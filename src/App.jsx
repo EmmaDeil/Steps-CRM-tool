@@ -1,6 +1,6 @@
 import { Router, Routes, Route} from 'react-router-dom';
 import './App.css'
-import Dashboard from './components/Dashboard';
+import Dashboard from './dashboard/Dashboard';
 import ModulePage from "./components/ModulePage";
 import NotFound from './components/NotFound';
 
