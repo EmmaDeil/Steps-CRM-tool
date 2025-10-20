@@ -2,37 +2,39 @@
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut as firebaseSignOut,
-  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  onAuthStateChanged,
-  sendEmailVerification,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut as fbSignOut,
 } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
   projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "SENDER_ID",
   appId: "YOUR_APP_ID",
-  // ...other config
 };
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
 
-export const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
+const provider = new GoogleAuthProvider();
 
-export const signOut = () => firebaseSignOut(auth);
-
-export const registerWithEmail = (email, password) =>
-  createUserWithEmailAndPassword(auth, email, password);
-
-export const loginWithEmail = (email, password) =>
+// 🟢 Auth Helpers
+export const loginUser = (email, password) =>
   signInWithEmailAndPassword(auth, email, password);
 
-export const subscribeToAuthChanges = (cb) => onAuthStateChanged(auth, cb);
+export const registerUser = (email, password) =>
+  createUserWithEmailAndPassword(auth, email, password);
 
-export const sendVerificationEmail = (user) => sendEmailVerification(user);
+export const resetPassword = (email) => sendPasswordResetEmail(auth, email);
+
+export const signInWithGoogle = () => signInWithPopup(auth, provider);
+
+export const signOut = () => fbSignOut(auth);
+export const registerWithEmail = (email, password) =>
+  createUserWithEmailAndPassword(auth, email, password);
