@@ -1,0 +1,35 @@
+.dashboard-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.main {
+  padding: 1rem;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.main-card {
+  border: 1px solid #ddd;
+  flex: 1 1 calc(33.333% - 0.6rem);
+  box-sizing: border-box;
+}
+
+.card-img-top {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  margin: 0 auto;
+}
+
+.module-link {
+  margin-top: 0.5rem;
+  border: 1px solid #007bff;
+  border-radius: 12px;
+  padding: 0 1rem;
+  text-decoration: none;
+  color: #007bff;
+}
