@@ -27,7 +27,7 @@ const Signup = () => {
           type="email"
           {...register("email")}
           placeholder="you@example.com"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+          className="auth-input"
         />
       </div>
 
@@ -37,13 +37,13 @@ const Signup = () => {
           type="password"
           {...register("password")}
           placeholder="••••••••"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+          className="auth-input"
         />
       </div>
 
       <button
         type="submit"
-        className="w-full bg-green-600 text-white font-semibold py-2 rounded-lg hover:bg-green-700 transition"
+        className="btn-custom"
       >
         Sign Up
       </button>

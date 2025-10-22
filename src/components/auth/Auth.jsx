@@ -19,9 +19,9 @@ const Auth = () => {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gradient-to-r from-blue-100 to-blue-300 p-4">
-      <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md relative overflow-hidden">
-        <h1 className="text-2xl font-bold text-center mb-4 text-gray-800">
+    <div className="auth-container">
+      <div className="auth-card">
+        <h1 className="auth-title">
           {isLogin ? "Welcome Back 👋" : "Create an Account ✨"}
         </h1>
 
@@ -49,10 +49,10 @@ const Auth = () => {
           )}
         </AnimatePresence>
 
-        <div className="flex gap-2 mt-5">
+        <div className="auth-actions">
           <button
             onClick={handleGoogle}
-            className="flex-1 py-2 rounded-lg border hover:shadow-sm transition font-medium"
+            className="auth-button"
           >
             Continue with Google
           </button>
@@ -60,20 +60,20 @@ const Auth = () => {
 
         <div className="text-center mt-4">
           {isLogin ? (
-            <p className="text-sm text-gray-600">
+            <p className="small text-secondary">
               Don’t have an account?{" "}
               <button
-                className="text-blue-600 font-medium hover:underline"
+                className="btn btn-outline-primary fw-medium text-decoration-none hover-underline"
                 onClick={() => setIsLogin(false)}
               >
                 Sign Up
               </button>
             </p>
           ) : (
-            <p className="text-sm text-gray-600">
+            <p className="small text-secondary">
               Already have an account?{" "}
               <button
-                className="text-blue-600 font-medium hover:underline"
+                className="btn btn-outline-primary fw-medium text-decoration-none hover-underline"
                 onClick={() => setIsLogin(true)}
               >
                 Login
