@@ -1,16 +1,20 @@
 import { Router, Routes, Route} from 'react-router-dom';
 import './App.css'
+import Auth from './components/auth/Auth';
 import Dashboard from './dashboard/Dashboard';
 import ModulePage from "./components/ModulePage";
 import NotFound from './components/NotFound';
+import { Toaster } from 'react-hot-toast';
 
 function App() {
 
   return (
     <>
+      <Toaster position="top-right" />
       <Routes>
         {/* Main dashboard page */}
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Auth />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="*" element={<NotFound />} />
 
         {/* Dynamic module page */}

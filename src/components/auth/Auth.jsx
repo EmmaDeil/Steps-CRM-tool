@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import LoginForm from "./Login";
 import SignupForm from "./Signup";
-import { signInWithGoogle } from "../firebase";
+import { signInWithGoogle } from "../../firebase";
 import toast from "react-hot-toast";
 
 const Auth = () => {

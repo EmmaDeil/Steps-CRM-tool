@@ -1,7 +1,7 @@
 // src/auth/LoginForm.jsx
 import React from "react";
 import { useForm } from "react-hook-form";
-import { loginUser, signInWithGoogle, resetPassword } from "../firebase";
+import { loginUser, signInWithGoogle, resetPassword } from "../../firebase";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 
