@@ -22,6 +22,24 @@ const Signup = () => {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div>
+        <label className="block text-gray-700 font-medium mb-1">Full Name</label>
+        <input
+          type="text"
+          {...register("fullName")}
+          placeholder="Your Name"
+          className="auth-input"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700 font-medium mb-1">Username</label>
+        <input
+          type="text"
+          {...register("username")}
+          placeholder="Your Username"
+          className="auth-input"
+        />
+      </div>
+      <div>
         <label className="block text-gray-700 font-medium mb-1">Email</label>
         <input
           type="email"
@@ -30,7 +48,15 @@ const Signup = () => {
           className="auth-input"
         />
       </div>
-
+      <div>
+        <label className="block text-gray-700 font-medium mb-1">Phone Number</label>
+        <input
+          type="tel"
+          {...register("phoneNumber")}
+          placeholder="+1 234 567 8900"
+          className="auth-input"
+        />
+      </div>
       <div>
         <label className="block text-gray-700 font-medium mb-1">Password</label>
         <input

@@ -44,7 +44,7 @@ const Login = () => {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div>
-        <label className="d-block text-dark fw-medium mb-1">
+        <label className="d-block text-dark fw-medium mb-2">
           Email Address
         </label>
         <input
@@ -74,7 +74,7 @@ const Login = () => {
         <button
           type="button"
           onClick={handleForgotPassword}
-          className="btn-link-custom btn btn-sm"
+          className="btn-link-custom"
         >
           Forgot password?
         </button>

@@ -5,6 +5,7 @@ import LoginForm from "./Login";
 import SignupForm from "./Signup";
 import { signInWithGoogle } from "../../firebase";
 import toast from "react-hot-toast";
+import "./Auth.css";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -52,8 +53,13 @@ const Auth = () => {
         <div className="auth-actions">
           <button
             onClick={handleGoogle}
-            className="auth-button"
+            className="auth-button google"
           >
+            <img
+      src="https://www.svgrepo.com/show/355037/google.svg"
+      alt="Google"
+      className="google-icon"
+    />
             Continue with Google
           </button>
         </div>
@@ -63,7 +69,7 @@ const Auth = () => {
             <p className="small text-secondary">
               Don’t have an account?{" "}
               <button
-                className="btn btn-outline-primary fw-medium text-decoration-none hover-underline"
+                className="btn-outline-custom"
                 onClick={() => setIsLogin(false)}
               >
                 Sign Up
@@ -73,7 +79,7 @@ const Auth = () => {
             <p className="small text-secondary">
               Already have an account?{" "}
               <button
-                className="btn btn-outline-primary fw-medium text-decoration-none hover-underline"
+                className="btn-outline-custom"
                 onClick={() => setIsLogin(true)}
               >
                 Login
