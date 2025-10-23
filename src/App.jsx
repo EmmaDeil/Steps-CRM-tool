@@ -5,7 +5,7 @@ import Dashboard from "./dashboard/Dashboard";
 import PrivateRoute from "./components/PrivateRoute";
 import ModulePage from "./components/ModulePage";
 import NotFound from "./components/NotFound";
-import { Toaster } from "react-hot-toast";
+import { Toaster } from "react-hot-toast"; 
 
 function App() {
   return (
@@ -22,10 +22,10 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route path="*" element={<NotFound />} />
+          <Route path="*" element={<NotFound />} />
 
         {/* Dynamic module page */}
-        <Route path="/modules/:id" element={<ModulePage />} />
+          <Route path="/modules/:id" element={<ModulePage />} />
       </Routes>
     </>
   );

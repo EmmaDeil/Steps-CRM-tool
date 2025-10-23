@@ -5,10 +5,13 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth, sendVerificationEmail, signOut } from "../firebase";
 import LogoutButton from "./LogoutButton";
 import toast from "react-hot-toast";
+import "./Dashboard.css";
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
+  const [resendDisabled, setResendDisabled] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -20,15 +23,19 @@ const Dashboard = () => {
 
   if (checking)
     return (
-      <div className="h-screen flex items-center justify-center text-gray-600">
-        Checking authentication...
+      <div className="dashboard-bg d-flex align-items-center justify-content-center min-vh-100">
+        <div className="dashboard-card card shadow-lg p-4 mx-auto text-center">
+          <span className="text-secondary">Checking authentication...</span>
+        </div>
       </div>
     );
 
   if (!user) {
     return (
-      <div className="h-screen flex items-center justify-center text-gray-600">
-        Please log in first.
+      <div className="dashboard-bg d-flex align-items-center justify-content-center min-vh-100">
+        <div className="dashboard-card card shadow-lg p-4 mx-auto text-center">
+          <span className="text-secondary">Please log in first.</span>
+        </div>
       </div>
     );
   }
@@ -36,11 +43,17 @@ const Dashboard = () => {
   // 🚨 User exists but email not verified
   if (!user.emailVerified) {
     const handleResend = async () => {
+      setResendDisabled(true);
+      setResendMessage("");
       try {
         await sendVerificationEmail(user);
+        setResendMessage("Verification email sent! Please check your inbox.");
         toast.success("Verification email sent again!");
+        setTimeout(() => setResendDisabled(false), 30000);
       } catch (err) {
+        setResendMessage("Failed to send verification email. Try again later.");
         toast.error(err.message);
+        setResendDisabled(false);
       }
     };
 
@@ -54,16 +67,16 @@ const Dashboard = () => {
     };
 
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-blue-300">
-        <div className="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full flex flex-col items-center">
-          <div className="mb-4">
+      <div className="dashboard-bg d-flex align-items-center justify-content-center min-vh-100">
+        <div className="dashboard-card card shadow-lg p-4 mx-auto text-center">
+          <div className="mb-3">
             <svg
               width="48"
               height="48"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
-              className="mx-auto text-red-500"
+              className="dashboard-icon"
             >
               <path
                 strokeLinecap="round"
@@ -73,22 +86,32 @@ const Dashboard = () => {
               />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-red-600 mb-2">
+          <h2 className="dashboard-title text-danger mb-2">
             Email Not Verified
           </h2>
-          <p className="text-gray-700 mb-6">
+          <p className="dashboard-desc mb-3">
             Please verify your email before accessing the dashboard.
           </p>
-          <div className="flex gap-4 w-full">
+          {resendMessage && (
+            <div className="alert alert-info text-center mb-3 animate-fade-in">
+              {resendMessage}
+            </div>
+          )}
+          <div className="d-flex gap-2 w-100">
             <button
               onClick={handleResend}
-              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition"
+              disabled={resendDisabled}
+              className={`btn btn-primary flex-fill ${
+                resendDisabled ? "disabled" : ""
+              }`}
             >
-              Resend Verification Link
+              {resendDisabled
+                ? "Resend Disabled (30s)"
+                : "Resend Verification Link"}
             </button>
             <button
               onClick={handleLogout}
-              className="flex-1 bg-gray-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-600 transition"
+              className="btn btn-outline-secondary flex-fill"
             >
               Logout
             </button>
@@ -98,23 +121,15 @@ const Dashboard = () => {
     );
   }
 
-  // ✅ Verified user dashboard
+  // ...existing code for verified user dashboard...
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center text-center">
-      <div className="bg-white shadow-lg p-6 rounded-xl max-w-md w-full">
-        {user.photoURL && (
-          <img
-            src={user.photoURL}
-            alt="Profile"
-            className="w-20 h-20 rounded-full mx-auto mb-4"
-          />
-        )}
-        <h2 className="text-xl font-semibold">
+    <div className="dashboard-bg d-flex align-items-center justify-content-center min-vh-100">
+      <div className="dashboard-card card shadow-lg p-4 mx-auto text-center">
+        <h2 className="dashboard-title text-success mb-2">
           Welcome, {user.displayName || "User"} 👋
         </h2>
-        <p className="text-gray-500 mt-2">{user.email}</p>
-
-        <div className="mt-6">
+        <p className="dashboard-desc text-secondary mb-3">{user.email}</p>
+        <div className="mt-4">
           <LogoutButton />
         </div>
       </div>

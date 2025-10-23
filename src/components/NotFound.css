@@ -1,0 +1,26 @@
+/* NotFound page styles */
+.notfound-bg {
+  background: linear-gradient(135deg, #f8fafc 0%, #e0eaff 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.notfound-card {
+  background: #fff;
+  border-radius: 1.5rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  padding: 2.5rem 2rem;
+  max-width: 400px;
+  text-align: center;
+}
+.notfound-title {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #dc3545;
+  margin-bottom: 1rem;
+}
+.notfound-desc {
+  color: #6c757d;
+  margin-bottom: 2rem;
+}

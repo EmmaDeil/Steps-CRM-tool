@@ -1,14 +1,20 @@
 import React from "react";
 import PropTypes from "prop-types";
 import { Link } from "react-router-dom";
+import "./NotFound.css";
 
 const NotFound = () => {
   return (
-    <div>
-      <h2>Oops! Page not found</h2>
-      <Link to="/" className="btn btn-primary">
-        Go to Dashboard
-      </Link>
+    <div className="notfound-bg">
+      <div className="notfound-card">
+        <h2 className="notfound-title">Oops! Page not found</h2>
+        <p className="notfound-desc">
+          The page you are looking for does not exist or has been moved.
+        </p>
+        <Link to="/" className="btn btn-primary">
+          Go to Dashboard
+        </Link>
+      </div>
     </div>
   );
 };
