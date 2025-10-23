@@ -1,5 +1,6 @@
 // src/dashboard/Dashboard.jsx
 import React, { useEffect, useState } from "react";
+import PropTypes from "prop-types";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, sendVerificationEmail, signOut } from "../firebase";
 import LogoutButton from "./LogoutButton";
@@ -53,25 +54,41 @@ const Dashboard = () => {
     };
 
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-center">
-        <div className="bg-white p-6 rounded-xl shadow-md max-w-md w-full">
-          <h2 className="text-xl font-semibold text-red-600">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-blue-300">
+        <div className="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full flex flex-col items-center">
+          <div className="mb-4">
+            <svg
+              width="48"
+              height="48"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              className="mx-auto text-red-500"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 16h-1v-4h-1m1-4h.01M12 20h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-red-600 mb-2">
             Email Not Verified
           </h2>
-          <p className="text-gray-600 mt-2">
+          <p className="text-gray-700 mb-6">
             Please verify your email before accessing the dashboard.
           </p>
-
-          <div className="mt-4 flex flex-col gap-3">
+          <div className="flex gap-4 w-full">
             <button
               onClick={handleResend}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition"
             >
-              Resend Verification Email
+              Resend Verification Link
             </button>
             <button
               onClick={handleLogout}
-              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition"
+              className="flex-1 bg-gray-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-600 transition"
             >
               Logout
             </button>
@@ -103,6 +120,10 @@ const Dashboard = () => {
       </div>
     </div>
   );
+};
+
+Dashboard.propTypes = {
+  // If you expect props, define here
 };
 
 export default Dashboard;

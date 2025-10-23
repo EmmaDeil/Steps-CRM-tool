@@ -1,5 +1,6 @@
 // src/auth/LoginForm.jsx
 import React from "react";
+import PropTypes from "prop-types";
 import { useForm } from "react-hook-form";
 import { loginUser, resetPassword } from "../../firebase";
 import toast from "react-hot-toast";
@@ -7,7 +8,11 @@ import { useNavigate } from "react-router-dom";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { register, handleSubmit } = useForm();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm();
 
   const onSubmit = async (data) => {
     try {
@@ -49,22 +54,40 @@ const Login = () => {
         </label>
         <input
           type="email"
-          {...register("email")}
+          {...register("email", {
+            required: "Email is required",
+            pattern: {
+              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+              message: "Invalid email address",
+            },
+          })}
           placeholder="you@example.com"
           className="auth-input"
         />
+        {errors.email && (
+          <span className="text-red-500 text-sm">{errors.email.message}</span>
+        )}
       </div>
 
       <div>
-        <label className="d-block text-dark fw-medium mb-1">
-          Password
-        </label>
+        <label className="d-block text-dark fw-medium mb-1">Password</label>
         <input
           type="password"
-          {...register("password")}
+          {...register("password", {
+            required: "Password is required",
+            minLength: {
+              value: 6,
+              message: "Password must be at least 6 characters",
+            },
+          })}
           placeholder="••••••••"
           className="auth-input"
         />
+        {errors.password && (
+          <span className="text-red-500 text-sm">
+            {errors.password.message}
+          </span>
+        )}
       </div>
 
       <div className="flex-between">
@@ -80,10 +103,7 @@ const Login = () => {
         </button>
       </div>
 
-      <button
-        type="submit"
-        className="btn-custom"
-      >
+      <button type="submit" className="btn-custom">
         Login
       </button>
 
@@ -96,6 +116,10 @@ const Login = () => {
       </button> */}
     </form>
   );
+};
+
+Login.propTypes = {
+  // If you expect props, define here
 };
 
 export default Login;

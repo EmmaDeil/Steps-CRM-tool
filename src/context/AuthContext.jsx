@@ -1,5 +1,5 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase";
 
@@ -27,4 +27,4 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// useAuth hook moved to src/context/useAuth.js
+// import useAuth directly from './useAuth.js' in your components

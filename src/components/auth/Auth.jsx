@@ -1,6 +1,7 @@
 // src/auth/Auth.jsx
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import PropTypes from "prop-types";
+import { AnimatePresence, motion } from "framer-motion";
 import LoginForm from "./Login";
 import SignupForm from "./Signup";
 import { signInWithGoogle } from "../../firebase";
@@ -51,15 +52,12 @@ const Auth = () => {
         </AnimatePresence>
 
         <div className="auth-actions">
-          <button
-            onClick={handleGoogle}
-            className="auth-button google"
-          >
+          <button onClick={handleGoogle} className="auth-button google">
             <img
-      src="https://www.svgrepo.com/show/355037/google.svg"
-      alt="Google"
-      className="google-icon"
-    />
+              src="https://www.svgrepo.com/show/355037/google.svg"
+              alt="Google"
+              className="google-icon"
+            />
             Continue with Google
           </button>
         </div>
@@ -90,6 +88,10 @@ const Auth = () => {
       </div>
     </div>
   );
+};
+
+Auth.propTypes = {
+  // If you expect children or other props, define here
 };
 
 export default Auth;

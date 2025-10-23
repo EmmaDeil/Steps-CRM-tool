@@ -1,11 +1,15 @@
 // src/components/ProtectedRoute.jsx
 import React from "react";
+import PropTypes from "prop-types";
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { subscribeToAuthChanges } from "../firebase";
 
 const ProtectedRoute = ({ children }) => {
-  const [authState, setAuthState] = useState({ initialized: false, user: null });
+  const [authState, setAuthState] = useState({
+    initialized: false,
+    user: null,
+  });
 
   useEffect(() => {
     const unsubscribe = subscribeToAuthChanges((user) => {
@@ -16,7 +20,11 @@ const ProtectedRoute = ({ children }) => {
 
   if (!authState.initialized) {
     // or show a spinner
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        Loading...
+      </div>
+    );
   }
 
   if (!authState.user) {
@@ -24,6 +32,10 @@ const ProtectedRoute = ({ children }) => {
   }
 
   return children;
+};
+
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired,
 };
 
 export default ProtectedRoute;

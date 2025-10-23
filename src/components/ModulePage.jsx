@@ -1,4 +1,5 @@
 import React from "react";
+import PropTypes from "prop-types";
 import { useParams } from "react-router-dom";
 
 // import Accounting from "./modules/Accounting";
@@ -41,6 +42,10 @@ const ModulePage = () => {
         </div>
       );
   }
+};
+
+ModulePage.propTypes = {
+  // If you expect props, define here
 };
 
 export default ModulePage;
