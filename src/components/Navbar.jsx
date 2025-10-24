@@ -1,22 +1,20 @@
 import React from "react";
 import PropTypes from "prop-types";
-import { Link } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import LogoutButton from "../dashboard/LogoutButton";
 
-const Navbar = ({ active, user, onLogout, searchQuery, setSearchQuery }) => {
+const Navbar = ({ user, onLogout, searchQuery, setSearchQuery, onSearch }) => {
   const handleSearch = (e) => {
     e.preventDefault();
-    // searchQuery is already controlled via setSearchQuery
-    // Could dispatch an event or call a callback here if needed
-    console.log("Search for:", searchQuery);
+    if (onSearch) onSearch(searchQuery);
   };
 
   return (
     <nav className="navbar navbar-expand-lg navbar-light bg-white border-bottom">
       <div className="container-fluid">
-        <Link className="navbar-brand" to="/">
+        <NavLink className="navbar-brand" to="/dashboard">
           Steps CRM
-        </Link>
+        </NavLink>
         <button
           className="navbar-toggler"
           type="button"
@@ -50,25 +48,34 @@ const Navbar = ({ active, user, onLogout, searchQuery, setSearchQuery }) => {
 
           <ul className="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center">
             <li className="nav-item me-3">
-              <Link
-                className={`nav-link ${active === "home" ? "active" : ""}`}
+              <NavLink
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
                 to="/dashboard"
               >
                 Home
-              </Link>
+              </NavLink>
             </li>
             <li className="nav-item me-3">
-              <Link
-                className={`nav-link ${active === "module" ? "active" : ""}`}
+              <NavLink
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
                 to="/modules"
               >
-                Module
-              </Link>
+                Modules
+              </NavLink>
             </li>
             <li className="nav-item me-3">
-              <Link className="nav-link" to="#">
+              <NavLink
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
+                to="/chat"
+              >
                 Chat
-              </Link>
+              </NavLink>
             </li>
             <li className="nav-item">
               {user ? (
@@ -91,9 +98,14 @@ const Navbar = ({ active, user, onLogout, searchQuery, setSearchQuery }) => {
                   </div>
                 </div>
               ) : (
-                <Link className="nav-link" to="/auth">
+                <NavLink
+                  className={({ isActive }) =>
+                    `nav-link ${isActive ? "active" : ""}`
+                  }
+                  to="/auth"
+                >
                   Login
-                </Link>
+                </NavLink>
               )}
             </li>
           </ul>
@@ -103,14 +115,12 @@ const Navbar = ({ active, user, onLogout, searchQuery, setSearchQuery }) => {
   );
 };
 
+export default Navbar;
+
 Navbar.propTypes = {
-  active: PropTypes.string,
   user: PropTypes.object,
   onLogout: PropTypes.func,
+  searchQuery: PropTypes.string,
+  setSearchQuery: PropTypes.func,
+  onSearch: PropTypes.func,
 };
-
-Navbar.defaultProps = {
-  active: "home",
-};
-
-export default Navbar;
