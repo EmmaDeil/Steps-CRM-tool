@@ -3,9 +3,9 @@ import "./App.css";
 import Auth from "./components/auth/Auth";
 import Dashboard from "./dashboard/Dashboard";
 import PrivateRoute from "./components/PrivateRoute";
-import ModulePage from "./components/ModulePage";
+import Module from "./components/Module";
 import NotFound from "./components/NotFound";
-import { Toaster } from "react-hot-toast"; 
+import { Toaster } from "react-hot-toast";
 
 function App() {
   return (
@@ -22,10 +22,26 @@ function App() {
             </PrivateRoute>
           }
         />
-          <Route path="*" element={<NotFound />} />
 
-        {/* Dynamic module page */}
-          <Route path="/modules/:id" element={<ModulePage />} />
+        {/* Modules list and module details (protected) */}
+        <Route
+          path="/modules"
+          element={
+            <PrivateRoute>
+              <Module />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/modules/:id"
+          element={
+            <PrivateRoute>
+              <Module />
+            </PrivateRoute>
+          }
+        />
+
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </>
   );

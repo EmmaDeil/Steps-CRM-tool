@@ -1,9 +1,8 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase";
-
-export const AuthContext = createContext();
+import { AuthContext } from "./AuthContextCore";
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);

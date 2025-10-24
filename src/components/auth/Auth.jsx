@@ -1,7 +1,7 @@
 // src/auth/Auth.jsx
 import React, { useState } from "react";
 import PropTypes from "prop-types";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import LoginForm from "./Login";
 import SignupForm from "./Signup";
 import { signInWithGoogle } from "../../firebase";
@@ -29,25 +29,13 @@ const Auth = () => {
 
         <AnimatePresence mode="wait">
           {isLogin ? (
-            <motion.div
-              key="login"
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 30 }}
-              transition={{ duration: 0.45 }}
-            >
+            <div key="login">
               <LoginForm />
-            </motion.div>
+            </div>
           ) : (
-            <motion.div
-              key="signup"
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -30 }}
-              transition={{ duration: 0.45 }}
-            >
+            <div key="signup">
               <SignupForm />
-            </motion.div>
+            </div>
           )}
         </AnimatePresence>
 
