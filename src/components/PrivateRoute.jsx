@@ -13,7 +13,8 @@ const PrivateRoute = ({ children }) => {
 
   // If user is not logged in, redirect to login
   if (!currentUser) {
-    return <Navigate to="/auth" replace />;
+    // App routes use '/' for the auth page — redirect there instead of '/auth'
+    return <Navigate to="/" replace />;
   }
 
   // If user's provider data is missing or not password-based, treat as verified
@@ -87,9 +88,7 @@ const PrivateRoute = ({ children }) => {
                 resendDisabled ? "disabled" : ""
               }`}
             >
-              {resendDisabled
-                ? "Resend Disabled (30s)"
-                : "Resend Verification Link"}
+              {resendDisabled ? "Disabled (30s)" : "Resend Verification Link"}
             </button>
             <button
               onClick={handleLogout}

@@ -6,6 +6,7 @@ import { auth, signOut } from "../firebase";
 import LogoutButton from "./LogoutButton";
 import Navbar from "../components/Navbar";
 import Module from "../components/Module";
+import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import "./Dashboard.css";
 
@@ -13,6 +14,7 @@ const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const navigate = useNavigate();
 
   const handleLogout = async () => {
     try {
@@ -21,6 +23,12 @@ const Dashboard = () => {
     } catch (error) {
       toast.error(error?.message || "Logout failed");
     }
+  };
+
+  const handleSearchSubmit = (q) => {
+    // set the query and navigate to modules list so the Module component displays filtered results
+    setSearchQuery(q || "");
+    navigate("/modules");
   };
 
   useEffect(() => {
@@ -61,6 +69,7 @@ const Dashboard = () => {
         onLogout={handleLogout}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
+        onSearch={handleSearchSubmit}
       />
       <div className="dashboard-bg d-flex align-items-center justify-content-center min-vh-100">
         <div className="dashboard-card card shadow-lg p-4 mx-auto text-center">
