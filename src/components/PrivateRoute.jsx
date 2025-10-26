@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import PropTypes from "prop-types";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
-import { sendVerificationEmail, signOut } from "../firebase";
+import { sendVerificationEmail, signOut } from "../noFirebase";
 import toast from "react-hot-toast";
 
 const PrivateRoute = ({ children }) => {

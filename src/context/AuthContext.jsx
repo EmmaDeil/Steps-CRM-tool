@@ -1,7 +1,6 @@
 // src/context/AuthContext.jsx
 import React, { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../firebase";
+import { subscribeToAuthChanges } from "../noFirebase";
 import { AuthContext } from "./AuthContextCore";
 
 export const AuthProvider = ({ children }) => {
@@ -9,7 +8,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = subscribeToAuthChanges((user) => {
       setCurrentUser(user);
       setLoading(false);
     });

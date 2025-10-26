@@ -1,8 +1,6 @@
 // src/dashboard/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth, signOut } from "../firebase";
 import LogoutButton from "./LogoutButton";
 import Navbar from "../components/Navbar";
 import Module from "../components/Module";
@@ -17,12 +15,9 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    try {
-      await signOut();
-      toast.success("Logged out");
-    } catch (error) {
-      toast.error(error?.message || "Logout failed");
-    }
+    // Firebase removed: simply navigate to the auth/root page and show toast
+    toast.success("Logged out");
+    navigate("/");
   };
 
   const handleSearchSubmit = (q) => {
@@ -32,11 +27,9 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setChecking(false);
-    });
-    return unsubscribe;
+    // Firebase removed: no auth provider — mark checking as finished.
+    setChecking(false);
+    setUser(null);
   }, []);
 
   if (checking)

@@ -2,26 +2,21 @@
 import React from "react";
 import PropTypes from "prop-types";
 import { useForm } from "react-hook-form";
-import { loginUser, resetPassword } from "../../firebase";
+// Login/reset disabled — backend removed
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 
 const Login = () => {
-  const navigate = useNavigate();
+  // navigate kept for potential future use (prefixed to avoid unused-var lint)
+  const _navigate = useNavigate();
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm();
 
-  const onSubmit = async (data) => {
-    try {
-      await loginUser(data.email, data.password);
-      toast.success("Login successful!");
-      navigate("/dashboard");
-    } catch (err) {
-      toast.error(err.message);
-    }
+  const onSubmit = async () => {
+    toast.error("Login is unavailable (backend removed).");
   };
 
   // const handleGoogle = async () => {
@@ -35,15 +30,7 @@ const Login = () => {
   // };
 
   const handleForgotPassword = async () => {
-    const email = prompt("Enter your email for password reset:");
-    if (email) {
-      try {
-        await resetPassword(email);
-        toast.success("Password reset email sent!");
-      } catch (err) {
-        toast.error(err.message);
-      }
-    }
+    toast.error("Password reset is unavailable (backend removed).");
   };
 
   return (

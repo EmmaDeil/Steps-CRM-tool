@@ -1,7 +1,7 @@
 // src/dashboard/LogoutButton.jsx
 import React from "react";
 import PropTypes from "prop-types";
-import { signOut } from "../firebase";
+import { signOut } from "../noFirebase";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 

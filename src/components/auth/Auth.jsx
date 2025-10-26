@@ -4,20 +4,14 @@ import PropTypes from "prop-types";
 import { AnimatePresence } from "framer-motion";
 import LoginForm from "./Login";
 import SignupForm from "./Signup";
-import { signInWithGoogle } from "../../firebase";
+// Google sign-in removed with Firebase; feature disabled
 import toast from "react-hot-toast";
 import "./Auth.css";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const handleGoogle = async () => {
-    try {
-      await signInWithGoogle();
-      toast.success("Signed in with Google");
-      // firebase observer will redirect via App route logic
-    } catch (err) {
-      toast.error(err.message || "Google sign-in failed");
-    }
+    toast.error("Google sign-in is unavailable (Firebase removed).");
   };
 
   return (

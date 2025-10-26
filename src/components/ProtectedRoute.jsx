@@ -3,7 +3,7 @@ import React from "react";
 import PropTypes from "prop-types";
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { subscribeToAuthChanges } from "../firebase";
+import { subscribeToAuthChanges } from "../noFirebase";
 
 const ProtectedRoute = ({ children }) => {
   const [authState, setAuthState] = useState({
@@ -28,7 +28,8 @@ const ProtectedRoute = ({ children }) => {
   }
 
   if (!authState.user) {
-    return <Navigate to="/auth" replace />;
+    // Auth has been removed; redirect to root or allow access depending on your needs.
+    return <Navigate to="/" replace />;
   }
 
   return children;

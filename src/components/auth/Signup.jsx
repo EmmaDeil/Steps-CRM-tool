@@ -1,9 +1,9 @@
 import React from "react";
 import PropTypes from "prop-types";
 import { useForm } from "react-hook-form";
-import { registerUser, sendVerificationEmail } from "../../firebase";
+// Signup/register disabled — backend removed
 import toast from "react-hot-toast";
-import { useNavigate } from "react-router-dom";
+// navigation disabled for signup
 
 const Signup = () => {
   const {
@@ -11,17 +11,10 @@ const Signup = () => {
     handleSubmit,
     formState: { errors },
   } = useForm();
-  const navigate = useNavigate();
+  // navigate not used because signup is disabled
 
-  const onSubmit = async (data) => {
-    try {
-      const userCredential = await registerUser(data.email, data.password);
-      await sendVerificationEmail(userCredential.user);
-      toast.success("Verification email sent! Please check your inbox.");
-      navigate("/");
-    } catch (err) {
-      toast.error(err.message);
-    }
+  const onSubmit = async () => {
+    toast.error("Signup is unavailable (backend removed).");
   };
 
   return (
