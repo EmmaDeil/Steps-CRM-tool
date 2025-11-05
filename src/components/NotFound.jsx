@@ -11,8 +11,8 @@ const NotFound = () => {
         <p className="notfound-desc">
           The page you are looking for does not exist or has been moved.
         </p>
-        <Link to="/" className="btn btn-primary">
-          Home
+        <Link to="/dashboard" className="btn btn-primary">
+          Dashboard
         </Link>
       </div>
     </div>

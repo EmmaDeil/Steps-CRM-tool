@@ -28,7 +28,7 @@ function App() {
           path="/modules"
           element={
             <PrivateRoute>
-              <Module />
+              <Module showNavbar={true} />
             </PrivateRoute>
           }
         />
@@ -36,7 +36,7 @@ function App() {
           path="/modules/:id"
           element={
             <PrivateRoute>
-              <Module />
+              <Module showNavbar={true} />
             </PrivateRoute>
           }
         />

@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.53.6",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "bootstrap": "^5.3.8",
     "framer-motion": "^12.23.24",

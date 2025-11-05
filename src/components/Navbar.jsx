@@ -1,18 +1,44 @@
 import React from "react";
 import PropTypes from "prop-types";
-import { NavLink } from "react-router-dom";
-import LogoutButton from "../dashboard/LogoutButton";
+import { NavLink, useNavigate } from "react-router-dom";
+import { UserButton } from "@clerk/clerk-react";
+import stepsLogo from "../assets/steps-logo.ico";
 
-const Navbar = ({ user, onLogout, searchQuery, setSearchQuery, onSearch }) => {
+const Navbar = ({
+  user,
+  searchQuery,
+  setSearchQuery,
+  onSearch,
+  showBackButton,
+  onBack,
+}) => {
+  const navigate = useNavigate();
+
   const handleSearch = (e) => {
     e.preventDefault();
     if (onSearch) onSearch(searchQuery);
   };
 
+  const handleBackClick = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      navigate("/modules");
+    }
+  };
+
   return (
     <nav className="navbar navbar-expand-lg navbar-light bg-white border-bottom">
       <div className="container-fluid">
-        <NavLink className="navbar-brand" to="/dashboard">
+        <NavLink
+          className="navbar-brand d-flex align-items-center"
+          to="/dashboard"
+        >
+          <img
+            src={stepsLogo}
+            alt="Steps Logo"
+            style={{ width: "30px", height: "30px", marginRight: "8px" }}
+          />
           Steps CRM
         </NavLink>
         <button
@@ -47,26 +73,15 @@ const Navbar = ({ user, onLogout, searchQuery, setSearchQuery, onSearch }) => {
           </form>
 
           <ul className="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center">
-            <li className="nav-item me-3">
-              <NavLink
-                className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
-                }
-                to="/dashboard"
+            {showBackButton && (
+              <button
+                className="btn btn-outline-secondary btn-md ms-1"
+                onClick={handleBackClick}
+                title="Back to Modules"
               >
-                Home
-              </NavLink>
-            </li>
-            <li className="nav-item me-3">
-              <NavLink
-                className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
-                }
-                to="/modules"
-              >
-                Modules
-              </NavLink>
-            </li>
+                Back
+              </button>
+            )}
             <li className="nav-item me-3">
               <NavLink
                 className={({ isActive }) =>
@@ -81,28 +96,21 @@ const Navbar = ({ user, onLogout, searchQuery, setSearchQuery, onSearch }) => {
               {user ? (
                 <div className="d-flex align-items-center">
                   <div className="me-3 text-end d-none d-lg-block">
-                    <div className="fw-bold">{user.displayName || "User"}</div>
-                    <div className="small text-secondary">{user.email}</div>
+                    <div className="fw-bold">
+                      {user.fullName || user.firstName || "User"}
+                    </div>
+                    <div className="small text-secondary">
+                      {user.primaryEmailAddress?.emailAddress}
+                    </div>
                   </div>
-                  <div>
-                    {onLogout ? (
-                      <button
-                        className="btn btn-outline-secondary"
-                        onClick={onLogout}
-                      >
-                        Logout
-                      </button>
-                    ) : (
-                      <LogoutButton />
-                    )}
-                  </div>
+                  <UserButton afterSignOutUrl="/" />
                 </div>
               ) : (
                 <NavLink
                   className={({ isActive }) =>
                     `nav-link ${isActive ? "active" : ""}`
                   }
-                  to="/auth"
+                  to="/"
                 >
                   Login
                 </NavLink>
@@ -119,8 +127,9 @@ export default Navbar;
 
 Navbar.propTypes = {
   user: PropTypes.object,
-  onLogout: PropTypes.func,
   searchQuery: PropTypes.string,
   setSearchQuery: PropTypes.func,
   onSearch: PropTypes.func,
+  showBackButton: PropTypes.bool,
+  onBack: PropTypes.func,
 };

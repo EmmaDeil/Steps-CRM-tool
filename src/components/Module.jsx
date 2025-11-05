@@ -1,16 +1,20 @@
 import React, { Suspense, lazy } from "react";
 import PropTypes from "prop-types";
-import { useParams } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { useUser } from "@clerk/clerk-react";
+import Navbar from "./Navbar";
+import "./Module.css";
 
 // sample module metadata; componentName optionally points to a real component file under ./modules/
 const sampleModules = [
   { id: 1, name: "Accounting", componentName: "Accounting" },
-  { id: 2, name: "Inventory" },
-  { id: 3, name: "HR Management" },
-  { id: 4, name: "Facility Maintenance", componentName: "Facility" },
-  { id: 5, name: "Finance Reports" },
-  { id: 6, name: "Security Logs" },
-  { id: 7, name: "Admin Controls" },
+  { id: 2, name: "Inventory", componentName: "Inventory" },
+  { id: 3, name: "HR Management", componentName: "HRManagement" },
+  { id: 4, name: "Facility Maintenance", componentName: "FacilityMaintenance" },
+  { id: 5, name: "Finance Reports", componentName: "FinanceReports" },
+  { id: 6, name: "Security Logs", componentName: "SecurityLogs" },
+  { id: 7, name: "Admin Controls", componentName: "AdminControls" },
+  { id: 8, name: "Attendance", componentName: "Attendance" },
 ];
 
 const loadModuleComponent = (componentName) => {
@@ -25,8 +29,10 @@ const loadModuleComponent = (componentName) => {
   }
 };
 
-const Module = ({ searchQuery }) => {
+const Module = ({ searchQuery, showNavbar = false }) => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useUser();
 
   if (id) {
     const mid = parseInt(id, 10);
@@ -36,6 +42,12 @@ const Module = ({ searchQuery }) => {
         <div className="p-4 text-center">
           <h3 className="mb-2">Module Not Found</h3>
           <p className="text-secondary">No module with id {id}</p>
+          <button
+            className="btn btn-primary mt-3"
+            onClick={() => navigate("/dashboard")}
+          >
+            Dashboard
+          </button>
         </div>
       );
     }
@@ -43,16 +55,45 @@ const Module = ({ searchQuery }) => {
     const ModuleComp = loadModuleComponent(found.componentName);
     if (ModuleComp) {
       return (
-        <Suspense fallback={<div className="p-4">Loading module...</div>}>
-          <ModuleComp />
-        </Suspense>
+        <div>
+          {showNavbar && (
+            <Navbar
+              user={user}
+              showBackButton={true}
+              onBack={() => navigate("/modules")}
+            />
+          )}
+          <Suspense fallback={<div className="p-4">Loading module...</div>}>
+            <ModuleComp />
+          </Suspense>
+        </div>
       );
     }
 
     return (
-      <div className="p-4 text-center">
-        <h3 className="mb-2">{found.name}</h3>
-        <p className="text-secondary">Details for module {found.name}</p>
+      <div>
+        {showNavbar && (
+          <Navbar
+            user={user}
+            showBackButton={true}
+            onBack={() => navigate("/dashboard")}
+          />
+        )}
+        <div className="p-4 text-center">
+          <div className="alert alert-warning d-inline-block">
+            <h3 className="mb-2">⚠️ Module Not Available</h3>
+            <p className="text-secondary mb-3">
+              The <strong>{found.name}</strong> module is currently under
+              development.
+            </p>
+            <button
+              className="btn btn-primary"
+              onClick={() => navigate("/dashboard")}
+            >
+              Dashboard
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -63,22 +104,31 @@ const Module = ({ searchQuery }) => {
   );
 
   return (
-    <div className="p-3">
-      <h3 className="mb-3">Modules</h3>
-      <div className="row g-3">
-        {filtered.map((m) => (
-          <div key={m.id} className="col-12 col-md-6">
-            <div className="card p-3 h-100">
-              <h5 className="mb-1">{m.name}</h5>
-              <p className="small text-secondary mb-0">Module ID: {m.id}</p>
+    <div>
+      {showNavbar && <Navbar user={user} />}
+      <div className="p-3 container">
+        <h3 className="mb-5"></h3>
+        <div className="row g-1">
+          {filtered.map((m) => (
+            <div key={m.id} className="col-12 col-md-6 col-lg-3">
+              <Link to={`/modules/${m.id}`} className="module-link">
+                <div
+                  className="card module-card p-3 h-100"
+                  style={{ width: "20rem" }}
+                >
+                  <h5 className="mb-0 p-4" style={{ fontSize: "1.25rem" }}>
+                    {m.name}
+                  </h5>
+                </div>
+              </Link>
             </div>
-          </div>
-        ))}
-        {filtered.length === 0 && (
-          <div className="col-12 text-center text-secondary">
-            No modules matched your search.
-          </div>
-        )}
+          ))}
+          {filtered.length === 0 && (
+            <div className="col-12 text-center text-secondary">
+              No modules matched your search.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -86,10 +136,12 @@ const Module = ({ searchQuery }) => {
 
 Module.propTypes = {
   searchQuery: PropTypes.string,
+  showNavbar: PropTypes.bool,
 };
 
 Module.defaultProps = {
   searchQuery: "",
+  showNavbar: false,
 };
 
 export default Module;

@@ -1,0 +1,56 @@
+/* Module.css */
+
+.module-card {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 1px solid #dee2e6;
+}
+
+.module-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-color: #0d6efd;
+}
+
+.module-card:active {
+  transform: translateY(-2px);
+}
+
+.module-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.module-link:hover {
+  text-decoration: none;
+}
+
+.module-card h5 {
+  color: #212529;
+  font-weight: 600;
+}
+
+.module-card:hover h5 {
+  color: #0d6efd;
+}
+
+/* Module header with back button */
+.module-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.module-header .btn-outline-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.module-header .btn-outline-secondary:hover {
+  background-color: #6c757d;
+  color: white;
+}
