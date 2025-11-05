@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from "react";
 import PropTypes from "prop-types";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
+import { useAppContext } from "../context/useAppContext";
 import Navbar from "./Navbar";
 import "./Module.css";
 
@@ -33,6 +34,7 @@ const Module = ({ searchQuery, showNavbar = false }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useUser();
+  const { hasModuleAccess } = useAppContext();
 
   if (id) {
     const mid = parseInt(id, 10);
@@ -48,6 +50,36 @@ const Module = ({ searchQuery, showNavbar = false }) => {
           >
             Dashboard
           </button>
+        </div>
+      );
+    }
+
+    // Check access permission
+    if (!hasModuleAccess(found.name)) {
+      return (
+        <div>
+          {showNavbar && (
+            <Navbar
+              user={user}
+              showBackButton={true}
+              onBack={() => navigate("/dashboard")}
+            />
+          )}
+          <div className="p-4 text-center">
+            <div className="alert alert-warning d-inline-block">
+              <h3 className="mb-2">🔒 Access Denied</h3>
+              <p className="text-secondary mb-3">
+                You do not have permission to access the{" "}
+                <strong>{found.name}</strong> module.
+              </p>
+              <button
+                className="btn btn-primary"
+                onClick={() => navigate("/dashboard")}
+              >
+                Go Back to Dashboard
+              </button>
+            </div>
+          </div>
         </div>
       );
     }

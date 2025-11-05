@@ -2,6 +2,8 @@ import { Routes, Route } from "react-router-dom";
 import "./App.css";
 import Auth from "./components/auth/Auth";
 import Dashboard from "./dashboard/Dashboard";
+import DashboardAnalytics from "./components/DashboardAnalytics";
+import AnalyticsPage from "./dashboard/AnalyticsPage";
 import PrivateRoute from "./components/PrivateRoute";
 import Module from "./components/Module";
 import NotFound from "./components/NotFound";
@@ -42,6 +44,14 @@ function App() {
         />
 
         <Route path="*" element={<NotFound />} />
+        <Route
+          path="/analytics"
+          element={
+            <PrivateRoute>
+              <AnalyticsPage />
+            </PrivateRoute>
+          }
+        />
       </Routes>
     </>
   );

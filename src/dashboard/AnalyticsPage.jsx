@@ -1,21 +1,18 @@
-// src/dashboard/Dashboard.jsx
+// src/dashboard/AnalyticsPage.jsx
 import React, { useState } from "react";
-import PropTypes from "prop-types";
 import Navbar from "../components/Navbar";
 import DashboardAnalytics from "../components/DashboardAnalytics";
-import Module from "../components/Module";
-import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
-import "./Dashboard.css";
+import { useNavigate } from "react-router-dom";
 
-const Dashboard = () => {
+const AnalyticsPage = () => {
   const { user, isLoaded } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
 
   const handleSearchSubmit = (q) => {
-    // set the query and navigate to modules list so the Module component displays filtered results
     setSearchQuery(q || "");
+    // Sending users to modules when they submit a module search
     navigate("/modules");
   };
 
@@ -32,7 +29,6 @@ const Dashboard = () => {
   return (
     <div>
       <Navbar
-        active="home"
         user={user}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -40,16 +36,11 @@ const Dashboard = () => {
       />
       <div className="dashboard-bg">
         <div className="dashboard-card card shadow-lg p-4 mx-auto text-center">
-          {/* Dashboard main: show modules (dashboard houses modules). */}
-          <Module searchQuery={searchQuery} />
+          <DashboardAnalytics />
         </div>
       </div>
     </div>
   );
 };
 
-Dashboard.propTypes = {
-  // If you expect props, define here
-};
-
-export default Dashboard;
+export default AnalyticsPage;
