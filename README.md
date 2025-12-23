@@ -14,7 +14,7 @@
 ## 🎯 Overview
 
 Steps CRM is a modern, enterprise-grade Customer Relationship Management system built with React 19, featuring:
-- 8 Integrated modules
+- 12 Integrated modules
 - Role-based access control
 - Dark mode support
 - Real-time analytics
@@ -23,15 +23,19 @@ Steps CRM is a modern, enterprise-grade Customer Relationship Management system 
 ## ✨ Features
 
 ### Core Features
-- ✅ **8 Business Modules:**
+- ✅ **12 Business Modules:**
   - Accounting (Financial Management)
   - Inventory (Stock Management)
   - HR Management (Employee Records)
   - Facility Maintenance (Tickets & Maintenance)
-  - Finance Reports (Analytics & Reports)
+  - Finance (Payment Processing & Reports)
   - Security Logs (Access & Activity Logs)
   - Admin Controls (System Management)
   - Attendance (Check-in/Check-out Tracking)
+  - Signature Management (Digital Signatures)
+  - Material Requests (Procurement Requests)
+  - Purchase Orders (Order Management)
+  - Analytics (Dashboard & Insights)
 
 ### Advanced Features
 - ✅ **Authentication:** Clerk integration with secure JWT tokens
@@ -129,8 +133,8 @@ Navigate to `http://localhost:5173`
 
 | Role    | Access Level | Modules Available |
 |---------|-------------|-------------------|
-| User    | Basic | Accounting, Inventory, Attendance |
-| Manager | Extended | User modules + HR, Finance Reports |
+| User    | Basic | Accounting, Inventory, Attendance, Analytics |
+| Manager | Extended | User modules + HR, Finance |
 | Admin   | Full | All modules including Admin Controls |
 
 ## 💼 Usage

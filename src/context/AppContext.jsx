@@ -1,5 +1,6 @@
-import React, { createContext, useState } from "react";
+import React, { createContext, useState, useEffect } from "react";
 import PropTypes from "prop-types";
+import { useUser } from "@clerk/clerk-react";
 
 const AppContext = createContext();
 
@@ -24,6 +25,16 @@ export const AppProvider = ({ children }) => {
     setSearchHistory(newHistory);
     localStorage.setItem("searchHistory", JSON.stringify(newHistory));
   };
+
+  // If a user is signed in via Clerk, treat them as admin for this project
+  // (per project requirement that the currently-signed-in user has full admin rights).
+  const { user, isLoaded } = useUser();
+
+  useEffect(() => {
+    if (isLoaded && user) {
+      setUserRole("admin");
+    }
+  }, [isLoaded, user]);
 
   // Clear search history
   const clearSearchHistory = () => {
@@ -60,13 +71,14 @@ export const AppProvider = ({ children }) => {
 
     // Define role-based access
     const rolePermissions = {
-      user: ["Accounting", "Inventory", "Attendance"],
+      user: ["Accounting", "Inventory", "Attendance", "Analytics"],
       manager: [
         "Accounting",
         "Inventory",
         "HR Management",
         "Attendance",
-        "Finance Reports",
+        "Finance",
+        "Analytics",
       ],
       admin: ["*"], // All modules
     };

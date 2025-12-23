@@ -42,13 +42,9 @@ const Navbar = ({
     }
   };
 
-  const isAnalyticsActive =
-    location.pathname === "/analytics" ||
-    location.pathname.startsWith("/dashboard/analytics");
-
   return (
-    <nav className="navbar navbar-expand-lg navbar-light bg-white border-bottom">
-      <div className="container-fluid">
+    <nav className="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top">
+      <div className="container-fluid px-3 px-lg-4">
         <NavLink
           className="navbar-brand d-flex align-items-center"
           to="/dashboard"
@@ -58,7 +54,8 @@ const Navbar = ({
             alt="Steps Logo"
             style={{ width: "30px", height: "30px", marginRight: "8px" }}
           />
-          Steps CRM
+          <span className="d-none d-sm-inline">Steps CRM</span>
+          <span className="d-inline d-sm-none">Steps</span>
         </NavLink>
         <button
           className="navbar-toggler"
@@ -73,7 +70,8 @@ const Navbar = ({
         </button>
 
         <div className="collapse navbar-collapse" id="mainNavbar">
-          <div className="position-relative ms-3 me-auto">
+          {/* Search Form - Full width on mobile, auto width on desktop */}
+          <div className="position-relative my-3 my-lg-0 ms-lg-3 me-lg-auto">
             <form className="d-flex" onSubmit={handleSearch} role="search">
               <input
                 className="form-control me-2"
@@ -83,9 +81,13 @@ const Navbar = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setShowSearchHistory(true)}
+                style={{ minWidth: "200px" }}
               />
               <button className="btn btn-outline-primary" type="submit">
-                Search
+                <span className="d-none d-md-inline">Search</span>
+                <span className="d-inline d-md-none">
+                  <i className="bi bi-search"></i>
+                </span>
               </button>
             </form>
             {showSearchHistory && searchHistory.length > 0 && (
@@ -129,6 +131,7 @@ const Navbar = ({
             )}
           </div>
 
+          {/* Navigation Items - Compact and right-aligned */}
           <ul className="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center gap-2">
             {showBackButton && (
               <li className="nav-item">
@@ -137,54 +140,36 @@ const Navbar = ({
                   onClick={handleBackClick}
                   title="Back to Modules"
                 >
+                  <i className="bi bi-arrow-left me-1"></i>
                   Back
                 </button>
               </li>
             )}
-            <li className="nav-item d-flex align-items-center">
-              {/* Analytics / Dashboard toggle: when on analytics page show Dashboard button to return */}
-              {isAnalyticsActive ? (
-                <button
-                  className="btn btn-primary"
-                  onClick={() => navigate("/dashboard")}
-                  aria-label="Go to Dashboard"
-                  title="Back to Dashboard"
-                >
-                  🏠 Dashboard
-                </button>
-              ) : (
-                <button
-                  className="btn btn-outline-primary"
-                  onClick={() => navigate("/analytics")}
-                  aria-label="Go to Analytics"
-                  title="Open Analytics"
-                >
-                  📊 Analytics
-                </button>
-              )}
-            </li>
             <li className="nav-item">
               <NotificationCenter />
             </li>
-            {/* Theme toggle removed per project settings */}
-            <li className="nav-item me-3">
+            <li className="nav-item">
               <NavLink
                 className={({ isActive }) =>
                   `nav-link ${isActive ? "active" : ""}`
                 }
                 to="/chat"
               >
-                Chat
+                <i className="bi bi-chat-dots"></i>
+                <span className="d-none d-xl-inline ms-1">Chat</span>
               </NavLink>
             </li>
             <li className="nav-item">
               {user ? (
                 <div className="d-flex align-items-center">
-                  <div className="me-3 text-end d-none d-lg-block">
-                    <div className="fw-bold">
+                  <div className="me-2 text-end d-none d-lg-block">
+                    <div className="fw-bold small">
                       {user.fullName || user.firstName || "User"}
                     </div>
-                    <div className="small text-secondary">
+                    <div
+                      className="small text-secondary"
+                      style={{ fontSize: "0.7rem" }}
+                    >
                       {user.primaryEmailAddress?.emailAddress}
                     </div>
                   </div>

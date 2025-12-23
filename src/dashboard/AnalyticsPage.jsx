@@ -1,9 +1,10 @@
 // src/dashboard/AnalyticsPage.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Navbar from "../components/Navbar";
 import DashboardAnalytics from "../components/DashboardAnalytics";
 import { useUser } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
+import { apiService } from "../services/api";
 
 const AnalyticsPage = () => {
   const { user, isLoaded } = useUser();
@@ -15,6 +16,53 @@ const AnalyticsPage = () => {
     // Sending users to modules when they submit a module search
     navigate("/modules");
   };
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [materialRequests, setMaterialRequests] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchAnalytics = async () => {
+      setLoading(true);
+      try {
+        const res = await apiService.get("/api/analytics");
+        if (mounted) setData(res.data || {});
+      } catch (err) {
+        console.error("Failed to fetch analytics:", err);
+        if (mounted) setError(err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    const fetchMaterialRequests = async () => {
+      try {
+        const res = await apiService.get("/api/material-requests");
+        if (mounted) setMaterialRequests(res.data || []);
+      } catch (err) {
+        console.error("Failed to fetch material requests:", err);
+      }
+    };
+
+    const fetchPurchaseOrders = async () => {
+      try {
+        const res = await apiService.get("/api/purchase-orders");
+        if (mounted) setPurchaseOrders(res.data || []);
+      } catch (err) {
+        console.error("Failed to fetch purchase orders:", err);
+      }
+    };
+
+    fetchAnalytics();
+    fetchMaterialRequests();
+    fetchPurchaseOrders();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   if (!isLoaded) {
     return (
@@ -36,7 +84,17 @@ const AnalyticsPage = () => {
       />
       <div className="dashboard-bg">
         <div className="dashboard-card card shadow-lg p-4 mx-auto text-center">
-          <DashboardAnalytics />
+          {loading && <div className="p-4">Loading analytics...</div>}
+          {error && (
+            <div className="p-4 text-danger">Failed to load analytics.</div>
+          )}
+          {!loading && !error && (
+            <DashboardAnalytics
+              data={data}
+              materialRequests={materialRequests}
+              purchaseOrders={purchaseOrders}
+            />
+          )}
         </div>
       </div>
     </div>

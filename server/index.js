@@ -1,0 +1,341 @@
+/* eslint-disable */
+// Server migrated to use MongoDB via Mongoose.
+const express = require('express');
+const cors = require('cors');
+const morgan = require('morgan');
+const mongoose = require('mongoose');
+const path = require('path');
+const dotenv = require('dotenv');
+// Ensure .env is loaded even when the server is started from the repo root
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+const ModuleModel = require('./models/Module');
+const AnalyticsModel = require('./models/Analytics');
+const AttendanceModel = require('./models/Attendance');
+const MaterialRequestModel = require('./models/MaterialRequest');
+const PurchaseOrderModel = require('./models/PurchaseOrder');
+const { sendApprovalEmail, sendPOReviewEmail } = require('./utils/emailService');
+const seed = require('./data');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(morgan('dev'));
+
+if (!process.env.MONGODB_URI) {
+  throw new Error('MONGODB_URI is not set in environment');
+}
+
+const MONGODB_URI = process.env.MONGODB_URI;
+
+async function start() {
+  try {
+    await mongoose.connect(MONGODB_URI, { 
+      useNewUrlParser: true, 
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000 
+    });
+    console.log('✓ Connected to MongoDB');
+
+    // Seed modules if empty or update with new modules
+    const moduleCount = await ModuleModel.countDocuments();
+    if (moduleCount === 0) {
+      await ModuleModel.insertMany(seed.modules);
+      console.log('Seeded modules');
+    } else {
+      // Check for new modules and add them
+      for (const module of seed.modules) {
+        const exists = await ModuleModel.findOne({ id: module.id });
+        if (!exists) {
+          await ModuleModel.create(module);
+          console.log(`Added new module: ${module.name}`);
+        }
+      }
+    }
+
+    // Seed analytics if empty
+    const analyticsCount = await AnalyticsModel.countDocuments();
+    if (analyticsCount === 0) {
+      await AnalyticsModel.create(seed.analytics);
+      console.log('Seeded analytics');
+    }
+
+    // Seed attendance if empty
+    const attendanceCount = await AttendanceModel.countDocuments();
+    if (attendanceCount === 0) {
+      await AttendanceModel.insertMany(seed.attendance);
+      console.log('Seeded attendance');
+    }
+  } catch (err) {
+    console.error('✗ Failed to connect to MongoDB');
+    console.error('  Error:', err.message);
+    console.error('  Please ensure MongoDB is running or set MONGODB_URI in .env');
+    process.exit(1);
+  }
+
+  // API endpoints using centralized server API helpers
+  const api = require('./api');
+
+  app.get('/api/modules', async (req, res) => {
+    const mods = await api.getModules();
+    res.json(mods);
+  });
+
+  app.get('/api/modules/:id', async (req, res) => {
+    const id = req.params.id;
+    const mod = await api.getModuleById(id);
+    if (!mod) return res.status(404).json({ message: 'Not found' });
+    res.json(mod);
+  });
+
+  app.get('/api/analytics', async (req, res) => {
+    const a = await api.getAnalytics();
+    res.json(a || {});
+  });
+
+  app.get('/api/attendance', async (req, res) => {
+    const list = await api.getAttendance();
+    res.json(list);
+  });
+
+  // Material Requests endpoints
+  app.get('/api/material-requests', async (req, res) => {
+    try {
+      const requests = await MaterialRequestModel.find().sort({ createdAt: -1 });
+      res.json(requests);
+    } catch (err) {
+      console.error('Error fetching material requests:', err);
+      res.status(500).json({ message: 'Failed to fetch requests' });
+    }
+  });
+
+  app.post('/api/material-requests', async (req, res) => {
+    try {
+      // Generate request ID
+      const count = await MaterialRequestModel.countDocuments();
+      const requestId = String(count + 1).padStart(6, '0');
+      
+      const requestData = {
+        ...req.body,
+        requestId,
+      };
+      
+      const newRequest = await MaterialRequestModel.create(requestData);
+      
+      // Send approval email to approver
+      await sendApprovalEmail(newRequest);
+      
+      res.status(201).json({ message: 'Request created and email sent', data: newRequest });
+    } catch (err) {
+      console.error('Error creating material request:', err);
+      res.status(500).json({ message: 'Failed to create request' });
+    }
+  });
+
+  // Approve material request and create PO
+  app.post('/api/material-requests/:id/approve', async (req, res) => {
+    try {
+      const materialRequest = await MaterialRequestModel.findById(req.params.id);
+      if (!materialRequest) {
+        return res.status(404).json({ message: 'Request not found' });
+      }
+
+      // Update material request status
+      materialRequest.status = 'approved';
+      await materialRequest.save();
+
+      // Auto-create Purchase Order
+      const poCount = await PurchaseOrderModel.countDocuments();
+      const poNumber = `PO-${String(poCount + 1).padStart(6, '0')}`;
+
+      // Map line items from material request to PO format
+      const lineItems = materialRequest.lineItems.map(item => ({
+        itemName: item.itemName,
+        description: item.description || '',
+        quantity: parseFloat(item.quantity) || 0,
+        unit: item.quantityType || 'pcs',
+        unitPrice: parseFloat(item.amount) || 0,
+        total: (parseFloat(item.quantity) || 0) * (parseFloat(item.amount) || 0),
+      }));
+
+      const totalAmount = lineItems.reduce((sum, item) => sum + item.total, 0);
+
+      const purchaseOrder = await PurchaseOrderModel.create({
+        poNumber,
+        requester: materialRequest.requestedBy,
+        approver: materialRequest.approver,
+        vendor: req.body.vendor || 'To be assigned',
+        orderDate: new Date().toISOString().split('T')[0],
+        deliveryDate: '',
+        status: 'draft',
+        lineItems,
+        totalAmount,
+        message: materialRequest.message || '',
+        attachments: materialRequest.attachments || [],
+        materialRequestId: materialRequest._id,
+      });
+
+      // PO created for procurement team review (no email sent)
+
+      res.json({ 
+        message: 'Request approved and PO created',
+        materialRequest,
+        purchaseOrder 
+      });
+    } catch (err) {
+      console.error('Error approving material request:', err);
+      res.status(500).json({ message: 'Failed to approve request' });
+    }
+  });
+
+  // Reject material request
+  app.post('/api/material-requests/:id/reject', async (req, res) => {
+    try {
+      const updated = await MaterialRequestModel.findByIdAndUpdate(
+        req.params.id,
+        { status: 'rejected', rejectionReason: req.body.reason },
+        { new: true }
+      );
+      if (!updated) return res.status(404).json({ message: 'Request not found' });
+      res.json({ message: 'Request rejected', data: updated });
+    } catch (err) {
+      console.error('Error rejecting material request:', err);
+      res.status(500).json({ message: 'Failed to reject request' });
+    }
+  });
+
+  app.put('/api/material-requests/:id', async (req, res) => {
+    try {
+      const updated = await MaterialRequestModel.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { new: true }
+      );
+      if (!updated) return res.status(404).json({ message: 'Request not found' });
+      res.json({ message: 'Request updated', data: updated });
+    } catch (err) {
+      console.error('Error updating material request:', err);
+      res.status(500).json({ message: 'Failed to update request' });
+    }
+  });
+
+  // Signatures endpoints
+  app.get('/api/signatures', async (req, res) => {
+    res.json([]);
+  });
+
+  // Vendors endpoint
+  app.get('/api/vendors', async (req, res) => {
+    const vendors = [
+      { id: 1, name: 'ABC Office Supplies Ltd.', category: 'Office Supplies', email: 'contact@abcoffice.com' },
+      { id: 2, name: 'Tech Solutions Inc.', category: 'Technology', email: 'sales@techsolutions.com' },
+      { id: 3, name: 'Global Furniture Co.', category: 'Furniture', email: 'info@globalfurniture.com' },
+      { id: 4, name: 'Premier Cleaning Services', category: 'Services', email: 'hello@premiercleaning.com' },
+      { id: 5, name: 'Industrial Equipment Corp.', category: 'Equipment', email: 'orders@indequip.com' },
+      { id: 6, name: 'Green Energy Solutions', category: 'Energy', email: 'info@greenenergy.com' },
+      { id: 7, name: 'Prime Construction Materials', category: 'Construction', email: 'sales@primeconst.com' },
+      { id: 8, name: 'Fast Delivery Logistics', category: 'Logistics', email: 'support@fastdelivery.com' },
+    ];
+    res.json(vendors);
+  });
+
+  // Purchase Orders endpoints
+  app.get('/api/purchase-orders', async (req, res) => {
+    try {
+      const orders = await PurchaseOrderModel.find().sort({ createdAt: -1 });
+      res.json(orders);
+    } catch (err) {
+      console.error('Error fetching purchase orders:', err);
+      res.status(500).json({ message: 'Failed to fetch orders' });
+    }
+  });
+
+  app.post('/api/purchase-orders', async (req, res) => {
+    try {
+      const count = await PurchaseOrderModel.countDocuments();
+      const poNumber = `PO-${String(count + 1).padStart(6, '0')}`;
+      
+      const poData = {
+        ...req.body,
+        poNumber,
+      };
+      
+      const newPO = await PurchaseOrderModel.create(poData);
+      res.status(201).json({ message: 'Purchase order created', data: newPO });
+    } catch (err) {
+      console.error('Error creating purchase order:', err);
+      res.status(500).json({ message: 'Failed to create purchase order' });
+    }
+  });
+
+  // Review and approve PO
+  app.post('/api/purchase-orders/:id/review', async (req, res) => {
+    try {
+      const po = await PurchaseOrderModel.findById(req.params.id);
+      if (!po) {
+        return res.status(404).json({ message: 'Purchase order not found' });
+      }
+
+      // Update PO with review changes
+      if (req.body.lineItems) po.lineItems = req.body.lineItems;
+      if (req.body.vendor) po.vendor = req.body.vendor;
+      if (req.body.deliveryDate) po.deliveryDate = req.body.deliveryDate;
+      if (req.body.reviewNotes) po.reviewNotes = req.body.reviewNotes;
+      
+      // Calculate new total
+      po.totalAmount = po.lineItems.reduce((sum, item) => sum + item.total, 0);
+      
+      // Update status to reviewed (ready for finance)
+      po.status = 'payment_pending';
+      await po.save();
+
+      res.json({ message: 'Purchase order reviewed and sent to finance', data: po });
+    } catch (err) {
+      console.error('Error reviewing purchase order:', err);
+      res.status(500).json({ message: 'Failed to review purchase order' });
+    }
+  });
+
+  // Get POs pending payment (for Finance module)
+  app.get('/api/purchase-orders/pending-payment', async (req, res) => {
+    try {
+      const orders = await PurchaseOrderModel.find({ 
+        status: 'payment_pending' 
+      }).sort({ createdAt: -1 });
+      res.json(orders);
+    } catch (err) {
+      console.error('Error fetching pending payment orders:', err);
+      res.status(500).json({ message: 'Failed to fetch orders' });
+    }
+  });
+
+  // Mark PO as paid
+  app.post('/api/purchase-orders/:id/mark-paid', async (req, res) => {
+    try {
+      const po = await PurchaseOrderModel.findByIdAndUpdate(
+        req.params.id,
+        { status: 'paid', paidDate: new Date() },
+        { new: true }
+      );
+      if (!po) return res.status(404).json({ message: 'Purchase order not found' });
+      res.json({ message: 'Payment recorded', data: po });
+    } catch (err) {
+      console.error('Error marking PO as paid:', err);
+      res.status(500).json({ message: 'Failed to update payment status' });
+    }
+  });
+
+  if (!process.env.PORT) {
+    throw new Error('PORT is not set in environment');
+  }
+
+  const port = process.env.PORT;
+  app.listen(port, () => {
+    console.log(`Steps backend listening on http://localhost:${port}`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});

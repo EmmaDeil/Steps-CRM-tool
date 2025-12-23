@@ -1,80 +1,611 @@
-import React from "react";
+import React, { useState } from "react";
+import { useUser } from "@clerk/clerk-react";
 
 const Accounting = () => {
+  const { user } = useUser();
+  const [retirementRequests, setRetirementRequests] = useState([
+    {
+      id: 1,
+      employeeName: "John Smith",
+      employeeId: "EMP001",
+      department: "Finance",
+      userId: "user_123",
+      retirementDate: "2025-06-30",
+      yearsOfService: 25,
+      finalSettlement: 125000,
+      advanceRequestId: 1,
+      status: "pending",
+      submittedDate: "2025-12-10",
+    },
+    {
+      id: 2,
+      employeeName: "Sarah Johnson",
+      employeeId: "EMP023",
+      department: "HR",
+      userId: "user_456",
+      retirementDate: "2025-08-15",
+      yearsOfService: 20,
+      finalSettlement: 95000,
+      advanceRequestId: 2,
+      status: "approved",
+      submittedDate: "2025-12-05",
+    },
+  ]);
+  const [advanceRequests, setAdvanceRequests] = useState([
+    {
+      id: 1,
+      employeeName: "Mike Wilson",
+      employeeId: "EMP045",
+      department: "Sales",
+      userId: "user_789",
+      amount: 5000,
+      reason: "Medical Emergency",
+      requestDate: "2025-12-18",
+      repaymentPeriod: "6 months",
+      status: "approved",
+      hasRetirement: false,
+    },
+    {
+      id: 2,
+      employeeName: "Emily Brown",
+      employeeId: "EMP067",
+      department: "Marketing",
+      userId: "user_101",
+      amount: 3500,
+      reason: "Home Repair",
+      requestDate: "2025-12-15",
+      repaymentPeriod: "4 months",
+      status: "approved",
+      hasRetirement: false,
+    },
+  ]);
+  const [showRetirementForm, setShowRetirementForm] = useState(false);
+  const [showAdvanceForm, setShowAdvanceForm] = useState(false);
+  const [retirementFormData, setRetirementFormData] = useState({
+    retirementDate: "",
+    yearsOfService: "",
+    finalSettlement: "",
+    advanceRequestId: "",
+  });
+  const [advanceFormData, setAdvanceFormData] = useState({
+    amount: "",
+    reason: "",
+    repaymentPeriod: "",
+  });
+
+  // Get current user's info
+  const currentUserName = user?.fullName || "Current User";
+  const currentUserId = user?.id || "user_current";
+  const currentEmployeeId = user?.publicMetadata?.employeeId || "EMP999";
+  const currentDepartment = user?.publicMetadata?.department || "General";
+
+  // Filter requests to show only current user's requests
+  const userRetirementRequests = retirementRequests.filter(
+    (req) => req.userId === currentUserId
+  );
+  const userAdvanceRequests = advanceRequests.filter(
+    (req) => req.userId === currentUserId
+  );
+
+  // Get approved advances that can be retired
+  const eligibleAdvances = userAdvanceRequests.filter(
+    (req) => req.status === "approved" && !req.hasRetirement
+  );
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(amount);
+  };
+
+  const handleRetirementSubmit = (e) => {
+    e.preventDefault();
+
+    // Check if advance request ID is provided
+    const advanceRequest = advanceRequests.find(
+      (req) => req.id === parseInt(retirementFormData.advanceRequestId)
+    );
+
+    if (!advanceRequest) {
+      alert("Please select a valid advance request to retire");
+      return;
+    }
+
+    const newRequest = {
+      id: retirementRequests.length + 1,
+      employeeName: currentUserName,
+      employeeId: currentEmployeeId,
+      department: currentDepartment,
+      userId: currentUserId,
+      ...retirementFormData,
+      advanceRequestId: parseInt(retirementFormData.advanceRequestId),
+      status: "pending",
+      submittedDate: new Date().toISOString().split("T")[0],
+      finalSettlement: parseFloat(retirementFormData.finalSettlement),
+      yearsOfService: parseInt(retirementFormData.yearsOfService),
+    };
+
+    // Mark the advance as having a retirement request
+    setAdvanceRequests(
+      advanceRequests.map((req) =>
+        req.id === parseInt(retirementFormData.advanceRequestId)
+          ? { ...req, hasRetirement: true }
+          : req
+      )
+    );
+
+    setRetirementRequests([...retirementRequests, newRequest]);
+    setShowRetirementForm(false);
+    setRetirementFormData({
+      retirementDate: "",
+      yearsOfService: "",
+      finalSettlement: "",
+      advanceRequestId: "",
+    });
+  };
+
+  const handleAdvanceSubmit = (e) => {
+    e.preventDefault();
+    const newRequest = {
+      id: advanceRequests.length + 1,
+      employeeName: currentUserName,
+      employeeId: currentEmployeeId,
+      department: currentDepartment,
+      userId: currentUserId,
+      ...advanceFormData,
+      status: "pending",
+      requestDate: new Date().toISOString().split("T")[0],
+      amount: parseFloat(advanceFormData.amount),
+      hasRetirement: false,
+    };
+    setAdvanceRequests([...advanceRequests, newRequest]);
+    setShowAdvanceForm(false);
+    setAdvanceFormData({
+      amount: "",
+      reason: "",
+      repaymentPeriod: "",
+    });
+  };
+
   return (
-    <div className="p-4">
-      <h2 className="mb-3">Accounting Module</h2>
-      <p className="text-secondary mb-4">
-        Manage financial transactions, accounts, and bookkeeping.
-      </p>
-
-      <div className="row g-3">
-        <div className="col-md-3">
-          <div className="card p-3">
-            <h5 className="mb-2">Total Income</h5>
-            <p className="h3 mb-0 text-success">$325,450</p>
-            <small className="text-success">+15% this month</small>
-          </div>
-        </div>
-        <div className="col-md-3">
-          <div className="card p-3">
-            <h5 className="mb-2">Total Expenses</h5>
-            <p className="h3 mb-0 text-danger">$198,320</p>
-            <small className="text-danger">+8% this month</small>
-          </div>
-        </div>
-        <div className="col-md-3">
-          <div className="card p-3">
-            <h5 className="mb-2">Accounts Payable</h5>
-            <p className="h3 mb-0 text-warning">$45,670</p>
-          </div>
-        </div>
-        <div className="col-md-3">
-          <div className="card p-3">
-            <h5 className="mb-2">Accounts Receivable</h5>
-            <p className="h3 mb-0 text-info">$78,920</p>
-          </div>
+    <div className="container-fluid p-4">
+      <div className="mb-4">
+        <h2 className="mb-2">Accounting Module</h2>
+        <p className="text-secondary">
+          Manage your retirement and advance expense requests
+        </p>
+        <div className="alert alert-info">
+          <i className="bi bi-info-circle me-2"></i>
+          <strong>Note:</strong> You can only view and manage your own requests.
+          Retirement requests can only be made for approved advances.
         </div>
       </div>
 
-      <div className="mt-4">
-        <h4>Recent Transactions</h4>
-        <div className="list-group">
-          <div className="list-group-item">
-            <div className="d-flex justify-content-between">
+      <div className="row g-4">
+        {/* Advance Expense Request Card */}
+        <div className="col-12 col-lg-6">
+          <div className="card shadow-sm h-100">
+            <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
               <div>
-                <strong>Payment Received - Client ABC</strong>
-                <div className="small text-secondary">Invoice #12345</div>
+                <h5 className="mb-0">
+                  <i className="bi bi-cash-coin me-2"></i>Advance Expense
+                  Requests
+                </h5>
               </div>
-              <span className="text-success fw-bold">+$12,500</span>
+              <button
+                className="btn btn-light btn-sm"
+                onClick={() => setShowAdvanceForm(!showAdvanceForm)}
+              >
+                <i className="bi bi-plus-circle me-1"></i>
+                {showAdvanceForm ? "Cancel" : "New Request"}
+              </button>
             </div>
-          </div>
-          <div className="list-group-item">
-            <div className="d-flex justify-content-between">
-              <div>
-                <strong>Vendor Payment - Office Supplies</strong>
-                <div className="small text-secondary">Invoice #67890</div>
+            <div className="card-body">
+              {showAdvanceForm && (
+                <div className="border rounded p-3 mb-3 bg-light">
+                  <h6 className="mb-3">New Advance Request</h6>
+                  <form onSubmit={handleAdvanceSubmit}>
+                    <div className="mb-3">
+                      <label className="form-label">Employee Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={currentUserName}
+                        disabled
+                      />
+                    </div>
+                    <div className="row mb-3">
+                      <div className="col-md-6">
+                        <label className="form-label">Employee ID</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={currentEmployeeId}
+                          disabled
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label">Department</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={currentDepartment}
+                          disabled
+                        />
+                      </div>
+                    </div>
+                    <div className="row mb-3">
+                      <div className="col-md-6">
+                        <label className="form-label">
+                          Advance Amount <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          className="form-control"
+                          value={advanceFormData.amount}
+                          onChange={(e) =>
+                            setAdvanceFormData({
+                              ...advanceFormData,
+                              amount: e.target.value,
+                            })
+                          }
+                          min="0"
+                          step="0.01"
+                          required
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label">
+                          Repayment Period{" "}
+                          <span className="text-danger">*</span>
+                        </label>
+                        <select
+                          className="form-select"
+                          value={advanceFormData.repaymentPeriod}
+                          onChange={(e) =>
+                            setAdvanceFormData({
+                              ...advanceFormData,
+                              repaymentPeriod: e.target.value,
+                            })
+                          }
+                          required
+                        >
+                          <option value="">Select Period</option>
+                          <option value="3 months">3 months</option>
+                          <option value="6 months">6 months</option>
+                          <option value="9 months">9 months</option>
+                          <option value="12 months">12 months</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Reason <span className="text-danger">*</span>
+                      </label>
+                      <textarea
+                        className="form-control"
+                        rows="2"
+                        value={advanceFormData.reason}
+                        onChange={(e) =>
+                          setAdvanceFormData({
+                            ...advanceFormData,
+                            reason: e.target.value,
+                          })
+                        }
+                        placeholder="e.g., Medical Emergency, Home Repair"
+                        required
+                      ></textarea>
+                    </div>
+                    <div className="d-flex gap-2">
+                      <button type="submit" className="btn btn-primary btn-sm">
+                        <i className="bi bi-check-circle me-1"></i>Submit
+                        Request
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setShowAdvanceForm(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              <div className="table-responsive">
+                <table className="table table-sm table-hover">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Amount</th>
+                      <th>Reason</th>
+                      <th>Period</th>
+                      <th>Date</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userAdvanceRequests.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="text-center text-muted py-3">
+                          No advance requests found
+                        </td>
+                      </tr>
+                    ) : (
+                      userAdvanceRequests.map((request) => (
+                        <tr key={request.id}>
+                          <td>
+                            <strong className="text-primary">
+                              {formatCurrency(request.amount)}
+                            </strong>
+                          </td>
+                          <td>{request.reason}</td>
+                          <td>
+                            <small>{request.repaymentPeriod}</small>
+                          </td>
+                          <td>
+                            <small>{request.requestDate}</small>
+                          </td>
+                          <td>
+                            <span
+                              className={`badge ${
+                                request.status === "approved"
+                                  ? "bg-success"
+                                  : request.status === "rejected"
+                                  ? "bg-danger"
+                                  : "bg-warning"
+                              }`}
+                            >
+                              {request.status}
+                            </span>
+                            {request.hasRetirement && (
+                              <span className="badge bg-info ms-1">
+                                <i className="bi bi-clock-history"></i> Retiring
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
-              <span className="text-danger fw-bold">-$3,450</span>
-            </div>
-          </div>
-          <div className="list-group-item">
-            <div className="d-flex justify-content-between">
-              <div>
-                <strong>Salary Payment - Batch Processing</strong>
-                <div className="small text-secondary">Monthly Payroll</div>
-              </div>
-              <span className="text-danger fw-bold">-$85,000</span>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="mt-4">
-        <div className="d-flex gap-2">
-          <button className="btn btn-primary">New Transaction</button>
-          <button className="btn btn-outline-primary">View Reports</button>
-          <button className="btn btn-outline-primary">Export Data</button>
+        {/* Retirement Card */}
+        <div className="col-12 col-lg-6">
+          <div className="card shadow-sm h-100">
+            <div className="card-header bg-success text-white d-flex justify-content-between align-items-center">
+              <div>
+                <h5 className="mb-0">
+                  <i className="bi bi-calendar-check me-2"></i>Retirement
+                  Requests
+                </h5>
+              </div>
+              <button
+                className="btn btn-light btn-sm"
+                onClick={() => setShowRetirementForm(!showRetirementForm)}
+                disabled={eligibleAdvances.length === 0}
+                title={
+                  eligibleAdvances.length === 0
+                    ? "No approved advances available to retire"
+                    : ""
+                }
+              >
+                <i className="bi bi-plus-circle me-1"></i>
+                {showRetirementForm ? "Cancel" : "New Request"}
+              </button>
+            </div>
+            <div className="card-body">
+              {eligibleAdvances.length === 0 && !showRetirementForm && (
+                <div className="alert alert-warning">
+                  <i className="bi bi-exclamation-triangle me-2"></i>
+                  You need an approved advance request before creating a
+                  retirement request.
+                </div>
+              )}
+
+              {showRetirementForm && (
+                <div className="border rounded p-3 mb-3 bg-light">
+                  <h6 className="mb-3">New Retirement Request</h6>
+                  <form onSubmit={handleRetirementSubmit}>
+                    <div className="mb-3">
+                      <label className="form-label">Employee Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={currentUserName}
+                        disabled
+                      />
+                    </div>
+                    <div className="row mb-3">
+                      <div className="col-md-6">
+                        <label className="form-label">Employee ID</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={currentEmployeeId}
+                          disabled
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label">Department</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={currentDepartment}
+                          disabled
+                        />
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Select Advance to Retire{" "}
+                        <span className="text-danger">*</span>
+                      </label>
+                      <select
+                        className="form-select"
+                        value={retirementFormData.advanceRequestId}
+                        onChange={(e) =>
+                          setRetirementFormData({
+                            ...retirementFormData,
+                            advanceRequestId: e.target.value,
+                          })
+                        }
+                        required
+                      >
+                        <option value="">Choose advance request...</option>
+                        {eligibleAdvances.map((advance) => (
+                          <option key={advance.id} value={advance.id}>
+                            {formatCurrency(advance.amount)} - {advance.reason}{" "}
+                            ({advance.requestDate})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="row mb-3">
+                      <div className="col-md-6">
+                        <label className="form-label">
+                          Retirement Date <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control"
+                          value={retirementFormData.retirementDate}
+                          onChange={(e) =>
+                            setRetirementFormData({
+                              ...retirementFormData,
+                              retirementDate: e.target.value,
+                            })
+                          }
+                          required
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label">
+                          Years of Service{" "}
+                          <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          className="form-control"
+                          value={retirementFormData.yearsOfService}
+                          onChange={(e) =>
+                            setRetirementFormData({
+                              ...retirementFormData,
+                              yearsOfService: e.target.value,
+                            })
+                          }
+                          min="0"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Final Settlement Amount{" "}
+                        <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={retirementFormData.finalSettlement}
+                        onChange={(e) =>
+                          setRetirementFormData({
+                            ...retirementFormData,
+                            finalSettlement: e.target.value,
+                          })
+                        }
+                        min="0"
+                        step="0.01"
+                        required
+                      />
+                    </div>
+                    <div className="d-flex gap-2">
+                      <button type="submit" className="btn btn-success btn-sm">
+                        <i className="bi bi-check-circle me-1"></i>Submit
+                        Request
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setShowRetirementForm(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              <div className="table-responsive">
+                <table className="table table-sm table-hover">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Retirement Date</th>
+                      <th>Years</th>
+                      <th>Settlement</th>
+                      <th>Date</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userRetirementRequests.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="text-center text-muted py-3">
+                          No retirement requests found
+                        </td>
+                      </tr>
+                    ) : (
+                      userRetirementRequests.map((request) => {
+                        const linkedAdvance = advanceRequests.find(
+                          (adv) => adv.id === request.advanceRequestId
+                        );
+                        return (
+                          <tr key={request.id}>
+                            <td>
+                              <small>{request.retirementDate}</small>
+                            </td>
+                            <td>{request.yearsOfService} yrs</td>
+                            <td>
+                              <strong className="text-success">
+                                {formatCurrency(request.finalSettlement)}
+                              </strong>
+                            </td>
+                            <td>
+                              <small>{request.submittedDate}</small>
+                            </td>
+                            <td>
+                              <span
+                                className={`badge ${
+                                  request.status === "approved"
+                                    ? "bg-success"
+                                    : request.status === "rejected"
+                                    ? "bg-danger"
+                                    : "bg-warning"
+                                }`}
+                              >
+                                {request.status}
+                              </span>
+                              {linkedAdvance && (
+                                <div className="small text-muted mt-1">
+                                  <i className="bi bi-link-45deg"></i>{" "}
+                                  {formatCurrency(linkedAdvance.amount)}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

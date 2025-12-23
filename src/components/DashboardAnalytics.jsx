@@ -16,7 +16,11 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const DashboardAnalytics = ({ data }) => {
+const DashboardAnalytics = ({
+  data,
+  materialRequests = [],
+  purchaseOrders = [],
+}) => {
   const COLORS = [
     "#0d6efd",
     "#6c757d",
@@ -26,35 +30,43 @@ const DashboardAnalytics = ({ data }) => {
     "#0dcaf0",
   ];
 
-  // Sample data - replace with real data from props
-  const moduleUsageData = data?.moduleUsage || [
-    { name: "Accounting", value: 45 },
-    { name: "Inventory", value: 32 },
-    { name: "HR", value: 28 },
-    { name: "Attendance", value: 56 },
-    { name: "Finance", value: 23 },
-  ];
-
-  const activityData = data?.recentActivity || [
-    { date: "Mon", actions: 12 },
-    { date: "Tue", actions: 19 },
-    { date: "Wed", actions: 15 },
-    { date: "Thu", actions: 25 },
-    { date: "Fri", actions: 22 },
-    { date: "Sat", actions: 8 },
-    { date: "Sun", actions: 5 },
-  ];
-
+  // Use data provided by the backend. If data is not provided, render
+  // empty-friendly defaults (no hard-coded sample data in the client).
+  const moduleUsageData = data?.moduleUsage || [];
+  const activityData = data?.recentActivity || [];
   const stats = data?.stats || {
-    totalModules: 8,
-    activeUsers: 127,
-    todayActions: 89,
-    alerts: 3,
+    totalModules: moduleUsageData.length || 0,
+    activeUsers: data?.stats?.activeUsers || 0,
+    todayActions: data?.stats?.todayActions || 0,
+    alerts: data?.stats?.alerts || 0,
+  };
+
+  // Calculate material requests stats
+  const materialRequestsStats = {
+    total: materialRequests.length,
+    pending: materialRequests.filter((r) => r.status === "pending").length,
+    approved: materialRequests.filter((r) => r.status === "approved").length,
+    rejected: materialRequests.filter((r) => r.status === "rejected").length,
+  };
+
+  // Calculate purchase orders stats
+  const purchaseOrdersStats = {
+    total: purchaseOrders.length,
+    totalValue: purchaseOrders.reduce((sum, o) => sum + (o.amount || 0), 0),
+    pendingApproval: purchaseOrders.filter((o) => o.status === "submitted")
+      .length,
+    received: purchaseOrders.filter((o) => o.status === "received").length,
+  };
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(amount);
   };
 
   return (
     <div className="container-fluid p-4">
-        
       {/* Stats Cards */}
       <div className="row g-3 mb-4">
         <div className="col-12 col-sm-6 col-lg-3">
@@ -98,6 +110,120 @@ const DashboardAnalytics = ({ data }) => {
                 <h3 className="mb-0 text-warning">{stats.alerts}</h3>
               </div>
               <div className="fs-1">🔔</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Material Requests Summary */}
+      <div className="row g-3 mb-4">
+        <div className="col-12">
+          <h5 className="mb-3">Material Requests Overview</h5>
+        </div>
+        <div className="col-12 col-sm-6 col-lg-3">
+          <div className="card p-3 h-100">
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <p className="text-secondary mb-1">Total Requests</p>
+                <h3 className="mb-0">{materialRequestsStats.total}</h3>
+              </div>
+              <div className="fs-1">📋</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-12 col-sm-6 col-lg-3">
+          <div className="card p-3 h-100">
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <p className="text-secondary mb-1">Pending</p>
+                <h3 className="mb-0 text-warning">
+                  {materialRequestsStats.pending}
+                </h3>
+              </div>
+              <div className="fs-1">⏳</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-12 col-sm-6 col-lg-3">
+          <div className="card p-3 h-100">
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <p className="text-secondary mb-1">Approved</p>
+                <h3 className="mb-0 text-success">
+                  {materialRequestsStats.approved}
+                </h3>
+              </div>
+              <div className="fs-1">✅</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-12 col-sm-6 col-lg-3">
+          <div className="card p-3 h-100">
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <p className="text-secondary mb-1">Rejected</p>
+                <h3 className="mb-0 text-danger">
+                  {materialRequestsStats.rejected}
+                </h3>
+              </div>
+              <div className="fs-1">❌</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Purchase Orders Summary */}
+      <div className="row g-3 mb-4">
+        <div className="col-12">
+          <h5 className="mb-3">Purchase Orders Overview</h5>
+        </div>
+        <div className="col-12 col-sm-6 col-lg-3">
+          <div className="card p-3 h-100">
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <p className="text-secondary mb-1">Total Orders</p>
+                <h3 className="mb-0">{purchaseOrdersStats.total}</h3>
+              </div>
+              <div className="fs-1">📦</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-12 col-sm-6 col-lg-3">
+          <div className="card p-3 h-100">
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <p className="text-secondary mb-1">Total Value</p>
+                <h3 className="mb-0 text-primary">
+                  {formatCurrency(purchaseOrdersStats.totalValue)}
+                </h3>
+              </div>
+              <div className="fs-1">💰</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-12 col-sm-6 col-lg-3">
+          <div className="card p-3 h-100">
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <p className="text-secondary mb-1">Pending Approval</p>
+                <h3 className="mb-0 text-info">
+                  {purchaseOrdersStats.pendingApproval}
+                </h3>
+              </div>
+              <div className="fs-1">⏱️</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-12 col-sm-6 col-lg-3">
+          <div className="card p-3 h-100">
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <p className="text-secondary mb-1">Received</p>
+                <h3 className="mb-0 text-success">
+                  {purchaseOrdersStats.received}
+                </h3>
+              </div>
+              <div className="fs-1">✅</div>
             </div>
           </div>
         </div>
@@ -179,38 +305,7 @@ const DashboardAnalytics = ({ data }) => {
           <div className="card p-3">
             <h5 className="mb-3">Recent Activities</h5>
             <div className="list-group list-group-flush">
-              {(
-                data?.recentActivities || [
-                  {
-                    id: 1,
-                    user: "John Doe",
-                    action: "Updated inventory item",
-                    module: "Inventory",
-                    time: "5 mins ago",
-                  },
-                  {
-                    id: 2,
-                    user: "Jane Smith",
-                    action: "Created new transaction",
-                    module: "Accounting",
-                    time: "12 mins ago",
-                  },
-                  {
-                    id: 3,
-                    user: "Bob Johnson",
-                    action: "Checked attendance",
-                    module: "Attendance",
-                    time: "23 mins ago",
-                  },
-                  {
-                    id: 4,
-                    user: "Alice Brown",
-                    action: "Generated report",
-                    module: "Finance",
-                    time: "1 hour ago",
-                  },
-                ]
-              ).map((activity) => (
+              {(data?.recentActivities || []).map((activity) => (
                 <div
                   key={activity.id}
                   className="list-group-item border-0 px-0"
@@ -244,6 +339,8 @@ DashboardAnalytics.propTypes = {
     stats: PropTypes.object,
     recentActivities: PropTypes.array,
   }),
+  materialRequests: PropTypes.array,
+  purchaseOrders: PropTypes.array,
 };
 
 export default DashboardAnalytics;

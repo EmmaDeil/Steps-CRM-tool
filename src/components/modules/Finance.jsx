@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 
-const FinanceReports = () => {
+const Finance = () => {
   const [pendingPayments, setPendingPayments] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -274,4 +274,4 @@ const FinanceReports = () => {
   );
 };
 
-export default FinanceReports;
+export default Finance;

@@ -1,8 +1,8 @@
-// Centralized API service
+// Centralized API service for Steps CRM
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://attendance-app-swart-iota.vercel.app';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -39,7 +39,6 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       toast.error('Session expired. Please login again.');
-      // Optionally redirect to login
     } else if (error.response?.status === 403) {
       toast.error('You do not have permission to perform this action.');
     } else if (error.response?.status === 404) {
