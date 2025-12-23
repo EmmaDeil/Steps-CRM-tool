@@ -66,265 +66,216 @@ const DashboardAnalytics = ({
   };
 
   return (
-    <div className="container-fluid p-4">
+    <div className="w-full px-4 py-6">
       {/* Stats Cards */}
-      <div className="row g-3 mb-4">
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
-              <div>
-                <p className="text-secondary mb-1">Total Modules</p>
-                <h3 className="mb-0">{stats.totalModules}</h3>
-              </div>
-              <div className="fs-1">📦</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Total Modules</p>
+              <h3 className="text-2xl font-bold text-[#111418] dark:text-white">{stats.totalModules}</h3>
             </div>
+            <div className="text-3xl">📦</div>
           </div>
         </div>
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
-              <div>
-                <p className="text-secondary mb-1">Active Users</p>
-                <h3 className="mb-0">{stats.activeUsers}</h3>
-              </div>
-              <div className="fs-1">👥</div>
+        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Active Users</p>
+              <h3 className="text-2xl font-bold text-[#111418] dark:text-white">{stats.activeUsers}</h3>
             </div>
+            <div className="text-3xl">👥</div>
           </div>
         </div>
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
-              <div>
-                <p className="text-secondary mb-1">Today's Actions</p>
-                <h3 className="mb-0">{stats.todayActions}</h3>
-              </div>
-              <div className="fs-1">⚡</div>
+        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Today's Actions</p>
+              <h3 className="text-2xl font-bold text-[#111418] dark:text-white">{stats.todayActions}</h3>
             </div>
+            <div className="text-3xl">⚡</div>
           </div>
         </div>
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
-              <div>
-                <p className="text-secondary mb-1">Alerts</p>
-                <h3 className="mb-0 text-warning">{stats.alerts}</h3>
-              </div>
-              <div className="fs-1">🔔</div>
+        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Alerts</p>
+              <h3 className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats.alerts}</h3>
             </div>
+            <div className="text-3xl">🔔</div>
           </div>
         </div>
       </div>
 
       {/* Material Requests Summary */}
-      <div className="row g-3 mb-4">
-        <div className="col-12">
-          <h5 className="mb-3">Material Requests Overview</h5>
-        </div>
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
+      <div className="mb-6">
+        <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">Material Requests Overview</h5>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-secondary mb-1">Total Requests</p>
-                <h3 className="mb-0">{materialRequestsStats.total}</h3>
+                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Total Requests</p>
+                <h3 className="text-2xl font-bold text-[#111418] dark:text-white">{materialRequestsStats.total}</h3>
               </div>
-              <div className="fs-1">📋</div>
+              <div className="text-3xl">📋</div>
             </div>
           </div>
-        </div>
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
+          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-secondary mb-1">Pending</p>
-                <h3 className="mb-0 text-warning">
-                  {materialRequestsStats.pending}
-                </h3>
+                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Pending</p>
+                <h3 className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{materialRequestsStats.pending}</h3>
               </div>
-              <div className="fs-1">⏳</div>
+              <div className="text-3xl">⏳</div>
             </div>
           </div>
-        </div>
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
+          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-secondary mb-1">Approved</p>
-                <h3 className="mb-0 text-success">
-                  {materialRequestsStats.approved}
-                </h3>
+                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Approved</p>
+                <h3 className="text-2xl font-bold text-green-600 dark:text-green-400">{materialRequestsStats.approved}</h3>
               </div>
-              <div className="fs-1">✅</div>
+              <div className="text-3xl">✅</div>
             </div>
           </div>
-        </div>
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
+          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-secondary mb-1">Rejected</p>
-                <h3 className="mb-0 text-danger">
-                  {materialRequestsStats.rejected}
-                </h3>
+                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Rejected</p>
+                <h3 className="text-2xl font-bold text-red-600 dark:text-red-400">{materialRequestsStats.rejected}</h3>
               </div>
-              <div className="fs-1">❌</div>
+              <div className="text-3xl">❌</div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Purchase Orders Summary */}
-      <div className="row g-3 mb-4">
-        <div className="col-12">
-          <h5 className="mb-3">Purchase Orders Overview</h5>
-        </div>
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
+      <div className="mb-6">
+        <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">Purchase Orders Overview</h5>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-secondary mb-1">Total Orders</p>
-                <h3 className="mb-0">{purchaseOrdersStats.total}</h3>
+                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Total Orders</p>
+                <h3 className="text-2xl font-bold text-[#111418] dark:text-white">{purchaseOrdersStats.total}</h3>
               </div>
-              <div className="fs-1">📦</div>
+              <div className="text-3xl">📦</div>
             </div>
           </div>
-        </div>
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
+          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-secondary mb-1">Total Value</p>
-                <h3 className="mb-0 text-primary">
-                  {formatCurrency(purchaseOrdersStats.totalValue)}
-                </h3>
+                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Total Value</p>
+                <h3 className="text-2xl font-bold text-blue-600 dark:text-blue-400">{formatCurrency(purchaseOrdersStats.totalValue)}</h3>
               </div>
-              <div className="fs-1">💰</div>
+              <div className="text-3xl">💰</div>
             </div>
           </div>
-        </div>
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
+          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-secondary mb-1">Pending Approval</p>
-                <h3 className="mb-0 text-info">
-                  {purchaseOrdersStats.pendingApproval}
-                </h3>
+                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Pending Approval</p>
+                <h3 className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{purchaseOrdersStats.pendingApproval}</h3>
               </div>
-              <div className="fs-1">⏱️</div>
+              <div className="text-3xl">⏱️</div>
             </div>
           </div>
-        </div>
-        <div className="col-12 col-sm-6 col-lg-3">
-          <div className="card p-3 h-100">
-            <div className="d-flex justify-content-between align-items-center">
+          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-secondary mb-1">Received</p>
-                <h3 className="mb-0 text-success">
-                  {purchaseOrdersStats.received}
-                </h3>
+                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">Received</p>
+                <h3 className="text-2xl font-bold text-green-600 dark:text-green-400">{purchaseOrdersStats.received}</h3>
               </div>
-              <div className="fs-1">✅</div>
+              <div className="text-3xl">✅</div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Charts */}
-      <div className="row g-3">
-        <div className="col-12 col-lg-6">
-          <div className="card p-3">
-            <h5 className="mb-3">Module Usage</h5>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={moduleUsageData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) =>
-                    `${name} ${(percent * 100).toFixed(0)}%`
-                  }
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {moduleUsageData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4">
+          <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">Module Usage</h5>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={moduleUsageData}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ name, percent }) =>
+                  `${name} ${(percent * 100).toFixed(0)}%`
+                }
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="value"
+              >
+                {moduleUsageData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={COLORS[index % COLORS.length]}
+                  />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
 
-        <div className="col-12 col-lg-6">
-          <div className="card p-3">
-            <h5 className="mb-3">Weekly Activity</h5>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={activityData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="actions"
-                  stroke="#0d6efd"
-                  strokeWidth={2}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4">
+          <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">Weekly Activity</h5>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={activityData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="actions"
+                stroke="#0d6efd"
+                strokeWidth={2}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
 
-        <div className="col-12">
-          <div className="card p-3">
-            <h5 className="mb-3">Module Performance</h5>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={moduleUsageData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="value" fill="#0d6efd" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="lg:col-span-2 rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4">
+          <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">Module Performance</h5>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={moduleUsageData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="value" fill="#0d6efd" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
       {/* Recent Activities */}
-      <div className="row g-3 mt-2">
-        <div className="col-12">
-          <div className="card p-3">
-            <h5 className="mb-3">Recent Activities</h5>
-            <div className="list-group list-group-flush">
-              {(data?.recentActivities || []).map((activity) => (
-                <div
-                  key={activity.id}
-                  className="list-group-item border-0 px-0"
-                >
-                  <div className="d-flex w-100 justify-content-between align-items-center">
-                    <div>
-                      <h6 className="mb-1">{activity.user}</h6>
-                      <p className="mb-0 small text-secondary">
-                        {activity.action} in{" "}
-                        <span className="badge bg-primary">
-                          {activity.module}
-                        </span>
-                      </p>
-                    </div>
-                    <small className="text-secondary">{activity.time}</small>
-                  </div>
+      <div className="mt-4">
+        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4">
+          <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">Recent Activities</h5>
+          <div className="space-y-3">
+            {(data?.recentActivities || []).map((activity) => (
+              <div key={activity.id} className="flex items-center justify-between border-b border-[#dbe0e6] dark:border-gray-700 pb-3 last:border-b-0">
+                <div>
+                  <h6 className="text-sm font-semibold text-[#111418] dark:text-white mb-1">{activity.user}</h6>
+                  <p className="text-xs text-[#617589] dark:text-gray-400">
+                    {activity.action} in{" "}
+                    <span className="inline-block px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-semibold">
+                      {activity.module}
+                    </span>
+                  </p>
                 </div>
-              ))}
-            </div>
+                <small className="text-xs text-[#617589] dark:text-gray-400">{activity.time}</small>
+              </div>
+            ))}
           </div>
         </div>
       </div>
