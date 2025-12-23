@@ -123,7 +123,7 @@ export default function Home() {
           <div className="relative w-full max-w-lg mb-10 group">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
               <span className="material-symbols-outlined text-gray-400 group-focus-within:text-primary transition-colors">
-                search
+                
               </span>
             </div>
             <input

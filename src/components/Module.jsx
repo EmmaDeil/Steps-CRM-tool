@@ -6,7 +6,6 @@ import { useAppContext } from "../context/useAppContext";
 import Navbar from "./Navbar";
 import Skeleton from "./Skeleton";
 import EmptyState from "./EmptyState";
-import "./Module.css";
 import { apiService } from "../services/api";
 
 // Modules are now fetched from the backend API (/api/modules). The client no
@@ -59,14 +58,19 @@ const Module = ({ searchQuery, showNavbar = false }) => {
     const found = (modules || []).find((m) => String(m.id) === String(mid));
     if (!found) {
       return (
-        <div className="p-4 text-center">
-          <h3 className="mb-2">Module Not Found</h3>
-          <p className="text-secondary">No module with id {id}</p>
+        <div className="px-4 py-10 text-center">
+          <h3 className="text-xl font-bold mb-2 text-[#111418] dark:text-white">
+            Module Not Found
+          </h3>
+          <p className="text-sm text-[#617589] dark:text-gray-400">
+            No module with id {id}
+          </p>
           <button
-            className="btn btn-primary mt-3"
+            className="mt-4 inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
             onClick={() => navigate("/home")}
           >
-            Dashboard
+            <span className="material-symbols-outlined text-base">home</span>
+            Home
           </button>
         </div>
       );
@@ -83,18 +87,21 @@ const Module = ({ searchQuery, showNavbar = false }) => {
               onBack={() => navigate("/home")}
             />
           )}
-          <div className="p-4 text-center">
-            <div className="alert alert-warning d-inline-block">
-              <h3 className="mb-2">🔒 Access Denied</h3>
-              <p className="text-secondary mb-3">
+          <div className="px-4 py-10 text-center">
+            <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-200 px-6 py-4">
+              <h3 className="text-lg font-bold mb-2">🔒 Access Denied</h3>
+              <p className="text-sm mb-3 text-[#617589] dark:text-gray-400">
                 You do not have permission to access the{" "}
                 <strong>{found.name}</strong> module.
               </p>
               <button
-                className="btn btn-primary"
+                className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 onClick={() => navigate("/home")}
               >
-                Go Back to Dashboard
+                <span className="material-symbols-outlined text-base">
+                  home
+                </span>
+                Home
               </button>
             </div>
           </div>
@@ -129,18 +136,19 @@ const Module = ({ searchQuery, showNavbar = false }) => {
             onBack={() => navigate("/home")}
           />
         )}
-        <div className="p-4 text-center">
-          <div className="alert alert-warning d-inline-block">
-            <h3 className="mb-2">⚠️ Module Not Available</h3>
-            <p className="text-secondary mb-3">
+        <div className="px-4 py-10 text-center">
+          <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-200 px-6 py-4">
+            <h3 className="text-lg font-bold mb-2">⚠️ Module Not Available</h3>
+            <p className="text-sm mb-3 text-[#617589] dark:text-gray-400">
               The <strong>{found.name}</strong> module is currently under
               development.
             </p>
             <button
-              className="btn btn-primary"
+              className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
               onClick={() => navigate("/home")}
             >
-              Dashboard
+              <span className="material-symbols-outlined text-base">home</span>
+              Home
             </button>
           </div>
         </div>
@@ -188,20 +196,15 @@ const Module = ({ searchQuery, showNavbar = false }) => {
   );
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        width: "100%",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <div className="min-h-screen w-full flex flex-col">
       {showNavbar && <Navbar user={user} />}
-      <div className="modules-container">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {/* Header */}
-        <div className="modules-header">
-          <h2 className="modules-title">Available Modules</h2>
-          <p className="modules-subtitle">
+        <div className="text-center mb-12">
+          <h2 className="text-2xl md:text-3xl font-bold text-[#111418] dark:text-white">
+            Available Modules
+          </h2>
+          <p className="text-sm text-[#617589] dark:text-gray-400">
             {filtered.length} {filtered.length === 1 ? "module" : "modules"}{" "}
             available
           </p>
@@ -209,12 +212,15 @@ const Module = ({ searchQuery, showNavbar = false }) => {
 
         {/* Loading State */}
         {loading && (
-          <div className="modules-grid">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {Array.from({ length: 8 }).map((_, index) => (
-              <div key={index} className="module-card-wrapper">
-                <div className="card module-card skeleton-card">
-                  <Skeleton height={120} />
-                </div>
+              <div
+                key={index}
+                className="relative flex flex-col items-center p-8 bg-white dark:bg-[#1e293b] rounded-2xl border border-[#dbe0e6] dark:border-gray-700 shadow-sm h-[260px]"
+              >
+                <div className="size-24 rounded-2xl bg-gray-100 dark:bg-gray-800 mb-6" />
+                <div className="h-4 w-40 bg-gray-200 dark:bg-gray-700 rounded-full mb-2" />
+                <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded-full" />
               </div>
             ))}
           </div>
@@ -222,58 +228,61 @@ const Module = ({ searchQuery, showNavbar = false }) => {
 
         {/* Error State */}
         {error && (
-          <EmptyState
-            icon="⚠️"
-            title="Oops! Something went wrong"
-            description="We couldn't load the modules. Please try again later."
-            variant="error"
-            action={
+          <div className="text-center">
+            <div className="inline-block rounded-md border border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-200 px-6 py-4">
+              <div className="text-lg font-semibold mb-2">
+                Oops! Something went wrong
+              </div>
+              <p className="text-sm mb-3">
+                We couldn't load the modules. Please try again later.
+              </p>
               <button
-                className="btn btn-danger btn-sm"
+                className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 onClick={() => window.location.reload()}
               >
                 Retry
               </button>
-            }
-          />
+            </div>
+          </div>
         )}
 
         {/* No Results */}
         {!loading && !error && filtered.length === 0 && (
-          <EmptyState
-            icon="🔍"
-            title="No modules found"
-            description="Your search didn't match any modules. Try adjusting your search terms."
-            variant="search"
-          />
+          <div className="text-center">
+            <div className="inline-block rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e293b] px-6 py-4">
+              <div className="text-lg font-semibold mb-2">No modules found</div>
+              <p className="text-sm text-[#617589] dark:text-gray-400">
+                Your search didn't match any modules. Try adjusting your search
+                terms.
+              </p>
+            </div>
+          </div>
         )}
 
         {/* Module Cards Grid */}
         {!loading && !error && filtered.length > 0 && (
-          <div className="modules-grid">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {filtered.map((m) => (
-              <Link key={m.id} to={`/modules/${m.id}`} className="module-link">
-                <div className="module-card-wrapper">
-                  <div className="card module-card">
-                    {/* Icon */}
-                    <div className="module-icon">
-                      {moduleIcons[m.name] || "📦"}
-                    </div>
-
-                    {/* Title */}
-                    <h5 className="module-card-title">{m.name}</h5>
-
-                    {/* Description */}
-                    <p className="module-card-description">
-                      {moduleDescriptions[m.name] ||
-                        "Click to access this module"}
-                    </p>
-
-                    {/* Action Indicator */}
-                    <div className="module-action">
-                      <span className="module-arrow">→</span>
-                    </div>
-                  </div>
+              <Link
+                key={m.id}
+                to={`/modules/${m.id}`}
+                className="group relative flex flex-col items-center p-8 bg-white dark:bg-[#1e293b] rounded-2xl border border-[#dbe0e6] dark:border-gray-700 shadow-sm h-[260px] hover:shadow-xl transition-shadow"
+              >
+                {/* Icon */}
+                <div className="text-5xl mb-4">
+                  {moduleIcons[m.name] || "📦"}
+                </div>
+                {/* Title */}
+                <h5 className="text-xl font-bold text-[#111418] dark:text-white mb-2 text-center">
+                  {m.name}
+                </h5>
+                {/* Description */}
+                <p className="text-sm text-[#617589] dark:text-gray-400 text-center flex-1">
+                  {moduleDescriptions[m.name] || "Click to access this module"}
+                </p>
+                {/* Action */}
+                <div className="mt-3 py-1 px-3 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs font-semibold rounded-full">
+                  Open
                 </div>
               </Link>
             ))}
@@ -282,8 +291,8 @@ const Module = ({ searchQuery, showNavbar = false }) => {
 
         {/* Module Count Summary */}
         {!loading && !error && filtered.length > 0 && (
-          <div className="modules-footer">
-            <p className="text-secondary">
+          <div className="text-center mt-10 border-t border-[#dbe0e6] dark:border-gray-800 pt-6">
+            <p className="text-sm text-[#617589] dark:text-gray-400">
               Showing {filtered.length} of {modules?.length || 0} modules
             </p>
           </div>

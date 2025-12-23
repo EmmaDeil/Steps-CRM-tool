@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import PropTypes from "prop-types";
 import Navbar from "../components/Navbar";
-import DashboardAnalytics from "../components/DashboardAnalytics";
 import Module from "../components/Module";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";

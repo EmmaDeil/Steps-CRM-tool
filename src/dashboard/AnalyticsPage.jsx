@@ -1,10 +1,9 @@
 // src/dashboard/AnalyticsPage.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Navbar from "../components/Navbar";
-import DashboardAnalytics from "../components/DashboardAnalytics";
+import Analytics from "../components/modules/Analytics";
 import { useUser } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
-import { apiService } from "../services/api";
 
 const AnalyticsPage = () => {
   const { user, isLoaded } = useUser();
@@ -17,53 +16,13 @@ const AnalyticsPage = () => {
     navigate("/modules");
   };
 
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [materialRequests, setMaterialRequests] = useState([]);
-  const [purchaseOrders, setPurchaseOrders] = useState([]);
-
-  useEffect(() => {
-    let mounted = true;
-    const fetchAnalytics = async () => {
-      setLoading(true);
-      try {
-        const res = await apiService.get("/api/analytics");
-        if (mounted) setData(res.data || {});
-      } catch (err) {
-        if (mounted) setError(err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    const fetchMaterialRequests = async () => {
-      try {
-        const res = await apiService.get("/api/material-requests");
-        if (mounted) setMaterialRequests(res.data || []);
-      } catch (err) {}
-    };
-
-    const fetchPurchaseOrders = async () => {
-      try {
-        const res = await apiService.get("/api/purchase-orders");
-        if (mounted) setPurchaseOrders(res.data || []);
-      } catch (err) {}
-    };
-
-    fetchAnalytics();
-    fetchMaterialRequests();
-    fetchPurchaseOrders();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   if (!isLoaded) {
     return (
-      <div className="dashboard-bg d-flex align-items-center justify-content-center min-vh-100">
-        <div className="dashboard-card card shadow-lg p-4 mx-auto text-center">
-          <span className="text-secondary">Loading...</span>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-[#0f0f1e]">
+        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] shadow-lg p-6 text-center">
+          <span className="text-sm text-[#617589] dark:text-gray-400">
+            Loading...
+          </span>
         </div>
       </div>
     );
@@ -77,21 +36,7 @@ const AnalyticsPage = () => {
         setSearchQuery={setSearchQuery}
         onSearch={handleSearchSubmit}
       />
-      <div className="dashboard-bg">
-        <div className="dashboard-card card shadow-lg p-4 mx-auto text-center">
-          {loading && <div className="p-4">Loading analytics...</div>}
-          {error && (
-            <div className="p-4 text-danger">Failed to load analytics.</div>
-          )}
-          {!loading && !error && (
-            <DashboardAnalytics
-              data={data}
-              materialRequests={materialRequests}
-              purchaseOrders={purchaseOrders}
-            />
-          )}
-        </div>
-      </div>
+      <Analytics />
     </div>
   );
 };

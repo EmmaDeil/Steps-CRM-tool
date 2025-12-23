@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import PropTypes from "prop-types";
 import { NavLink, useNavigate } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
@@ -41,82 +41,102 @@ const Navbar = ({
     }
   };
 
-  return (
-    <nav className="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top">
-      <div className="container-fluid px-3 px-lg-4">
-        <NavLink className="navbar-brand d-flex align-items-center" to="/home">
-          <img
-            src={stepsLogo}
-            alt="Steps Logo"
-            style={{ width: "30px", height: "30px", marginRight: "8px" }}
-          />
-          <span className="d-none d-sm-inline">Steps CRM</span>
-          <span className="d-inline d-sm-none">Steps</span>
-        </NavLink>
-        <button
-          className="navbar-toggler"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#mainNavbar"
-          aria-controls="mainNavbar"
-          aria-expanded="false"
-          aria-label="Toggle navigation"
-        >
-          <span className="navbar-toggler-icon" />
-        </button>
+  const [isOpen, setIsOpen] = useState(false);
 
-        <div className="collapse navbar-collapse" id="mainNavbar">
-          {/* Search Form - Full width on mobile, auto width on desktop */}
-          <div className="position-relative my-3 my-lg-0 ms-lg-3 me-lg-auto">
-            <form className="d-flex" onSubmit={handleSearch} role="search">
+  return (
+    <nav className="sticky top-0 z-50 w-full bg-white dark:bg-[#111418] border-b border-[#dbe0e6] dark:border-gray-800">
+      <div className="px-3 md:px-6">
+        <div className="flex items-center justify-between py-3">
+          <NavLink className="flex items-center gap-2" to="/home">
+            <img src={stepsLogo} alt="Steps Logo" className="w-7 h-7" />
+            <span className="hidden sm:inline text-sm font-semibold text-[#111418] dark:text-white">
+              Steps CRM
+            </span>
+            <span className="sm:hidden text-sm font-semibold text-[#111418] dark:text-white">
+              Steps
+            </span>
+          </NavLink>
+
+          <div className="flex items-center gap-2 md:gap-4">
+            {/* Back button */}
+            {showBackButton && (
+              <button
+                className="hidden md:inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                onClick={handleBackClick}
+                title="Back to Modules"
+              >
+                <span className="material-symbols-outlined text-base">
+                  arrow_back
+                </span>
+                Back
+              </button>
+            )}
+
+            {/* Mobile menu toggle */}
+            <button
+              className="md:hidden inline-flex items-center justify-center p-2 rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200"
+              aria-label="Toggle navigation"
+              onClick={() => setIsOpen((v) => !v)}
+            >
+              <span className="material-symbols-outlined">menu</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Collapsible content */}
+        <div className={`${isOpen ? "block" : "hidden"} md:block pb-3 md:pb-0`}>
+          {/* Search */}
+          <div className="relative md:my-3">
+            <form
+              className="flex items-center gap-2"
+              onSubmit={handleSearch}
+              role="search"
+            >
               <input
-                className="form-control me-2"
+                className="flex-1 md:w-auto min-w-[200px] rounded-md border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] px-3 py-2 text-sm text-[#111418] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-primary"
                 type="search"
                 placeholder="Search modules"
                 aria-label="Search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setShowSearchHistory(true)}
-                style={{ minWidth: "200px" }}
               />
-              <button className="btn btn-outline-primary" type="submit">
-                <span className="d-none d-md-inline">Search</span>
-                <span className="d-inline d-md-none">
-                  <i className="bi bi-search"></i>
+              <button
+                className="inline-flex items-center gap-1 px-3 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                type="submit"
+              >
+                <span className="hidden md:inline">Search</span>
+                <span className="md:hidden material-symbols-outlined">
+                  search
                 </span>
               </button>
             </form>
+
             {showSearchHistory && searchHistory.length > 0 && (
               <>
                 <div
-                  className="position-fixed top-0 start-0 w-100 h-100"
+                  className="fixed inset-0"
                   style={{ zIndex: 1040 }}
                   onClick={() => setShowSearchHistory(false)}
                 />
                 <div
-                  className="position-absolute card shadow-lg mt-1"
+                  className="absolute mt-1 shadow-lg"
                   style={{ zIndex: 1050, width: "100%", maxWidth: "300px" }}
                 >
-                  <div className="card-body p-2">
-                    <small className="text-secondary px-2">
+                  <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e293b] p-2">
+                    <small className="block text-xs text-[#617589] dark:text-gray-400 px-2">
                       Recent Searches
                     </small>
-                    <div className="list-group list-group-flush">
+                    <div className="flex flex-col">
                       {searchHistory.slice(0, 5).map((query, index) => (
                         <button
                           key={index}
-                          className="list-group-item list-group-item-action border-0"
+                          className="text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 rounded"
                           onClick={() => handleSearchHistoryClick(query)}
                         >
-                          <svg
-                            width="14"
-                            height="14"
-                            fill="currentColor"
-                            viewBox="0 0 16 16"
-                            className="me-2"
-                          >
-                            <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" />
-                          </svg>
+                          <span className="material-symbols-outlined align-middle text-base mr-2">
+                            search
+                          </span>
                           {query}
                         </button>
                       ))}
@@ -127,45 +147,43 @@ const Navbar = ({
             )}
           </div>
 
-          {/* Navigation Items - Compact and right-aligned */}
-          <ul className="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center gap-2">
+          {/* Nav items */}
+          <div className="mt-3 md:mt-0 md:flex md:items-center md:justify-end md:gap-3">
             {showBackButton && (
-              <li className="nav-item">
-                <button
-                  className="btn btn-outline-secondary btn-sm"
-                  onClick={handleBackClick}
-                  title="Back to Modules"
-                >
-                  <i className="bi bi-arrow-left me-1"></i>
-                  Back
-                </button>
-              </li>
+              <button
+                className="md:hidden inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                onClick={handleBackClick}
+                title="Back to Modules"
+              >
+                <span className="material-symbols-outlined text-base">
+                  arrow_back
+                </span>
+                Back
+              </button>
             )}
-            <li className="nav-item">
+
+            <div className="inline-flex items-center gap-3">
               <NotificationCenter />
-            </li>
-            <li className="nav-item">
               <NavLink
                 className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
+                  `${
+                    isActive
+                      ? "text-primary"
+                      : "text-[#617589] dark:text-gray-400"
+                  } inline-flex items-center gap-1 text-sm font-medium hover:text-primary`
                 }
                 to="/chat"
               >
-                <i className="bi bi-chat-dots"></i>
-                <span className="d-none d-xl-inline ms-1">Chat</span>
+                <span className="material-symbols-outlined">chat</span>
+                <span className="hidden xl:inline">Chat</span>
               </NavLink>
-            </li>
-            <li className="nav-item">
               {user ? (
-                <div className="d-flex align-items-center">
-                  <div className="me-2 text-end d-none d-lg-block">
-                    <div className="fw-bold small">
+                <div className="inline-flex items-center gap-2">
+                  <div className="hidden lg:block text-right">
+                    <div className="text-xs font-semibold text-[#111418] dark:text-white">
                       {user.fullName || user.firstName || "User"}
                     </div>
-                    <div
-                      className="small text-secondary"
-                      style={{ fontSize: "0.7rem" }}
-                    >
+                    <div className="text-[11px] text-[#617589] dark:text-gray-400">
                       {user.primaryEmailAddress?.emailAddress}
                     </div>
                   </div>
@@ -174,15 +192,19 @@ const Navbar = ({
               ) : (
                 <NavLink
                   className={({ isActive }) =>
-                    `nav-link ${isActive ? "active" : ""}`
+                    `${
+                      isActive
+                        ? "text-primary"
+                        : "text-[#617589] dark:text-gray-400"
+                    } inline-flex items-center text-sm font-medium hover:text-primary`
                   }
                   to="/"
                 >
                   Login
                 </NavLink>
               )}
-            </li>
-          </ul>
+            </div>
+          </div>
         </div>
       </div>
     </nav>
