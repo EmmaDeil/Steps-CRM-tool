@@ -3,12 +3,16 @@
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
 const mongoose = require('mongoose');
 const path = require('path');
 const dotenv = require('dotenv');
 // Ensure .env is loaded even when the server is started from the repo root
 dotenv.config({ path: path.join(__dirname, '.env') });
 
+const { validate, validationRules } = require('./middleware/validation');
 const ModuleModel = require('./models/Module');
 const AnalyticsModel = require('./models/Analytics');
 const AttendanceModel = require('./models/Attendance');
@@ -18,8 +22,40 @@ const { sendApprovalEmail, sendPOReviewEmail } = require('./utils/emailService')
 const seed = require('./data');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+
+// Security Middleware
+app.use(helmet()); // Secure HTTP headers
+app.use(mongoSanitize()); // Sanitize MongoDB queries
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
+  legacyHeaders: false, // Disable `X-RateLimit-*` headers
+});
+
+// Apply rate limiter to all requests
+app.use(limiter);
+
+// More strict rate limiter for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  skipSuccessfulRequests: true,
+  message: 'Too many failed requests, please try again later.',
+});
+
+// CORS configuration
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true,
+  optionsSuccessStatus: 200,
+}));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(morgan('dev'));
 
 if (!process.env.MONGODB_URI) {
@@ -322,6 +358,75 @@ async function start() {
     } catch (err) {
       console.error('Error marking PO as paid:', err);
       res.status(500).json({ message: 'Failed to update payment status' });
+    }
+  });
+
+  // Send approval email for advance requests
+  app.post('/api/send-approval-email', authLimiter, [
+    validationRules.email,
+    validationRules.employeeName,
+    validationRules.employeeId,
+    validationRules.department,
+    validationRules.amount,
+    validationRules.approver,
+    validationRules.approverEmail,
+    validationRules.reason,
+    validationRules.repaymentPeriod,
+  ], validate, async (req, res) => {
+    try {
+      const {
+        to,
+        employeeName,
+        employeeId,
+        department,
+        amount,
+        reason,
+        repaymentPeriod,
+        approver,
+        requestType,
+      } = req.body;
+
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to,
+        subject: `Advance Request Approval Required - ${employeeId}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #0d6efd;">Advance Request Approval Required</h2>
+            <p>Dear ${approver},</p>
+            <p>A new advance request has been submitted for your approval.</p>
+            
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <h3 style="margin-top: 0;">Request Details</h3>
+              <p><strong>Employee Name:</strong> ${employeeName}</p>
+              <p><strong>Employee ID:</strong> ${employeeId}</p>
+              <p><strong>Department:</strong> ${department}</p>
+              <p><strong>Amount:</strong> $${parseFloat(amount).toFixed(2)}</p>
+              <p><strong>Reason:</strong> ${reason}</p>
+              <p><strong>Repayment Period:</strong> ${repaymentPeriod}</p>
+            </div>
+
+            <p style="color: #666; font-size: 12px;">
+              This is an automated email. Please do not reply to this message.
+            </p>
+          </div>
+        `,
+      };
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('📧 Approval email would be sent to:', mailOptions.to);
+        return res.json({ success: true, message: 'Email logged (dev mode)' });
+      }
+
+      const transporter = require('./utils/emailService').transporter || null;
+      if (transporter) {
+        await transporter.sendMail(mailOptions);
+      }
+      
+      res.json({ success: true, message: 'Approval email sent successfully' });
+    } catch (err) {
+      console.error('Error sending approval email:', err);
+      res.status(500).json({ success: false, message: 'Failed to send email', error: err.message });
     }
   });
 

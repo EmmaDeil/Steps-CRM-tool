@@ -9,7 +9,7 @@ const Auth = () => {
       <div className="auth-card">
         <h1 className="auth-title">Welcome to Steps CRM</h1>
         <div className="d-flex justify-content-center mt-4">
-          <SignIn afterSignInUrl="/dashboard" redirectUrl="/dashboard" />
+          <SignIn afterSignInUrl="/home" redirectUrl="/home" />
         </div>
       </div>
     </div>

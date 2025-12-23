@@ -31,7 +31,6 @@ const AnalyticsPage = () => {
         const res = await apiService.get("/api/analytics");
         if (mounted) setData(res.data || {});
       } catch (err) {
-        console.error("Failed to fetch analytics:", err);
         if (mounted) setError(err);
       } finally {
         if (mounted) setLoading(false);
@@ -42,18 +41,14 @@ const AnalyticsPage = () => {
       try {
         const res = await apiService.get("/api/material-requests");
         if (mounted) setMaterialRequests(res.data || []);
-      } catch (err) {
-        console.error("Failed to fetch material requests:", err);
-      }
+      } catch (err) {}
     };
 
     const fetchPurchaseOrders = async () => {
       try {
         const res = await apiService.get("/api/purchase-orders");
         if (mounted) setPurchaseOrders(res.data || []);
-      } catch (err) {
-        console.error("Failed to fetch purchase orders:", err);
-      }
+      } catch (err) {}
     };
 
     fetchAnalytics();

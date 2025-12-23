@@ -31,7 +31,6 @@ const Attendance = () => {
             const response = await fetch(endpoint);
             if (response.ok) {
               data = await response.json();
-              console.log("Successfully fetched from:", endpoint);
               break;
             }
             lastError = new Error(
@@ -39,7 +38,6 @@ const Attendance = () => {
             );
           } catch (err) {
             lastError = err;
-            console.log(`Failed to fetch from ${endpoint}:`, err.message);
           }
         }
 
@@ -49,7 +47,6 @@ const Attendance = () => {
 
         setAttendanceData(data);
       } catch (err) {
-        console.error("Error fetching attendance data:", err);
         setError(err.message);
         toast.error("Failed to connect to attendance backend");
       } finally {

@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
+import { apiService } from "../../services/api";
+import toast from "react-hot-toast";
 
 const Accounting = () => {
   const { user } = useUser();
@@ -61,6 +63,40 @@ const Accounting = () => {
   ]);
   const [showRetirementForm, setShowRetirementForm] = useState(false);
   const [showAdvanceForm, setShowAdvanceForm] = useState(false);
+  const [staffList, setStaffList] = useState([
+    {
+      id: 1,
+      name: "Alice Brown",
+      email: "alice.brown@company.com",
+      role: "Finance Manager",
+    },
+    {
+      id: 2,
+      name: "Bob Davis",
+      email: "bob.davis@company.com",
+      role: "HR Manager",
+    },
+    {
+      id: 3,
+      name: "Carol Smith",
+      email: "carol.smith@company.com",
+      role: "Operations Manager",
+    },
+    {
+      id: 4,
+      name: "David Wilson",
+      email: "david.wilson@company.com",
+      role: "Department Head",
+    },
+    {
+      id: 5,
+      name: "Emma Johnson",
+      email: "emma.johnson@company.com",
+      role: "Supervisor",
+    },
+  ]);
+  const [approverSuggestions, setApproverSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [retirementFormData, setRetirementFormData] = useState({
     retirementDate: "",
     yearsOfService: "",
@@ -71,6 +107,8 @@ const Accounting = () => {
     amount: "",
     reason: "",
     repaymentPeriod: "",
+    approver: "",
+    approverEmail: "",
   });
 
   // Get current user's info
@@ -91,6 +129,36 @@ const Accounting = () => {
   const eligibleAdvances = userAdvanceRequests.filter(
     (req) => req.status === "approved" && !req.hasRetirement
   );
+
+  // Handle approver name input change with suggestions
+  const handleApproverInputChange = (value) => {
+    setAdvanceFormData({
+      ...advanceFormData,
+      approver: value,
+    });
+
+    if (value.trim().length > 0) {
+      const filtered = staffList.filter((staff) =>
+        staff.name.toLowerCase().includes(value.toLowerCase())
+      );
+      setApproverSuggestions(filtered);
+      setShowSuggestions(true);
+    } else {
+      setApproverSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  // Handle approver selection from suggestions
+  const handleSelectApprover = (staff) => {
+    setAdvanceFormData({
+      ...advanceFormData,
+      approver: staff.name,
+      approverEmail: staff.email,
+    });
+    setShowSuggestions(false);
+    setApproverSuggestions([]);
+  };
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("en-US", {
@@ -145,27 +213,58 @@ const Accounting = () => {
     });
   };
 
-  const handleAdvanceSubmit = (e) => {
+  const handleAdvanceSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate approver is selected
+    if (!advanceFormData.approver || !advanceFormData.approverEmail) {
+      toast.error("Approver must be selected");
+      return;
+    }
+
     const newRequest = {
       id: advanceRequests.length + 1,
       employeeName: currentUserName,
       employeeId: currentEmployeeId,
       department: currentDepartment,
       userId: currentUserId,
-      ...advanceFormData,
+      amount: parseFloat(advanceFormData.amount),
+      reason: advanceFormData.reason,
+      repaymentPeriod: advanceFormData.repaymentPeriod,
+      approver: advanceFormData.approver,
+      approverEmail: advanceFormData.approverEmail,
       status: "pending",
       requestDate: new Date().toISOString().split("T")[0],
-      amount: parseFloat(advanceFormData.amount),
       hasRetirement: false,
     };
-    setAdvanceRequests([...advanceRequests, newRequest]);
-    setShowAdvanceForm(false);
-    setAdvanceFormData({
-      amount: "",
-      reason: "",
-      repaymentPeriod: "",
-    });
+
+    try {
+      // Send email to approver
+      await apiService.post("/api/send-approval-email", {
+        to: advanceFormData.approverEmail,
+        employeeName: currentUserName,
+        employeeId: currentEmployeeId,
+        department: currentDepartment,
+        amount: advanceFormData.amount,
+        reason: advanceFormData.reason,
+        repaymentPeriod: advanceFormData.repaymentPeriod,
+        approver: advanceFormData.approver,
+        requestType: "advance",
+      });
+
+      setAdvanceRequests([...advanceRequests, newRequest]);
+      setShowAdvanceForm(false);
+      setAdvanceFormData({
+        amount: "",
+        reason: "",
+        repaymentPeriod: "",
+        approver: "",
+        approverEmail: "",
+      });
+      toast.success("Request submitted and email sent to approver");
+    } catch (err) {
+      toast.error("Failed to submit request");
+    }
   };
 
   return (
@@ -234,6 +333,115 @@ const Accounting = () => {
                           disabled
                         />
                       </div>
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Approver <span className="text-danger">*</span>
+                      </label>
+                      <div style={{ position: "relative" }}>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Start typing approver name..."
+                          value={advanceFormData.approver}
+                          onChange={(e) =>
+                            handleApproverInputChange(e.target.value)
+                          }
+                          onFocus={() => {
+                            if (approverSuggestions.length > 0) {
+                              setShowSuggestions(true);
+                            }
+                          }}
+                          required
+                          autoComplete="off"
+                        />
+                        {showSuggestions && approverSuggestions.length > 0 && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: "100%",
+                              left: 0,
+                              right: 0,
+                              backgroundColor: "white",
+                              border: "1px solid #ddd",
+                              borderTop: "none",
+                              borderRadius: "0 0 4px 4px",
+                              maxHeight: "200px",
+                              overflowY: "auto",
+                              zIndex: 1000,
+                              boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                            }}
+                          >
+                            {approverSuggestions.map((staff) => (
+                              <div
+                                key={staff.id}
+                                onClick={() => handleSelectApprover(staff)}
+                                style={{
+                                  padding: "10px 12px",
+                                  cursor: "pointer",
+                                  borderBottom: "1px solid #eee",
+                                  transition: "background-color 0.2s",
+                                }}
+                                onMouseEnter={(e) =>
+                                  (e.target.style.backgroundColor = "#f8f9fa")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.target.style.backgroundColor = "white")
+                                }
+                              >
+                                <div style={{ fontWeight: "500" }}>
+                                  {staff.name}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    color: "#666",
+                                  }}
+                                >
+                                  {staff.role}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Approver Email <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        className="form-control"
+                        placeholder="approver@example.com"
+                        value={advanceFormData.approverEmail}
+                        onChange={(e) =>
+                          setAdvanceFormData({
+                            ...advanceFormData,
+                            approverEmail: e.target.value,
+                          })
+                        }
+                        readOnly={
+                          advanceFormData.approverEmail &&
+                          staffList.some(
+                            (s) =>
+                              s.name === advanceFormData.approver &&
+                              s.email === advanceFormData.approverEmail
+                          )
+                        }
+                        required
+                      />
+                      {advanceFormData.approverEmail &&
+                        staffList.some(
+                          (s) =>
+                            s.name === advanceFormData.approver &&
+                            s.email === advanceFormData.approverEmail
+                        ) && (
+                          <small className="text-success d-block mt-1">
+                            <i className="bi bi-check-circle me-1"></i>
+                            Auto-filled from staff database
+                          </small>
+                        )}
                     </div>
                     <div className="row mb-3">
                       <div className="col-md-6">

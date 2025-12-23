@@ -102,7 +102,6 @@ const MaterialRequests = () => {
       const response = await apiService.get("/api/vendors");
       setVendors(response.data || []);
     } catch (err) {
-      console.error("Failed to fetch vendors:", err);
     }
   };
 
@@ -118,7 +117,6 @@ const MaterialRequests = () => {
         toast.error("Request not found");
       }
     } catch (err) {
-      console.error("Failed to fetch request:", err);
       toast.error("Failed to load request");
     }
   };
@@ -155,7 +153,6 @@ const MaterialRequests = () => {
       navigate("/dashboard/material-requests");
       fetchRequests();
     } catch (err) {
-      console.error("Failed to approve request:", err);
       toast.error("Failed to approve request");
     }
   };
@@ -180,7 +177,6 @@ const MaterialRequests = () => {
       navigate("/dashboard/material-requests");
       fetchRequests();
     } catch (err) {
-      console.error("Failed to reject request:", err);
       toast.error("Failed to reject request");
     }
   };
@@ -200,7 +196,6 @@ const MaterialRequests = () => {
         if (parsed.message) setMessage(parsed.message);
         // Note: attachments (File objects) cannot be stored in localStorage
       } catch (err) {
-        console.error("Failed to restore state:", err);
       }
     }
   }, []);
@@ -231,7 +226,6 @@ const MaterialRequests = () => {
       setRequests(response.data || []);
       setError(null);
     } catch (err) {
-      console.error("Failed to fetch material requests:", err);
       setError("Failed to load material requests");
     } finally {
       setLoading(false);
@@ -390,7 +384,6 @@ const MaterialRequests = () => {
 
       fetchRequests();
     } catch (err) {
-      console.error("Failed to submit request:", err);
       toast.error("Failed to submit request");
     }
   };

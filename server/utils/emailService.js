@@ -168,4 +168,5 @@ async function sendPOReviewEmail(poData) {
 module.exports = {
   sendApprovalEmail,
   sendPOReviewEmail,
+  transporter,
 };

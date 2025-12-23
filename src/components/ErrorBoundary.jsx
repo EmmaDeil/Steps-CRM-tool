@@ -12,7 +12,7 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("ErrorBoundary caught an error:", error, errorInfo);
+    // Error boundary captured the error, displaying fallback UI
     this.setState({
       error,
       errorInfo,
@@ -55,7 +55,7 @@ class ErrorBoundary extends React.Component {
               </button>
               <button
                 className="btn btn-outline-secondary"
-                onClick={() => (window.location.href = "/dashboard")}
+                onClick={() => (window.location.href = "/home")}
               >
                 Go to Dashboard
               </button>

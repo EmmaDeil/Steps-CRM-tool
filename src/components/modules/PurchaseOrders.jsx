@@ -82,7 +82,6 @@ const PurchaseOrders = () => {
       setReviewNotes("");
       fetchOrders();
     } catch (err) {
-      console.error("Failed to submit review:", err);
       toast.error("Failed to submit review");
     }
   };
@@ -141,7 +140,6 @@ const PurchaseOrders = () => {
       const response = await apiService.get("/api/vendors");
       setVendors(response.data || []);
     } catch (err) {
-      console.error("Failed to fetch vendors:", err);
     }
   };
 
@@ -161,7 +159,6 @@ const PurchaseOrders = () => {
       setOrders(response.data || []);
       setError(null);
     } catch (err) {
-      console.error("Failed to fetch purchase orders:", err);
       setError("Failed to load purchase orders");
     } finally {
       setLoading(false);
@@ -291,7 +288,6 @@ const PurchaseOrders = () => {
       resetForm();
       fetchOrders();
     } catch (err) {
-      console.error("Failed to create purchase order:", err);
       alert("Failed to create purchase order. Please try again.");
     }
   };

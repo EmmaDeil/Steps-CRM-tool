@@ -1,8 +1,7 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import "./App.css";
 import Auth from "./components/auth/Auth";
-import Dashboard from "./dashboard/Dashboard";
-import DashboardAnalytics from "./components/DashboardAnalytics";
+import Home from "./home/Home";
 import AnalyticsPage from "./dashboard/AnalyticsPage";
 import PrivateRoute from "./components/PrivateRoute";
 import Module from "./components/Module";
@@ -14,13 +13,14 @@ function App() {
     <>
       <Toaster position="top-right" />
       <Routes>
-        {/* Main dashboard page */}
+        {/* Auth page */}
         <Route path="/" element={<Auth />} />
+        {/* New Home screen (post-login landing) */}
         <Route
-          path="/dashboard"
+          path="/home"
           element={
             <PrivateRoute>
-              <Dashboard />
+              <Home />
             </PrivateRoute>
           }
         />
@@ -44,6 +44,8 @@ function App() {
         />
 
         <Route path="*" element={<NotFound />} />
+        {/* Backward-compat: redirect old dashboard route to home */}
+        <Route path="/dashboard" element={<Navigate to="/home" replace />} />
         <Route
           path="/analytics"
           element={

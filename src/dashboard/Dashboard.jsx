@@ -14,23 +14,25 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   const handleSearchSubmit = (q) => {
-    // set the query and navigate to modules list so the Module component displays filtered results
     setSearchQuery(q || "");
     navigate("/modules");
   };
 
   if (!isLoaded) {
     return (
-      <div className="dashboard-bg d-flex align-items-center justify-content-center min-vh-100">
-        <div className="dashboard-card card shadow-lg p-4 mx-auto text-center">
-          <span className="text-secondary">Loading...</span>
+      <div className="dashboard-loading">
+        <div className="dashboard-loading-card">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <p className="mt-3 text-secondary">Loading your dashboard...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="dashboard-wrapper">
       <Navbar
         active="home"
         user={user}
@@ -38,12 +40,7 @@ const Dashboard = () => {
         setSearchQuery={setSearchQuery}
         onSearch={handleSearchSubmit}
       />
-      <div className="dashboard-bg">
-        <div className="dashboard-card card shadow-lg p-4 mx-auto text-center">
-          {/* Dashboard main: show modules (dashboard houses modules). */}
-          <Module searchQuery={searchQuery} />
-        </div>
-      </div>
+      <Module searchQuery={searchQuery} />
     </div>
   );
 };

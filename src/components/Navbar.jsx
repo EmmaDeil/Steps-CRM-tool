@@ -1,6 +1,6 @@
 import React from "react";
 import PropTypes from "prop-types";
-import { NavLink, useNavigate, useLocation } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
 import stepsLogo from "../assets/steps-logo.ico";
 import NotificationCenter from "./NotificationCenter";
@@ -15,7 +15,6 @@ const Navbar = ({
   onBack,
 }) => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { searchHistory, addSearchHistory } = useAppContext();
   const [showSearchHistory, setShowSearchHistory] = React.useState(false);
 
@@ -45,10 +44,7 @@ const Navbar = ({
   return (
     <nav className="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top">
       <div className="container-fluid px-3 px-lg-4">
-        <NavLink
-          className="navbar-brand d-flex align-items-center"
-          to="/dashboard"
-        >
+        <NavLink className="navbar-brand d-flex align-items-center" to="/home">
           <img
             src={stepsLogo}
             alt="Steps Logo"

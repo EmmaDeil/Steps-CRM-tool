@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { apiService } from "../../services/api";
+import Pagination from "../Pagination";
+import Skeleton from "../Skeleton";
+import EmptyState from "../EmptyState";
 import toast from "react-hot-toast";
 
 const Finance = () => {
   const [pendingPayments, setPendingPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     fetchPendingPayments();
@@ -18,7 +23,6 @@ const Finance = () => {
       );
       setPendingPayments(response.data || []);
     } catch (err) {
-      console.error("Failed to fetch pending payments:", err);
     } finally {
       setLoading(false);
     }
@@ -38,7 +42,6 @@ const Finance = () => {
       toast.success("Payment recorded successfully");
       fetchPendingPayments();
     } catch (err) {
-      console.error("Failed to mark as paid:", err);
       toast.error("Failed to record payment");
     }
   };
@@ -62,69 +65,84 @@ const Finance = () => {
           </span>
         </div>
         {loading ? (
-          <div className="text-center p-4">
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
+          <div className="card p-4">
+            <Skeleton count={5} height={50} />
           </div>
         ) : pendingPayments.length === 0 ? (
-          <div className="alert alert-info">
-            <i className="bi bi-info-circle me-2"></i>
-            No pending payments at the moment.
-          </div>
+          <EmptyState
+            icon="💳"
+            title="No pending payments"
+            description="All payment orders have been processed. Great work!"
+          />
         ) : (
-          <div className="table-responsive">
-            <table className="table table-hover">
-              <thead className="table-light">
-                <tr>
-                  <th>PO Number</th>
-                  <th>Vendor</th>
-                  <th>Requester</th>
-                  <th>Order Date</th>
-                  <th>Amount (₦)</th>
-                  <th>Review Notes</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingPayments.map((po) => (
-                  <tr key={po._id}>
-                    <td>
-                      <strong>{po.poNumber}</strong>
-                    </td>
-                    <td>{po.vendor}</td>
-                    <td>{po.requester}</td>
-                    <td>
-                      {po.orderDate
-                        ? new Date(po.orderDate).toLocaleDateString()
-                        : "N/A"}
-                    </td>
-                    <td className="fw-bold text-success">
-                      ₦{po.totalAmount?.toLocaleString() || 0}
-                    </td>
-                    <td>
-                      {po.reviewNotes ? (
-                        <small className="text-muted">{po.reviewNotes}</small>
-                      ) : (
-                        <small className="text-muted fst-italic">
-                          No notes
-                        </small>
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        className="btn btn-sm btn-success"
-                        onClick={() => handleMarkAsPaid(po._id)}
-                      >
-                        <i className="bi bi-check-circle me-1"></i>
-                        Mark as Paid
-                      </button>
-                    </td>
+          <>
+            <div className="table-responsive">
+              <table className="table table-hover">
+                <thead className="table-light">
+                  <tr>
+                    <th>PO Number</th>
+                    <th>Vendor</th>
+                    <th>Requester</th>
+                    <th>Order Date</th>
+                    <th>Amount (₦)</th>
+                    <th>Review Notes</th>
+                    <th>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {pendingPayments
+                    .slice(
+                      (currentPage - 1) * itemsPerPage,
+                      currentPage * itemsPerPage
+                    )
+                    .map((po) => (
+                      <tr key={po._id}>
+                        <td>
+                          <strong>{po.poNumber}</strong>
+                        </td>
+                        <td>{po.vendor}</td>
+                        <td>{po.requester}</td>
+                        <td>
+                          {po.orderDate
+                            ? new Date(po.orderDate).toLocaleDateString()
+                            : "N/A"}
+                        </td>
+                        <td className="fw-bold text-success">
+                          ₦{po.totalAmount?.toLocaleString() || 0}
+                        </td>
+                        <td>
+                          {po.reviewNotes ? (
+                            <small className="text-muted">
+                              {po.reviewNotes}
+                            </small>
+                          ) : (
+                            <small className="text-muted fst-italic">
+                              No notes
+                            </small>
+                          )}
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-sm btn-success"
+                            onClick={() => handleMarkAsPaid(po._id)}
+                          >
+                            <i className="bi bi-check-circle me-1"></i>
+                            Mark as Paid
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(pendingPayments.length / itemsPerPage)}
+              onPageChange={setCurrentPage}
+              itemsPerPage={itemsPerPage}
+              totalItems={pendingPayments.length}
+            />
+          </>
         )}
       </div>
 

@@ -4,6 +4,8 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { useAppContext } from "../context/useAppContext";
 import Navbar from "./Navbar";
+import Skeleton from "./Skeleton";
+import EmptyState from "./EmptyState";
 import "./Module.css";
 import { apiService } from "../services/api";
 
@@ -40,7 +42,6 @@ const Module = ({ searchQuery, showNavbar = false }) => {
         const res = await apiService.get("/api/modules");
         if (mounted) setModules(res.data || []);
       } catch (err) {
-        console.error("Failed to fetch modules:", err);
         if (mounted) setError(err);
       } finally {
         if (mounted) setLoading(false);
@@ -63,7 +64,7 @@ const Module = ({ searchQuery, showNavbar = false }) => {
           <p className="text-secondary">No module with id {id}</p>
           <button
             className="btn btn-primary mt-3"
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate("/home")}
           >
             Dashboard
           </button>
@@ -79,7 +80,7 @@ const Module = ({ searchQuery, showNavbar = false }) => {
             <Navbar
               user={user}
               showBackButton={true}
-              onBack={() => navigate("/dashboard")}
+              onBack={() => navigate("/home")}
             />
           )}
           <div className="p-4 text-center">
@@ -91,7 +92,7 @@ const Module = ({ searchQuery, showNavbar = false }) => {
               </p>
               <button
                 className="btn btn-primary"
-                onClick={() => navigate("/dashboard")}
+                onClick={() => navigate("/home")}
               >
                 Go Back to Dashboard
               </button>
@@ -125,7 +126,7 @@ const Module = ({ searchQuery, showNavbar = false }) => {
           <Navbar
             user={user}
             showBackButton={true}
-            onBack={() => navigate("/dashboard")}
+            onBack={() => navigate("/home")}
           />
         )}
         <div className="p-4 text-center">
@@ -137,7 +138,7 @@ const Module = ({ searchQuery, showNavbar = false }) => {
             </p>
             <button
               className="btn btn-primary"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navigate("/home")}
             >
               Dashboard
             </button>
@@ -147,47 +148,144 @@ const Module = ({ searchQuery, showNavbar = false }) => {
     );
   }
 
+  // Module icons mapping
+  const moduleIcons = {
+    Finance: "💰",
+    Accounting: "📊",
+    "Material Requests": "📦",
+    "Purchase Orders": "🛒",
+    "HR Management": "👥",
+    Analytics: "📈",
+    Attendance: "📋",
+    Inventory: "📑",
+    "Facility Maintenance": "🔧",
+    "Security Logs": "🔐",
+    "Signature Management": "✍️",
+    "Finance Reports": "📄",
+    "Admin Controls": "⚙️",
+  };
+
+  // Module descriptions
+  const moduleDescriptions = {
+    Finance: "Manage payments and financial records",
+    Accounting: "Handle retirement and advance requests",
+    "Material Requests": "Request and track materials",
+    "Purchase Orders": "Create and manage purchase orders",
+    "HR Management": "Manage employee information",
+    Analytics: "View analytics and reports",
+    Attendance: "Track employee attendance",
+    Inventory: "Manage inventory levels",
+    "Facility Maintenance": "Request facility maintenance",
+    "Security Logs": "View security logs",
+    "Signature Management": "Manage digital signatures",
+    "Finance Reports": "Generate financial reports",
+    "Admin Controls": "System administration",
+  };
+
   const query = (searchQuery || "").toLowerCase();
   const filtered = (modules || []).filter((m) =>
     m.name.toLowerCase().includes(query)
   );
 
   return (
-    <div>
+    <div
+      style={{
+        minHeight: "100vh",
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       {showNavbar && <Navbar user={user} />}
-      <div className="p-3 container">
-        <h3 className="mb-5"></h3>
+      <div className="modules-container">
+        {/* Header */}
+        <div className="modules-header">
+          <h2 className="modules-title">Available Modules</h2>
+          <p className="modules-subtitle">
+            {filtered.length} {filtered.length === 1 ? "module" : "modules"}{" "}
+            available
+          </p>
+        </div>
 
-        {loading && <div className="text-center p-4">Loading modules...</div>}
-
-        {error && (
-          <div className="text-center p-4 text-danger">
-            Failed to load modules. Please try again later.
+        {/* Loading State */}
+        {loading && (
+          <div className="modules-grid">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="module-card-wrapper">
+                <div className="card module-card skeleton-card">
+                  <Skeleton height={120} />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        {!loading && !error && (
-          <div className="row g-1">
-            {filtered.map((m) => (
-              <div key={m.id} className="col-12 col-md-6 col-lg-3">
-                <Link to={`/modules/${m.id}`} className="module-link">
-                  <div
-                    className="card module-card p-0 h-100"
-                    style={{ width: "20rem" }}
-                  >
-                    <h5 className="mb-0 mx-auto p-4" style={{ fontSize: "1.25rem" }}>
-                      {m.name}
-                    </h5>
-                  </div>
-                </Link>
-              </div>
-            ))}
+        {/* Error State */}
+        {error && (
+          <EmptyState
+            icon="⚠️"
+            title="Oops! Something went wrong"
+            description="We couldn't load the modules. Please try again later."
+            variant="error"
+            action={
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </button>
+            }
+          />
+        )}
 
-            {filtered.length === 0 && (
-              <div className="col-12 text-center text-secondary">
-                No modules matched your search.
-              </div>
-            )}
+        {/* No Results */}
+        {!loading && !error && filtered.length === 0 && (
+          <EmptyState
+            icon="🔍"
+            title="No modules found"
+            description="Your search didn't match any modules. Try adjusting your search terms."
+            variant="search"
+          />
+        )}
+
+        {/* Module Cards Grid */}
+        {!loading && !error && filtered.length > 0 && (
+          <div className="modules-grid">
+            {filtered.map((m) => (
+              <Link key={m.id} to={`/modules/${m.id}`} className="module-link">
+                <div className="module-card-wrapper">
+                  <div className="card module-card">
+                    {/* Icon */}
+                    <div className="module-icon">
+                      {moduleIcons[m.name] || "📦"}
+                    </div>
+
+                    {/* Title */}
+                    <h5 className="module-card-title">{m.name}</h5>
+
+                    {/* Description */}
+                    <p className="module-card-description">
+                      {moduleDescriptions[m.name] ||
+                        "Click to access this module"}
+                    </p>
+
+                    {/* Action Indicator */}
+                    <div className="module-action">
+                      <span className="module-arrow">→</span>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Module Count Summary */}
+        {!loading && !error && filtered.length > 0 && (
+          <div className="modules-footer">
+            <p className="text-secondary">
+              Showing {filtered.length} of {modules?.length || 0} modules
+            </p>
           </div>
         )}
       </div>

@@ -17,7 +17,6 @@ const SignatureManagement = () => {
       setSignatures(response.data || []);
       setError(null);
     } catch (err) {
-      console.error("Failed to fetch signatures:", err);
       setError("Failed to load signatures");
     } finally {
       setLoading(false);
