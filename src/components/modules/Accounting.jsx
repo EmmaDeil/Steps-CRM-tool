@@ -389,64 +389,6 @@ const Accounting = () => {
               </div>
             </form>
           )}
-
-          {/* Advance Requests Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#dbe0e6] dark:border-gray-700">
-                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
-                    Amount
-                  </th>
-                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
-                    Reason
-                  </th>
-                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {userAdvanceRequests.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan="3"
-                      className="text-center py-4 text-[#617589] dark:text-gray-400"
-                    >
-                      No requests yet
-                    </td>
-                  </tr>
-                ) : (
-                  userAdvanceRequests.map((request) => (
-                    <tr
-                      key={request.id}
-                      className="border-b border-[#dbe0e6] dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                    >
-                      <td className="py-2 px-2 text-[#111418] dark:text-white font-semibold">
-                        {formatCurrency(request.amount)}
-                      </td>
-                      <td className="py-2 px-2 text-[#617589] dark:text-gray-400 text-xs">
-                        {request.reason}
-                      </td>
-                      <td className="py-2 px-2">
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                            request.status === "approved"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                              : request.status === "rejected"
-                              ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                          }`}
-                        >
-                          {request.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
         </div>
 
         {/* Retirement Card */}
@@ -563,63 +505,7 @@ const Accounting = () => {
             </form>
           )}
 
-          {/* Retirement Requests Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#dbe0e6] dark:border-gray-700">
-                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
-                    Date
-                  </th>
-                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
-                    Settlement
-                  </th>
-                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {userRetirementRequests.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan="3"
-                      className="text-center py-4 text-[#617589] dark:text-gray-400"
-                    >
-                      No requests yet
-                    </td>
-                  </tr>
-                ) : (
-                  userRetirementRequests.map((request) => (
-                    <tr
-                      key={request.id}
-                      className="border-b border-[#dbe0e6] dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                    >
-                      <td className="py-2 px-2 text-[#111418] dark:text-white text-xs">
-                        {request.retirementDate}
-                      </td>
-                      <td className="py-2 px-2 text-[#111418] dark:text-white font-semibold">
-                        {formatCurrency(request.finalSettlement)}
-                      </td>
-                      <td className="py-2 px-2">
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                            request.status === "approved"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                              : request.status === "rejected"
-                              ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                          }`}
-                        >
-                          {request.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+
         </div>
 
         {/* History Card */}
