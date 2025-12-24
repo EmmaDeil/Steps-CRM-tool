@@ -34,7 +34,7 @@ const iconMap = {
 
 export default function Home() {
   const navigate = useNavigate();
-  const { user, isLoaded } = useUser();
+  const { user } = useUser();
   const { id } = useParams();
   const { hasModuleAccess } = useAppContext();
 
@@ -211,44 +211,13 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-background-light text-[#111418] dark:bg-background-dark dark:text-white font-display">
       {/* Header */}
-      <header className="w-full bg-white dark:bg-[#111418] border-b border-[#dbe0e6] dark:border-gray-800 px-6 py-3 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div
-            className="bg-center bg-no-repeat bg-cover rounded-full size-10"
-            aria-label="Company Logo"
-            style={{ backgroundImage: "url('/assets/step-logo.ico')" }}
-          />
-          <div className="flex flex-col">
-            <h1 className="text-[#111418] dark:text-white text-base font-bold leading-tight">
-              Acme Corp
-            </h1>
-            <p className="text-[#617589] dark:text-gray-400 text-xs font-medium">
-              Business Suite
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 pl-1">
-          {isLoaded ? (
-            <>
-              <div
-                className="bg-center bg-no-repeat bg-cover rounded-full size-9"
-                aria-label="User avatar"
-                style={{ backgroundImage: "url('/assets/step-logo.ico')" }}
-              />
-              <div className="hidden md:flex flex-col">
-                <p className="text-[#111418] dark:text-white text-sm font-medium leading-tight">
-                  {user?.fullName || "User"}
-                </p>
-                <p className="text-[#617589] dark:text-gray-400 text-xs font-normal">
-                  {user?.primaryEmailAddress?.emailAddress || ""}
-                </p>
-              </div>
-            </>
-          ) : (
-            <div className="h-3 w-40 rounded-full bg-gray-200 dark:bg-gray-700" />
-          )}
-        </div>
-      </header>
+      <Navbar 
+        user={user}
+        showCompanyBranding={true}
+        companyName="Acme Corp"
+        companySubtitle="Business Suite"
+        companyLogo="/assets/step-logo.ico"
+      />
 
       {/* Main */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex flex-col items-center justify-center">

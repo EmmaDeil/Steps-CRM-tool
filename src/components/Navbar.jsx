@@ -13,6 +13,10 @@ const Navbar = ({
   onSearch,
   showBackButton,
   onBack,
+  showCompanyBranding = false,
+  companyName = "Steps CRM",
+  companySubtitle = null,
+  companyLogo = null,
 }) => {
   const navigate = useNavigate();
   const { searchHistory, addSearchHistory } = useAppContext();
@@ -47,15 +51,35 @@ const Navbar = ({
     <nav className="sticky top-0 z-50 w-full bg-white dark:bg-[#111418] border-b border-[#dbe0e6] dark:border-gray-800">
       <div className="px-3 md:px-6">
         <div className="flex items-center justify-between py-3">
-          <NavLink className="flex items-center gap-2" to="/home">
-            <img src={stepsLogo} alt="Steps Logo" className="w-7 h-7" />
-            <span className="hidden sm:inline text-sm font-semibold text-[#111418] dark:text-white">
-              Steps CRM
-            </span>
-            <span className="sm:hidden text-sm font-semibold text-[#111418] dark:text-white">
-              Steps
-            </span>
-          </NavLink>
+          {showCompanyBranding ? (
+            <div className="flex items-center gap-3">
+              <div
+                className="bg-center bg-no-repeat bg-cover rounded-full size-10"
+                aria-label="Company Logo"
+                style={{ backgroundImage: companyLogo ? `url('${companyLogo}')` : "url('/assets/step-logo.ico')" }}
+              />
+              <div className="flex flex-col">
+                <h1 className="text-[#111418] dark:text-white text-base font-bold leading-tight">
+                  {companyName}
+                </h1>
+                {companySubtitle && (
+                  <p className="text-[#617589] dark:text-gray-400 text-xs font-medium">
+                    {companySubtitle}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <NavLink className="flex items-center gap-2" to="/home">
+              <img src={stepsLogo} alt="Steps Logo" className="w-7 h-7" />
+              <span className="hidden sm:inline text-sm font-semibold text-[#111418] dark:text-white">
+                Steps CRM
+              </span>
+              <span className="sm:hidden text-sm font-semibold text-[#111418] dark:text-white">
+                Steps
+              </span>
+            </NavLink>
+          )}
 
           <div className="flex items-center gap-2 md:gap-4">
             {/* Back button */}
@@ -179,15 +203,35 @@ const Navbar = ({
               </NavLink>
               {user ? (
                 <div className="inline-flex items-center gap-2">
-                  <div className="hidden lg:block text-right">
-                    <div className="text-xs font-semibold text-[#111418] dark:text-white">
-                      {user.fullName || user.firstName || "User"}
+                  {!showCompanyBranding && (
+                    <div className="hidden lg:block text-right">
+                      <div className="text-xs font-semibold text-[#111418] dark:text-white">
+                        {user.fullName || user.firstName || "User"}
+                      </div>
+                      <div className="text-[11px] text-[#617589] dark:text-gray-400">
+                        {user.primaryEmailAddress?.emailAddress}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-[#617589] dark:text-gray-400">
-                      {user.primaryEmailAddress?.emailAddress}
+                  )}
+                  {showCompanyBranding ? (
+                    <div className="flex items-center gap-3 pl-1">
+                      <div
+                        className="bg-center bg-no-repeat bg-cover rounded-full size-9"
+                        aria-label="User avatar"
+                        style={{ backgroundImage: "url('/assets/step-logo.ico')" }}
+                      />
+                      <div className="hidden md:flex flex-col">
+                        <p className="text-[#111418] dark:text-white text-sm font-medium leading-tight">
+                          {user?.fullName || "User"}
+                        </p>
+                        <p className="text-[#617589] dark:text-gray-400 text-xs font-normal">
+                          {user?.primaryEmailAddress?.emailAddress || ""}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <UserButton afterSignOutUrl="/" />
+                  ) : (
+                    <UserButton afterSignOutUrl="/" />
+                  )}
                 </div>
               ) : (
                 <NavLink
@@ -220,4 +264,8 @@ Navbar.propTypes = {
   onSearch: PropTypes.func,
   showBackButton: PropTypes.bool,
   onBack: PropTypes.func,
+  showCompanyBranding: PropTypes.bool,
+  companyName: PropTypes.string,
+  companySubtitle: PropTypes.string,
+  companyLogo: PropTypes.string,
 };
