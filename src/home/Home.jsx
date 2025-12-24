@@ -17,19 +17,19 @@ const loadModuleComponent = (componentName) => {
 
 // Tailwind-powered Home screen (no external CSS)
 const iconMap = {
-  Finance: { name: "account_balance", color: "purple" },
-  Accounting: { name: "receipt_long", color: "purple" },
-  "Facility Maintenance": { name: "domain", color: "blue" },
-  Approval: { name: "fact_check", color: "orange" },
-  "Material Requests": { name: "receipt_long", color: "green" },
-  "Purchase Orders": { name: "shopping_cart", color: "indigo" },
-  Inventory: { name: "inventory_2", color: "teal" },
-  Analytics: { name: "query_stats", color: "cyan" },
-  Attendance: { name: "badge", color: "emerald" },
-  "HR Management": { name: "group", color: "rose" },
-  "Security Logs": { name: "shield_lock", color: "red" },
-  "Signature Management": { name: "stylus_note", color: "pink" },
-  "Admin Controls": { name: "admin_panel_settings", color: "gray" },
+  Finance: { icon: "fa-university", color: "purple" },
+  Accounting: { icon: "fa-receipt", color: "purple" },
+  "Facility Maintenance": { icon: "fa-building", color: "blue" },
+  Approval: { icon: "fa-check-circle", color: "orange" },
+  "Material Requests": { icon: "fa-boxes", color: "green" },
+  "Purchase Orders": { icon: "fa-cart-shopping", color: "indigo" },
+  Inventory: { icon: "fa-warehouse", color: "teal" },
+  Analytics: { icon: "fa-chart-line", color: "cyan" },
+  Attendance: { icon: "fa-id-badge", color: "emerald" },
+  "HR Management": { icon: "fa-people-group", color: "rose" },
+  "Security Logs": { icon: "fa-lock", color: "red" },
+  "Signature Management": { icon: "fa-pen-fancy", color: "pink" },
+  "Admin Controls": { icon: "fa-sliders", color: "gray" },
 };
 
 export default function Home() {
@@ -110,9 +110,7 @@ export default function Home() {
                 className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 onClick={() => navigate("/home")}
               >
-                <span className="material-symbols-outlined text-base">
-                  home
-                </span>
+                <i className="fa-solid fa-home text-base"></i>
                 Back to Home
               </button>
             </div>
@@ -137,9 +135,7 @@ export default function Home() {
                 className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 onClick={() => navigate("/home")}
               >
-                <span className="material-symbols-outlined text-base">
-                  home
-                </span>
+                <i className="fa-solid fa-home text-base"></i>
                 Back to Home
               </button>
             </div>
@@ -182,7 +178,7 @@ export default function Home() {
               className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
               onClick={() => navigate("/home")}
             >
-              <span className="material-symbols-outlined text-base">home</span>
+              <i className="fa-solid fa-home text-base"></i>
               Back to Home
             </button>
           </div>
@@ -203,7 +199,7 @@ export default function Home() {
           {/* Search */}
           <div className="relative w-full max-w-lg mb-10 group">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <span className="material-symbols-outlined text-gray-400 group-focus-within:text-primary transition-colors"></span>
+              <i className="fa-solid fa-magnifying-glass text-gray-400 group-focus-within:text-primary transition-colors"></i>
             </div>
             <input
               aria-label="Search"
@@ -253,7 +249,7 @@ export default function Home() {
             filtered.length > 0 &&
             filtered.map((m) => {
               const icon = iconMap[m.name] || {
-                name: "widgets",
+                icon: "fa-cube",
                 color: "gray",
               };
               const colorClass =
@@ -288,9 +284,7 @@ export default function Home() {
                   <div
                     className={`size-24 rounded-2xl bg-gradient-to-br ${colorClass} flex items-center justify-center mb-6 shadow-sm border`}
                   >
-                    <span className="material-symbols-outlined text-[48px]">
-                      {icon.name}
-                    </span>
+                    <i className={`fa-solid ${icon.icon} text-5xl`}></i>
                   </div>
                   <h3 className="text-xl font-bold text-[#111418] dark:text-white mb-2">
                     {m.name}

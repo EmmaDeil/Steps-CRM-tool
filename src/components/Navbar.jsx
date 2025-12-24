@@ -77,9 +77,7 @@ const Navbar = ({ user }) => {
                     }}
                     className="w-full text-left px-4 py-2 text-sm text-[#111418] dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2 transition-colors"
                   >
-                    <span className="material-symbols-outlined text-base">
-                      person
-                    </span>
+                    <i className="fa-solid fa-user text-sm"></i>
                     Profile
                   </button>
 
@@ -91,9 +89,7 @@ const Navbar = ({ user }) => {
                     }}
                     className="w-full text-left px-4 py-2 text-sm text-[#111418] dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2 transition-colors"
                   >
-                    <span className="material-symbols-outlined text-base">
-                      settings
-                    </span>
+                    <i className="fa-solid fa-gear text-sm"></i>
                     Settings
                   </button>
 
@@ -108,9 +104,7 @@ const Navbar = ({ user }) => {
                     }}
                     className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors font-medium"
                   >
-                    <span className="material-symbols-outlined text-base">
-                      logout
-                    </span>
+                    <i className="fa-solid fa-sign-out-alt text-sm"></i>
                     Logout
                   </button>
                 </div>

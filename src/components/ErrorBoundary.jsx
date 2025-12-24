@@ -56,18 +56,14 @@ class ErrorBoundary extends React.Component {
                 className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 onClick={this.handleReset}
               >
-                <span className="material-symbols-outlined text-base">
-                  refresh
-                </span>
+                <i className="fa-solid fa-rotate-right text-sm"></i>
                 Reload Page
               </button>
               <button
                 className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
                 onClick={() => (window.location.href = "/home")}
               >
-                <span className="material-symbols-outlined text-base">
-                  home
-                </span>
+                <i className="fa-solid fa-home text-sm"></i>
                 Home
               </button>
             </div>
