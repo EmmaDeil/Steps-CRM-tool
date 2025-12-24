@@ -32,14 +32,6 @@ function App() {
           }
         />
 
-        {/* Backward-compat: redirect old routes to home */}
-        <Route path="/dashboard" element={<Navigate to="/home" replace />} />
-        <Route path="/modules" element={<Navigate to="/home" replace />} />
-        <Route
-          path="/modules/:id"
-          element={<Navigate to="/home/:id" replace />}
-        />
-
         {/* 404 fallback */}
         <Route path="*" element={<NotFound />} />
       </Routes>
