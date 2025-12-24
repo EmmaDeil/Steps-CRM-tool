@@ -451,9 +451,9 @@ const Accounting = () => {
       {/* Modals */}
       {/* Advance Expense Modal */}
       {showAdvanceForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-2xl max-w-2xl w-full max-h-96 overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-2xl max-w-2xl w-full min-h-screen md:min-h-auto md:max-h-[90vh] my-8 flex flex-col">
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between rounded-t-xl">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <i className="fa-solid fa-wallet"></i>
                 New Advance Expense Request
@@ -466,7 +466,10 @@ const Accounting = () => {
               </button>
             </div>
 
-            <form onSubmit={handleAdvanceSubmit} className="p-6 space-y-4">
+            <form
+              onSubmit={handleAdvanceSubmit}
+              className="flex-1 overflow-y-auto p-6 space-y-5"
+            >
               <div>
                 <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
                   Amount <span className="text-red-600">*</span>
@@ -499,7 +502,7 @@ const Accounting = () => {
                       reason: e.target.value,
                     })
                   }
-                  rows="3"
+                  rows="4"
                   required
                 />
               </div>
@@ -609,10 +612,10 @@ const Accounting = () => {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-6 pb-2">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
                 >
                   <i className="fa-solid fa-check"></i>
                   Submit Request
@@ -620,7 +623,7 @@ const Accounting = () => {
                 <button
                   type="button"
                   onClick={() => setShowAdvanceForm(false)}
-                  className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-[#111418] dark:text-white font-semibold rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 text-[#111418] dark:text-white font-semibold rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                 >
                   Cancel
                 </button>
@@ -632,9 +635,9 @@ const Accounting = () => {
 
       {/* Retirement Modal */}
       {showRetirementForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-2xl max-w-2xl w-full max-h-96 overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 flex items-center justify-between">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-2xl max-w-2xl w-full min-h-screen md:min-h-auto md:max-h-[90vh] my-8 flex flex-col">
+            <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 flex items-center justify-between rounded-t-xl">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <i className="fa-solid fa-handshake"></i>
                 New Retirement Request
@@ -647,7 +650,10 @@ const Accounting = () => {
               </button>
             </div>
 
-            <form onSubmit={handleRetirementSubmit} className="p-6 space-y-4">
+            <form
+              onSubmit={handleRetirementSubmit}
+              className="flex-1 overflow-y-auto p-6 space-y-5"
+            >
               <div>
                 <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
                   Retirement Date <span className="text-red-600">*</span>
@@ -705,10 +711,10 @@ const Accounting = () => {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-6 pb-2">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
                 >
                   <i className="fa-solid fa-check"></i>
                   Submit Request
@@ -716,7 +722,7 @@ const Accounting = () => {
                 <button
                   type="button"
                   onClick={() => setShowRetirementForm(false)}
-                  className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-[#111418] dark:text-white font-semibold rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 text-[#111418] dark:text-white font-semibold rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                 >
                   Cancel
                 </button>
