@@ -109,6 +109,8 @@ const Accounting = () => {
     repaymentPeriod: "",
     approver: "",
     approverEmail: "",
+    currency: "USD",
+    purpose: "",
   });
 
   // Get current user's info
@@ -200,6 +202,8 @@ const Accounting = () => {
       repaymentPeriod: advanceFormData.repaymentPeriod,
       approver: advanceFormData.approver,
       approverEmail: advanceFormData.approverEmail,
+      currency: advanceFormData.currency,
+      purpose: advanceFormData.purpose,
       status: "pending",
       requestDate: new Date().toISOString().split("T")[0],
       hasRetirement: false,
@@ -213,7 +217,9 @@ const Accounting = () => {
         employeeId: currentEmployeeId,
         department: currentDepartment,
         amount: advanceFormData.amount,
+        currency: advanceFormData.currency,
         reason: advanceFormData.reason,
+        purpose: advanceFormData.purpose,
         repaymentPeriod: advanceFormData.repaymentPeriod,
         approver: advanceFormData.approver,
         requestType: "advance",
@@ -227,6 +233,8 @@ const Accounting = () => {
         repaymentPeriod: "",
         approver: "",
         approverEmail: "",
+        currency: "USD",
+        purpose: "",
       });
       toast.success("Request submitted and email sent to approver");
     } catch {
@@ -322,6 +330,61 @@ const Accounting = () => {
                   placeholder="e.g., 6 months"
                   required
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div>
+                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
+                    Currency <span className="text-red-600">*</span>
+                  </label>
+                  <select
+                    className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
+                    value={advanceFormData.currency}
+                    onChange={(e) =>
+                      setAdvanceFormData({
+                        ...advanceFormData,
+                        currency: e.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                    <option value="JPY">JPY</option>
+                    <option value="INR">INR</option>
+                    <option value="AUD">AUD</option>
+                    <option value="CAD">CAD</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
+                    Purpose <span className="text-red-600">*</span>
+                  </label>
+                  <select
+                    className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
+                    value={advanceFormData.purpose}
+                    onChange={(e) =>
+                      setAdvanceFormData({
+                        ...advanceFormData,
+                        purpose: e.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="">Select purpose...</option>
+                    <option value="Medical Emergency">Medical Emergency</option>
+                    <option value="Home Repair">Home Repair</option>
+                    <option value="Education">Education</option>
+                    <option value="Vehicle Purchase">Vehicle Purchase</option>
+                    <option value="Family Emergency">Family Emergency</option>
+                    <option value="Debt Repayment">Debt Repayment</option>
+                    <option value="Business Investment">
+                      Business Investment
+                    </option>
+                    <option value="Travel">Travel</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
               </div>
               <div className="mb-3">
                 <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
@@ -504,8 +567,6 @@ const Accounting = () => {
               </div>
             </form>
           )}
-
-
         </div>
 
         {/* History Card */}

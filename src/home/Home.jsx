@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { useAppContext } from "../context/useAppContext";
 import Navbar from "../components/Navbar";
+import Breadcrumb from "../components/Breadcrumb";
 import { apiService } from "../services/api";
 
 // Dynamically load module components
@@ -150,6 +151,12 @@ export default function Home() {
       return (
         <div className="min-h-screen flex flex-col">
           <Navbar user={user} />
+          <Breadcrumb
+            items={[
+              { label: "Home", href: "/home", icon: "fa-house" },
+              { label: found.name, icon: iconMap[found.name]?.icon || "fa-cube" },
+            ]}
+          />
           <div className="flex-1">
             <Suspense
               fallback={
