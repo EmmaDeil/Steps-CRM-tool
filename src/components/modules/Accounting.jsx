@@ -451,16 +451,16 @@ const Accounting = () => {
       {/* Modals */}
       {/* Advance Expense Modal */}
       {showAdvanceForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-2xl max-w-2xl w-full min-h-screen md:min-h-auto md:max-h-[90vh] my-8 flex flex-col">
-            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between rounded-t-xl">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between rounded-t-xl flex-shrink-0">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <i className="fa-solid fa-wallet"></i>
                 New Advance Expense Request
               </h2>
               <button
                 onClick={() => setShowAdvanceForm(false)}
-                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors"
+                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors flex-shrink-0"
               >
                 <i className="fa-solid fa-times text-lg"></i>
               </button>
@@ -612,7 +612,7 @@ const Accounting = () => {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-6 pb-2">
+              <div className="flex gap-3 pt-6">
                 <button
                   type="submit"
                   className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
@@ -635,16 +635,16 @@ const Accounting = () => {
 
       {/* Retirement Modal */}
       {showRetirementForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-2xl max-w-2xl w-full min-h-screen md:min-h-auto md:max-h-[90vh] my-8 flex flex-col">
-            <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 flex items-center justify-between rounded-t-xl">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 flex items-center justify-between rounded-t-xl flex-shrink-0">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <i className="fa-solid fa-handshake"></i>
                 New Retirement Request
               </h2>
               <button
                 onClick={() => setShowRetirementForm(false)}
-                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors"
+                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors flex-shrink-0"
               >
                 <i className="fa-solid fa-times text-lg"></i>
               </button>
@@ -711,7 +711,7 @@ const Accounting = () => {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-6 pb-2">
+              <div className="flex gap-3 pt-6">
                 <button
                   type="submit"
                   className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
