@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
@@ -63,7 +63,7 @@ const Accounting = () => {
   ]);
   const [showRetirementForm, setShowRetirementForm] = useState(false);
   const [showAdvanceForm, setShowAdvanceForm] = useState(false);
-  const [staffList, setStaffList] = useState([
+  const [staffList] = useState([
     {
       id: 1,
       name: "Alice Brown",
@@ -125,40 +125,7 @@ const Accounting = () => {
     (req) => req.userId === currentUserId
   );
 
-  // Get approved advances that can be retired
-  const eligibleAdvances = userAdvanceRequests.filter(
-    (req) => req.status === "approved" && !req.hasRetirement
-  );
-
-  // Handle approver name input change with suggestions
-  const handleApproverInputChange = (value) => {
-    setAdvanceFormData({
-      ...advanceFormData,
-      approver: value,
-    });
-
-    if (value.trim().length > 0) {
-      const filtered = staffList.filter((staff) =>
-        staff.name.toLowerCase().includes(value.toLowerCase())
-      );
-      setApproverSuggestions(filtered);
-      setShowSuggestions(true);
-    } else {
-      setApproverSuggestions([]);
-      setShowSuggestions(false);
-    }
-  };
-
-  // Handle approver selection from suggestions
-  const handleSelectApprover = (staff) => {
-    setAdvanceFormData({
-      ...advanceFormData,
-      approver: staff.name,
-      approverEmail: staff.email,
-    });
-    setShowSuggestions(false);
-    setApproverSuggestions([]);
-  };
+  // Get approver suggestions and handle form
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("en-US", {
@@ -262,557 +229,459 @@ const Accounting = () => {
         approverEmail: "",
       });
       toast.success("Request submitted and email sent to approver");
-    } catch (err) {
+    } catch {
       toast.error("Failed to submit request");
     }
   };
 
   return (
-    <div className="container-fluid p-4">
-      <div className="mb-4">
-        <h2 className="mb-2">Accounting Module</h2>
-        <p className="text-secondary">
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="mb-6">
+        <h2 className="text-3xl font-bold text-[#111418] dark:text-white mb-2">
+          Accounting Module
+        </h2>
+        <p className="text-[#617589] dark:text-gray-400">
           Manage your retirement and advance expense requests
         </p>
-        <div className="alert alert-info">
-          <i className="bi bi-info-circle me-2"></i>
-          <strong>Note:</strong> You can only view and manage your own requests.
-          Retirement requests can only be made for approved advances.
-        </div>
       </div>
 
-      <div className="row g-4">
+      {/* Cards Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Advance Expense Request Card */}
-        <div className="col-12 col-lg-6">
-          <div className="card shadow-sm h-100">
-            <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-              <div>
-                <h5 className="mb-0">
-                  <i className="bi bi-cash-coin me-2"></i>Advance Expense
-                  Requests
-                </h5>
-              </div>
-              <button
-                className="btn btn-light btn-sm"
-                onClick={() => setShowAdvanceForm(!showAdvanceForm)}
-              >
-                <i className="bi bi-plus-circle me-1"></i>
-                {showAdvanceForm ? "Cancel" : "New Request"}
-              </button>
-            </div>
-            <div className="card-body">
-              {showAdvanceForm && (
-                <div className="border rounded p-3 mb-3 bg-light">
-                  <h6 className="mb-3">New Advance Request</h6>
-                  <form onSubmit={handleAdvanceSubmit}>
-                    <div className="mb-3">
-                      <label className="form-label">Employee Name</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={currentUserName}
-                        disabled
-                      />
-                    </div>
-                    <div className="row mb-3">
-                      <div className="col-md-6">
-                        <label className="form-label">Employee ID</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={currentEmployeeId}
-                          disabled
-                        />
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label">Department</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={currentDepartment}
-                          disabled
-                        />
-                      </div>
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label">
-                        Approver <span className="text-danger">*</span>
-                      </label>
-                      <div style={{ position: "relative" }}>
-                        <input
-                          type="text"
-                          className="form-control"
-                          placeholder="Start typing approver name..."
-                          value={advanceFormData.approver}
-                          onChange={(e) =>
-                            handleApproverInputChange(e.target.value)
-                          }
-                          onFocus={() => {
-                            if (approverSuggestions.length > 0) {
-                              setShowSuggestions(true);
-                            }
-                          }}
-                          required
-                          autoComplete="off"
-                        />
-                        {showSuggestions && approverSuggestions.length > 0 && (
-                          <div
-                            style={{
-                              position: "absolute",
-                              top: "100%",
-                              left: 0,
-                              right: 0,
-                              backgroundColor: "white",
-                              border: "1px solid #ddd",
-                              borderTop: "none",
-                              borderRadius: "0 0 4px 4px",
-                              maxHeight: "200px",
-                              overflowY: "auto",
-                              zIndex: 1000,
-                              boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                            }}
-                          >
-                            {approverSuggestions.map((staff) => (
-                              <div
-                                key={staff.id}
-                                onClick={() => handleSelectApprover(staff)}
-                                style={{
-                                  padding: "10px 12px",
-                                  cursor: "pointer",
-                                  borderBottom: "1px solid #eee",
-                                  transition: "background-color 0.2s",
-                                }}
-                                onMouseEnter={(e) =>
-                                  (e.target.style.backgroundColor = "#f8f9fa")
-                                }
-                                onMouseLeave={(e) =>
-                                  (e.target.style.backgroundColor = "white")
-                                }
-                              >
-                                <div style={{ fontWeight: "500" }}>
-                                  {staff.name}
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: "0.85rem",
-                                    color: "#666",
-                                  }}
-                                >
-                                  {staff.role}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label">
-                        Approver Email <span className="text-danger">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        className="form-control"
-                        placeholder="approver@example.com"
-                        value={advanceFormData.approverEmail}
-                        onChange={(e) =>
-                          setAdvanceFormData({
-                            ...advanceFormData,
-                            approverEmail: e.target.value,
-                          })
-                        }
-                        readOnly={
-                          advanceFormData.approverEmail &&
-                          staffList.some(
-                            (s) =>
-                              s.name === advanceFormData.approver &&
-                              s.email === advanceFormData.approverEmail
-                          )
-                        }
-                        required
-                      />
-                      {advanceFormData.approverEmail &&
-                        staffList.some(
-                          (s) =>
-                            s.name === advanceFormData.approver &&
-                            s.email === advanceFormData.approverEmail
-                        ) && (
-                          <small className="text-success d-block mt-1">
-                            <i className="bi bi-check-circle me-1"></i>
-                            Auto-filled from staff database
-                          </small>
-                        )}
-                    </div>
-                    <div className="row mb-3">
-                      <div className="col-md-6">
-                        <label className="form-label">
-                          Advance Amount <span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          value={advanceFormData.amount}
-                          onChange={(e) =>
-                            setAdvanceFormData({
-                              ...advanceFormData,
-                              amount: e.target.value,
-                            })
-                          }
-                          min="0"
-                          step="0.01"
-                          required
-                        />
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label">
-                          Repayment Period{" "}
-                          <span className="text-danger">*</span>
-                        </label>
-                        <select
-                          className="form-select"
-                          value={advanceFormData.repaymentPeriod}
-                          onChange={(e) =>
-                            setAdvanceFormData({
-                              ...advanceFormData,
-                              repaymentPeriod: e.target.value,
-                            })
-                          }
-                          required
-                        >
-                          <option value="">Select Period</option>
-                          <option value="3 months">3 months</option>
-                          <option value="6 months">6 months</option>
-                          <option value="9 months">9 months</option>
-                          <option value="12 months">12 months</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label">
-                        Reason <span className="text-danger">*</span>
-                      </label>
-                      <textarea
-                        className="form-control"
-                        rows="2"
-                        value={advanceFormData.reason}
-                        onChange={(e) =>
-                          setAdvanceFormData({
-                            ...advanceFormData,
-                            reason: e.target.value,
-                          })
-                        }
-                        placeholder="e.g., Medical Emergency, Home Repair"
-                        required
-                      ></textarea>
-                    </div>
-                    <div className="d-flex gap-2">
-                      <button type="submit" className="btn btn-primary btn-sm">
-                        <i className="bi bi-check-circle me-1"></i>Submit
-                        Request
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setShowAdvanceForm(false)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
+        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-[#dbe0e6] dark:border-gray-700 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-[#111418] dark:text-white flex items-center gap-2">
+              <i className="fa-solid fa-wallet text-blue-600"></i>
+              Advance Expense Request
+            </h3>
+            <button
+              onClick={() => setShowAdvanceForm(!showAdvanceForm)}
+              className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1"
+            >
+              <i className="fa-solid fa-plus text-xs"></i>
+              New
+            </button>
+          </div>
 
-              <div className="table-responsive">
-                <table className="table table-sm table-hover">
-                  <thead className="table-light">
-                    <tr>
-                      <th>Amount</th>
-                      <th>Reason</th>
-                      <th>Period</th>
-                      <th>Date</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {userAdvanceRequests.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" className="text-center text-muted py-3">
-                          No advance requests found
-                        </td>
-                      </tr>
-                    ) : (
-                      userAdvanceRequests.map((request) => (
-                        <tr key={request.id}>
-                          <td>
-                            <strong className="text-primary">
-                              {formatCurrency(request.amount)}
-                            </strong>
-                          </td>
-                          <td>{request.reason}</td>
-                          <td>
-                            <small>{request.repaymentPeriod}</small>
-                          </td>
-                          <td>
-                            <small>{request.requestDate}</small>
-                          </td>
-                          <td>
-                            <span
-                              className={`badge ${
-                                request.status === "approved"
-                                  ? "bg-success"
-                                  : request.status === "rejected"
-                                  ? "bg-danger"
-                                  : "bg-warning"
-                              }`}
-                            >
-                              {request.status}
-                            </span>
-                            {request.hasRetirement && (
-                              <span className="badge bg-info ms-1">
-                                <i className="bi bi-clock-history"></i> Retiring
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+          {showAdvanceForm && (
+            <form
+              onSubmit={handleAdvanceSubmit}
+              className="mb-4 pb-4 border-b border-[#dbe0e6] dark:border-gray-700"
+            >
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
+                  Amount <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="number"
+                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
+                  value={advanceFormData.amount}
+                  onChange={(e) =>
+                    setAdvanceFormData({
+                      ...advanceFormData,
+                      amount: e.target.value,
+                    })
+                  }
+                  min="0"
+                  step="0.01"
+                  required
+                />
               </div>
-            </div>
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
+                  Reason <span className="text-red-600">*</span>
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
+                  value={advanceFormData.reason}
+                  onChange={(e) =>
+                    setAdvanceFormData({
+                      ...advanceFormData,
+                      reason: e.target.value,
+                    })
+                  }
+                  rows="2"
+                  required
+                />
+              </div>
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
+                  Repayment Period <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
+                  value={advanceFormData.repaymentPeriod}
+                  onChange={(e) =>
+                    setAdvanceFormData({
+                      ...advanceFormData,
+                      repaymentPeriod: e.target.value,
+                    })
+                  }
+                  placeholder="e.g., 6 months"
+                  required
+                />
+              </div>
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
+                  Approver <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
+                  value={advanceFormData.approver}
+                  onChange={(e) => {
+                    setAdvanceFormData({
+                      ...advanceFormData,
+                      approver: e.target.value,
+                    });
+                    const matches = staffList.filter((staff) =>
+                      staff.name
+                        .toLowerCase()
+                        .includes(e.target.value.toLowerCase())
+                    );
+                    setApproverSuggestions(matches);
+                    setShowSuggestions(true);
+                  }}
+                  placeholder="Search staff..."
+                  required
+                />
+                {showSuggestions && approverSuggestions.length > 0 && (
+                  <div className="mt-2 bg-white dark:bg-gray-800 border border-[#dbe0e6] dark:border-gray-700 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                    {approverSuggestions.map((staff, idx) => (
+                      <div
+                        key={idx}
+                        className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-[#111418] dark:text-white text-sm"
+                        onClick={() => {
+                          setAdvanceFormData({
+                            ...advanceFormData,
+                            approver: staff.name,
+                            approverEmail: staff.email,
+                          });
+                          setShowSuggestions(false);
+                        }}
+                      >
+                        <div className="font-medium">{staff.name}</div>
+                        <div className="text-xs text-[#617589] dark:text-gray-400">
+                          {staff.email}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors flex items-center gap-1"
+                >
+                  <i className="fa-solid fa-check"></i>
+                  Submit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanceForm(false)}
+                  className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-[#111418] dark:text-white text-sm rounded-md hover:bg-gray-400 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Advance Requests Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#dbe0e6] dark:border-gray-700">
+                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
+                    Amount
+                  </th>
+                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
+                    Reason
+                  </th>
+                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {userAdvanceRequests.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan="3"
+                      className="text-center py-4 text-[#617589] dark:text-gray-400"
+                    >
+                      No requests yet
+                    </td>
+                  </tr>
+                ) : (
+                  userAdvanceRequests.map((request) => (
+                    <tr
+                      key={request.id}
+                      className="border-b border-[#dbe0e6] dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <td className="py-2 px-2 text-[#111418] dark:text-white font-semibold">
+                        {formatCurrency(request.amount)}
+                      </td>
+                      <td className="py-2 px-2 text-[#617589] dark:text-gray-400 text-xs">
+                        {request.reason}
+                      </td>
+                      <td className="py-2 px-2">
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                            request.status === "approved"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                              : request.status === "rejected"
+                              ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                          }`}
+                        >
+                          {request.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
         {/* Retirement Card */}
-        <div className="col-12 col-lg-6">
-          <div className="card shadow-sm h-100">
-            <div className="card-header bg-success text-white d-flex justify-content-between align-items-center">
-              <div>
-                <h5 className="mb-0">
-                  <i className="bi bi-calendar-check me-2"></i>Retirement
-                  Requests
-                </h5>
+        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-[#dbe0e6] dark:border-gray-700 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-[#111418] dark:text-white flex items-center gap-2">
+              <i className="fa-solid fa-handshake text-purple-600"></i>
+              Retirement
+            </h3>
+            <button
+              onClick={() => setShowRetirementForm(!showRetirementForm)}
+              className="px-3 py-1 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 transition-colors flex items-center gap-1"
+            >
+              <i className="fa-solid fa-plus text-xs"></i>
+              New
+            </button>
+          </div>
+
+          {showRetirementForm && (
+            <form
+              onSubmit={handleRetirementSubmit}
+              className="mb-4 pb-4 border-b border-[#dbe0e6] dark:border-gray-700"
+            >
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
+                  Employee Name <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
+                  value={retirementFormData.employeeName}
+                  onChange={(e) =>
+                    setRetirementFormData({
+                      ...retirementFormData,
+                      employeeName: e.target.value,
+                    })
+                  }
+                  required
+                />
               </div>
-              <button
-                className="btn btn-light btn-sm"
-                onClick={() => setShowRetirementForm(!showRetirementForm)}
-                disabled={eligibleAdvances.length === 0}
-                title={
-                  eligibleAdvances.length === 0
-                    ? "No approved advances available to retire"
-                    : ""
-                }
-              >
-                <i className="bi bi-plus-circle me-1"></i>
-                {showRetirementForm ? "Cancel" : "New Request"}
-              </button>
-            </div>
-            <div className="card-body">
-              {eligibleAdvances.length === 0 && !showRetirementForm && (
-                <div className="alert alert-warning">
-                  <i className="bi bi-exclamation-triangle me-2"></i>
-                  You need an approved advance request before creating a
-                  retirement request.
-                </div>
-              )}
-
-              {showRetirementForm && (
-                <div className="border rounded p-3 mb-3 bg-light">
-                  <h6 className="mb-3">New Retirement Request</h6>
-                  <form onSubmit={handleRetirementSubmit}>
-                    <div className="mb-3">
-                      <label className="form-label">Employee Name</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={currentUserName}
-                        disabled
-                      />
-                    </div>
-                    <div className="row mb-3">
-                      <div className="col-md-6">
-                        <label className="form-label">Employee ID</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={currentEmployeeId}
-                          disabled
-                        />
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label">Department</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={currentDepartment}
-                          disabled
-                        />
-                      </div>
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label">
-                        Select Advance to Retire{" "}
-                        <span className="text-danger">*</span>
-                      </label>
-                      <select
-                        className="form-select"
-                        value={retirementFormData.advanceRequestId}
-                        onChange={(e) =>
-                          setRetirementFormData({
-                            ...retirementFormData,
-                            advanceRequestId: e.target.value,
-                          })
-                        }
-                        required
-                      >
-                        <option value="">Choose advance request...</option>
-                        {eligibleAdvances.map((advance) => (
-                          <option key={advance.id} value={advance.id}>
-                            {formatCurrency(advance.amount)} - {advance.reason}{" "}
-                            ({advance.requestDate})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="row mb-3">
-                      <div className="col-md-6">
-                        <label className="form-label">
-                          Retirement Date <span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          className="form-control"
-                          value={retirementFormData.retirementDate}
-                          onChange={(e) =>
-                            setRetirementFormData({
-                              ...retirementFormData,
-                              retirementDate: e.target.value,
-                            })
-                          }
-                          required
-                        />
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label">
-                          Years of Service{" "}
-                          <span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          value={retirementFormData.yearsOfService}
-                          onChange={(e) =>
-                            setRetirementFormData({
-                              ...retirementFormData,
-                              yearsOfService: e.target.value,
-                            })
-                          }
-                          min="0"
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label">
-                        Final Settlement Amount{" "}
-                        <span className="text-danger">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        value={retirementFormData.finalSettlement}
-                        onChange={(e) =>
-                          setRetirementFormData({
-                            ...retirementFormData,
-                            finalSettlement: e.target.value,
-                          })
-                        }
-                        min="0"
-                        step="0.01"
-                        required
-                      />
-                    </div>
-                    <div className="d-flex gap-2">
-                      <button type="submit" className="btn btn-success btn-sm">
-                        <i className="bi bi-check-circle me-1"></i>Submit
-                        Request
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setShowRetirementForm(false)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
-
-              <div className="table-responsive">
-                <table className="table table-sm table-hover">
-                  <thead className="table-light">
-                    <tr>
-                      <th>Retirement Date</th>
-                      <th>Years</th>
-                      <th>Settlement</th>
-                      <th>Date</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {userRetirementRequests.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" className="text-center text-muted py-3">
-                          No retirement requests found
-                        </td>
-                      </tr>
-                    ) : (
-                      userRetirementRequests.map((request) => {
-                        const linkedAdvance = advanceRequests.find(
-                          (adv) => adv.id === request.advanceRequestId
-                        );
-                        return (
-                          <tr key={request.id}>
-                            <td>
-                              <small>{request.retirementDate}</small>
-                            </td>
-                            <td>{request.yearsOfService} yrs</td>
-                            <td>
-                              <strong className="text-success">
-                                {formatCurrency(request.finalSettlement)}
-                              </strong>
-                            </td>
-                            <td>
-                              <small>{request.submittedDate}</small>
-                            </td>
-                            <td>
-                              <span
-                                className={`badge ${
-                                  request.status === "approved"
-                                    ? "bg-success"
-                                    : request.status === "rejected"
-                                    ? "bg-danger"
-                                    : "bg-warning"
-                                }`}
-                              >
-                                {request.status}
-                              </span>
-                              {linkedAdvance && (
-                                <div className="small text-muted mt-1">
-                                  <i className="bi bi-link-45deg"></i>{" "}
-                                  {formatCurrency(linkedAdvance.amount)}
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        );
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div>
+                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
+                    Retirement Date <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
+                    value={retirementFormData.retirementDate}
+                    onChange={(e) =>
+                      setRetirementFormData({
+                        ...retirementFormData,
+                        retirementDate: e.target.value,
                       })
-                    )}
-                  </tbody>
-                </table>
+                    }
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
+                    Years of Service <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
+                    value={retirementFormData.yearsOfService}
+                    onChange={(e) =>
+                      setRetirementFormData({
+                        ...retirementFormData,
+                        yearsOfService: e.target.value,
+                      })
+                    }
+                    min="0"
+                    required
+                  />
+                </div>
               </div>
-            </div>
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
+                  Final Settlement Amount{" "}
+                  <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="number"
+                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
+                  value={retirementFormData.finalSettlement}
+                  onChange={(e) =>
+                    setRetirementFormData({
+                      ...retirementFormData,
+                      finalSettlement: e.target.value,
+                    })
+                  }
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors flex items-center gap-1"
+                >
+                  <i className="fa-solid fa-check"></i>
+                  Submit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRetirementForm(false)}
+                  className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-[#111418] dark:text-white text-sm rounded-md hover:bg-gray-400 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Retirement Requests Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#dbe0e6] dark:border-gray-700">
+                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
+                    Date
+                  </th>
+                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
+                    Settlement
+                  </th>
+                  <th className="text-left py-2 px-2 font-semibold text-[#111418] dark:text-white">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {userRetirementRequests.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan="3"
+                      className="text-center py-4 text-[#617589] dark:text-gray-400"
+                    >
+                      No requests yet
+                    </td>
+                  </tr>
+                ) : (
+                  userRetirementRequests.map((request) => (
+                    <tr
+                      key={request.id}
+                      className="border-b border-[#dbe0e6] dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <td className="py-2 px-2 text-[#111418] dark:text-white text-xs">
+                        {request.retirementDate}
+                      </td>
+                      <td className="py-2 px-2 text-[#111418] dark:text-white font-semibold">
+                        {formatCurrency(request.finalSettlement)}
+                      </td>
+                      <td className="py-2 px-2">
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                            request.status === "approved"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                              : request.status === "rejected"
+                              ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                          }`}
+                        >
+                          {request.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* History Card */}
+        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-[#dbe0e6] dark:border-gray-700 shadow-sm p-6">
+          <h3 className="text-xl font-bold text-[#111418] dark:text-white mb-4 flex items-center gap-2">
+            <i className="fa-solid fa-history text-orange-600"></i>
+            History
+          </h3>
+
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {[...userRetirementRequests, ...userAdvanceRequests].length ===
+            0 ? (
+              <p className="text-center py-8 text-[#617589] dark:text-gray-400">
+                No records found
+              </p>
+            ) : (
+              [...userRetirementRequests, ...userAdvanceRequests]
+                .sort(
+                  (a, b) =>
+                    new Date(b.submittedDate || b.requestDate) -
+                    new Date(a.submittedDate || a.requestDate)
+                )
+                .map((record, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-[#dbe0e6] dark:border-gray-700 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-semibold text-[#111418] dark:text-white text-sm">
+                          {record.employeeName ||
+                            `Advance Expense - ${record.reason}`}
+                        </div>
+                        <div className="text-xs text-[#617589] dark:text-gray-400 mt-1">
+                          {record.submittedDate || record.requestDate}
+                        </div>
+                        {record.amount && (
+                          <div className="text-sm font-semibold text-green-600 dark:text-green-400 mt-1">
+                            {formatCurrency(record.amount)}
+                          </div>
+                        )}
+                        {record.finalSettlement && (
+                          <div className="text-sm font-semibold text-blue-600 dark:text-blue-400 mt-1">
+                            {formatCurrency(record.finalSettlement)}
+                          </div>
+                        )}
+                      </div>
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full font-semibold whitespace-nowrap ${
+                          record.status === "approved"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                            : record.status === "rejected"
+                            ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                            : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                        }`}
+                      >
+                        {record.status}
+                      </span>
+                    </div>
+                  </div>
+                ))
+            )}
           </div>
         </div>
       </div>
