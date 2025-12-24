@@ -250,12 +250,12 @@ export default function Home() {
         <div className="flex flex-col md:flex-row items-center justify-center gap-4">
           <p>© 2025 Acme Corp Business Suite. All rights reserved.</p>
           <div className="flex gap-4 text-xs font-medium">
-            <a className="hover:text-primary transition-colors" href="#">
+            {/* <a className="hover:text-primary transition-colors" href="#">
               Support
             </a>
             <a className="hover:text-primary transition-colors" href="#">
               Privacy
-            </a>
+            </a> */}
           </div>
         </div>
       </footer>
