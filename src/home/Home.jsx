@@ -97,7 +97,11 @@ export default function Home() {
     if (!found) {
       return (
         <div className="min-h-screen flex flex-col">
-          <Navbar user={user} showBackButton={true} onBack={() => navigate("/home")} />
+          <Navbar
+            user={user}
+            showBackButton={true}
+            onBack={() => navigate("/home")}
+          />
           <div className="flex-1 flex items-center justify-center px-4 py-10">
             <div className="text-center">
               <h3 className="text-xl font-bold mb-2 text-[#111418] dark:text-white">
@@ -110,7 +114,9 @@ export default function Home() {
                 className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 onClick={() => navigate("/home")}
               >
-                <span className="material-symbols-outlined text-base">home</span>
+                <span className="material-symbols-outlined text-base">
+                  home
+                </span>
                 Back to Home
               </button>
             </div>
@@ -123,7 +129,11 @@ export default function Home() {
     if (!hasModuleAccess(found.name)) {
       return (
         <div className="min-h-screen flex flex-col">
-          <Navbar user={user} showBackButton={true} onBack={() => navigate("/home")} />
+          <Navbar
+            user={user}
+            showBackButton={true}
+            onBack={() => navigate("/home")}
+          />
           <div className="flex-1 flex items-center justify-center px-4 py-10">
             <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-200 px-6 py-4 text-center">
               <h3 className="text-lg font-bold mb-2">🔒 Access Denied</h3>
@@ -135,7 +145,9 @@ export default function Home() {
                 className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 onClick={() => navigate("/home")}
               >
-                <span className="material-symbols-outlined text-base">home</span>
+                <span className="material-symbols-outlined text-base">
+                  home
+                </span>
                 Back to Home
               </button>
             </div>
@@ -149,9 +161,17 @@ export default function Home() {
     if (ModuleComp) {
       return (
         <div className="min-h-screen flex flex-col">
-          <Navbar user={user} showBackButton={true} onBack={() => navigate("/home")} />
+          <Navbar
+            user={user}
+            showBackButton={true}
+            onBack={() => navigate("/home")}
+          />
           <div className="flex-1">
-            <Suspense fallback={<div className="p-4 text-center">Loading module...</div>}>
+            <Suspense
+              fallback={
+                <div className="p-4 text-center">Loading module...</div>
+              }
+            >
               <ModuleComp />
             </Suspense>
           </div>
@@ -162,12 +182,17 @@ export default function Home() {
     // Module not available
     return (
       <div className="min-h-screen flex flex-col">
-        <Navbar user={user} showBackButton={true} onBack={() => navigate("/home")} />
+        <Navbar
+          user={user}
+          showBackButton={true}
+          onBack={() => navigate("/home")}
+        />
         <div className="flex-1 flex items-center justify-center px-4 py-10">
           <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-200 px-6 py-4 text-center">
             <h3 className="text-lg font-bold mb-2">⚠️ Module Not Available</h3>
             <p className="text-sm mb-3 text-[#617589] dark:text-gray-400">
-              The <strong>{found.name}</strong> module is currently under development.
+              The <strong>{found.name}</strong> module is currently under
+              development.
             </p>
             <button
               className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
@@ -231,9 +256,7 @@ export default function Home() {
           {/* Search */}
           <div className="relative w-full max-w-lg mb-10 group">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <span className="material-symbols-outlined text-gray-400 group-focus-within:text-primary transition-colors">
-                
-              </span>
+              <span className="material-symbols-outlined text-gray-400 group-focus-within:text-primary transition-colors"></span>
             </div>
             <input
               aria-label="Search"
