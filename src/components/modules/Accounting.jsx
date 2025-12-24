@@ -106,7 +106,6 @@ const Accounting = () => {
   const [advanceFormData, setAdvanceFormData] = useState({
     amount: "",
     reason: "",
-    repaymentPeriod: "",
     approver: "",
     approverEmail: "",
     currency: "USD",
@@ -199,7 +198,6 @@ const Accounting = () => {
       userId: currentUserId,
       amount: parseFloat(advanceFormData.amount),
       reason: advanceFormData.reason,
-      repaymentPeriod: advanceFormData.repaymentPeriod,
       approver: advanceFormData.approver,
       approverEmail: advanceFormData.approverEmail,
       currency: advanceFormData.currency,
@@ -220,7 +218,6 @@ const Accounting = () => {
         currency: advanceFormData.currency,
         reason: advanceFormData.reason,
         purpose: advanceFormData.purpose,
-        repaymentPeriod: advanceFormData.repaymentPeriod,
         approver: advanceFormData.approver,
         requestType: "advance",
       });
@@ -230,7 +227,6 @@ const Accounting = () => {
       setAdvanceFormData({
         amount: "",
         reason: "",
-        repaymentPeriod: "",
         approver: "",
         approverEmail: "",
         currency: "USD",
@@ -243,340 +239,184 @@ const Accounting = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-[#0f172a] dark:to-[#1e293b] p-6 space-y-6">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold text-[#111418] dark:text-white mb-2">
+      <div className="mb-8 max-w-7xl mx-auto">
+        <h2 className="text-4xl font-bold text-[#111418] dark:text-white mb-2">
+          <i className="fa-solid fa-calculator mr-3 text-blue-600"></i>
           Accounting Module
         </h2>
-        <p className="text-[#617589] dark:text-gray-400">
-          Manage your retirement and advance expense requests
+        <p className="text-[#617589] dark:text-gray-400 text-lg">
+          Manage your retirement and advance expense requests with ease
         </p>
       </div>
 
+      {/* Stats Cards */}
+      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-[#dbe0e6] dark:border-gray-700 shadow-sm p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              <i className="fa-solid fa-wallet text-blue-600 text-xl"></i>
+            </div>
+            <div>
+              <p className="text-sm text-[#617589] dark:text-gray-400">
+                Advance Requests
+              </p>
+              <p className="text-2xl font-bold text-[#111418] dark:text-white">
+                {userAdvanceRequests.length}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-[#dbe0e6] dark:border-gray-700 shadow-sm p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+              <i className="fa-solid fa-handshake text-purple-600 text-xl"></i>
+            </div>
+            <div>
+              <p className="text-sm text-[#617589] dark:text-gray-400">
+                Retirement Requests
+              </p>
+              <p className="text-2xl font-bold text-[#111418] dark:text-white">
+                {userRetirementRequests.length}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-[#dbe0e6] dark:border-gray-700 shadow-sm p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+              <i className="fa-solid fa-history text-orange-600 text-xl"></i>
+            </div>
+            <div>
+              <p className="text-sm text-[#617589] dark:text-gray-400">
+                Total Records
+              </p>
+              <p className="text-2xl font-bold text-[#111418] dark:text-white">
+                {userAdvanceRequests.length + userRetirementRequests.length}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Cards Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Advance Expense Request Card */}
-        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-[#dbe0e6] dark:border-gray-700 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-[#111418] dark:text-white flex items-center gap-2">
-              <i className="fa-solid fa-wallet text-blue-600"></i>
-              Advance Expense Request
-            </h3>
+        <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-[#dbe0e6] dark:border-gray-700 shadow-lg p-6 hover:shadow-xl transition-shadow">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-2xl font-bold text-[#111418] dark:text-white flex items-center gap-2 mb-1">
+                <i className="fa-solid fa-wallet text-blue-600 text-2xl"></i>
+                Advance Expense
+              </h3>
+              <p className="text-sm text-[#617589] dark:text-gray-400">
+                Request an advance for expenses
+              </p>
+            </div>
             <button
-              onClick={() => setShowAdvanceForm(!showAdvanceForm)}
-              className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1"
+              onClick={() => setShowAdvanceForm(true)}
+              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2"
             >
-              <i className="fa-solid fa-plus text-xs"></i>
-              New
+              <i className="fa-solid fa-plus"></i>
+              New Request
             </button>
           </div>
-
-          {showAdvanceForm && (
-            <form
-              onSubmit={handleAdvanceSubmit}
-              className="mb-4 pb-4 border-b border-[#dbe0e6] dark:border-gray-700"
-            >
-              <div className="mb-3">
-                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
-                  Amount <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="number"
-                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
-                  value={advanceFormData.amount}
-                  onChange={(e) =>
-                    setAdvanceFormData({
-                      ...advanceFormData,
-                      amount: e.target.value,
-                    })
-                  }
-                  min="0"
-                  step="0.01"
-                  required
-                />
-              </div>
-              <div className="mb-3">
-                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
-                  Reason <span className="text-red-600">*</span>
-                </label>
-                <textarea
-                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
-                  value={advanceFormData.reason}
-                  onChange={(e) =>
-                    setAdvanceFormData({
-                      ...advanceFormData,
-                      reason: e.target.value,
-                    })
-                  }
-                  rows="2"
-                  required
-                />
-              </div>
-              <div className="mb-3">
-                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
-                  Repayment Period <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
-                  value={advanceFormData.repaymentPeriod}
-                  onChange={(e) =>
-                    setAdvanceFormData({
-                      ...advanceFormData,
-                      repaymentPeriod: e.target.value,
-                    })
-                  }
-                  placeholder="e.g., 6 months"
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div>
-                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
-                    Currency <span className="text-red-600">*</span>
-                  </label>
-                  <select
-                    className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
-                    value={advanceFormData.currency}
-                    onChange={(e) =>
-                      setAdvanceFormData({
-                        ...advanceFormData,
-                        currency: e.target.value,
-                      })
-                    }
-                    required
+          <div className="space-y-2">
+            {userAdvanceRequests.length === 0 ? (
+              <p className="text-center py-8 text-[#617589] dark:text-gray-400">
+                No requests yet
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {userAdvanceRequests.slice(0, 3).map((request) => (
+                  <div
+                    key={request.id}
+                    className="p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800"
                   >
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                    <option value="JPY">JPY</option>
-                    <option value="INR">INR</option>
-                    <option value="AUD">AUD</option>
-                    <option value="CAD">CAD</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
-                    Purpose <span className="text-red-600">*</span>
-                  </label>
-                  <select
-                    className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
-                    value={advanceFormData.purpose}
-                    onChange={(e) =>
-                      setAdvanceFormData({
-                        ...advanceFormData,
-                        purpose: e.target.value,
-                      })
-                    }
-                    required
-                  >
-                    <option value="">Select purpose...</option>
-                    <option value="Medical Emergency">Medical Emergency</option>
-                    <option value="Home Repair">Home Repair</option>
-                    <option value="Education">Education</option>
-                    <option value="Vehicle Purchase">Vehicle Purchase</option>
-                    <option value="Family Emergency">Family Emergency</option>
-                    <option value="Debt Repayment">Debt Repayment</option>
-                    <option value="Business Investment">
-                      Business Investment
-                    </option>
-                    <option value="Travel">Travel</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-              </div>
-              <div className="mb-3">
-                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
-                  Approver <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
-                  value={advanceFormData.approver}
-                  onChange={(e) => {
-                    setAdvanceFormData({
-                      ...advanceFormData,
-                      approver: e.target.value,
-                    });
-                    const matches = staffList.filter((staff) =>
-                      staff.name
-                        .toLowerCase()
-                        .includes(e.target.value.toLowerCase())
-                    );
-                    setApproverSuggestions(matches);
-                    setShowSuggestions(true);
-                  }}
-                  placeholder="Search staff..."
-                  required
-                />
-                {showSuggestions && approverSuggestions.length > 0 && (
-                  <div className="mt-2 bg-white dark:bg-gray-800 border border-[#dbe0e6] dark:border-gray-700 rounded-md shadow-lg max-h-40 overflow-y-auto">
-                    {approverSuggestions.map((staff, idx) => (
-                      <div
-                        key={idx}
-                        className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-[#111418] dark:text-white text-sm"
-                        onClick={() => {
-                          setAdvanceFormData({
-                            ...advanceFormData,
-                            approver: staff.name,
-                            approverEmail: staff.email,
-                          });
-                          setShowSuggestions(false);
-                        }}
-                      >
-                        <div className="font-medium">{staff.name}</div>
-                        <div className="text-xs text-[#617589] dark:text-gray-400">
-                          {staff.email}
-                        </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-[#111418] dark:text-white">
+                          {request.currency} {request.amount}
+                        </p>
+                        <p className="text-xs text-[#617589] dark:text-gray-400">
+                          {request.purpose}
+                        </p>
                       </div>
-                    ))}
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                          request.status === "approved"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                            : request.status === "rejected"
+                            ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                            : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                        }`}
+                      >
+                        {request.status}
+                      </span>
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors flex items-center gap-1"
-                >
-                  <i className="fa-solid fa-check"></i>
-                  Submit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanceForm(false)}
-                  className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-[#111418] dark:text-white text-sm rounded-md hover:bg-gray-400 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Retirement Card */}
-        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-[#dbe0e6] dark:border-gray-700 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-[#111418] dark:text-white flex items-center gap-2">
-              <i className="fa-solid fa-handshake text-purple-600"></i>
-              Retirement
-            </h3>
+        <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-[#dbe0e6] dark:border-gray-700 shadow-lg p-6 hover:shadow-xl transition-shadow">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-2xl font-bold text-[#111418] dark:text-white flex items-center gap-2 mb-1">
+                <i className="fa-solid fa-handshake text-purple-600 text-2xl"></i>
+                Retirement
+              </h3>
+              <p className="text-sm text-[#617589] dark:text-gray-400">Manage retirement requests</p>
+            </div>
             <button
-              onClick={() => setShowRetirementForm(!showRetirementForm)}
-              className="px-3 py-1 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 transition-colors flex items-center gap-1"
+              onClick={() => setShowRetirementForm(true)}
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white text-sm rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2"
             >
-              <i className="fa-solid fa-plus text-xs"></i>
-              New
+              <i className="fa-solid fa-plus"></i>
+              New Request
             </button>
           </div>
-
-          {showRetirementForm && (
-            <form
-              onSubmit={handleRetirementSubmit}
-              className="mb-4 pb-4 border-b border-[#dbe0e6] dark:border-gray-700"
-            >
-              <div className="mb-3">
-                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
-                  Employee Name <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
-                  value={retirementFormData.employeeName}
-                  onChange={(e) =>
-                    setRetirementFormData({
-                      ...retirementFormData,
-                      employeeName: e.target.value,
-                    })
-                  }
-                  required
-                />
+          <div className="space-y-2">
+            {userRetirementRequests.length === 0 ? (
+              <p className="text-center py-8 text-[#617589] dark:text-gray-400">No requests yet</p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {userRetirementRequests.slice(0, 3).map((request) => (
+                  <div key={request.id} className="p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200 dark:border-purple-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-[#111418] dark:text-white">{formatCurrency(request.finalSettlement)}</p>
+                        <p className="text-xs text-[#617589] dark:text-gray-400">{request.retirementDate}</p>
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                        request.status === "approved"
+                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                          : request.status === "rejected"
+                          ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                          : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                      }`}>
+                        {request.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div>
-                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
-                    Retirement Date <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
-                    value={retirementFormData.retirementDate}
-                    onChange={(e) =>
-                      setRetirementFormData({
-                        ...retirementFormData,
-                        retirementDate: e.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
-                    Years of Service <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
-                    value={retirementFormData.yearsOfService}
-                    onChange={(e) =>
-                      setRetirementFormData({
-                        ...retirementFormData,
-                        yearsOfService: e.target.value,
-                      })
-                    }
-                    min="0"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="mb-3">
-                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
-                  Final Settlement Amount{" "}
-                  <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="number"
-                  className="w-full px-3 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-[#111418] dark:text-white"
-                  value={retirementFormData.finalSettlement}
-                  onChange={(e) =>
-                    setRetirementFormData({
-                      ...retirementFormData,
-                      finalSettlement: e.target.value,
-                    })
-                  }
-                  min="0"
-                  step="0.01"
-                  required
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors flex items-center gap-1"
-                >
-                  <i className="fa-solid fa-check"></i>
-                  Submit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowRetirementForm(false)}
-                  className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-[#111418] dark:text-white text-sm rounded-md hover:bg-gray-400 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
+            )}
+          </div>
         </div>
 
         {/* History Card */}
-        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-[#dbe0e6] dark:border-gray-700 shadow-sm p-6">
-          <h3 className="text-xl font-bold text-[#111418] dark:text-white mb-4 flex items-center gap-2">
-            <i className="fa-solid fa-history text-orange-600"></i>
+        <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-[#dbe0e6] dark:border-gray-700 shadow-lg p-6 hover:shadow-xl transition-shadow">
+          <h3 className="text-2xl font-bold text-[#111418] dark:text-white mb-6 flex items-center gap-2">
+            <i className="fa-solid fa-history text-orange-600 text-2xl"></i>
             History
           </h3>
 
-          <div className="space-y-3 max-h-96 overflow-y-auto">
+          <div className="space-y-2 max-h-96 overflow-y-auto">
             {[...userRetirementRequests, ...userAdvanceRequests].length ===
             0 ? (
               <p className="text-center py-8 text-[#617589] dark:text-gray-400">
@@ -592,20 +432,20 @@ const Accounting = () => {
                 .map((record, idx) => (
                   <div
                     key={idx}
-                    className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-[#dbe0e6] dark:border-gray-700 hover:shadow-md transition-shadow"
+                    className="p-3 bg-orange-50 dark:bg-orange-900/10 rounded-lg border border-orange-200 dark:border-orange-800 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="font-semibold text-[#111418] dark:text-white text-sm">
                           {record.employeeName ||
-                            `Advance Expense - ${record.reason}`}
+                            `${record.purpose || 'Advance'}`}
                         </div>
                         <div className="text-xs text-[#617589] dark:text-gray-400 mt-1">
                           {record.submittedDate || record.requestDate}
                         </div>
                         {record.amount && (
                           <div className="text-sm font-semibold text-green-600 dark:text-green-400 mt-1">
-                            {formatCurrency(record.amount)}
+                            {record.currency} {record.amount}
                           </div>
                         )}
                         {record.finalSettlement && (
@@ -632,6 +472,282 @@ const Accounting = () => {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      {/* Advance Expense Modal */}
+      {showAdvanceForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-2xl max-w-2xl w-full max-h-96 overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <i className="fa-solid fa-wallet"></i>
+                New Advance Expense Request
+              </h2>
+              <button
+                onClick={() => setShowAdvanceForm(false)}
+                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors"
+              >
+                <i className="fa-solid fa-times text-lg"></i>
+              </button>
+            </div>
+
+            <form onSubmit={handleAdvanceSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                  Amount <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="number"
+                  className="w-full px-4 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-[#111418] dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={advanceFormData.amount}
+                  onChange={(e) =>
+                    setAdvanceFormData({
+                      ...advanceFormData,
+                      amount: e.target.value,
+                    })
+                  }
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                  Reason <span className="text-red-600">*</span>
+                </label>
+                <textarea
+                  className="w-full px-4 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-[#111418] dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={advanceFormData.reason}
+                  onChange={(e) =>
+                    setAdvanceFormData({
+                      ...advanceFormData,
+                      reason: e.target.value,
+                    })
+                  }
+                  rows="3"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                    Currency <span className="text-red-600">*</span>
+                  </label>
+                  <select
+                    className="w-full px-4 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-[#111418] dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={advanceFormData.currency}
+                    onChange={(e) =>
+                      setAdvanceFormData({
+                        ...advanceFormData,
+                        currency: e.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                    <option value="JPY">JPY</option>
+                    <option value="INR">INR</option>
+                    <option value="AUD">AUD</option>
+                    <option value="CAD">CAD</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                    Purpose <span className="text-red-600">*</span>
+                  </label>
+                  <select
+                    className="w-full px-4 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-[#111418] dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={advanceFormData.purpose}
+                    onChange={(e) =>
+                      setAdvanceFormData({
+                        ...advanceFormData,
+                        purpose: e.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="">Select purpose...</option>
+                    <option value="Medical Emergency">Medical Emergency</option>
+                    <option value="Home Repair">Home Repair</option>
+                    <option value="Education">Education</option>
+                    <option value="Vehicle Purchase">Vehicle Purchase</option>
+                    <option value="Family Emergency">Family Emergency</option>
+                    <option value="Debt Repayment">Debt Repayment</option>
+                    <option value="Business Investment">Business Investment</option>
+                    <option value="Travel">Travel</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                  Approver <span className="text-red-600">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-[#111418] dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={advanceFormData.approver}
+                    onChange={(e) => {
+                      setAdvanceFormData({
+                        ...advanceFormData,
+                        approver: e.target.value,
+                      });
+                      const matches = staffList.filter((staff) =>
+                        staff.name
+                          .toLowerCase()
+                          .includes(e.target.value.toLowerCase())
+                      );
+                      setApproverSuggestions(matches);
+                      setShowSuggestions(true);
+                    }}
+                    placeholder="Search staff..."
+                    required
+                  />
+                  {showSuggestions && approverSuggestions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-[#dbe0e6] dark:border-gray-700 rounded-lg shadow-lg max-h-40 overflow-y-auto z-10">
+                      {approverSuggestions.map((staff, idx) => (
+                        <div
+                          key={idx}
+                          className="px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer text-[#111418] dark:text-white text-sm border-b border-[#dbe0e6] dark:border-gray-700 last:border-b-0"
+                          onClick={() => {
+                            setAdvanceFormData({
+                              ...advanceFormData,
+                              approver: staff.name,
+                              approverEmail: staff.email,
+                            });
+                            setShowSuggestions(false);
+                          }}
+                        >
+                          <div className="font-medium">{staff.name}</div>
+                          <div className="text-xs text-[#617589] dark:text-gray-400">
+                            {staff.email}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                >
+                  <i className="fa-solid fa-check"></i>
+                  Submit Request
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanceForm(false)}
+                  className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-[#111418] dark:text-white font-semibold rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Retirement Modal */}
+      {showRetirementForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-2xl max-w-2xl w-full max-h-96 overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <i className="fa-solid fa-handshake"></i>
+                New Retirement Request
+              </h2>
+              <button
+                onClick={() => setShowRetirementForm(false)}
+                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors"
+              >
+                <i className="fa-solid fa-times text-lg"></i>
+              </button>
+            </div>
+
+            <form onSubmit={handleRetirementSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                  Retirement Date <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="date"
+                  className="w-full px-4 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-[#111418] dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  value={retirementFormData.retirementDate}
+                  onChange={(e) =>
+                    setRetirementFormData({
+                      ...retirementFormData,
+                      retirementDate: e.target.value,
+                    })
+                  }
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                    Years of Service <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full px-4 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-[#111418] dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    value={retirementFormData.yearsOfService}
+                    onChange={(e) =>
+                      setRetirementFormData({
+                        ...retirementFormData,
+                        yearsOfService: e.target.value,
+                      })
+                    }
+                    min="0"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                    Final Settlement <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full px-4 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-[#111418] dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    value={retirementFormData.finalSettlement}
+                    onChange={(e) =>
+                      setRetirementFormData({
+                        ...retirementFormData,
+                        finalSettlement: e.target.value,
+                      })
+                    }
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                >
+                  <i className="fa-solid fa-check"></i>
+                  Submit Request
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRetirementForm(false)}
+                  className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-[#111418] dark:text-white font-semibold rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
