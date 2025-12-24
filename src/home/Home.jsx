@@ -97,11 +97,7 @@ export default function Home() {
     if (!found) {
       return (
         <div className="min-h-screen flex flex-col">
-          <Navbar
-            user={user}
-            showBackButton={true}
-            onBack={() => navigate("/home")}
-          />
+          <Navbar user={user} />
           <div className="flex-1 flex items-center justify-center px-4 py-10">
             <div className="text-center">
               <h3 className="text-xl font-bold mb-2 text-[#111418] dark:text-white">
@@ -129,11 +125,7 @@ export default function Home() {
     if (!hasModuleAccess(found.name)) {
       return (
         <div className="min-h-screen flex flex-col">
-          <Navbar
-            user={user}
-            showBackButton={true}
-            onBack={() => navigate("/home")}
-          />
+          <Navbar user={user} />
           <div className="flex-1 flex items-center justify-center px-4 py-10">
             <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-200 px-6 py-4 text-center">
               <h3 className="text-lg font-bold mb-2">🔒 Access Denied</h3>
@@ -161,11 +153,7 @@ export default function Home() {
     if (ModuleComp) {
       return (
         <div className="min-h-screen flex flex-col">
-          <Navbar
-            user={user}
-            showBackButton={true}
-            onBack={() => navigate("/home")}
-          />
+          <Navbar user={user} />
           <div className="flex-1">
             <Suspense
               fallback={
@@ -182,11 +170,7 @@ export default function Home() {
     // Module not available
     return (
       <div className="min-h-screen flex flex-col">
-        <Navbar
-          user={user}
-          showBackButton={true}
-          onBack={() => navigate("/home")}
-        />
+        <Navbar user={user} />
         <div className="flex-1 flex items-center justify-center px-4 py-10">
           <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-200 px-6 py-4 text-center">
             <h3 className="text-lg font-bold mb-2">⚠️ Module Not Available</h3>
@@ -210,14 +194,8 @@ export default function Home() {
   // ===== HOME LIST VIEW =====
   return (
     <div className="min-h-screen flex flex-col bg-background-light text-[#111418] dark:bg-background-dark dark:text-white font-display">
-      {/* Header */}
-      <Navbar 
-        user={user}
-        showCompanyBranding={true}
-        companyName="Acme Corp"
-        companySubtitle="Business Suite"
-        companyLogo="/assets/step-logo.ico"
-      />
+      {/* Navbar */}
+      <Navbar user={user} />
 
       {/* Main */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex flex-col items-center justify-center">
