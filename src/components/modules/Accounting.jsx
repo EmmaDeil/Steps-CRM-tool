@@ -303,10 +303,10 @@ const Accounting = () => {
       {/* Cards Grid */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Advance Expense Request Card */}
-        <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-[#dbe0e6] dark:border-gray-700 shadow-lg p-6 hover:shadow-xl transition-shadow">
-          <div className="flex items-center justify-between mb-6">
+        <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-[#dbe0e6] dark:border-gray-700 shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
+          <div className="text-center space-y-4">
             <div>
-              <h3 className="text-2xl font-bold text-[#111418] dark:text-white flex items-center gap-2 mb-1">
+              <h3 className="text-2xl font-bold text-[#111418] dark:text-white flex items-center gap-2 justify-center mb-2">
                 <i className="fa-solid fa-wallet text-blue-600 text-2xl"></i>
                 Advance Expense
               </h3>
@@ -316,49 +316,11 @@ const Accounting = () => {
             </div>
             <button
               onClick={() => setShowAdvanceForm(true)}
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2"
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 justify-center w-full"
             >
-              <i className="fa-solid fa-plus"></i>
+              <i className="fa-solid fa-plus text-lg"></i>
               New Request
             </button>
-          </div>
-          <div className="space-y-2">
-            {userAdvanceRequests.length === 0 ? (
-              <p className="text-center py-8 text-[#617589] dark:text-gray-400">
-                No requests yet
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {userAdvanceRequests.slice(0, 3).map((request) => (
-                  <div
-                    key={request.id}
-                    className="p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-[#111418] dark:text-white">
-                          {request.currency} {request.amount}
-                        </p>
-                        <p className="text-xs text-[#617589] dark:text-gray-400">
-                          {request.purpose}
-                        </p>
-                      </div>
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                          request.status === "approved"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : request.status === "rejected"
-                            ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                            : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                        }`}
-                      >
-                        {request.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 
@@ -370,7 +332,9 @@ const Accounting = () => {
                 <i className="fa-solid fa-handshake text-purple-600 text-2xl"></i>
                 Retirement
               </h3>
-              <p className="text-sm text-[#617589] dark:text-gray-400">Manage retirement requests</p>
+              <p className="text-sm text-[#617589] dark:text-gray-400">
+                Manage retirement requests
+              </p>
             </div>
             <button
               onClick={() => setShowRetirementForm(true)}
@@ -382,23 +346,34 @@ const Accounting = () => {
           </div>
           <div className="space-y-2">
             {userRetirementRequests.length === 0 ? (
-              <p className="text-center py-8 text-[#617589] dark:text-gray-400">No requests yet</p>
+              <p className="text-center py-8 text-[#617589] dark:text-gray-400">
+                No requests yet
+              </p>
             ) : (
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {userRetirementRequests.slice(0, 3).map((request) => (
-                  <div key={request.id} className="p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div
+                    key={request.id}
+                    className="p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200 dark:border-purple-800"
+                  >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-semibold text-[#111418] dark:text-white">{formatCurrency(request.finalSettlement)}</p>
-                        <p className="text-xs text-[#617589] dark:text-gray-400">{request.retirementDate}</p>
+                        <p className="font-semibold text-[#111418] dark:text-white">
+                          {formatCurrency(request.finalSettlement)}
+                        </p>
+                        <p className="text-xs text-[#617589] dark:text-gray-400">
+                          {request.retirementDate}
+                        </p>
                       </div>
-                      <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                        request.status === "approved"
-                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                          : request.status === "rejected"
-                          ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                          : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                      }`}>
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                          request.status === "approved"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                            : request.status === "rejected"
+                            ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                            : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                        }`}
+                      >
                         {request.status}
                       </span>
                     </div>
@@ -438,7 +413,7 @@ const Accounting = () => {
                       <div>
                         <div className="font-semibold text-[#111418] dark:text-white text-sm">
                           {record.employeeName ||
-                            `${record.purpose || 'Advance'}`}
+                            `${record.purpose || "Advance"}`}
                         </div>
                         <div className="text-xs text-[#617589] dark:text-gray-400 mt-1">
                           {record.submittedDate || record.requestDate}
@@ -575,7 +550,9 @@ const Accounting = () => {
                     <option value="Vehicle Purchase">Vehicle Purchase</option>
                     <option value="Family Emergency">Family Emergency</option>
                     <option value="Debt Repayment">Debt Repayment</option>
-                    <option value="Business Investment">Business Investment</option>
+                    <option value="Business Investment">
+                      Business Investment
+                    </option>
                     <option value="Travel">Travel</option>
                     <option value="Other">Other</option>
                   </select>
