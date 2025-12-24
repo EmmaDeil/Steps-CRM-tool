@@ -4,7 +4,6 @@ import Auth from "./components/auth/Auth";
 import Home from "./home/Home";
 import AnalyticsPage from "./dashboard/AnalyticsPage";
 import PrivateRoute from "./components/PrivateRoute";
-import Module from "./components/Module";
 import NotFound from "./components/NotFound";
 import { Toaster } from "react-hot-toast";
 
@@ -15,7 +14,8 @@ function App() {
       <Routes>
         {/* Auth page */}
         <Route path="/" element={<Auth />} />
-        {/* New Home screen (post-login landing) */}
+        
+        {/* Home - module list and detail view (protected) */}
         <Route
           path="/home"
           element={
@@ -24,28 +24,21 @@ function App() {
             </PrivateRoute>
           }
         />
-
-        {/* Modules list and module details (protected) */}
         <Route
-          path="/modules"
+          path="/home/:id"
           element={
             <PrivateRoute>
-              <Module showNavbar={true} />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/modules/:id"
-          element={
-            <PrivateRoute>
-              <Module showNavbar={true} />
+              <Home />
             </PrivateRoute>
           }
         />
 
-        <Route path="*" element={<NotFound />} />
-        {/* Backward-compat: redirect old dashboard route to home */}
+        {/* Backward-compat: redirect old routes to home */}
         <Route path="/dashboard" element={<Navigate to="/home" replace />} />
+        <Route path="/modules" element={<Navigate to="/home" replace />} />
+        <Route path="/modules/:id" element={<Navigate to="/home/:id" replace />} />
+        
+        {/* Analytics page */}
         <Route
           path="/analytics"
           element={
@@ -54,6 +47,9 @@ function App() {
             </PrivateRoute>
           }
         />
+
+        {/* 404 fallback */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </>
   );

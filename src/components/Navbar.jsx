@@ -37,7 +37,7 @@ const Navbar = ({
     if (onBack) {
       onBack();
     } else {
-      navigate("/modules");
+      navigate("/home");
     }
   };
 

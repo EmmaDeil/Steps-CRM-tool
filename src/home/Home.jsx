@@ -1,7 +1,19 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useState, Suspense, lazy } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
+import { useAppContext } from "../context/useAppContext";
+import Navbar from "../components/Navbar";
 import { apiService } from "../services/api";
+
+// Dynamically load module components
+const loadModuleComponent = (componentName) => {
+  if (!componentName) return null;
+  try {
+    return lazy(() => import(`../components/modules/${componentName}.jsx`));
+  } catch {
+    return null;
+  }
+};
 
 // Tailwind-powered Home screen (no external CSS)
 const iconMap = {
@@ -23,6 +35,8 @@ const iconMap = {
 export default function Home() {
   const navigate = useNavigate();
   const { user, isLoaded } = useUser();
+  const { id } = useParams();
+  const { hasModuleAccess } = useAppContext();
 
   const [search, setSearch] = useState("");
   const [modules, setModules] = useState([]);
@@ -72,8 +86,103 @@ export default function Home() {
     return modules.filter((m) => m.name.toLowerCase().includes(q));
   }, [modules, search]);
 
-  const handleOpenModule = (id) => navigate(`/modules/${id}`);
+  const handleOpenModule = (moduleId) => navigate(`/home/${moduleId}`);
 
+  // ===== MODULE DETAIL VIEW =====
+  if (id) {
+    const mid = parseInt(id, 10);
+    const found = (modules || []).find((m) => String(m.id) === String(mid));
+
+    // Module not found
+    if (!found) {
+      return (
+        <div className="min-h-screen flex flex-col">
+          <Navbar user={user} showBackButton={true} onBack={() => navigate("/home")} />
+          <div className="flex-1 flex items-center justify-center px-4 py-10">
+            <div className="text-center">
+              <h3 className="text-xl font-bold mb-2 text-[#111418] dark:text-white">
+                Module Not Found
+              </h3>
+              <p className="text-sm text-[#617589] dark:text-gray-400 mb-6">
+                No module with id {id}
+              </p>
+              <button
+                className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                onClick={() => navigate("/home")}
+              >
+                <span className="material-symbols-outlined text-base">home</span>
+                Back to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Check access permission
+    if (!hasModuleAccess(found.name)) {
+      return (
+        <div className="min-h-screen flex flex-col">
+          <Navbar user={user} showBackButton={true} onBack={() => navigate("/home")} />
+          <div className="flex-1 flex items-center justify-center px-4 py-10">
+            <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-200 px-6 py-4 text-center">
+              <h3 className="text-lg font-bold mb-2">🔒 Access Denied</h3>
+              <p className="text-sm mb-3 text-[#617589] dark:text-gray-400">
+                You do not have permission to access the{" "}
+                <strong>{found.name}</strong> module.
+              </p>
+              <button
+                className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                onClick={() => navigate("/home")}
+              >
+                <span className="material-symbols-outlined text-base">home</span>
+                Back to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Load module component
+    const ModuleComp = loadModuleComponent(found.componentName);
+    if (ModuleComp) {
+      return (
+        <div className="min-h-screen flex flex-col">
+          <Navbar user={user} showBackButton={true} onBack={() => navigate("/home")} />
+          <div className="flex-1">
+            <Suspense fallback={<div className="p-4 text-center">Loading module...</div>}>
+              <ModuleComp />
+            </Suspense>
+          </div>
+        </div>
+      );
+    }
+
+    // Module not available
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar user={user} showBackButton={true} onBack={() => navigate("/home")} />
+        <div className="flex-1 flex items-center justify-center px-4 py-10">
+          <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-200 px-6 py-4 text-center">
+            <h3 className="text-lg font-bold mb-2">⚠️ Module Not Available</h3>
+            <p className="text-sm mb-3 text-[#617589] dark:text-gray-400">
+              The <strong>{found.name}</strong> module is currently under development.
+            </p>
+            <button
+              className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+              onClick={() => navigate("/home")}
+            >
+              <span className="material-symbols-outlined text-base">home</span>
+              Back to Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== HOME LIST VIEW =====
   return (
     <div className="min-h-screen flex flex-col bg-background-light text-[#111418] dark:bg-background-dark dark:text-white font-display">
       {/* Header */}
@@ -249,14 +358,6 @@ export default function Home() {
       <footer className="mt-auto w-full text-center py-6 text-sm text-[#617589] dark:text-gray-500 border-t border-[#dbe0e6] dark:border-gray-800 bg-white dark:bg-[#111418]">
         <div className="flex flex-col md:flex-row items-center justify-center gap-4">
           <p>© 2025 Acme Corp Business Suite. All rights reserved.</p>
-          <div className="flex gap-4 text-xs font-medium">
-            {/* <a className="hover:text-primary transition-colors" href="#">
-              Support
-            </a>
-            <a className="hover:text-primary transition-colors" href="#">
-              Privacy
-            </a> */}
-          </div>
         </div>
       </footer>
     </div>
