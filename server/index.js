@@ -18,6 +18,8 @@ const AnalyticsModel = require('./models/Analytics');
 const AttendanceModel = require('./models/Attendance');
 const MaterialRequestModel = require('./models/MaterialRequest');
 const PurchaseOrderModel = require('./models/PurchaseOrder');
+const AdvanceRequestModel = require('./models/AdvanceRequest');
+const RefundRequestModel = require('./models/RefundRequest');
 const { sendApprovalEmail, sendPOReviewEmail } = require('./utils/emailService');
 const seed = require('./data');
 
@@ -428,6 +430,82 @@ async function start() {
     } catch (err) {
       console.error('Error sending approval email:', err);
       res.status(500).json({ success: false, message: 'Failed to send email', error: err.message });
+    }
+  });
+
+  // Advance Request endpoints
+  app.get('/api/advance-requests', async (req, res) => {
+    try {
+      const userId = req.query.userId;
+      const query = userId ? { userId } : {};
+      const requests = await AdvanceRequestModel.find(query).sort({ createdAt: -1 });
+      res.json(requests);
+    } catch (err) {
+      console.error('Error fetching advance requests:', err);
+      res.status(500).json({ message: 'Failed to fetch requests' });
+    }
+  });
+
+  app.post('/api/advance-requests', async (req, res) => {
+    try {
+      const newRequest = await AdvanceRequestModel.create(req.body);
+      res.status(201).json({ message: 'Request created successfully', data: newRequest });
+    } catch (err) {
+      console.error('Error creating advance request:', err);
+      res.status(500).json({ message: 'Failed to create request' });
+    }
+  });
+
+  app.put('/api/advance-requests/:id', async (req, res) => {
+    try {
+      const updated = await AdvanceRequestModel.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { new: true }
+      );
+      if (!updated) return res.status(404).json({ message: 'Request not found' });
+      res.json({ message: 'Request updated', data: updated });
+    } catch (err) {
+      console.error('Error updating advance request:', err);
+      res.status(500).json({ message: 'Failed to update request' });
+    }
+  });
+
+  // Refund Request endpoints
+  app.get('/api/refund-requests', async (req, res) => {
+    try {
+      const userId = req.query.userId;
+      const query = userId ? { userId } : {};
+      const requests = await RefundRequestModel.find(query).sort({ createdAt: -1 });
+      res.json(requests);
+    } catch (err) {
+      console.error('Error fetching refund requests:', err);
+      res.status(500).json({ message: 'Failed to fetch requests' });
+    }
+  });
+
+  app.post('/api/refund-requests', async (req, res) => {
+    try {
+      const newRequest = await RefundRequestModel.create(req.body);
+      res.status(201).json({ message: 'Request created successfully', data: newRequest });
+    } catch (err) {
+      console.error('Error creating refund request:', err);
+      res.status(500).json({ message: 'Failed to create request' });
+    }
+  });
+
+  app.put('/api/refund-requests/:id', async (req, res) => {
+    try {
+      const updated = await RefundRequestModel.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { new: true }
+      );
+      if (!updated) return res.status(404).json({ message: 'Request not found' });
+      res.json({ message: 'Request updated', data: updated });
+    } catch (err) {
+      console.error('Error updating refund request:', err);
+      res.status(500).json({ message: 'Failed to update request' });
     }
   });
 
