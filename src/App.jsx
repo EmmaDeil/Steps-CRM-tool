@@ -5,6 +5,7 @@ import Home from "./home/Home";
 import PrivateRoute from "./components/PrivateRoute";
 import NotFound from "./components/NotFound";
 import { Toaster } from "react-hot-toast";
+import RetirementManagement from "./components/modules/RetirementManagement";
 
 function App() {
   return (
@@ -28,6 +29,16 @@ function App() {
           element={
             <PrivateRoute>
               <Home />
+            </PrivateRoute>
+          }
+        />
+
+        {/* Retirement Management (protected) */}
+        <Route
+          path="/retirement-management"
+          element={
+            <PrivateRoute>
+              <RetirementManagement />
             </PrivateRoute>
           }
         />

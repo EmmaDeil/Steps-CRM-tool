@@ -1,9 +1,11 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 
 const Accounting = () => {
+  const navigate = useNavigate();
   const { user } = useUser();
   const [retirementRequests, setRetirementRequests] = useState([
     {
@@ -304,19 +306,19 @@ const Accounting = () => {
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Advance Expense Request Card */}
         <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-[#dbe0e6] dark:border-gray-700 shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
-          <div className="text-center space-y-4">
-            <div>
-              <h3 className="text-2xl font-bold text-[#111418] dark:text-white flex items-center gap-2 justify-center mb-2">
-                <i className="fa-solid fa-wallet text-blue-600 text-2xl"></i>
-                Advance Expense
-              </h3>
-              <p className="text-sm text-[#617589] dark:text-gray-400">
-                Request an advance for expenses
-              </p>
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mx-auto mb-4">
+              <i className="fa-solid fa-wallet text-blue-600 text-3xl"></i>
             </div>
+            <h3 className="text-2xl font-bold text-[#111418] dark:text-white mb-2">
+              Advance Expense
+            </h3>
+            <p className="text-sm text-[#617589] dark:text-gray-400 mb-6">
+              Request an advance for expenses
+            </p>
             <button
               onClick={() => setShowAdvanceForm(true)}
-              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 justify-center w-full"
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
             >
               <i className="fa-solid fa-plus text-lg"></i>
               New Request
@@ -325,62 +327,24 @@ const Accounting = () => {
         </div>
 
         {/* Retirement Card */}
-        <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-[#dbe0e6] dark:border-gray-700 shadow-lg p-6 hover:shadow-xl transition-shadow">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-2xl font-bold text-[#111418] dark:text-white flex items-center gap-2 mb-1">
-                <i className="fa-solid fa-handshake text-purple-600 text-2xl"></i>
-                Retirement
-              </h3>
-              <p className="text-sm text-[#617589] dark:text-gray-400">
-                Manage retirement requests
-              </p>
+        <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-[#dbe0e6] dark:border-gray-700 shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mx-auto mb-4">
+              <i className="fa-solid fa-handshake text-purple-600 text-3xl"></i>
             </div>
+            <h3 className="text-2xl font-bold text-[#111418] dark:text-white mb-2">
+              Retirement
+            </h3>
+            <p className="text-sm text-[#617589] dark:text-gray-400 mb-6">
+              Manage retirement requests
+            </p>
             <button
-              onClick={() => setShowRetirementForm(true)}
-              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white text-sm rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2"
+              onClick={() => navigate("/retirement-management")}
+              className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
             >
-              <i className="fa-solid fa-plus"></i>
+              <i className="fa-solid fa-plus text-lg"></i>
               New Request
             </button>
-          </div>
-          <div className="space-y-2">
-            {userRetirementRequests.length === 0 ? (
-              <p className="text-center py-8 text-[#617589] dark:text-gray-400">
-                No requests yet
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {userRetirementRequests.slice(0, 3).map((request) => (
-                  <div
-                    key={request.id}
-                    className="p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200 dark:border-purple-800"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-[#111418] dark:text-white">
-                          {formatCurrency(request.finalSettlement)}
-                        </p>
-                        <p className="text-xs text-[#617589] dark:text-gray-400">
-                          {request.retirementDate}
-                        </p>
-                      </div>
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                          request.status === "approved"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : request.status === "rejected"
-                            ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                            : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                        }`}
-                      >
-                        {request.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 
@@ -456,7 +420,7 @@ const Accounting = () => {
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between rounded-t-xl flex-shrink-0">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <i className="fa-solid fa-wallet"></i>
-                New Advance Expense Request
+                New Request
               </h2>
               <button
                 onClick={() => setShowAdvanceForm(false)}
@@ -640,7 +604,7 @@ const Accounting = () => {
             <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 flex items-center justify-between rounded-t-xl flex-shrink-0">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <i className="fa-solid fa-handshake"></i>
-                New Retirement Request
+                Retirement
               </h2>
               <button
                 onClick={() => setShowRetirementForm(false)}

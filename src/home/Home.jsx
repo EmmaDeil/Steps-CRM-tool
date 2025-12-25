@@ -6,12 +6,23 @@ import Navbar from "../components/Navbar";
 import Breadcrumb from "../components/Breadcrumb";
 import { apiService } from "../services/api";
 
-// Dynamically load module components
+// Dynamically load module components with fallback mapping for renamed modules
 const loadModuleComponent = (componentName) => {
   if (!componentName) return null;
+
+  // Fallback mapping for renamed/legacy component names
+  const componentMapping = {
+    FinanceReports: "Finance",
+  };
+
+  const finalComponentName = componentMapping[componentName] || componentName;
+
   try {
-    return lazy(() => import(`../components/modules/${componentName}.jsx`));
-  } catch {
+    return lazy(() =>
+      import(`../components/modules/${finalComponentName}.jsx`)
+    );
+  } catch (error) {
+    console.error(`Failed to load component: ${finalComponentName}`, error);
     return null;
   }
 };
@@ -89,11 +100,20 @@ export default function Home() {
 
   const handleOpenModule = (moduleId) => navigate(`/home/${moduleId}`);
 
+  // Memoize module component to prevent remount on parent re-render
+  const mid = id ? parseInt(id, 10) : null;
+  const found = useMemo(() => {
+    return mid !== null
+      ? (modules || []).find((m) => String(m.id) === String(mid))
+      : null;
+  }, [mid, modules]);
+
+  const ModuleComp = useMemo(() => {
+    return found ? loadModuleComponent(found.componentName) : null;
+  }, [found?.componentName]);
+
   // ===== MODULE DETAIL VIEW =====
   if (id) {
-    const mid = parseInt(id, 10);
-    const found = (modules || []).find((m) => String(m.id) === String(mid));
-
     // Module not found
     if (!found) {
       return (
@@ -145,8 +165,7 @@ export default function Home() {
       );
     }
 
-    // Load module component
-    const ModuleComp = loadModuleComponent(found.componentName);
+    // Render module with memoized component to prevent reload on parent re-render
     if (ModuleComp) {
       return (
         <div className="min-h-screen flex flex-col">
@@ -154,7 +173,10 @@ export default function Home() {
           <Breadcrumb
             items={[
               { label: "Home", href: "/home", icon: "fa-house" },
-              { label: found.name, icon: iconMap[found.name]?.icon || "fa-cube" },
+              {
+                label: found.name,
+                icon: iconMap[found.name]?.icon || "fa-cube",
+              },
             ]}
           />
           <div className="flex-1">
@@ -306,29 +328,12 @@ export default function Home() {
               );
             })}
         </div>
-
-        {/* Stats */}
-        <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-8 w-full max-w-4xl text-center border-t border-gray-200 dark:border-gray-800 pt-10">
-          {statCards.map((s, idx) => (
-            <div
-              key={idx}
-              className="flex flex-col gap-1 hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded-lg transition-colors"
-            >
-              <p className="text-3xl font-bold text-[#111418] dark:text-white">
-                {s.value}
-              </p>
-              <p className="text-xs font-medium text-[#617589] dark:text-gray-500 uppercase tracking-wide">
-                {s.label}
-              </p>
-            </div>
-          ))}
-        </div>
       </main>
 
       {/* Footer */}
       <footer className="mt-auto w-full text-center py-6 text-sm text-[#617589] dark:text-gray-500 border-t border-[#dbe0e6] dark:border-gray-800 bg-white dark:bg-[#111418]">
         <div className="flex flex-col md:flex-row items-center justify-center gap-4">
-          <p>© 2025 Acme Corp Business Suite. All rights reserved.</p>
+          <p>{new Date().getFullYear()} Acme Corp Business Suite. All rights reserved.</p>
         </div>
       </footer>
     </div>

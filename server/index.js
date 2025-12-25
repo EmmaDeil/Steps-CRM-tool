@@ -79,14 +79,15 @@ async function start() {
       await ModuleModel.insertMany(seed.modules);
       console.log('Seeded modules');
     } else {
-      // Check for new modules and add them
+      // Upsert modules: update existing ones and add new ones
       for (const module of seed.modules) {
-        const exists = await ModuleModel.findOne({ id: module.id });
-        if (!exists) {
-          await ModuleModel.create(module);
-          console.log(`Added new module: ${module.name}`);
-        }
+        await ModuleModel.findOneAndUpdate(
+          { id: module.id },
+          module,
+          { upsert: true, new: true }
+        );
       }
+      console.log('Updated modules to match seed data');
     }
 
     // Seed analytics if empty
