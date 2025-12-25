@@ -54,33 +54,17 @@ export default function Home() {
   const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [statCards, setStatCards] = useState([
-    { label: "Modules", value: 0 },
-    { label: "Active Users", value: 0 },
-    { label: "Today Actions", value: 0 },
-    { label: "Alerts", value: 0 },
-  ]);
+  // Removed unused statCards state
 
   useEffect(() => {
     let mounted = true;
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [modsRes, analyticsRes] = await Promise.all([
-          apiService.get("/api/modules"),
-          apiService.get("/api/analytics"),
-        ]);
+        const modsRes = await apiService.get("/api/modules");
         if (!mounted) return;
         const mods = modsRes?.data || [];
         setModules(mods);
-
-        const stats = analyticsRes?.data?.stats || {};
-        setStatCards([
-          { label: "Modules", value: stats.totalModules ?? mods.length },
-          { label: "Active Users", value: stats.activeUsers ?? 0 },
-          { label: "Today Actions", value: stats.todayActions ?? 0 },
-          { label: "Alerts", value: stats.alerts ?? 0 },
-        ]);
       } catch (err) {
         if (mounted) setError(err);
       } finally {
@@ -110,7 +94,7 @@ export default function Home() {
 
   const ModuleComp = useMemo(() => {
     return found ? loadModuleComponent(found.componentName) : null;
-  }, [found?.componentName]);
+  }, [found]);
 
   // ===== MODULE DETAIL VIEW =====
   if (id) {
@@ -333,7 +317,10 @@ export default function Home() {
       {/* Footer */}
       <footer className="mt-auto w-full text-center py-6 text-sm text-[#617589] dark:text-gray-500 border-t border-[#dbe0e6] dark:border-gray-800 bg-white dark:bg-[#111418]">
         <div className="flex flex-col md:flex-row items-center justify-center gap-4">
-          <p>{new Date().getFullYear()} Acme Corp Business Suite. All rights reserved.</p>
+          <p>
+            {new Date().getFullYear()} Acme Corp Business Suite. All rights
+            reserved.
+          </p>
         </div>
       </footer>
     </div>

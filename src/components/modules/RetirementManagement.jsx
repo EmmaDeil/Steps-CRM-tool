@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
+import { useAppContext } from "../../context/useAppContext";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 
@@ -9,243 +10,416 @@ const RetirementManagement = () => {
   const { user } = useUser();
   const [lineItems, setLineItems] = useState([]);
   const [newItem, setNewItem] = useState({
+    date: "",
     description: "",
-    cost: "",
+    quantity: "",
+    amount: "",
   });
+  const {
+    monthYear,
+    setMonthYear,
+    previousClosingBalance,
+    setPreviousClosingBalance,
+    inflowAmount,
+    setInflowAmount,
+  } = useAppContext();
 
   const handleAddLineItem = () => {
     if (
+      !newItem.date.trim() ||
       !newItem.description.trim() ||
-      !newItem.cost ||
-      parseFloat(newItem.cost) <= 0
+      !newItem.quantity ||
+      !newItem.amount ||
+      parseFloat(newItem.amount) <= 0
     ) {
-      toast.error("Please enter a valid description and cost");
+      toast.error("Please fill in all fields with valid values");
       return;
     }
-
     const item = {
       id: Date.now(),
+      date: newItem.date,
       description: newItem.description.trim(),
-      cost: parseFloat(newItem.cost),
+      quantity: parseInt(newItem.quantity),
+      amount: parseFloat(newItem.amount),
     };
-
     setLineItems([...lineItems, item]);
-    setNewItem({ description: "", cost: "" });
-    toast.success("Line item added");
+    setNewItem({ date: "", description: "", quantity: "", amount: "" });
+    toast.success("Expense item added");
   };
 
   const handleRemoveLineItem = (id) => {
     setLineItems(lineItems.filter((item) => item.id !== id));
-    toast.success("Line item removed");
+    toast.success("Expense item removed");
   };
 
-  const handleSubmit = async () => {
-    if (lineItems.length === 0) {
-      toast.error("Please add at least one line item");
-      return;
-    }
+  const calculateTotal = () =>
+    lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const calculateNewOpeningBalance = () =>
+    (Number(previousClosingBalance) || 0) +
+    (Number(inflowAmount) || 0) -
+    calculateTotal();
+  const formatMonthYear = (val) => {
+    if (!val) return "";
+    const [y, m] = val.split("-");
+    const d = new Date(Number(y), Number(m) - 1, 1);
+    return d.toLocaleString("en-US", { month: "long", year: "numeric" });
+  };
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(amount);
+
+  const handleSubmitBreakdown = async () => {
+    if (lineItems.length === 0)
+      return toast.error("Please add at least one expense item");
+    if (!monthYear) return toast.error("Please select the month and year");
+    if (previousClosingBalance === "")
+      return toast.error("Please enter previous closing balance");
 
     try {
       const request = {
         userId: user?.id,
         employeeName: user?.fullName || "Employee",
-        lineItems: lineItems,
-        totalAmount: calculateTotal(),
+        monthYear,
+        previousClosingBalance: Number(previousClosingBalance) || 0,
+        inflowAmount: Number(inflowAmount) || 0,
+        lineItems,
+        totalExpenses: calculateTotal(),
+        newOpeningBalance: calculateNewOpeningBalance(),
+        status: "submitted",
         submittedDate: new Date().toISOString().split("T")[0],
-        status: "pending",
       };
-
-      await apiService.post("/api/retirement-requests", request);
-      toast.success("Retirement request submitted successfully");
-      navigate("/home/1");
+      await apiService.post("/api/retirement-breakdown", request);
+      toast.success("Expense breakdown submitted successfully");
     } catch (error) {
-      toast.error("Failed to submit retirement request");
+      toast.error("Failed to submit expense breakdown");
       console.error(error);
     }
   };
 
-  const calculateTotal = () => {
-    return lineItems.reduce((sum, item) => sum + item.cost, 0);
+  const handleSaveDraft = async () => {
+    if (!monthYear) return toast.error("Please select the month and year");
+    try {
+      const request = {
+        userId: user?.id,
+        employeeName: user?.fullName || "Employee",
+        monthYear,
+        previousClosingBalance: Number(previousClosingBalance) || 0,
+        inflowAmount: Number(inflowAmount) || 0,
+        lineItems,
+        totalExpenses: calculateTotal(),
+        newOpeningBalance: calculateNewOpeningBalance(),
+        status: "draft",
+        submittedDate: new Date().toISOString().split("T")[0],
+      };
+      await apiService.post("/api/retirement-breakdown", request);
+      toast.success("Draft saved");
+    } catch (error) {
+      toast.error("Failed to save draft");
+      console.error(error);
+    }
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
+  const handleReset = () => {
+    setLineItems([]);
+    setNewItem({ date: "", description: "", quantity: "", amount: "" });
+    toast.success("Expense breakdown cleared");
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-[#0f172a] dark:to-[#1e293b] p-6">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-slate-100 dark:from-[#0f172a] dark:to-[#1e293b] p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Breadcrumb */}
+        <div className="mb-6 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+          <button
+            onClick={() => navigate("/home")}
+            className="hover:text-blue-600 transition-colors"
+          >
+            Home
+          </button>
+          <span>/</span>
+          <span className="text-gray-800 dark:text-gray-200">Retirement</span>
+        </div>
+
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-[#111418] dark:text-white mb-2 flex items-center gap-3">
-              <i className="fa-solid fa-handshake text-purple-600 text-4xl"></i>
-              Retirement Management
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              Retirement
             </h1>
-            <p className="text-[#617589] dark:text-gray-400 text-lg">
-              Add line items for your retirement settlement
+            <p className="text-gray-600 dark:text-gray-400">
+              Record the breakdown of how you spent the inflow payment from
+              finance.
             </p>
           </div>
-          <button
-            onClick={() => navigate("/home/1")}
-            className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            <i className="fa-solid fa-times mr-2"></i>
-            Close
-          </button>
+          <div className="flex gap-4 items-end">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Month & Year
+              </label>
+              <input
+                type="month"
+                value={monthYear}
+                onChange={(e) => setMonthYear(e.target.value)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Previous Closing Balance
+              </label>
+              <input
+                type="number"
+                value={previousClosingBalance}
+                onChange={(e) => setPreviousClosingBalance(e.target.value)}
+                placeholder="0.00"
+                step="0.01"
+                min="0"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm w-40"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Inflow Received (This Month)
+              </label>
+              <input
+                type="number"
+                value={inflowAmount}
+                onChange={(e) => setInflowAmount(e.target.value)}
+                placeholder="0.00"
+                step="0.01"
+                min="0"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm w-40"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Main Card */}
-        <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-[#dbe0e6] dark:border-gray-700 shadow-lg p-8">
-          {/* Add Line Item Section */}
-          <div className="mb-8 pb-8 border-b border-[#dbe0e6] dark:border-gray-700">
-            <h2 className="text-xl font-bold text-[#111418] dark:text-white mb-6">
-              Add Line Item
-            </h2>
+        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-gray-200 dark:border-gray-700 shadow p-6 mb-6">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                    Date
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                    Description
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                    Quantity
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                    Amount
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Inline input row */}
+                <tr className="bg-gray-50 dark:bg-gray-800/40">
+                  <td className="px-6 py-2">
+                    <input
+                      type="date"
+                      value={newItem.date}
+                      onChange={(e) =>
+                        setNewItem({ ...newItem, date: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleAddLineItem();
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </td>
+                  <td className="px-6 py-2">
+                    <input
+                      type="text"
+                      value={newItem.description}
+                      onChange={(e) =>
+                        setNewItem({ ...newItem, description: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleAddLineItem();
+                      }}
+                      placeholder="e.g., Office Supplies"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </td>
+                  <td className="px-6 py-2">
+                    <input
+                      type="number"
+                      value={newItem.quantity}
+                      onChange={(e) =>
+                        setNewItem({ ...newItem, quantity: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleAddLineItem();
+                      }}
+                      placeholder="0"
+                      min="1"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </td>
+                  <td className="px-6 py-2">
+                    <input
+                      type="number"
+                      value={newItem.amount}
+                      onChange={(e) =>
+                        setNewItem({ ...newItem, amount: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleAddLineItem();
+                      }}
+                      placeholder="0.00"
+                      step="0.01"
+                      min="0"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </td>
+                  <td className="px-6 py-2 text-center">
+                    <button
+                      onClick={handleAddLineItem}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-xs inline-flex items-center gap-2"
+                      title="Add expense"
+                    >
+                      <i className="fa-solid fa-plus"></i>
+                      Add
+                    </button>
+                  </td>
+                </tr>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              {/* Description Input */}
-              <div>
-                <label className="block text-sm font-semibold text-[#111418] dark:text-white mb-2">
-                  Description
-                </label>
-                <input
-                  type="text"
-                  value={newItem.description}
-                  onChange={(e) =>
-                    setNewItem({ ...newItem, description: e.target.value })
-                  }
-                  placeholder="e.g., Gratuity, Medical Benefits"
-                  className="w-full px-4 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-[#111418] dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
-                />
-              </div>
-
-              {/* Cost Input */}
-              <div>
-                <label className="block text-sm font-semibold text-[#111418] dark:text-white mb-2">
-                  Cost (USD)
-                </label>
-                <input
-                  type="number"
-                  value={newItem.cost}
-                  onChange={(e) =>
-                    setNewItem({ ...newItem, cost: e.target.value })
-                  }
-                  placeholder="0.00"
-                  step="0.01"
-                  min="0"
-                  className="w-full px-4 py-2 border border-[#dbe0e6] dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-[#111418] dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
-                />
-              </div>
-
-              {/* Add Button */}
-              <button
-                onClick={handleAddLineItem}
-                className="px-6 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center justify-center gap-2 h-10"
-              >
-                <i className="fa-solid fa-plus"></i>
-                Add Item
-              </button>
-            </div>
-          </div>
-
-          {/* Line Items Table */}
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-[#111418] dark:text-white mb-6">
-              Line Items ({lineItems.length})
-            </h2>
-
-            {lineItems.length === 0 ? (
-              <div className="text-center py-12 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-dashed border-purple-300 dark:border-purple-800">
-                <i className="fa-solid fa-inbox text-4xl text-[#617589] dark:text-gray-400 mb-3"></i>
-                <p className="text-[#617589] dark:text-gray-400">
-                  No line items added yet. Add items to get started.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-purple-50 dark:bg-purple-900/20">
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-[#111418] dark:text-white border border-[#dbe0e6] dark:border-gray-700">
-                        Description
-                      </th>
-                      <th className="px-6 py-3 text-right text-sm font-semibold text-[#111418] dark:text-white border border-[#dbe0e6] dark:border-gray-700">
-                        Cost
-                      </th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-[#111418] dark:text-white border border-[#dbe0e6] dark:border-gray-700 w-20">
-                        Action
-                      </th>
+                {/* Existing items */}
+                {lineItems.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+                    >
+                      No expenses added yet.
+                    </td>
+                  </tr>
+                ) : (
+                  lineItems.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                    >
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
+                        {item.date}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-white font-medium">
+                        {item.description}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                        {item.quantity}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-white font-semibold">
+                        {formatCurrency(item.amount)}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => handleRemoveLineItem(item.id)}
+                          className="text-red-500 hover:text-red-700 transition-colors"
+                          title="Delete item"
+                        >
+                          <i className="fa-solid fa-trash text-sm"></i>
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {lineItems.map((item, idx) => (
-                      <tr
-                        key={item.id}
-                        className={`${
-                          idx % 2 === 0
-                            ? "bg-white dark:bg-[#1e293b]"
-                            : "bg-purple-50 dark:bg-purple-900/10"
-                        } hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors`}
-                      >
-                        <td className="px-6 py-4 text-sm text-[#111418] dark:text-white border border-[#dbe0e6] dark:border-gray-700">
-                          {item.description}
-                        </td>
-                        <td className="px-6 py-4 text-sm font-semibold text-right text-green-600 dark:text-green-400 border border-[#dbe0e6] dark:border-gray-700">
-                          {formatCurrency(item.cost)}
-                        </td>
-                        <td className="px-6 py-4 text-center border border-[#dbe0e6] dark:border-gray-700">
-                          <button
-                            onClick={() => handleRemoveLineItem(item.id)}
-                            className="px-3 py-1 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors text-sm"
-                          >
-                            <i className="fa-solid fa-trash"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
+        </div>
 
-          {/* Total Section */}
-          {lineItems.length > 0 && (
-            <div className="mb-8 pb-8 border-t border-[#dbe0e6] dark:border-gray-700 pt-8">
-              <div className="flex justify-end items-center gap-8">
-                <div className="text-xl font-bold text-[#111418] dark:text-white">
-                  Total Amount:
+        {/* Summary Section */}
+        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-gray-200 dark:border-gray-700 shadow p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+                Summary for {formatMonthYear(monthYear) || "(select month)"}
+              </h3>
+              <div className="mt-2 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Previous Closing Balance
+                  </span>
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {formatCurrency(Number(previousClosingBalance) || 0)}
+                  </span>
                 </div>
-                <div className="text-3xl font-bold text-gradient bg-gradient-to-r from-purple-600 to-purple-700 bg-clip-text text-transparent">
-                  {formatCurrency(calculateTotal())}
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Inflow Received
+                  </span>
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {formatCurrency(Number(inflowAmount) || 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Total Expenses
+                  </span>
+                  <span className="font-semibold text-blue-600 dark:text-blue-400">
+                    {formatCurrency(calculateTotal())}
+                  </span>
                 </div>
               </div>
             </div>
-          )}
+            <div className="flex items-center md:justify-end">
+              <div className="text-right">
+                <div className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+                  New Opening Balance
+                </div>
+                <div className="text-4xl font-bold text-green-600 dark:text-green-400">
+                  {formatCurrency(calculateNewOpeningBalance())}
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-4 justify-end">
+          <div className="flex gap-3 justify-end">
             <button
-              onClick={() => navigate("/home/1")}
-              className="px-6 py-3 border border-[#dbe0e6] dark:border-gray-600 text-[#111418] dark:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors font-semibold"
+              onClick={handleReset}
+              className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium text-sm"
             >
-              Cancel
+              Clear
             </button>
             <button
-              onClick={handleSubmit}
-              disabled={lineItems.length === 0}
-              className={`px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-all ${
-                lineItems.length === 0
+              onClick={handleSaveDraft}
+              disabled={!monthYear}
+              className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${
+                !monthYear
                   ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:shadow-lg"
+                  : "bg-slate-700 text-white hover:bg-slate-800"
+              }`}
+            >
+              <i className="fa-solid fa-floppy-disk"></i>
+              Save Draft
+            </button>
+            <button
+              onClick={handleSubmitBreakdown}
+              disabled={
+                lineItems.length === 0 ||
+                !monthYear ||
+                previousClosingBalance === ""
+              }
+              className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${
+                lineItems.length === 0 ||
+                !monthYear ||
+                previousClosingBalance === ""
+                  ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
               }`}
             >
               <i className="fa-solid fa-check"></i>
-              Submit Request
+              Submit to Finance
             </button>
           </div>
         </div>

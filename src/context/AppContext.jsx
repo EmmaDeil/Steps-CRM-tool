@@ -12,6 +12,24 @@ export const AppProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Retirement page header state (persisted)
+  const [monthYear, setMonthYear] = useState(() => {
+    const stored = localStorage.getItem("retirement.monthYear");
+    if (stored) return stored;
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`; // default to current month
+  });
+  const [previousClosingBalance, setPreviousClosingBalance] = useState(() => {
+    const v = localStorage.getItem("retirement.previousClosingBalance");
+    return v !== null ? v : "";
+  });
+  const [inflowAmount, setInflowAmount] = useState(() => {
+    const v = localStorage.getItem("retirement.inflowAmount");
+    return v !== null ? v : "";
+  });
+
   // No theme support: removed theme state and DOM data-theme manipulation.
 
   // Add to search history
@@ -35,6 +53,25 @@ export const AppProvider = ({ children }) => {
       setUserRole("admin");
     }
   }, [isLoaded, user]);
+
+  // Persist retirement header values
+  useEffect(() => {
+    localStorage.setItem("retirement.monthYear", monthYear || "");
+  }, [monthYear]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "retirement.previousClosingBalance",
+      previousClosingBalance === "" ? "" : String(previousClosingBalance)
+    );
+  }, [previousClosingBalance]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "retirement.inflowAmount",
+      inflowAmount === "" ? "" : String(inflowAmount)
+    );
+  }, [inflowAmount]);
 
   // Clear search history
   const clearSearchHistory = () => {
@@ -98,6 +135,13 @@ export const AppProvider = ({ children }) => {
     addSearchHistory,
     clearSearchHistory,
     hasModuleAccess,
+    // Retirement header values
+    monthYear,
+    setMonthYear,
+    previousClosingBalance,
+    setPreviousClosingBalance,
+    inflowAmount,
+    setInflowAmount,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
