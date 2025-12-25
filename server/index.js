@@ -20,6 +20,7 @@ const MaterialRequestModel = require('./models/MaterialRequest');
 const PurchaseOrderModel = require('./models/PurchaseOrder');
 const AdvanceRequestModel = require('./models/AdvanceRequest');
 const RefundRequestModel = require('./models/RefundRequest');
+const RetirementBreakdownModel = require('./models/RetirementBreakdown');
 const { sendApprovalEmail, sendPOReviewEmail } = require('./utils/emailService');
 const seed = require('./data');
 
@@ -506,6 +507,44 @@ async function start() {
     } catch (err) {
       console.error('Error updating refund request:', err);
       res.status(500).json({ message: 'Failed to update request' });
+    }
+  });
+
+  // Retirement Breakdown endpoints
+  app.get('/api/retirement-breakdown', async (req, res) => {
+    try {
+      const userId = req.query.userId;
+      const query = userId ? { userId } : {};
+      const breakdowns = await RetirementBreakdownModel.find(query).sort({ createdAt: -1 });
+      res.json(breakdowns);
+    } catch (err) {
+      console.error('Error fetching retirement breakdowns:', err);
+      res.status(500).json({ message: 'Failed to fetch breakdowns' });
+    }
+  });
+
+  app.post('/api/retirement-breakdown', async (req, res) => {
+    try {
+      const newBreakdown = await RetirementBreakdownModel.create(req.body);
+      res.status(201).json({ message: 'Breakdown saved successfully', data: newBreakdown });
+    } catch (err) {
+      console.error('Error creating retirement breakdown:', err);
+      res.status(500).json({ message: 'Failed to save breakdown' });
+    }
+  });
+
+  app.put('/api/retirement-breakdown/:id', async (req, res) => {
+    try {
+      const updated = await RetirementBreakdownModel.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { new: true }
+      );
+      if (!updated) return res.status(404).json({ message: 'Breakdown not found' });
+      res.json({ message: 'Breakdown updated', data: updated });
+    } catch (err) {
+      console.error('Error updating retirement breakdown:', err);
+      res.status(500).json({ message: 'Failed to update breakdown' });
     }
   });
 

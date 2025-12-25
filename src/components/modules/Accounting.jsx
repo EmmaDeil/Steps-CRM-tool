@@ -9,9 +9,13 @@ const Accounting = () => {
   const { user } = useUser();
   const [advanceRequests, setAdvanceRequests] = useState([]);
   const [refundRequests, setRefundRequests] = useState([]);
+  const [retirementBreakdowns, setRetirementBreakdowns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdvanceForm, setShowAdvanceForm] = useState(false);
   const [showRefundForm, setShowRefundForm] = useState(false);
+  const [showRetirementHistory, setShowRetirementHistory] = useState(false);
+  const [showMonthDetails, setShowMonthDetails] = useState(false);
+  const [selectedMonthYear, setSelectedMonthYear] = useState(null);
   const [staffList] = useState([
     {
       id: 1,
@@ -75,12 +79,14 @@ const Accounting = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [advanceRes, refundRes] = await Promise.all([
+      const [advanceRes, refundRes, retirementRes] = await Promise.all([
         apiService.get(`/api/advance-requests?userId=${currentUserId}`),
         apiService.get(`/api/refund-requests?userId=${currentUserId}`),
+        apiService.get(`/api/retirement-breakdown?userId=${currentUserId}`),
       ]);
       setAdvanceRequests(advanceRes?.data || []);
       setRefundRequests(refundRes?.data || []);
+      setRetirementBreakdowns(retirementRes?.data || []);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load requests");
@@ -210,7 +216,7 @@ const Accounting = () => {
       <div className="mb-8 max-w-7xl mx-auto">
         <h2 className="text-4xl font-bold text-[#111418] dark:text-white mb-2">
           <i className="fa-solid fa-calculator mr-3 text-blue-600"></i>
-          Accounting Module
+          Accounting
         </h2>
         <p className="text-[#617589] dark:text-gray-400 text-lg">
           Manage your advance and refund requests with ease
@@ -316,21 +322,30 @@ const Accounting = () => {
         <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-[#dbe0e6] dark:border-gray-700 shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
           <div className="text-center">
             <div className="w-16 h-16 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mx-auto mb-4">
-              <i className="fa-solid fa-handshake text-purple-600 text-3xl"></i>
+              <i className="fa-solid fa-history text-purple-600 text-3xl"></i>
             </div>
             <h3 className="text-2xl font-bold text-[#111418] dark:text-white mb-2">
-              Retirement
+              Retirement History
             </h3>
             <p className="text-sm text-[#617589] dark:text-gray-400 mb-6">
-              Manage retirement requests
+              View retirement breakdown history
             </p>
-            <button
-              onClick={() => navigate("/retirement-management")}
-              className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
-            >
-              <i className="fa-solid fa-plus text-lg"></i>
-              New Request
-            </button>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => setShowRetirementHistory(true)}
+                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
+              >
+                <i className="fa-solid fa-list text-lg"></i>
+                View History
+              </button>
+              <button
+                onClick={() => navigate("/retirement-management")}
+                className="px-6 py-2 border-2 border-purple-600 text-purple-600 dark:text-purple-400 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all font-semibold flex items-center gap-2 mx-auto"
+              >
+                <i className="fa-solid fa-plus text-sm"></i>
+                New Request
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -853,6 +868,610 @@ const Accounting = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Retirement History Modal */}
+      {showRetirementHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 flex items-center justify-between rounded-t-xl flex-shrink-0">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <i className="fa-solid fa-history"></i>
+                Retirement Breakdown History
+              </h2>
+              <button
+                onClick={() => setShowRetirementHistory(false)}
+                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors flex-shrink-0"
+              >
+                <i className="fa-solid fa-times text-lg"></i>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {retirementBreakdowns.length === 0 ? (
+                <div className="text-center py-12">
+                  <i className="fa-solid fa-inbox text-6xl text-gray-300 dark:text-gray-600 mb-4"></i>
+                  <p className="text-lg text-[#617589] dark:text-gray-400 mb-2">
+                    No retirement breakdowns found
+                  </p>
+                  <p className="text-sm text-[#617589] dark:text-gray-400 mb-6">
+                    Create a new retirement breakdown to get started
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShowRetirementHistory(false);
+                      navigate("/retirement-management");
+                    }}
+                    className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold inline-flex items-center gap-2"
+                  >
+                    <i className="fa-solid fa-plus"></i>
+                    Create New Breakdown
+                  </button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 dark:bg-gray-800/50">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                          Month
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                          Previous Balance
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                          Total Inflow
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                          Total Expenses
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                          Closing Balance
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                          Total Items
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                          Submissions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {(() => {
+                        // Group breakdowns by month
+                        const monthlyData = {};
+                        retirementBreakdowns.forEach((breakdown) => {
+                          const monthKey = breakdown.monthYear;
+                          if (!monthlyData[monthKey]) {
+                            monthlyData[monthKey] = {
+                              monthYear: monthKey,
+                              previousClosingBalance:
+                                breakdown.previousClosingBalance || 0,
+                              totalInflow: 0,
+                              totalExpenses: 0,
+                              totalItems: 0,
+                              submissions: 0,
+                              latestBalance: 0,
+                            };
+                          }
+                          monthlyData[monthKey].totalInflow +=
+                            breakdown.inflowAmount || 0;
+                          monthlyData[monthKey].totalExpenses +=
+                            breakdown.totalExpenses || 0;
+                          monthlyData[monthKey].totalItems +=
+                            breakdown.lineItems?.length || 0;
+                          monthlyData[monthKey].submissions += 1;
+                          monthlyData[monthKey].latestBalance =
+                            breakdown.newOpeningBalance || 0;
+                        });
+
+                        // Convert to array and sort by month (most recent first)
+                        const monthlyArray = Object.values(monthlyData).sort(
+                          (a, b) => {
+                            return b.monthYear.localeCompare(a.monthYear);
+                          }
+                        );
+
+                        return monthlyArray.map((monthData, idx) => {
+                          const [year, month] = (
+                            monthData.monthYear || ""
+                          ).split("-");
+                          const monthName = month
+                            ? new Date(
+                                year,
+                                parseInt(month) - 1,
+                                1
+                              ).toLocaleString("en-US", {
+                                month: "long",
+                                year: "numeric",
+                              })
+                            : monthData.monthYear;
+
+                          return (
+                            <tr
+                              key={idx}
+                              className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                            >
+                              <td
+                                className="px-6 py-4 text-sm font-medium text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                                onClick={() => {
+                                  setSelectedMonthYear(monthData.monthYear);
+                                  setShowMonthDetails(true);
+                                }}
+                              >
+                                {monthName}
+                              </td>
+                              <td className="px-6 py-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
+                                $
+                                {monthData.previousClosingBalance?.toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 text-sm font-semibold text-green-600 dark:text-green-400">
+                                ${monthData.totalInflow?.toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 text-sm font-semibold text-red-600 dark:text-red-400">
+                                ${monthData.totalExpenses?.toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 text-sm font-semibold text-blue-600 dark:text-blue-400">
+                                ${monthData.latestBalance?.toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-[#617589] dark:text-gray-400">
+                                {monthData.totalItems} items
+                              </td>
+                              <td className="px-6 py-4 text-sm text-[#617589] dark:text-gray-400">
+                                {monthData.submissions} submission
+                                {monthData.submissions > 1 ? "s" : ""}
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl flex justify-between items-center flex-shrink-0">
+              <button
+                onClick={() => setShowRetirementHistory(false)}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-[#111418] dark:text-white font-semibold rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  // Prepare monthly aggregated data for export
+                  const monthlyData = {};
+                  retirementBreakdowns.forEach((breakdown) => {
+                    const monthKey = breakdown.monthYear;
+                    if (!monthlyData[monthKey]) {
+                      monthlyData[monthKey] = {
+                        monthYear: monthKey,
+                        previousClosingBalance:
+                          breakdown.previousClosingBalance || 0,
+                        totalInflow: 0,
+                        totalExpenses: 0,
+                        totalItems: 0,
+                        submissions: 0,
+                        latestBalance: 0,
+                      };
+                    }
+                    monthlyData[monthKey].totalInflow +=
+                      breakdown.inflowAmount || 0;
+                    monthlyData[monthKey].totalExpenses +=
+                      breakdown.totalExpenses || 0;
+                    monthlyData[monthKey].totalItems +=
+                      breakdown.lineItems?.length || 0;
+                    monthlyData[monthKey].submissions += 1;
+                    monthlyData[monthKey].latestBalance =
+                      breakdown.newOpeningBalance || 0;
+                  });
+
+                  // Convert to CSV
+                  const monthlyArray = Object.values(monthlyData).sort(
+                    (a, b) => {
+                      return b.monthYear.localeCompare(a.monthYear);
+                    }
+                  );
+
+                  const headers = [
+                    "Month",
+                    "Previous Balance",
+                    "Total Inflow",
+                    "Total Expenses",
+                    "Closing Balance",
+                    "Total Items",
+                    "Submissions",
+                  ];
+
+                  const rows = monthlyArray.map((monthData) => {
+                    const [year, month] = (monthData.monthYear || "").split(
+                      "-"
+                    );
+                    const monthName = month
+                      ? new Date(year, parseInt(month) - 1, 1).toLocaleString(
+                          "en-US",
+                          {
+                            month: "long",
+                            year: "numeric",
+                          }
+                        )
+                      : monthData.monthYear;
+
+                    return [
+                      monthName,
+                      monthData.previousClosingBalance,
+                      monthData.totalInflow,
+                      monthData.totalExpenses,
+                      monthData.latestBalance,
+                      monthData.totalItems,
+                      monthData.submissions,
+                    ];
+                  });
+
+                  // Create CSV content
+                  const csvContent = [
+                    headers.join(","),
+                    ...rows.map((row) => row.join(",")),
+                  ].join("\n");
+
+                  // Download CSV
+                  const blob = new Blob([csvContent], {
+                    type: "text/csv;charset=utf-8;",
+                  });
+                  const link = document.createElement("a");
+                  const url = URL.createObjectURL(blob);
+                  link.setAttribute("href", url);
+                  link.setAttribute(
+                    "download",
+                    `retirement_history_${
+                      new Date().toISOString().split("T")[0]
+                    }.csv`
+                  );
+                  link.style.visibility = "hidden";
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  toast.success("Data exported successfully");
+                }}
+                className="px-6 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center gap-2"
+              >
+                <i className="fa-solid fa-download"></i>
+                Export Data
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Month Details Modal */}
+      {showMonthDetails && selectedMonthYear && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="px-8 py-6 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      setShowMonthDetails(false);
+                      setSelectedMonthYear(null);
+                    }}
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                  >
+                    <i className="fa-solid fa-arrow-left text-gray-600 dark:text-gray-400"></i>
+                  </button>
+                  <div>
+                    <h2 className="text-2xl font-bold text-[#111418] dark:text-white">
+                      {(() => {
+                        const [year, month] = (selectedMonthYear || "").split(
+                          "-"
+                        );
+                        const monthName = month
+                          ? new Date(
+                              year,
+                              parseInt(month) - 1,
+                              1
+                            ).toLocaleString("en-US", {
+                              month: "long",
+                              year: "numeric",
+                            })
+                          : selectedMonthYear;
+                        return `${monthName} - Detailed Breakdown`;
+                      })()}
+                    </h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      All submissions and line items for this month
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const monthBreakdowns = retirementBreakdowns.filter(
+                      (breakdown) => breakdown.monthYear === selectedMonthYear
+                    );
+
+                    const openingBalance =
+                      monthBreakdowns[0]?.previousClosingBalance || 0;
+                    const closingBalance =
+                      monthBreakdowns[monthBreakdowns.length - 1]
+                        ?.newOpeningBalance || 0;
+                    const totalInflow = monthBreakdowns.reduce(
+                      (sum, breakdown) => sum + (breakdown.inflowAmount || 0),
+                      0
+                    );
+                    const totalExpenses = monthBreakdowns.reduce(
+                      (sum, breakdown) => sum + (breakdown.totalExpenses || 0),
+                      0
+                    );
+
+                    const allLineItems = [];
+                    monthBreakdowns.forEach((breakdown) => {
+                      if (
+                        breakdown.lineItems &&
+                        breakdown.lineItems.length > 0
+                      ) {
+                        allLineItems.push(...breakdown.lineItems);
+                      }
+                    });
+
+                    const [year, month] = (selectedMonthYear || "").split("-");
+                    const monthName = month
+                      ? new Date(year, parseInt(month) - 1, 1).toLocaleString(
+                          "en-US",
+                          { month: "long", year: "numeric" }
+                        )
+                      : selectedMonthYear;
+
+                    // Create CSV content
+                    const headers = [
+                      "Date",
+                      "Description",
+                      "Quantity",
+                      "Amount",
+                    ];
+                    const rows = allLineItems.map((item) => [
+                      item.date || "N/A",
+                      item.description || "No description",
+                      item.quantity || 0,
+                      item.amount || 0,
+                    ]);
+
+                    const csvContent = [
+                      `Retirement Breakdown - ${monthName}`,
+                      "",
+                      "Financial Summary",
+                      `Opening Balance,$${openingBalance.toLocaleString()}`,
+                      `Total Inflow,$${totalInflow.toLocaleString()}`,
+                      `Total Expenses,$${totalExpenses.toLocaleString()}`,
+                      `Closing Balance,$${closingBalance.toLocaleString()}`,
+                      "",
+                      "Line Items",
+                      headers.join(","),
+                      ...rows.map((row) => row.join(",")),
+                      "",
+                      `Total,$${totalExpenses.toLocaleString()}`,
+                    ].join("\n");
+
+                    const blob = new Blob([csvContent], {
+                      type: "text/csv;charset=utf-8;",
+                    });
+                    const link = document.createElement("a");
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute("href", url);
+                    link.setAttribute(
+                      "download",
+                      `retirement_${monthName.replace(/ /g, "_")}_${
+                        new Date().toISOString().split("T")[0]
+                      }.csv`
+                    );
+                    link.style.visibility = "hidden";
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    toast.success("Data exported successfully");
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center gap-2"
+                >
+                  <i className="fa-solid fa-download"></i>
+                  Export
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-8 py-6">
+              {(() => {
+                const monthBreakdowns = retirementBreakdowns.filter(
+                  (breakdown) => breakdown.monthYear === selectedMonthYear
+                );
+
+                if (monthBreakdowns.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center h-full">
+                      <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                        <i className="fa-solid fa-inbox text-4xl text-gray-400"></i>
+                      </div>
+                      <p className="text-lg font-semibold text-gray-600 dark:text-gray-400">
+                        No submissions found for this month
+                      </p>
+                    </div>
+                  );
+                }
+
+                // Calculate aggregated financial data
+                const openingBalance =
+                  monthBreakdowns[0]?.previousClosingBalance || 0;
+                const closingBalance =
+                  monthBreakdowns[monthBreakdowns.length - 1]
+                    ?.newOpeningBalance || 0;
+                const totalInflow = monthBreakdowns.reduce(
+                  (sum, breakdown) => sum + (breakdown.inflowAmount || 0),
+                  0
+                );
+                const totalExpenses = monthBreakdowns.reduce(
+                  (sum, breakdown) => sum + (breakdown.totalExpenses || 0),
+                  0
+                );
+
+                // Combine all line items from all submissions
+                const allLineItems = [];
+                monthBreakdowns.forEach((breakdown) => {
+                  if (breakdown.lineItems && breakdown.lineItems.length > 0) {
+                    allLineItems.push(...breakdown.lineItems);
+                  }
+                });
+
+                return (
+                  <div className="space-y-6">
+                    {/* Financial Summary Cards */}
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                            <i className="fa-solid fa-wallet text-gray-600 dark:text-gray-300"></i>
+                          </div>
+                          <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                            Opening Balance
+                          </p>
+                        </div>
+                        <p className="text-2xl font-bold text-[#111418] dark:text-white">
+                          ${openingBalance.toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 rounded-xl p-6 border border-green-200 dark:border-green-800">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="w-10 h-10 bg-green-200 dark:bg-green-800 rounded-lg flex items-center justify-center">
+                            <i className="fa-solid fa-arrow-trend-up text-green-700 dark:text-green-300"></i>
+                          </div>
+                          <p className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wide">
+                            Total Inflow
+                          </p>
+                        </div>
+                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                          ${totalInflow.toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 rounded-xl p-6 border border-red-200 dark:border-red-800">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="w-10 h-10 bg-red-200 dark:bg-red-800 rounded-lg flex items-center justify-center">
+                            <i className="fa-solid fa-arrow-trend-down text-red-700 dark:text-red-300"></i>
+                          </div>
+                          <p className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wide">
+                            Total Expenses
+                          </p>
+                        </div>
+                        <p className="text-2xl font-bold text-red-700 dark:text-red-400">
+                          ${totalExpenses.toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-900/10 rounded-xl p-6 border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="w-10 h-10 bg-blue-200 dark:bg-blue-800 rounded-lg flex items-center justify-center">
+                            <i className="fa-solid fa-coins text-blue-700 dark:text-blue-300"></i>
+                          </div>
+                          <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">
+                            Closing Balance
+                          </p>
+                        </div>
+                        <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+                          ${closingBalance.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* All Line Items Table */}
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                      <div className="px-6 py-4 bg-gradient-to-r from-purple-600 to-purple-700 dark:from-purple-700 dark:to-purple-800">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                          <i className="fa-solid fa-list-check"></i>
+                          All Expense Line Items ({allLineItems.length} total
+                          items)
+                        </h3>
+                      </div>
+
+                      {allLineItems.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead className="bg-gray-50 dark:bg-gray-900">
+                              <tr>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                                  #
+                                </th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                                  Date
+                                </th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                                  Description
+                                </th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                                  Quantity
+                                </th>
+                                <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                                  Amount
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                              {allLineItems.map((item, itemIdx) => (
+                                <tr
+                                  key={itemIdx}
+                                  className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                                >
+                                  <td className="px-6 py-4 text-sm font-medium text-gray-500 dark:text-gray-400">
+                                    {itemIdx + 1}
+                                  </td>
+                                  <td className="px-6 py-4 text-sm text-[#111418] dark:text-white whitespace-nowrap">
+                                    {item.date || "N/A"}
+                                  </td>
+                                  <td className="px-6 py-4 text-sm text-[#111418] dark:text-white">
+                                    {item.description || "No description"}
+                                  </td>
+                                  <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
+                                    {item.quantity || 0}
+                                  </td>
+                                  <td className="px-6 py-4 text-sm font-bold text-[#111418] dark:text-white text-right">
+                                    ${(item.amount || 0).toLocaleString()}
+                                  </td>
+                                </tr>
+                              ))}
+                              <tr className="bg-gray-100 dark:bg-gray-900/50 font-bold">
+                                <td
+                                  colSpan="4"
+                                  className="px-6 py-4 text-right text-sm text-gray-700 dark:text-gray-300 uppercase tracking-wide"
+                                >
+                                  Total:
+                                </td>
+                                <td className="px-6 py-4 text-right text-lg font-bold text-[#111418] dark:text-white">
+                                  ${totalExpenses.toLocaleString()}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="p-12 text-center">
+                          <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i className="fa-solid fa-receipt text-4xl text-gray-300 dark:text-gray-600"></i>
+                          </div>
+                          <p className="text-lg font-semibold text-gray-500 dark:text-gray-400">
+                            No line items found
+                          </p>
+                          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                            There are no expense items recorded for this month
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </div>
       )}

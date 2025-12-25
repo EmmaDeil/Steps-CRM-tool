@@ -287,7 +287,6 @@ const RetirementManagement = () => {
                       title="Add expense"
                     >
                       <i className="fa-solid fa-plus"></i>
-                      Add
                     </button>
                   </td>
                 </tr>
