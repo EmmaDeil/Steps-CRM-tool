@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
+import { apiService } from "../../services/api";
 
 const DocSign = () => {
   const { user } = useUser();
@@ -43,12 +44,33 @@ const DocSign = () => {
 
   // Documents state - starts empty, populated when documents are uploaded
   const [documents, setDocuments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch documents on component mount
+  useEffect(() => {
+    if (user?.id) {
+      fetchDocuments();
+    }
+  }, [user]);
+
+  const fetchDocuments = async () => {
+    try {
+      setIsLoading(true);
+      const response = await apiService.get(`/api/documents?userId=${user.id}`);
+      setDocuments(response.data || []);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      toast.error("Failed to load documents");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleDocumentUpload = () => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".pdf";
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const file = e.target.files[0];
       if (file) {
         if (file.type !== "application/pdf") {
@@ -59,34 +81,50 @@ const DocSign = () => {
           toast.error("File size must be less than 50MB");
           return;
         }
-        toast.success(`"${file.name}" uploaded successfully`);
 
-        // Add to documents list
-        const newDoc = {
-          id: documents.length + 1,
-          name: file.name,
-          size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-          addedDate: "Added just now",
-          involvedParties: [{ name: user?.fullName || "You", role: "Owner" }],
-          status: "Pending",
-          dueDate: new Date(
-            Date.now() + 7 * 24 * 60 * 60 * 1000
-          ).toLocaleDateString("en-US", {
-            month: "short",
-            day: "2-digit",
-            year: "numeric",
-          }),
-          icon: "fa-file-pdf",
-          iconColor: "text-red-500",
-          requiresAction: false,
-          requestedBy: user?.id, // Track who uploaded
-          file: file, // Store the actual file object
-          fileURL: URL.createObjectURL(file), // Create blob URL for preview
-        };
-        setDocuments([newDoc, ...documents]);
+        try {
+          // Convert file to base64 for storage
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+            const fileURL = event.target.result; // Base64 string
 
-        // Open signature interface immediately for instant signing
-        setSignatureModal(newDoc);
+            // Create document object
+            const newDoc = {
+              name: file.name,
+              fileURL: fileURL,
+              fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+              uploadedBy: user?.id,
+              uploadedByName: user?.fullName || "You",
+              status: "Pending",
+              involvedParties: [
+                { name: user?.fullName || "You", role: "Owner" },
+              ],
+              dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+              metadata: {
+                icon: "fa-file-pdf",
+                iconColor: "text-red-500",
+              },
+            };
+
+            // Save to backend
+            const response = await apiService.post("/api/documents", newDoc);
+            const savedDoc = response.data;
+
+            // Add file object for frontend use
+            savedDoc.file = file;
+            savedDoc.fileURL = URL.createObjectURL(file);
+
+            setDocuments([savedDoc, ...documents]);
+            toast.success(`"${file.name}" uploaded successfully`);
+
+            // Open signature interface immediately for instant signing
+            setSignatureModal(savedDoc);
+          };
+          reader.readAsDataURL(file);
+        } catch (error) {
+          console.error("Error uploading document:", error);
+          toast.error("Failed to upload document");
+        }
       }
     };
     input.click();
@@ -156,12 +194,12 @@ const DocSign = () => {
     setTypedSignature("");
     setDrawnSignature(null);
     setUploadedSignature(null);
-    setRecipients([]);
+    setRecipients(document.recipients || []);
     setCurrentPage(1);
-    setTotalPages(1);
+    setTotalPages(document.totalPages || 1);
     setZoomLevel(100);
-    setPlacedSignatures([]); // Reset placed signatures for new document
-    setIsSigned(false); // Reset signed state
+    setPlacedSignatures(document.signatures || []); // Load existing signatures
+    setIsSigned(document.status === "Completed"); // Set signed state if already completed
 
     // Load PDF and get page count
     if (document.file) {
@@ -183,31 +221,46 @@ const DocSign = () => {
     }
   };
 
-  const handleApplySignature = () => {
+  const handleApplySignature = async () => {
     if (placedSignatures.length === 0) {
       toast.error("Please add at least one signature or field to the document");
       return;
     }
 
-    // Make all signatures permanent
-    setIsSigned(true);
+    try {
+      // Make all signatures permanent
+      setIsSigned(true);
 
-    // Update document status to completed
-    setDocuments(
-      documents.map((doc) =>
-        doc.id === signatureModal.id
-          ? {
-              ...doc,
-              status: "Completed",
-              signatures: placedSignatures,
-              recipients,
-            }
-          : doc
-      )
-    );
+      // Send to backend
+      await apiService.post(`/api/documents/${signatureModal._id}/sign`, {
+        signatures: placedSignatures,
+        recipients,
+        userId: user?.id,
+        userName: user?.fullName,
+      });
 
-    toast.success("Document signed successfully!");
-    setSignatureModal(null);
+      // Update local state
+      setDocuments(
+        documents.map((doc) =>
+          doc._id === signatureModal._id
+            ? {
+                ...doc,
+                status: "Completed",
+                signatures: placedSignatures,
+                recipients,
+                completedAt: new Date(),
+              }
+            : doc
+        )
+      );
+
+      toast.success("Document signed successfully!");
+      setSignatureModal(null);
+    } catch (error) {
+      console.error("Error signing document:", error);
+      toast.error("Failed to sign document");
+      setIsSigned(false);
+    }
   };
 
   const handleClearSignature = () => {
@@ -481,11 +534,17 @@ const DocSign = () => {
     // Add your download logic here
   };
 
-  const handleDeleteDocument = (doc) => {
+  const handleDeleteDocument = async (doc) => {
     setDocumentMenuOpen(null);
     if (window.confirm(`Are you sure you want to delete "${doc.name}"?`)) {
-      setDocuments(documents.filter((d) => d.id !== doc.id));
-      toast.success("Document deleted successfully");
+      try {
+        await apiService.delete(`/api/documents/${doc._id}`);
+        setDocuments(documents.filter((d) => d._id !== doc._id));
+        toast.success("Document deleted successfully");
+      } catch (error) {
+        console.error("Error deleting document:", error);
+        toast.error("Failed to delete document");
+      }
     }
   };
 
@@ -547,7 +606,16 @@ const DocSign = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {documents.length === 0 ? (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                        <p className="text-gray-600">Loading documents...</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : documents.length === 0 ? (
                   <tr>
                     <td colSpan="5" className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
@@ -567,18 +635,23 @@ const DocSign = () => {
                   </tr>
                 ) : (
                   documents.map((doc) => (
-                    <tr key={doc.id} className="hover:bg-gray-50">
+                    <tr key={doc._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <i
-                            className={`fa-solid ${doc.icon} ${doc.iconColor} text-xl`}
+                            className={`fa-solid ${
+                              doc.metadata?.icon || "fa-file-pdf"
+                            } ${
+                              doc.metadata?.iconColor || "text-red-500"
+                            } text-xl`}
                           ></i>
                           <div>
                             <p className="font-medium text-gray-900">
                               {doc.name}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {doc.size} • {doc.addedDate}
+                              {doc.fileSize} •{" "}
+                              {new Date(doc.createdAt).toLocaleDateString()}
                             </p>
                           </div>
                         </div>
@@ -608,12 +681,16 @@ const DocSign = () => {
                         {getStatusBadge(doc.status)}
                       </td>
                       <td className="px-6 py-4 hidden sm:table-cell">
-                        <p className="text-sm text-gray-900">{doc.dueDate}</p>
+                        <p className="text-sm text-gray-900">
+                          {doc.dueDate
+                            ? new Date(doc.dueDate).toLocaleDateString()
+                            : "N/A"}
+                        </p>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
                           {doc.status === "Action Required" &&
-                            doc.requestedBy !== user?.id && (
+                            doc.uploadedBy !== user?.id && (
                               <button
                                 onClick={() => handleSignNow(doc)}
                                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"

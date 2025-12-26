@@ -21,7 +21,11 @@ const PurchaseOrderModel = require('./models/PurchaseOrder');
 const AdvanceRequestModel = require('./models/AdvanceRequest');
 const RefundRequestModel = require('./models/RefundRequest');
 const RetirementBreakdownModel = require('./models/RetirementBreakdown');
-const { sendApprovalEmail, sendPOReviewEmail } = require('./utils/emailService');
+const DocumentModel = require('./models/Document');
+const UserModel = require('./models/User');
+const SecuritySettingsModel = require('./models/SecuritySettings');
+const AuditLogModel = require('./models/AuditLog');
+const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail } = require('./utils/emailService');
 const seed = require('./data');
 
 const app = express();
@@ -545,6 +549,528 @@ async function start() {
     } catch (err) {
       console.error('Error updating retirement breakdown:', err);
       res.status(500).json({ message: 'Failed to update breakdown' });
+    }
+  });
+
+  // ========== DOCUMENT MANAGEMENT ROUTES ==========
+  
+  // Get all documents for a user
+  app.get('/api/documents', async (req, res) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ message: 'userId is required' });
+      }
+      
+      const documents = await DocumentModel.find({
+        $or: [
+          { uploadedBy: userId },
+          { 'recipients.email': userId },
+        ],
+      }).sort({ createdAt: -1 });
+      
+      res.json(documents);
+    } catch (err) {
+      console.error('Error fetching documents:', err);
+      res.status(500).json({ message: 'Failed to fetch documents' });
+    }
+  });
+
+  // Get a single document by ID
+  app.get('/api/documents/:id', async (req, res) => {
+    try {
+      const document = await DocumentModel.findById(req.params.id);
+      if (!document) {
+        return res.status(404).json({ message: 'Document not found' });
+      }
+      res.json(document);
+    } catch (err) {
+      console.error('Error fetching document:', err);
+      res.status(500).json({ message: 'Failed to fetch document' });
+    }
+  });
+
+  // Create a new document
+  app.post('/api/documents', async (req, res) => {
+    try {
+      const document = new DocumentModel(req.body);
+      const saved = await document.save();
+      res.status(201).json(saved);
+    } catch (err) {
+      console.error('Error creating document:', err);
+      res.status(500).json({ message: 'Failed to create document' });
+    }
+  });
+
+  // Update document (add signatures, change status, etc.)
+  app.patch('/api/documents/:id', async (req, res) => {
+    try {
+      const updated = await DocumentModel.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { new: true }
+      );
+      if (!updated) {
+        return res.status(404).json({ message: 'Document not found' });
+      }
+      res.json(updated);
+    } catch (err) {
+      console.error('Error updating document:', err);
+      res.status(500).json({ message: 'Failed to update document' });
+    }
+  });
+
+  // Sign document (complete signing process)
+  app.post('/api/documents/:id/sign', async (req, res) => {
+    try {
+      const { signatures, recipients, userId, userName } = req.body;
+      
+      const document = await DocumentModel.findById(req.params.id);
+      if (!document) {
+        return res.status(404).json({ message: 'Document not found' });
+      }
+
+      // Add signatures with timestamp and signer info
+      const timestampedSignatures = signatures.map(sig => ({
+        ...sig,
+        signedAt: new Date(),
+        signedBy: userId,
+      }));
+
+      document.signatures = timestampedSignatures;
+      document.status = 'Completed';
+      document.completedAt = new Date();
+      
+      // Update recipients if provided
+      if (recipients && recipients.length > 0) {
+        document.recipients = recipients.map(rec => ({
+          ...rec,
+          status: rec.email === userId ? 'signed' : 'pending',
+        }));
+      }
+
+      await document.save();
+
+      // TODO: Send email notifications to recipients
+      // You can implement email sending here using the emailService
+
+      res.json({ message: 'Document signed successfully', document });
+    } catch (err) {
+      console.error('Error signing document:', err);
+      res.status(500).json({ message: 'Failed to sign document' });
+    }
+  });
+
+  // Delete a document
+  app.delete('/api/documents/:id', async (req, res) => {
+    try {
+      const deleted = await DocumentModel.findByIdAndDelete(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: 'Document not found' });
+      }
+      res.json({ message: 'Document deleted successfully' });
+    } catch (err) {
+      console.error('Error deleting document:', err);
+      res.status(500).json({ message: 'Failed to delete document' });
+    }
+  });
+
+  // ==================== USER MANAGEMENT ROUTES ====================
+
+  // Get all users with optional filtering
+  app.get('/api/users', async (req, res) => {
+    try {
+      const { role, status, search } = req.query;
+      let query = {};
+
+      if (role) {
+        query.role = role;
+      }
+      if (status) {
+        query.status = status;
+      }
+      if (search) {
+        query.$or = [
+          { fullName: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+        ];
+      }
+
+      const users = await UserModel.find(query)
+        .select('-resetPasswordToken -resetPasswordExpires')
+        .sort({ createdAt: -1 })
+        .populate('invitedBy', 'fullName email');
+
+      res.json(users);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+      res.status(500).json({ message: 'Failed to fetch users' });
+    }
+  });
+
+  // Get single user by ID
+  app.get('/api/users/:id', async (req, res) => {
+    try {
+      const user = await UserModel.findById(req.params.id)
+        .select('-resetPasswordToken -resetPasswordExpires')
+        .populate('invitedBy', 'fullName email');
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      res.json(user);
+    } catch (err) {
+      console.error('Error fetching user:', err);
+      res.status(500).json({ message: 'Failed to fetch user' });
+    }
+  });
+
+  // Create new user
+  app.post('/api/users', async (req, res) => {
+    try {
+      const { fullName, email, role, permissions, invitedBy } = req.body;
+
+      // Check if user already exists
+      const existingUser = await UserModel.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ message: 'User with this email already exists' });
+      }
+
+      const user = new UserModel({
+        fullName,
+        email,
+        role: role || 'Viewer',
+        status: 'Pending',
+        permissions,
+        invitedBy,
+        invitedAt: new Date(),
+      });
+
+      await user.save();
+      res.status(201).json(user);
+    } catch (err) {
+      console.error('Error creating user:', err);
+      res.status(500).json({ message: 'Failed to create user' });
+    }
+  });
+
+  // Update user
+  app.patch('/api/users/:id', async (req, res) => {
+    try {
+      const { fullName, email, role, status, permissions } = req.body;
+      
+      const updateData = {};
+      if (fullName !== undefined) updateData.fullName = fullName;
+      if (email !== undefined) updateData.email = email;
+      if (role !== undefined) updateData.role = role;
+      if (status !== undefined) updateData.status = status;
+      if (permissions !== undefined) updateData.permissions = permissions;
+
+      const user = await UserModel.findByIdAndUpdate(
+        req.params.id,
+        updateData,
+        { new: true, runValidators: true }
+      ).select('-resetPasswordToken -resetPasswordExpires');
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      res.json(user);
+    } catch (err) {
+      console.error('Error updating user:', err);
+      res.status(500).json({ message: 'Failed to update user' });
+    }
+  });
+
+  // Delete user
+  app.delete('/api/users/:id', async (req, res) => {
+    try {
+      const user = await UserModel.findByIdAndDelete(req.params.id);
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      res.json({ message: 'User deleted successfully' });
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      res.status(500).json({ message: 'Failed to delete user' });
+    }
+  });
+
+  // Request password reset
+  app.post('/api/users/:id/reset-password', async (req, res) => {
+    try {
+      const user = await UserModel.findById(req.params.id);
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Generate reset token
+      const resetToken = user.generateResetToken();
+      await user.save();
+
+      // Send email
+      const emailResult = await sendPasswordResetEmail(user, resetToken);
+      
+      if (emailResult.success) {
+        res.json({ 
+          message: 'Password reset email sent successfully',
+          ...(process.env.NODE_ENV !== 'production' && { resetLink: emailResult.resetLink })
+        });
+      } else {
+        res.status(500).json({ message: 'Failed to send password reset email' });
+      }
+    } catch (err) {
+      console.error('Error requesting password reset:', err);
+      res.status(500).json({ message: 'Failed to process password reset request' });
+    }
+  });
+
+  // Update user status (activate/deactivate)
+  app.patch('/api/users/:id/status', async (req, res) => {
+    try {
+      const { status } = req.body;
+
+      if (!['Active', 'Inactive', 'Pending'].includes(status)) {
+        return res.status(400).json({ message: 'Invalid status' });
+      }
+
+      const user = await UserModel.findByIdAndUpdate(
+        req.params.id,
+        { status },
+        { new: true }
+      ).select('-resetPasswordToken -resetPasswordExpires');
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      res.json(user);
+    } catch (err) {
+      console.error('Error updating user status:', err);
+      res.status(500).json({ message: 'Failed to update user status' });
+    }
+  });
+
+  // ==================== SECURITY SETTINGS ROUTES ====================
+
+  // Get security settings (singleton)
+  app.get('/api/security/settings', async (req, res) => {
+    try {
+      let settings = await SecuritySettingsModel.findOne({ singleton: true });
+      
+      // Create default settings if none exist
+      if (!settings) {
+        settings = new SecuritySettingsModel({
+          singleton: true,
+          passwordPolicy: {
+            enabled: true,
+            minLength: 12,
+            specialChars: true,
+            uppercaseRequired: true,
+            lowercaseRequired: true,
+            numberRequired: true,
+            expiry: 90,
+          },
+          mfaSettings: {
+            enabled: true,
+            method: 'Authenticator App',
+            enforcement: 'All Users',
+            gracePeriod: 'None',
+          },
+          sessionControl: {
+            idleTimeout: 30,
+            concurrentSessions: 3,
+            rememberMeDuration: 30,
+          },
+        });
+        await settings.save();
+      }
+
+      res.json(settings);
+    } catch (err) {
+      console.error('Error fetching security settings:', err);
+      res.status(500).json({ message: 'Failed to fetch security settings' });
+    }
+  });
+
+  // Update security settings
+  app.patch('/api/security/settings', async (req, res) => {
+    try {
+      const { passwordPolicy, mfaSettings, sessionControl } = req.body;
+
+      let settings = await SecuritySettingsModel.findOne({ singleton: true });
+      
+      if (!settings) {
+        settings = new SecuritySettingsModel({ singleton: true });
+      }
+
+      if (passwordPolicy) settings.passwordPolicy = { ...settings.passwordPolicy, ...passwordPolicy };
+      if (mfaSettings) settings.mfaSettings = { ...settings.mfaSettings, ...mfaSettings };
+      if (sessionControl) settings.sessionControl = { ...settings.sessionControl, ...sessionControl };
+
+      await settings.save();
+
+      // Log the configuration update
+      await AuditLogModel.create({
+        actor: {
+          userId: req.body.actorId || 'system',
+          userName: req.body.actorName || 'System Admin',
+          userEmail: req.body.actorEmail || 'admin@system.com',
+          initials: 'SA',
+        },
+        action: 'Config Update',
+        actionColor: 'purple',
+        ipAddress: req.ip || req.connection.remoteAddress || 'Unknown',
+        userAgent: req.get('user-agent'),
+        description: 'Updated Security Settings',
+        status: 'Success',
+        metadata: { updatedFields: Object.keys(req.body) },
+      });
+
+      res.json(settings);
+    } catch (err) {
+      console.error('Error updating security settings:', err);
+      res.status(500).json({ message: 'Failed to update security settings' });
+    }
+  });
+
+  // Get active users count
+  app.get('/api/security/active-users', async (req, res) => {
+    try {
+      const activeUsers = await UserModel.countDocuments({ status: 'Active' });
+      res.json({ count: activeUsers });
+    } catch (err) {
+      console.error('Error fetching active users:', err);
+      res.status(500).json({ message: 'Failed to fetch active users count' });
+    }
+  });
+
+  // ==================== AUDIT LOG ROUTES ====================
+
+  // Get audit logs with filtering and pagination
+  app.get('/api/audit-logs', async (req, res) => {
+    try {
+      const { 
+        page = 1, 
+        limit = 10, 
+        action, 
+        status, 
+        search,
+        startDate,
+        endDate 
+      } = req.query;
+
+      const query = {};
+
+      if (action && action !== 'All Actions') {
+        query.action = action;
+      }
+
+      if (status && status !== 'All Statuses') {
+        query.status = status;
+      }
+
+      if (search) {
+        query.$or = [
+          { 'actor.userName': { $regex: search, $options: 'i' } },
+          { 'actor.userEmail': { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } },
+        ];
+      }
+
+      if (startDate || endDate) {
+        query.timestamp = {};
+        if (startDate) query.timestamp.$gte = new Date(startDate);
+        if (endDate) query.timestamp.$lte = new Date(endDate);
+      }
+
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      
+      const [logs, total] = await Promise.all([
+        AuditLogModel.find(query)
+          .sort({ timestamp: -1 })
+          .skip(skip)
+          .limit(parseInt(limit)),
+        AuditLogModel.countDocuments(query),
+      ]);
+
+      res.json({
+        logs,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit)),
+        },
+      });
+    } catch (err) {
+      console.error('Error fetching audit logs:', err);
+      res.status(500).json({ message: 'Failed to fetch audit logs' });
+    }
+  });
+
+  // Create audit log entry
+  app.post('/api/audit-logs', async (req, res) => {
+    try {
+      const log = new AuditLogModel({
+        ...req.body,
+        ipAddress: req.body.ipAddress || req.ip || req.connection.remoteAddress || 'Unknown',
+        userAgent: req.body.userAgent || req.get('user-agent'),
+      });
+
+      await log.save();
+      res.status(201).json(log);
+    } catch (err) {
+      console.error('Error creating audit log:', err);
+      res.status(500).json({ message: 'Failed to create audit log' });
+    }
+  });
+
+  // Export audit logs as CSV
+  app.get('/api/audit-logs/export', async (req, res) => {
+    try {
+      const { action, status, startDate, endDate } = req.query;
+      
+      const query = {};
+      if (action && action !== 'All Actions') query.action = action;
+      if (status && status !== 'All Statuses') query.status = status;
+      if (startDate || endDate) {
+        query.timestamp = {};
+        if (startDate) query.timestamp.$gte = new Date(startDate);
+        if (endDate) query.timestamp.$lte = new Date(endDate);
+      }
+
+      const logs = await AuditLogModel.find(query).sort({ timestamp: -1 }).limit(10000);
+
+      // Generate CSV
+      const headers = ['Timestamp', 'Actor', 'Action', 'IP Address', 'Description', 'Status'];
+      const csvRows = [headers.join(',')];
+
+      logs.forEach(log => {
+        const row = [
+          new Date(log.timestamp).toISOString(),
+          `"${log.actor.userName || 'Unknown'}"`,
+          log.action,
+          log.ipAddress,
+          `"${log.description}"`,
+          log.status,
+        ];
+        csvRows.push(row.join(','));
+      });
+
+      const csv = csvRows.join('\\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=audit-logs.csv');
+      res.send(csv);
+    } catch (err) {
+      console.error('Error exporting audit logs:', err);
+      res.status(500).json({ message: 'Failed to export audit logs' });
     }
   });
 

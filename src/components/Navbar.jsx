@@ -31,7 +31,7 @@ const Navbar = ({ user }) => {
         <div className="flex items-center gap-3">
           <img src={stepsLogo} alt="StepsERP Logo" className="w-8 h-8" />
           <h1 className="text-lg font-bold text-[#111418]">
-            stepsERP
+            NETLINK
           </h1>
         </div>
 

@@ -165,8 +165,58 @@ async function sendPOReviewEmail(poData) {
   }
 }
 
+// Send password reset email
+async function sendPasswordResetEmail(userData, resetToken) {
+  if (!userData.email) {
+    throw new Error('Email is required to send password reset email');
+  }
+
+  const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+  
+  const mailOptions = {
+    from: emailUser,
+    to: userData.email,
+    subject: 'Password Reset Request',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0d6efd;">Password Reset Request</h2>
+        <p>Dear ${userData.fullName},</p>
+        <p>We received a request to reset your password. Click the button below to create a new password:</p>
+        
+        <div style="margin: 30px 0;">
+          <a href="${resetLink}" style="background-color: #0d6efd; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+            Reset Password
+          </a>
+        </div>
+
+        <p>This link will expire in 1 hour.</p>
+        <p>If you didn't request a password reset, you can safely ignore this email.</p>
+
+        <p style="color: #666; font-size: 12px; margin-top: 30px;">
+          This is an automated email. Please do not reply to this message.
+        </p>
+      </div>
+    `,
+  };
+
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📧 Password reset email would be sent to:', mailOptions.to);
+      console.log('Reset Link:', resetLink);
+      return { success: true, message: 'Email logged (dev mode)', resetLink };
+    }
+    
+    await transporter.sendMail(mailOptions);
+    return { success: true, message: 'Email sent successfully' };
+  } catch (error) {
+    console.error('Error sending password reset email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendApprovalEmail,
   sendPOReviewEmail,
+  sendPasswordResetEmail,
   transporter,
 };
