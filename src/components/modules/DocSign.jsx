@@ -47,13 +47,8 @@ const DocSign = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch documents on component mount
-  useEffect(() => {
-    if (user?.id) {
-      fetchDocuments();
-    }
-  }, [user]);
-
-  const fetchDocuments = async () => {
+  const fetchDocuments = React.useCallback(async () => {
+    if (!user?.id) return;
     try {
       setIsLoading(true);
       const response = await apiService.get(`/api/documents?userId=${user.id}`);
@@ -64,7 +59,11 @@ const DocSign = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
 
   const handleDocumentUpload = () => {
     const input = document.createElement("input");

@@ -31,6 +31,15 @@ const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail } = require
 const seed = require('./data');
 
 const app = express();
+let dbConnected = false;
+
+// Short-circuits DB-backed endpoints when MongoDB is unavailable.
+const requireDbConnection = (req, res, next) => {
+  if (!dbConnected) {
+    return res.status(503).json({ message: 'Database unavailable; start with MONGODB_URI to enable this endpoint.' });
+  }
+  next();
+};
 
 // Security Middleware
 app.use(helmet()); // Secure HTTP headers
@@ -67,62 +76,90 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(morgan('dev'));
 
-if (!process.env.MONGODB_URI) {
-  throw new Error('MONGODB_URI is not set in environment');
-}
-
+// MongoDB connection string (optional for dev). If missing, run in degraded mode.
 const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+  console.warn('MONGODB_URI not set; starting in degraded mode with seed data.');
+}
 
 async function start() {
   try {
-    await mongoose.connect(MONGODB_URI, { 
-      useNewUrlParser: true, 
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000 
-    });
-    console.log('✓ Connected to MongoDB');
-
-    // Seed modules if empty or update with new modules
-    const moduleCount = await ModuleModel.countDocuments();
-    if (moduleCount === 0) {
-      await ModuleModel.insertMany(seed.modules);
-      console.log('Seeded modules');
+    if (MONGODB_URI) {
+      await mongoose.connect(MONGODB_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        serverSelectionTimeoutMS: 5000,
+      });
+      dbConnected = true;
+      console.log('✓ Connected to MongoDB');
     } else {
-      // Upsert modules: update existing ones and add new ones
-      for (const module of seed.modules) {
-        await ModuleModel.findOneAndUpdate(
-          { id: module.id },
-          module,
-          { upsert: true, new: true }
-        );
+      console.warn('Skipping MongoDB connect; no MONGODB_URI provided.');
+    }
+
+    if (dbConnected) {
+      // Seed modules if empty or update with new modules
+      const moduleCount = await ModuleModel.countDocuments();
+      if (moduleCount === 0) {
+        await ModuleModel.insertMany(seed.modules);
+        console.log('Seeded modules');
+      } else {
+        // Upsert modules: update existing ones and add new ones
+        for (const module of seed.modules) {
+          await ModuleModel.findOneAndUpdate(
+            { id: module.id },
+            module,
+            { upsert: true, new: true }
+          );
+        }
+        console.log('Updated modules to match seed data');
       }
-      console.log('Updated modules to match seed data');
-    }
 
-    // Seed analytics if empty
-    const analyticsCount = await AnalyticsModel.countDocuments();
-    if (analyticsCount === 0) {
-      await AnalyticsModel.create(seed.analytics);
-      console.log('Seeded analytics');
-    }
+      // Seed analytics if empty
+      const analyticsCount = await AnalyticsModel.countDocuments();
+      if (analyticsCount === 0) {
+        await AnalyticsModel.create(seed.analytics);
+        console.log('Seeded analytics');
+      }
 
-    // Seed attendance if empty
-    const attendanceCount = await AttendanceModel.countDocuments();
-    if (attendanceCount === 0) {
-      await AttendanceModel.insertMany(seed.attendance);
-      console.log('Seeded attendance');
+      // Seed attendance if empty
+      const attendanceCount = await AttendanceModel.countDocuments();
+      if (attendanceCount === 0) {
+        await AttendanceModel.insertMany(seed.attendance);
+        console.log('Seeded attendance');
+      }
+    } else {
+      console.warn('Skipping database seeding because no MongoDB connection is available.');
     }
   } catch (err) {
     console.error('✗ Failed to connect to MongoDB');
     console.error('  Error:', err.message);
     console.error('  Please ensure MongoDB is running or set MONGODB_URI in .env');
-    process.exit(1);
+    console.warn('Continuing in degraded mode with seed data.');
+    dbConnected = false;
   }
 
   // API endpoints using centralized server API helpers
   const api = require('./api');
 
+  // Block DB-backed endpoints early when MongoDB is not available.
+  app.use([
+    '/api/material-requests',
+    '/api/purchase-orders',
+    '/api/advance-requests',
+    '/api/refund-requests',
+    '/api/retirement-breakdown',
+    '/api/documents',
+    '/api/users',
+    '/api/security',
+    '/api/audit-logs',
+    '/api/approval',
+    '/api/user/profile',
+  ], requireDbConnection);
+
   app.get('/api/modules', async (req, res) => {
+    if (!dbConnected) {
+      return res.json(seed.modules);
+    }
     const mods = await api.getModules();
     res.json(mods);
   });
@@ -135,17 +172,26 @@ async function start() {
   });
 
   app.get('/api/analytics', async (req, res) => {
+    if (!dbConnected) {
+      return res.json(seed.analytics);
+    }
     const a = await api.getAnalytics();
     res.json(a || {});
   });
 
   app.get('/api/attendance', async (req, res) => {
+    if (!dbConnected) {
+      return res.json(seed.attendance);
+    }
     const list = await api.getAttendance();
     res.json(list);
   });
 
   // Material Requests endpoints
   app.get('/api/material-requests', async (req, res) => {
+    if (!dbConnected) {
+      return res.status(503).json({ message: 'Database unavailable in dev; material requests disabled.' });
+    }
     try {
       const requests = await MaterialRequestModel.find().sort({ createdAt: -1 });
       res.json(requests);
@@ -156,6 +202,9 @@ async function start() {
   });
 
   app.post('/api/material-requests', async (req, res) => {
+    if (!dbConnected) {
+      return res.status(503).json({ message: 'Database unavailable in dev; material requests disabled.' });
+    }
     try {
       // Generate request ID
       const count = await MaterialRequestModel.countDocuments();
@@ -180,6 +229,9 @@ async function start() {
 
   // Approve material request and create PO
   app.post('/api/material-requests/:id/approve', async (req, res) => {
+    if (!dbConnected) {
+      return res.status(503).json({ message: 'Database unavailable in dev; approvals disabled.' });
+    }
     try {
       const materialRequest = await MaterialRequestModel.findById(req.params.id);
       if (!materialRequest) {
@@ -236,6 +288,9 @@ async function start() {
 
   // Reject material request
   app.post('/api/material-requests/:id/reject', async (req, res) => {
+    if (!dbConnected) {
+      return res.status(503).json({ message: 'Database unavailable in dev; rejections disabled.' });
+    }
     try {
       const updated = await MaterialRequestModel.findByIdAndUpdate(
         req.params.id,
@@ -251,6 +306,9 @@ async function start() {
   });
 
   app.put('/api/material-requests/:id', async (req, res) => {
+    if (!dbConnected) {
+      return res.status(503).json({ message: 'Database unavailable in dev; updates disabled.' });
+    }
     try {
       const updated = await MaterialRequestModel.findByIdAndUpdate(
         req.params.id,
@@ -287,6 +345,9 @@ async function start() {
 
   // Purchase Orders endpoints
   app.get('/api/purchase-orders', async (req, res) => {
+    if (!dbConnected) {
+      return res.status(503).json({ message: 'Database unavailable in dev; purchase orders disabled.' });
+    }
     try {
       const orders = await PurchaseOrderModel.find().sort({ createdAt: -1 });
       res.json(orders);
@@ -297,6 +358,9 @@ async function start() {
   });
 
   app.post('/api/purchase-orders', async (req, res) => {
+    if (!dbConnected) {
+      return res.status(503).json({ message: 'Database unavailable in dev; purchase orders disabled.' });
+    }
     try {
       const count = await PurchaseOrderModel.countDocuments();
       const poNumber = `PO-${String(count + 1).padStart(6, '0')}`;
@@ -316,6 +380,9 @@ async function start() {
 
   // Review and approve PO
   app.post('/api/purchase-orders/:id/review', async (req, res) => {
+    if (!dbConnected) {
+      return res.status(503).json({ message: 'Database unavailable in dev; reviews disabled.' });
+    }
     try {
       const po = await PurchaseOrderModel.findById(req.params.id);
       if (!po) {
@@ -344,6 +411,9 @@ async function start() {
 
   // Get POs pending payment (for Finance module)
   app.get('/api/purchase-orders/pending-payment', async (req, res) => {
+    if (!dbConnected) {
+      return res.status(503).json({ message: 'Database unavailable in dev; payments disabled.' });
+    }
     try {
       const orders = await PurchaseOrderModel.find({ 
         status: 'payment_pending' 
@@ -357,6 +427,9 @@ async function start() {
 
   // Mark PO as paid
   app.post('/api/purchase-orders/:id/mark-paid', async (req, res) => {
+    if (!dbConnected) {
+      return res.status(503).json({ message: 'Database unavailable in dev; payments disabled.' });
+    }
     try {
       const po = await PurchaseOrderModel.findByIdAndUpdate(
         req.params.id,
@@ -1872,17 +1945,250 @@ async function start() {
     }
   });
 
-  if (!process.env.PORT) {
-    throw new Error('PORT is not set in environment');
-  }
+  // ===========================
+  // Travel Request Routes
+  // ===========================
+  
+  // Get travel requests (with optional filters)
+  app.get('/api/approval/travel-requests', async (req, res) => {
+    try {
+      const query = {};
+      if (req.query.employeeId) query.employeeId = req.query.employeeId;
+      if (req.query.managerId) query.managerId = req.query.managerId;
+      if (req.query.status) query.status = req.query.status;
+      
+      const requests = await api.getTravelRequests(query);
+      res.json({ success: true, data: requests });
+    } catch (error) {
+      console.error('Error fetching travel requests:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 
-  const port = process.env.PORT;
-  app.listen(port, () => {
+  // Create travel request
+  app.post('/api/approval/travel-requests', async (req, res) => {
+    try {
+      const request = await api.createTravelRequest(req.body);
+      res.status(201).json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error creating travel request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Manager approves travel request
+  app.post('/api/approval/travel-requests/:id/manager-approve', async (req, res) => {
+    try {
+      const { comments } = req.body;
+      const request = await api.updateTravelRequestStatus(
+        req.params.id,
+        'approved_manager',
+        comments,
+        'manager'
+      );
+      
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error approving travel request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Manager rejects travel request
+  app.post('/api/approval/travel-requests/:id/manager-reject', async (req, res) => {
+    try {
+      const { comments } = req.body;
+      const request = await api.updateTravelRequestStatus(
+        req.params.id,
+        'rejected_manager',
+        comments,
+        'manager'
+      );
+      
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error rejecting travel request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Update travel booking details (after manager approval)
+  app.post('/api/approval/travel-requests/:id/book', async (req, res) => {
+    try {
+      const bookingData = {
+        ticketBooked: req.body.ticketBooked || false,
+        bookedBy: req.body.bookedBy,
+        bookingReference: req.body.bookingReference,
+        hotelBooked: req.body.hotelBooked || false,
+        hotelDetails: req.body.hotelDetails,
+      };
+      
+      const request = await api.updateTravelBooking(req.params.id, bookingData);
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error booking travel:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Send travel approval email (to manager)
+  app.post('/api/send-travel-approval-email', async (req, res) => {
+    try {
+      const {
+        to,
+        employeeName,
+        employeeId,
+        currentLocation,
+        destination,
+        purpose,
+        fromDate,
+        toDate,
+        numberOfDays,
+        numberOfNights,
+        accommodationRequired,
+        budget,
+        managerName,
+        approvalStage
+      } = req.body;
+
+      await sendApprovalEmail({
+        to,
+        employeeName,
+        employeeId,
+        amount: `Budget: $${budget}`,
+        reason: purpose,
+        approver: managerName,
+        requestType: 'travel',
+        additionalInfo: `From: ${currentLocation} → ${destination}\nDates: ${fromDate} to ${toDate}\nDuration: ${numberOfDays} days, ${numberOfNights} nights\nAccommodation: ${accommodationRequired ? 'Required' : 'Not Required'}\nApproval Stage: ${approvalStage}\n\nNote: Tickets can only be booked after manager approval.`,
+      });
+
+      res.json({ success: true, message: 'Email sent successfully' });
+    } catch (error) {
+      console.error('Error sending travel approval email:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // =====================================================
+  // USER PROFILE ENDPOINTS
+  // =====================================================
+  
+  // Get user profile by clerk ID
+  app.get('/api/user/profile/:clerkId', async (req, res) => {
+    try {
+      const { clerkId } = req.params;
+      const user = await api.getUserByClerkId(clerkId);
+      
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+      
+      res.json({ success: true, data: user });
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create or update user profile
+  app.post('/api/user/profile', async (req, res) => {
+    try {
+      const { clerkId, email, fullName, phoneNumber, department, jobTitle, bio } = req.body;
+      
+      if (!clerkId || !email || !fullName) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Missing required fields: clerkId, email, fullName' 
+        });
+      }
+      
+      const user = await api.createOrUpdateUserProfile({
+        clerkId,
+        email,
+        fullName,
+        phoneNumber,
+        department,
+        jobTitle,
+        bio,
+      });
+      
+      res.json({ success: true, data: user });
+    } catch (error) {
+      console.error('Error creating/updating user profile:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Update user profile
+  app.put('/api/user/profile/:clerkId', async (req, res) => {
+    try {
+      const { clerkId } = req.params;
+      const { phoneNumber, department, jobTitle, bio, fullName, email } = req.body;
+      
+      const user = await api.updateUserProfile(clerkId, {
+        phoneNumber,
+        department,
+        jobTitle,
+        bio,
+        fullName,
+        email,
+      });
+      
+      res.json({ success: true, data: user });
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      if (error.message === 'User not found') {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Upload profile picture
+  app.post('/api/user/profile/:clerkId/upload-picture', async (req, res) => {
+    try {
+      const { clerkId } = req.params;
+      const { pictureUrl } = req.body;
+      
+      if (!pictureUrl) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Missing pictureUrl' 
+        });
+      }
+      
+      const user = await api.updateUserProfilePicture(clerkId, pictureUrl);
+      
+      res.json({ success: true, data: user });
+    } catch (error) {
+      console.error('Error uploading profile picture:', error);
+      if (error.message === 'User not found') {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  const port = process.env.PORT || 5000;
+  if (!process.env.PORT) {
+    console.warn('PORT is not set; defaulting to 5000');
+  }
+  const server = app.listen(port, () => {
     console.log(`Steps backend listening on http://localhost:${port}`);
+  });
+  server.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+      const fallback = String(Number(port) + 1);
+      console.warn(`Port ${port} in use. Falling back to ${fallback}.`);
+      app.listen(fallback, () => {
+        console.log(`Steps backend listening on http://localhost:${fallback}`);
+      });
+    } else {
+      console.error('Server failed to start:', err);
+    }
   });
 }
 
 start().catch((err) => {
   console.error('Failed to start server:', err);
-  process.exit(1);
 });

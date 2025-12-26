@@ -11,8 +11,8 @@ const Approval = () => {
   const [advanceRequests, setAdvanceRequests] = useState([]);
   const [refundRequests, setRefundRequests] = useState([]);
   const [retirementBreakdowns, setRetirementBreakdowns] = useState([]);
-  const [leaveRequests, setLeaveRequests] = useState([]);
-  const [travelRequests, setTravelRequests] = useState([]);
+  const [leaveRequests, _setLeaveRequests] = useState([]);
+  const [travelRequests, _setTravelRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdvanceForm, setShowAdvanceForm] = useState(false);
   const [showRefundForm, setShowRefundForm] = useState(false);
@@ -24,7 +24,7 @@ const Approval = () => {
   const [showTravelForm, setShowTravelForm] = useState(false);
   const [selectedMonthYear, setSelectedMonthYear] = useState(null);
   const [editingLineItems, setEditingLineItems] = useState({});
-  
+
   // Leave form state
   const [leaveFormData, setLeaveFormData] = useState({
     leaveType: "",
@@ -38,6 +38,24 @@ const Approval = () => {
   const [leaveAllocation, setLeaveAllocation] = useState(null);
   const [calculatedDays, setCalculatedDays] = useState(0);
   const [remainingLeave, setRemainingLeave] = useState(null);
+
+  // Travel form state
+  const [travelFormData, setTravelFormData] = useState({
+    currentLocation: "",
+    destination: "",
+    purpose: "",
+    fromDate: "",
+    toDate: "",
+    numberOfDays: 0,
+    numberOfNights: 0,
+    accommodationRequired: false,
+    budget: "",
+    description: "",
+    managerId: "",
+    managerName: "",
+    managerEmail: "",
+  });
+  const [travelFormLoading, setTravelFormLoading] = useState(false);
 
   const [staffList] = useState([
     {
@@ -107,13 +125,22 @@ const Approval = () => {
         );
         if (response?.data && response.data.length > 0) {
           setLeaveAllocation(response.data[0]);
-          // Set manager info if available
+          // Set manager info if available for both leave and travel forms
           if (response.data[0].managerId) {
-            setLeaveFormData((prev) => ({
-              ...prev,
+            const managerInfo = {
               managerId: response.data[0].managerId,
               managerName: response.data[0].managerName,
               managerEmail: response.data[0].managerEmail || "",
+            };
+
+            setLeaveFormData((prev) => ({
+              ...prev,
+              ...managerInfo,
+            }));
+
+            setTravelFormData((prev) => ({
+              ...prev,
+              ...managerInfo,
             }));
           }
         }
@@ -129,17 +156,23 @@ const Approval = () => {
 
   // Calculate days and remaining leave when dates or leave type changes
   useEffect(() => {
-    if (leaveFormData.fromDate && leaveFormData.toDate && leaveFormData.leaveType && leaveAllocation) {
+    if (
+      leaveFormData.fromDate &&
+      leaveFormData.toDate &&
+      leaveFormData.leaveType &&
+      leaveAllocation
+    ) {
       const from = new Date(leaveFormData.fromDate);
       const to = new Date(leaveFormData.toDate);
-      
+
       if (to >= from) {
         // Calculate business days (excluding weekends)
         let days = 0;
         const current = new Date(from);
         while (current <= to) {
           const dayOfWeek = current.getDay();
-          if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            // Not Sunday or Saturday
             days++;
           }
           current.setDate(current.getDate() + 1);
@@ -181,7 +214,33 @@ const Approval = () => {
         });
       }
     }
-  }, [leaveFormData.fromDate, leaveFormData.toDate, leaveFormData.leaveType, leaveAllocation]);
+  }, [
+    leaveFormData.fromDate,
+    leaveFormData.toDate,
+    leaveFormData.leaveType,
+    leaveAllocation,
+  ]);
+
+  // Calculate travel days and nights when dates change
+  useEffect(() => {
+    if (travelFormData.fromDate && travelFormData.toDate) {
+      const from = new Date(travelFormData.fromDate);
+      const to = new Date(travelFormData.toDate);
+
+      if (to >= from) {
+        // Calculate total days (inclusive)
+        const timeDiff = to.getTime() - from.getTime();
+        const days = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end days
+        const nights = Math.max(0, days - 1); // Nights are typically one less than days
+
+        setTravelFormData((prev) => ({
+          ...prev,
+          numberOfDays: days,
+          numberOfNights: nights,
+        }));
+      }
+    }
+  }, [travelFormData.fromDate, travelFormData.toDate]);
 
   // Fetch data from MongoDB
   const fetchData = async () => {
@@ -375,7 +434,11 @@ const Approval = () => {
     }
 
     // Check if enough leave balance
-    if (remainingLeave && remainingLeave.remaining < 0 && leaveFormData.leaveType !== "unpaid") {
+    if (
+      remainingLeave &&
+      remainingLeave.remaining < 0 &&
+      leaveFormData.leaveType !== "unpaid"
+    ) {
       toast.error(`Insufficient ${leaveFormData.leaveType} leave balance`);
       return;
     }
@@ -399,7 +462,10 @@ const Approval = () => {
 
     try {
       // Save to database
-      const response = await apiService.post("/api/approval/leave-requests", newRequest);
+      const response = await apiService.post(
+        "/api/approval/leave-requests",
+        newRequest
+      );
 
       if (!response || !response.data) {
         throw new Error("Failed to save leave request");
@@ -440,6 +506,125 @@ const Approval = () => {
     } catch (error) {
       console.error("Error submitting leave request:", error);
       toast.error(error.message || "Failed to submit leave request");
+    }
+  };
+
+  const handleTravelSubmit = async (e) => {
+    e.preventDefault();
+
+    // Validation
+    if (!travelFormData.currentLocation) {
+      toast.error("Please enter your current location");
+      return;
+    }
+
+    if (!travelFormData.destination) {
+      toast.error("Please enter destination");
+      return;
+    }
+
+    if (!travelFormData.purpose) {
+      toast.error("Please select purpose");
+      return;
+    }
+
+    if (!travelFormData.fromDate || !travelFormData.toDate) {
+      toast.error("Please select travel dates");
+      return;
+    }
+
+    if (!travelFormData.managerId || !travelFormData.managerEmail) {
+      toast.error(
+        "Manager information is required. Please contact HR to assign a manager."
+      );
+      return;
+    }
+
+    if (!travelFormData.budget || parseFloat(travelFormData.budget) <= 0) {
+      toast.error("Please enter a valid budget");
+      return;
+    }
+
+    const newRequest = {
+      employeeName: currentUserName,
+      employeeId: currentEmployeeId,
+      department: currentDepartment,
+      userId: currentUserId,
+      currentLocation: travelFormData.currentLocation,
+      destination: travelFormData.destination,
+      purpose: travelFormData.purpose,
+      fromDate: travelFormData.fromDate,
+      toDate: travelFormData.toDate,
+      numberOfDays: travelFormData.numberOfDays,
+      numberOfNights: travelFormData.numberOfNights,
+      accommodationRequired: travelFormData.accommodationRequired,
+      budget: parseFloat(travelFormData.budget),
+      description: travelFormData.description,
+      managerId: travelFormData.managerId,
+      managerName: travelFormData.managerName,
+      managerEmail: travelFormData.managerEmail,
+      status: "pending_manager",
+      requestDate: new Date().toISOString().split("T")[0],
+    };
+
+    try {
+      setTravelFormLoading(true);
+
+      // Save to database
+      const response = await apiService.post(
+        "/api/approval/travel-requests",
+        newRequest
+      );
+
+      if (!response || !response.data) {
+        throw new Error("Failed to save travel request");
+      }
+
+      // Send email to manager
+      try {
+        await apiService.post("/api/send-travel-approval-email", {
+          to: travelFormData.managerEmail,
+          employeeName: currentUserName,
+          employeeId: currentEmployeeId,
+          currentLocation: travelFormData.currentLocation,
+          destination: travelFormData.destination,
+          purpose: travelFormData.purpose,
+          fromDate: travelFormData.fromDate,
+          toDate: travelFormData.toDate,
+          numberOfDays: travelFormData.numberOfDays,
+          numberOfNights: travelFormData.numberOfNights,
+          accommodationRequired: travelFormData.accommodationRequired,
+          budget: travelFormData.budget,
+          managerName: travelFormData.managerName,
+          approvalStage: "manager",
+        });
+      } catch (emailError) {
+        console.warn("Email notification failed:", emailError);
+      }
+
+      setShowTravelForm(false);
+      setTravelFormData({
+        currentLocation: "",
+        destination: "",
+        purpose: "",
+        fromDate: "",
+        toDate: "",
+        numberOfDays: 0,
+        numberOfNights: 0,
+        accommodationRequired: false,
+        budget: "",
+        description: "",
+        managerId: leaveAllocation?.managerId || "",
+        managerName: leaveAllocation?.managerName || "",
+        managerEmail: leaveAllocation?.managerEmail || "",
+      });
+      toast.success("Travel request submitted to manager for approval");
+      fetchData();
+    } catch (error) {
+      console.error("Error submitting travel request:", error);
+      toast.error(error.message || "Failed to submit travel request");
+    } finally {
+      setTravelFormLoading(false);
     }
   };
 
@@ -2004,23 +2189,39 @@ const Approval = () => {
               {/* Leave Balance Summary */}
               {leaveAllocation && (
                 <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h4 className="text-sm font-semibold text-blue-900 mb-3">Your Leave Balance ({leaveAllocation.year})</h4>
+                  <h4 className="text-sm font-semibold text-blue-900 mb-3">
+                    Your Leave Balance ({leaveAllocation.year})
+                  </h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                     <div>
                       <p className="text-blue-600">Annual Leave</p>
-                      <p className="font-bold text-blue-900">{leaveAllocation.annualLeave - (leaveAllocation.annualLeaveUsed || 0)} days left</p>
+                      <p className="font-bold text-blue-900">
+                        {leaveAllocation.annualLeave -
+                          (leaveAllocation.annualLeaveUsed || 0)}{" "}
+                        days left
+                      </p>
                     </div>
                     <div>
                       <p className="text-blue-600">Sick Leave</p>
-                      <p className="font-bold text-blue-900">{leaveAllocation.sickLeave - (leaveAllocation.sickLeaveUsed || 0)} days left</p>
+                      <p className="font-bold text-blue-900">
+                        {leaveAllocation.sickLeave -
+                          (leaveAllocation.sickLeaveUsed || 0)}{" "}
+                        days left
+                      </p>
                     </div>
                     <div>
                       <p className="text-blue-600">Personal Leave</p>
-                      <p className="font-bold text-blue-900">{leaveAllocation.personalLeave - (leaveAllocation.personalLeaveUsed || 0)} days left</p>
+                      <p className="font-bold text-blue-900">
+                        {leaveAllocation.personalLeave -
+                          (leaveAllocation.personalLeaveUsed || 0)}{" "}
+                        days left
+                      </p>
                     </div>
                     <div>
                       <p className="text-blue-600">Manager</p>
-                      <p className="font-bold text-blue-900">{leaveAllocation.managerName}</p>
+                      <p className="font-bold text-blue-900">
+                        {leaveAllocation.managerName}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -2034,7 +2235,12 @@ const Approval = () => {
                   <select
                     required
                     value={leaveFormData.leaveType}
-                    onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value })}
+                    onChange={(e) =>
+                      setLeaveFormData({
+                        ...leaveFormData,
+                        leaveType: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer"
                   >
                     <option value="">Select Type</option>
@@ -2053,8 +2259,13 @@ const Approval = () => {
                       type="date"
                       required
                       value={leaveFormData.fromDate}
-                      onChange={(e) => setLeaveFormData({ ...leaveFormData, fromDate: e.target.value })}
-                      min={new Date().toISOString().split('T')[0]}
+                      onChange={(e) =>
+                        setLeaveFormData({
+                          ...leaveFormData,
+                          fromDate: e.target.value,
+                        })
+                      }
+                      min={new Date().toISOString().split("T")[0]}
                       className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
                     />
                   </div>
@@ -2066,8 +2277,16 @@ const Approval = () => {
                       type="date"
                       required
                       value={leaveFormData.toDate}
-                      onChange={(e) => setLeaveFormData({ ...leaveFormData, toDate: e.target.value })}
-                      min={leaveFormData.fromDate || new Date().toISOString().split('T')[0]}
+                      onChange={(e) =>
+                        setLeaveFormData({
+                          ...leaveFormData,
+                          toDate: e.target.value,
+                        })
+                      }
+                      min={
+                        leaveFormData.fromDate ||
+                        new Date().toISOString().split("T")[0]
+                      }
                       className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
                     />
                   </div>
@@ -2075,32 +2294,56 @@ const Approval = () => {
 
                 {/* Live Calculation Display */}
                 {calculatedDays > 0 && remainingLeave && (
-                  <div className={`p-4 rounded-lg border ${remainingLeave.remaining >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                  <div
+                    className={`p-4 rounded-lg border ${
+                      remainingLeave.remaining >= 0
+                        ? "bg-green-50 border-green-200"
+                        : "bg-red-50 border-red-200"
+                    }`}
+                  >
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-semibold text-slate-700">Days Requested:</span>
-                      <span className="text-lg font-bold text-slate-900">{calculatedDays} business days</span>
+                      <span className="text-sm font-semibold text-slate-700">
+                        Days Requested:
+                      </span>
+                      <span className="text-lg font-bold text-slate-900">
+                        {calculatedDays} business days
+                      </span>
                     </div>
                     <div className="text-xs space-y-1 text-slate-600">
                       <div className="flex justify-between">
                         <span>Allocated:</span>
-                        <span className="font-semibold">{remainingLeave.allocated} days</span>
+                        <span className="font-semibold">
+                          {remainingLeave.allocated} days
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Already Used:</span>
-                        <span className="font-semibold">{remainingLeave.used} days</span>
+                        <span className="font-semibold">
+                          {remainingLeave.used} days
+                        </span>
                       </div>
                       <div className="flex justify-between border-t border-slate-300 pt-1 mt-1">
-                        <span className="font-semibold">Remaining After Request:</span>
-                        <span className={`font-bold ${remainingLeave.remaining >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                        <span className="font-semibold">
+                          Remaining After Request:
+                        </span>
+                        <span
+                          className={`font-bold ${
+                            remainingLeave.remaining >= 0
+                              ? "text-green-700"
+                              : "text-red-700"
+                          }`}
+                        >
                           {remainingLeave.remaining} days
                         </span>
                       </div>
                     </div>
-                    {remainingLeave.remaining < 0 && leaveFormData.leaveType !== 'unpaid' && (
-                      <div className="mt-2 text-xs text-red-700 font-medium">
-                        ⚠️ Insufficient leave balance. Consider selecting "Unpaid Leave" instead.
-                      </div>
-                    )}
+                    {remainingLeave.remaining < 0 &&
+                      leaveFormData.leaveType !== "unpaid" && (
+                        <div className="mt-2 text-xs text-red-700 font-medium">
+                          ⚠️ Insufficient leave balance. Consider selecting
+                          "Unpaid Leave" instead.
+                        </div>
+                      )}
                   </div>
                 )}
 
@@ -2115,7 +2358,7 @@ const Approval = () => {
                     className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-700 h-12 px-4 cursor-not-allowed"
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                    {leaveFormData.managerName 
+                    {leaveFormData.managerName
                       ? `Your request will be sent to ${leaveFormData.managerName} for approval, then to HR.`
                       : "Please contact HR to assign a manager before requesting leave."}
                   </p>
@@ -2128,7 +2371,12 @@ const Approval = () => {
                   <textarea
                     placeholder="Enter reason for leave"
                     value={leaveFormData.reason}
-                    onChange={(e) => setLeaveFormData({ ...leaveFormData, reason: e.target.value })}
+                    onChange={(e) =>
+                      setLeaveFormData({
+                        ...leaveFormData,
+                        reason: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 min-h-[100px] px-4 py-3 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
                   ></textarea>
                 </div>
@@ -2147,7 +2395,12 @@ const Approval = () => {
               </button>
               <button
                 onClick={handleLeaveSubmit}
-                disabled={!leaveFormData.managerId || (remainingLeave && remainingLeave.remaining < 0 && leaveFormData.leaveType !== 'unpaid')}
+                disabled={
+                  !leaveFormData.managerId ||
+                  (remainingLeave &&
+                    remainingLeave.remaining < 0 &&
+                    leaveFormData.leaveType !== "unpaid")
+                }
                 className="px-6 py-3 rounded-lg text-sm font-medium bg-primary text-white hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <i className="fa-solid fa-check text-lg"></i>
@@ -2163,7 +2416,9 @@ const Approval = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">
           <div className="flex h-full max-h-[90vh] w-full max-w-2xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">
-              <h3 className="text-slate-900 text-xl font-bold">Travel Request History</h3>
+              <h3 className="text-slate-900 text-xl font-bold">
+                Travel Request History
+              </h3>
               <button
                 onClick={() => setShowTravelHistory(false)}
                 className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
@@ -2180,21 +2435,329 @@ const Approval = () => {
               ) : (
                 <div className="space-y-4">
                   {travelRequests.map((travel) => (
-                    <div key={travel.id} className="border border-slate-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
+                    <div
+                      key={travel.id}
+                      className="border border-slate-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
+                    >
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <h4 className="font-semibold text-slate-900">{travel.destination || 'Travel'}</h4>
-                          <p className="text-xs text-slate-500 mt-1">{travel.purpose || 'Business travel'}</p>
+                          <h4 className="font-semibold text-slate-900">
+                            {travel.destination || "Travel"}
+                          </h4>
+                          <p className="text-xs text-slate-500 mt-1">
+                            {travel.purpose || "Business travel"}
+                          </p>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          travel.status === 'approved'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : travel.status === 'rejected'
-                            ? 'bg-red-100 text-red-700'
-                            : 'bg-amber-100 text-amber-700'
-                        }`}>
-                          {travel.status || 'pending'}
-                        </span>\n                      </div>\n                      <p className="text-sm text-slate-600">{travel.dates || 'No dates'}</p>\n                    </div>\n                  ))}\n                </div>\n              )}\n            </div>\n            <div className="border-t border-slate-200 p-6 bg-slate-50 flex justify-end gap-3">\n              <button\n                onClick={() => setShowTravelHistory(false)}\n                className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all"\n              >\n                Close\n              </button>\n            </div>\n          </div>\n        </div>\n      )}\n\n      {/* Travel Request Form Modal */}\n      {showTravelForm && (\n        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">\n          <div className="flex h-full max-h-[90vh] w-full max-w-2xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">\n            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">\n              <h3 className="text-slate-900 text-xl font-bold">New Travel Request</h3>\n              <button\n                onClick={() => setShowTravelForm(false)}\n                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"\n              >\n                <i className="fa-solid fa-times text-xl"></i>\n              </button>\n            </div>\n            <div className="flex-1 overflow-y-auto p-6">\n              <form className="space-y-5">\n                <div>\n                  <label className="block text-sm font-medium text-slate-700 mb-2">Destination <span className="text-red-500">*</span></label>\n                  <input type="text" placeholder="e.g. New York, USA" className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all" />\n                </div>\n                <div>\n                  <label className="block text-sm font-medium text-slate-700 mb-2">Purpose <span className="text-red-500">*</span></label>\n                  <select className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer">\n                    <option value="">Select Purpose</option>\n                    <option value="conference">Conference</option>\n                    <option value="client-meeting">Client Meeting</option>\n                    <option value="training">Training</option>\n                    <option value="audit">Audit</option>\n                    <option value="other">Other</option>\n                  </select>\n                </div>\n                <div className="grid grid-cols-2 gap-4">\n                  <div>\n                    <label className="block text-sm font-medium text-slate-700 mb-2">From Date <span className="text-red-500">*</span></label>\n                    <input type="date" className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all" />\n                  </div>\n                  <div>\n                    <label className="block text-sm font-medium text-slate-700 mb-2">To Date <span className="text-red-500">*</span></label>\n                    <input type="date" className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all" />\n                  </div>\n                </div>\n                <div>\n                  <label className="block text-sm font-medium text-slate-700 mb-2">Budget <span className="text-red-500">*</span></label>\n                  <input type="number" placeholder="e.g. 5000" className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all" />\n                </div>\n                <div>\n                  <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>\n                  <textarea placeholder="Enter travel details and requirements" className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 min-h-[100px] px-4 py-3 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"></textarea>\n                </div>\n              </form>\n            </div>\n            <div className="border-t border-slate-200 p-6 bg-slate-50 flex gap-3 justify-end">\n              <button\n                onClick={() => setShowTravelForm(false)}\n                className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all"\n              >\n                Cancel\n              </button>\n              <button className="px-6 py-3 rounded-lg text-sm font-medium bg-primary text-white hover:bg-blue-700 transition-all flex items-center gap-2">\n                <i className="fa-solid fa-check text-lg"></i>\n                Submit Request\n              </button>\n            </div>\n          </div>\n        </div>\n      )}\n    </div>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            travel.status === "approved"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : travel.status === "rejected"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {travel.status || "pending"}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600">
+                        {travel.dates || "No dates"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="border-t border-slate-200 p-6 bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowTravelHistory(false)}
+                className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Travel Request Form Modal */}
+      {showTravelForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">
+          <div className="flex h-full max-h-[90vh] w-full max-w-3xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">
+              <h3 className="text-slate-900 text-xl font-bold">
+                New Travel Request
+              </h3>
+              <button
+                onClick={() => setShowTravelForm(false)}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+              >
+                <i className="fa-solid fa-times text-xl"></i>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {/* Manager Info Display */}
+              {leaveAllocation && leaveAllocation.managerName && (
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-2">
+                    Approval Information
+                  </h4>
+                  <div className="text-xs text-blue-700">
+                    <p>
+                      <strong>Manager:</strong> {leaveAllocation.managerName}
+                    </p>
+                    <p className="mt-1">
+                      Your request will be sent to your manager for approval
+                      before ticket booking.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <form className="space-y-5" onSubmit={handleTravelSubmit}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Current Location <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Lagos, Nigeria"
+                      value={travelFormData.currentLocation}
+                      onChange={(e) =>
+                        setTravelFormData({
+                          ...travelFormData,
+                          currentLocation: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Destination <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. New York, USA"
+                      value={travelFormData.destination}
+                      onChange={(e) =>
+                        setTravelFormData({
+                          ...travelFormData,
+                          destination: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Purpose <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={travelFormData.purpose}
+                    onChange={(e) =>
+                      setTravelFormData({
+                        ...travelFormData,
+                        purpose: e.target.value,
+                      })
+                    }
+                    className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer"
+                  >
+                    <option value="">Select Purpose</option>
+                    <option value="conference">Conference</option>
+                    <option value="client-meeting">Client Meeting</option>
+                    <option value="training">Training</option>
+                    <option value="audit">Audit</option>
+                    <option value="site-visit">Site Visit</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      From Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={travelFormData.fromDate}
+                      onChange={(e) =>
+                        setTravelFormData({
+                          ...travelFormData,
+                          fromDate: e.target.value,
+                        })
+                      }
+                      min={new Date().toISOString().split("T")[0]}
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      To Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={travelFormData.toDate}
+                      onChange={(e) =>
+                        setTravelFormData({
+                          ...travelFormData,
+                          toDate: e.target.value,
+                        })
+                      }
+                      min={
+                        travelFormData.fromDate ||
+                        new Date().toISOString().split("T")[0]
+                      }
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Auto-calculated Days and Nights */}
+                {travelFormData.numberOfDays > 0 && (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-slate-600">Number of Days:</span>
+                        <span className="ml-2 font-semibold text-slate-900">
+                          {travelFormData.numberOfDays} days
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-600">
+                          Number of Nights:
+                        </span>
+                        <span className="ml-2 font-semibold text-slate-900">
+                          {travelFormData.numberOfNights} nights
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="flex items-center gap-3 cursor-pointer p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={travelFormData.accommodationRequired}
+                      onChange={(e) =>
+                        setTravelFormData({
+                          ...travelFormData,
+                          accommodationRequired: e.target.checked,
+                        })
+                      }
+                      className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-2 focus:ring-primary/50 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-slate-700">
+                        Accommodation Required
+                      </span>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Check if you need hotel or accommodation arrangements
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Estimated Budget <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="e.g. 5000"
+                    value={travelFormData.budget}
+                    onChange={(e) =>
+                      setTravelFormData({
+                        ...travelFormData,
+                        budget: e.target.value,
+                      })
+                    }
+                    min="0"
+                    step="0.01"
+                    className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Include estimated costs for flights, accommodation, meals,
+                    and other expenses
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Additional Details
+                  </label>
+                  <textarea
+                    placeholder="Enter travel details, special requirements, or additional information"
+                    value={travelFormData.description}
+                    onChange={(e) =>
+                      setTravelFormData({
+                        ...travelFormData,
+                        description: e.target.value,
+                      })
+                    }
+                    rows="4"
+                    className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 px-4 py-3 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                  ></textarea>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Manager Approver <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={travelFormData.managerName || "Not assigned"}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-700 h-12 px-4 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    {travelFormData.managerName
+                      ? `${travelFormData.managerName} will review and approve this request before tickets can be booked.`
+                      : "Please contact HR to assign a manager before requesting travel."}
+                  </p>
+                </div>
+              </form>
+            </div>
+            <div className="border-t border-slate-200 p-6 bg-slate-50 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowTravelForm(false)}
+                disabled={travelFormLoading}
+                className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleTravelSubmit}
+                disabled={!travelFormData.managerId || travelFormLoading}
+                className="px-6 py-3 rounded-lg text-sm font-medium bg-primary text-white hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {travelFormLoading ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-lg"></i>
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-check text-lg"></i>
+                    Submit Request
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

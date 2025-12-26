@@ -3,6 +3,8 @@ import { useUser } from "@clerk/clerk-react";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
+import { NumericFormat } from "react-number-format";
+import { formatCurrency } from "../../services/currency";
 
 const PurchaseOrders = () => {
   const { user } = useUser();
@@ -322,12 +324,7 @@ const PurchaseOrders = () => {
       ? orders
       : orders.filter((order) => order.status === filterStatus);
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
-  };
+  // Use centralized currency formatter
 
   if (loading) {
     return (
@@ -534,21 +531,18 @@ const PurchaseOrders = () => {
                             </select>
                           </td>
                           <td>
-                            <input
-                              type="number"
+                            <NumericFormat
                               className="form-control form-control-sm"
                               value={item.unitPrice}
-                              onChange={(e) =>
-                                handleLineItemChange(
-                                  index,
-                                  "unitPrice",
-                                  e.target.value
-                                )
-                              }
-                              onKeyDown={handleKeyDown}
+                              thousandSeparator
+                              allowNegative={false}
+                              decimalScale={2}
+                              fixedDecimalScale
                               placeholder="0.00"
-                              min="0"
-                              step="0.01"
+                              onValueChange={(values) => {
+                                const { value } = values;
+                                handleLineItemChange(index, "unitPrice", value);
+                              }}
                             />
                           </td>
                           <td>
@@ -834,7 +828,11 @@ const PurchaseOrders = () => {
                           <td>{order.vendor}</td>
                           <td>{order.items}</td>
                           <td>
-                            <strong>{formatCurrency(order.amount)}</strong>
+                            <strong>
+                              {formatCurrency(
+                                order.amount || order.totalAmount || 0
+                              )}
+                            </strong>
                           </td>
                           <td>
                             <span
@@ -1035,8 +1033,8 @@ const PurchaseOrders = () => {
                         <th style={{ width: "25%" }}>Description</th>
                         <th style={{ width: "10%" }}>Quantity</th>
                         <th style={{ width: "10%" }}>Unit</th>
-                        <th style={{ width: "12%" }}>Unit Price (₦)</th>
-                        <th style={{ width: "13%" }}>Total (₦)</th>
+                        <th style={{ width: "12%" }}>Unit Price</th>
+                        <th style={{ width: "13%" }}>Total</th>
                         <th style={{ width: "10%" }}>Action</th>
                       </tr>
                     </thead>
@@ -1109,25 +1107,29 @@ const PurchaseOrders = () => {
                             </select>
                           </td>
                           <td>
-                            <input
-                              type="number"
+                            <NumericFormat
                               className="form-control form-control-sm"
                               value={item.unitPrice}
-                              onChange={(e) =>
+                              thousandSeparator
+                              allowNegative={false}
+                              decimalScale={2}
+                              fixedDecimalScale
+                              placeholder="Price"
+                              onValueChange={(values) => {
+                                const { value } = values;
                                 handleReviewLineItemChange(
                                   index,
                                   "unitPrice",
-                                  e.target.value
-                                )
-                              }
-                              placeholder="Price"
+                                  value
+                                );
+                              }}
                             />
                           </td>
                           <td>
                             <input
                               type="text"
                               className="form-control form-control-sm"
-                              value={item.total?.toLocaleString() || "0"}
+                              value={formatCurrency(item.total || 0)}
                               disabled
                             />
                           </td>
@@ -1150,7 +1152,7 @@ const PurchaseOrders = () => {
                           Grand Total:
                         </td>
                         <td className="fw-bold">
-                          ₦{calculateReviewGrandTotal().toLocaleString()}
+                          {formatCurrency(calculateReviewGrandTotal())}
                         </td>
                         <td></td>
                       </tr>

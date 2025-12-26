@@ -147,35 +147,105 @@ const HRManagement = () => {
   const fetchAll = async () => {
     try {
       setEmployeesLoading(true);
-      const [empRes, reqRes, anaRes, leaveRes, perfRes, trainRes, payRes] =
-        await Promise.all([
-          apiService.get(
-            `/api/hr/employees${
-              search ? `?search=${encodeURIComponent(search)}` : ""
-            }`
-          ),
-          apiService.get("/api/hr/requisitions"),
-          apiService.get(`/api/hr/analytics?range=${range}`),
-          apiService.get("/api/hr/leave-requests"),
-          apiService.get("/api/hr/performance"),
-          apiService.get("/api/hr/training"),
-          apiService.get("/api/hr/payroll-next"),
-        ]);
-      setEmployees(empRes.data || []);
-      setRequisitions(reqRes.data || []);
+      const [
+        empRes,
+        reqRes,
+        anaRes,
+        leaveRes,
+        perfRes,
+        trainRes,
+        payRes,
+        allocRes,
+      ] = await Promise.allSettled([
+        apiService.get(
+          `/api/hr/employees${
+            search ? `?search=${encodeURIComponent(search)}` : ""
+          }`
+        ),
+        apiService.get("/api/hr/requisitions"),
+        apiService.get(`/api/hr/analytics?range=${range}`),
+        apiService.get("/api/hr/leave-requests"),
+        apiService.get("/api/hr/performance"),
+        apiService.get("/api/hr/training"),
+        apiService.get("/api/hr/payroll-next"),
+        apiService.get("/api/hr/leave-allocations"),
+      ]);
+
+      setEmployees(
+        empRes.status === "fulfilled" && empRes.value.data
+          ? Array.isArray(empRes.value.data)
+            ? empRes.value.data
+            : empRes.value.data.data || []
+          : []
+      );
+      setRequisitions(
+        reqRes.status === "fulfilled" && reqRes.value.data
+          ? Array.isArray(reqRes.value.data)
+            ? reqRes.value.data
+            : reqRes.value.data.data || []
+          : []
+      );
       setAnalytics(
-        anaRes.data || { turnoverRates: [], months: [], newHires: 0 }
+        anaRes.status === "fulfilled" && anaRes.value.data
+          ? anaRes.value.data
+          : { turnoverRates: [], months: [], newHires: 0 }
       );
-      setLeaveRequests(leaveRes.data || []);
+      setLeaveRequests(
+        leaveRes.status === "fulfilled" && leaveRes.value.data
+          ? Array.isArray(leaveRes.value.data)
+            ? leaveRes.value.data
+            : leaveRes.value.data.data || []
+          : []
+      );
+      setLeaveAllocations(
+        allocRes.status === "fulfilled" && allocRes.value.data
+          ? Array.isArray(allocRes.value.data)
+            ? allocRes.value.data
+            : allocRes.value.data.data || []
+          : []
+      );
       setPerformance(
-        perfRes.data || {
-          q3CompletedPct: 0,
-          pending: { selfReviews: 0, managerReviews: 0 },
-        }
+        perfRes.status === "fulfilled" && perfRes.value.data
+          ? perfRes.value.data
+          : {
+              q3CompletedPct: 0,
+              pending: { selfReviews: 0, managerReviews: 0 },
+            }
       );
-      setTraining(trainRes.data || []);
-      setPayrollNext(payRes.data || { date: "", runApproved: false });
-    } catch {
+      setTraining(
+        trainRes.status === "fulfilled" && trainRes.value.data
+          ? Array.isArray(trainRes.value.data)
+            ? trainRes.value.data
+            : trainRes.value.data.data || []
+          : []
+      );
+      setPayrollNext(
+        payRes.status === "fulfilled" && payRes.value.data
+          ? payRes.value.data
+          : { date: "", runApproved: false }
+      );
+
+      // Check for failures and log them
+      const failures = [
+        empRes.status === "rejected" ? "Employees" : null,
+        reqRes.status === "rejected" ? "Requisitions" : null,
+        anaRes.status === "rejected" ? "Analytics" : null,
+        leaveRes.status === "rejected" ? "Leave Requests" : null,
+        perfRes.status === "rejected" ? "Performance" : null,
+        trainRes.status === "rejected" ? "Training" : null,
+        payRes.status === "rejected" ? "Payroll" : null,
+        allocRes.status === "rejected" ? "Leave Allocations" : null,
+      ].filter(Boolean);
+
+      if (failures.length > 0) {
+        console.warn("Failed to load:", failures.join(", "));
+        // Only show error if critical endpoints failed
+        if (failures.includes("Employees") || failures.includes("Analytics")) {
+          toast.error(`Failed to load: ${failures.join(", ")}`);
+        }
+      }
+    } catch (error) {
+      console.error("Error in fetchAll:", error);
       toast.error("Failed to load HR dashboard data");
     } finally {
       setEmployeesLoading(false);

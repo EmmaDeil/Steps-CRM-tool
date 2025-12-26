@@ -1,13 +1,25 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import { useUser } from "@clerk/clerk-react";
 import "./App.css";
 import Auth from "./components/auth/Auth";
 import Home from "./home/Home";
+import Profile from "./components/Profile";
 import PrivateRoute from "./components/PrivateRoute";
 import NotFound from "./components/NotFound";
 import { Toaster } from "react-hot-toast";
 import RetirementManagement from "./components/modules/RetirementManagement";
+import Navbar from "./components/Navbar";
 
 function App() {
+  const { user } = useUser();
+
+  const PageWithNavbar = ({ children }) => (
+    <div className="min-h-screen d-flex flex-column">
+      <Navbar user={user} />
+      <div className="flex-grow-1">{children}</div>
+    </div>
+  );
+
   return (
     <>
       <Toaster position="top-right" />
@@ -33,12 +45,26 @@ function App() {
           }
         />
 
-        {/* Retirement Management (protected) */}
+        {/* Profile page inside app chrome (protected) */}
+        <Route
+          path="/profile"
+          element={
+            <PrivateRoute>
+              <PageWithNavbar>
+                <Profile />
+              </PageWithNavbar>
+            </PrivateRoute>
+          }
+        />
+
+        {/* Retirement Management inside app chrome (protected) */}
         <Route
           path="/retirement-management"
           element={
             <PrivateRoute>
-              <RetirementManagement />
+              <PageWithNavbar>
+                <RetirementManagement />
+              </PageWithNavbar>
             </PrivateRoute>
           }
         />

@@ -5,6 +5,8 @@ const AnalyticsModel = require('./models/Analytics');
 const AttendanceModel = require('./models/Attendance');
 const LeaveAllocation = require('./models/LeaveAllocation');
 const LeaveRequest = require('./models/LeaveRequest');
+const TravelRequest = require('./models/TravelRequest');
+const UserModel = require('./models/User');
 
 async function getModules() {
   return ModuleModel.find().sort({ id: 1 }).lean();
@@ -116,6 +118,94 @@ async function updateLeaveRequestStatus(id, status, comments, approverType) {
   return request.save();
 }
 
+// Travel Request functions
+async function getTravelRequests(query = {}) {
+  return TravelRequest.find(query).sort({ createdAt: -1 }).lean();
+}
+
+async function createTravelRequest(data) {
+  return TravelRequest.create(data);
+}
+
+async function updateTravelRequestStatus(id, status, comments, approverType) {
+  const request = await TravelRequest.findById(id);
+  if (!request) throw new Error('Travel request not found');
+  
+  request.status = status;
+  request.updatedAt = new Date();
+  
+  if (approverType === 'manager') {
+    request.managerComments = comments;
+    if (status === 'approved_manager') {
+      request.managerApprovedAt = new Date();
+      request.status = 'pending_booking'; // Move to booking stage
+    } else if (status === 'rejected_manager') {
+      request.managerRejectedAt = new Date();
+      request.status = 'rejected_manager';
+    }
+  }
+  
+  return request.save();
+}
+
+async function updateTravelBooking(id, bookingData) {
+  const request = await TravelRequest.findById(id);
+  if (!request) throw new Error('Travel request not found');
+  
+  request.bookingDetails = {
+    ...request.bookingDetails,
+    ...bookingData,
+    bookedAt: new Date(),
+  };
+  request.status = 'booked';
+  request.updatedAt = new Date();
+  
+  return request.save();
+}
+
+// User Profile functions
+async function getUserByClerkId(clerkId) {
+  return UserModel.findOne({ clerkId }).lean();
+}
+
+async function createOrUpdateUserProfile(data) {
+  const { clerkId, email, fullName } = data;
+  
+  // Check if user exists
+  let user = await UserModel.findOne({ clerkId });
+  
+  if (user) {
+    // Update existing user
+    Object.assign(user, data, { updatedAt: new Date() });
+    return user.save();
+  } else {
+    // Create new user
+    return UserModel.create({
+      clerkId,
+      email,
+      fullName,
+      ...data,
+    });
+  }
+}
+
+async function updateUserProfile(clerkId, data) {
+  const user = await UserModel.findOne({ clerkId });
+  if (!user) throw new Error('User not found');
+  
+  Object.assign(user, data, { updatedAt: new Date() });
+  return user.save();
+}
+
+async function updateUserProfilePicture(clerkId, pictureUrl) {
+  const user = await UserModel.findOne({ clerkId });
+  if (!user) throw new Error('User not found');
+  
+  user.profilePicture = pictureUrl;
+  user.updatedAt = new Date();
+  return user.save();
+}
+
 module.exports = {
   getModules,
   getModuleById,
@@ -133,4 +223,12 @@ module.exports = {
   getLeaveRequests,
   createLeaveRequest,
   updateLeaveRequestStatus,
+  getTravelRequests,
+  createTravelRequest,
+  updateTravelRequestStatus,
+  updateTravelBooking,
+  getUserByClerkId,
+  createOrUpdateUserProfile,
+  updateUserProfile,
+  updateUserProfilePicture,
 };

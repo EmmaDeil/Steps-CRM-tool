@@ -112,6 +112,15 @@ export const apiService = {
     updateUser: (id, data) => api.put(`/api/admin/users/${id}`, data),
     getSystemStats: () => api.get('/api/admin/system/stats'),
   },
+
+  user: {
+    getProfile: (clerkId) => api.get(`/api/user/profile/${clerkId}`),
+    updateProfile: (clerkId, data) => api.put(`/api/user/profile/${clerkId}`, data),
+    uploadProfilePicture: (clerkId, formData) => api.post(`/api/user/profile/${clerkId}/upload-picture`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+    createOrUpdateProfile: (data) => api.post('/api/user/profile', data),
+  },
 };
 
 export default api;

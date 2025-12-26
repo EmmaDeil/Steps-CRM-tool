@@ -1,0 +1,33 @@
+/* Underline-only input styles for Material Requests form */
+.underline-input,
+.underline-select,
+.underline-textarea {
+  border: none !important;
+  border-bottom: 1px solid #dee2e6 !important;
+  border-radius: 0 !important;
+  background-color: transparent;
+  box-shadow: none !important;
+}
+
+.underline-input:focus,
+.underline-select:focus,
+.underline-textarea:focus {
+  border-bottom-color: #0d6efd !important;
+  box-shadow: none !important;
+  outline: 0;
+}
+
+/* Small size tweaks to match existing sm controls */
+.underline-input.form-control-sm,
+.underline-select.form-select-sm {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+/* Disabled fields retain neutral underline */
+.underline-input:disabled,
+.underline-select:disabled,
+.underline-textarea:disabled {
+  border-bottom-color: #e9ecef !important;
+  background-color: transparent !important;
+}

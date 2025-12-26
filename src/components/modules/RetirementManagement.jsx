@@ -4,6 +4,7 @@ import { useAppContext } from "../../context/useAppContext";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
+import { formatCurrency } from "../../services/currency";
 
 const RetirementManagement = () => {
   const { user } = useUser();
@@ -52,9 +53,9 @@ const RetirementManagement = () => {
         // Auto-fill with the previous month's closing balance (newOpeningBalance)
         setPreviousClosingBalance(prevMonthData.newOpeningBalance || 0);
         toast.success(
-          `Previous closing balance auto-filled: $${(
+          `Previous closing balance auto-filled: ${formatCurrency(
             prevMonthData.newOpeningBalance || 0
-          ).toLocaleString()}`
+          )}`
         );
       } else {
         // If no previous month data, clear the field for manual entry
@@ -110,11 +111,7 @@ const RetirementManagement = () => {
     const d = new Date(Number(y), Number(m) - 1, 1);
     return d.toLocaleString("en-US", { month: "long", year: "numeric" });
   };
-  const formatCurrency = (amount) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
+  // Use centralized currency formatter
 
   const handleSubmitBreakdown = async () => {
     if (lineItems.length === 0)

@@ -5,6 +5,9 @@ import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { useDepartments } from "../../context/useDepartments";
+import "../../assets/components/MaterialRequests.css";
+import { NumericFormat } from "react-number-format";
+import { formatCurrency, parseCurrencyString } from "../../services/currency";
 
 const MaterialRequests = () => {
   const { user } = useUser();
@@ -419,7 +422,7 @@ const MaterialRequests = () => {
                 data-bs-toggle="dropdown"
                 aria-expanded="false"
               >
-                <i className="bi bi-funnel me-2"></i>
+                <i className="fa-solid fa-filter me-2"></i>
                 Filter:{" "}
                 {filterStatus === "all"
                   ? "All"
@@ -477,7 +480,7 @@ const MaterialRequests = () => {
               className="btn btn-primary"
               onClick={() => setShowForm(true)}
             >
-              <i className="bi bi-plus-circle me-2"></i>
+              <i className="fa-solid fa-plus-circle me-2"></i>
               New Request
             </button>
           )}
@@ -486,10 +489,13 @@ const MaterialRequests = () => {
 
       {/* Request Form */}
       {showForm && (
-        <div className="card mb-4">
+        <div
+          className="card mb-4 mx-auto"
+          style={{ maxWidth: "1000px", width: "100%" }}
+        >
           <div className="card-header">
             <h5 className="mb-0">
-              <i className="bi bi-file-earmark-text me-2"></i>
+              <i className="fa-solid fa-file-lines me-2"></i>
               New Material Request
             </h5>
           </div>
@@ -518,7 +524,7 @@ const MaterialRequests = () => {
                     Approver <span className="text-danger">*</span>
                   </label>
                   <select
-                    className="form-select"
+                    className="form-select underline-select"
                     name="approver"
                     value={formData.approver}
                     onChange={handleFormChange}
@@ -561,26 +567,26 @@ const MaterialRequests = () => {
                     Request Type <span className="text-danger">*</span>
                   </label>
                   <select
-                    className="form-select"
+                    className="form-select underline-select"
                     name="requestType"
                     value={formData.requestType}
                     onChange={handleFormChange}
                     required
                   >
                     <option value="">Select type</option>
-                    <option value="urgent">Urgent</option>
-                    <option value="normal">Normal</option>
+                    <option value="urgent">RFQ</option>
+                    <option value="normal">Purchase OR</option>
                     <option value="low-priority">Low Priority</option>
                     <option value="bulk-order">Bulk Order</option>
                     <option value="replacement">Replacement</option>
                   </select>
                 </div>
 
-                {/* Third Row: Department */}
-                <div className="col-md-12 mb-3">
+                {/* Third Row: Department (narrower width) */}
+                <div className="col-md-6 col-lg-4 mb-3">
                   <label className="form-label">Department</label>
                   <select
-                    className="form-select"
+                    className="form-select underline-select"
                     name="department"
                     value={formData.department}
                     onChange={handleFormChange}
@@ -601,10 +607,6 @@ const MaterialRequests = () => {
 
               {/* Line Items Table */}
               <div className="mb-4">
-                <h6 className="mb-3">
-                  <i className="bi bi-list-ul me-2"></i>
-                  Line Items
-                </h6>
                 <div
                   className="table-responsive"
                   style={{ border: "1px solid #dee2e6", borderRadius: "4px" }}
@@ -620,15 +622,15 @@ const MaterialRequests = () => {
                       }}
                     >
                       <tr>
-                        {/* <th
+                        <th
                           style={{
-                            width: "5%",
+                            width: "2%",
                             padding: "12px 8px",
                             fontWeight: 600,
                           }}
                         >
-                          #
-                        </th> */}
+                          S/N
+                        </th>
                         <th
                           style={{
                             width: "23%",
@@ -636,7 +638,7 @@ const MaterialRequests = () => {
                             fontWeight: 600,
                           }}
                         >
-                          Item Name *
+                          Name *
                         </th>
                         <th
                           style={{
@@ -649,7 +651,7 @@ const MaterialRequests = () => {
                         </th>
                         <th
                           style={{
-                            width: "10%",
+                            width: "8%",
                             padding: "12px 8px",
                             fontWeight: 600,
                             textAlign: "center",
@@ -659,7 +661,7 @@ const MaterialRequests = () => {
                         </th>
                         <th
                           style={{
-                            width: "13%",
+                            width: "12%",
                             padding: "12px 8px",
                             fontWeight: 600,
                           }}
@@ -668,7 +670,7 @@ const MaterialRequests = () => {
                         </th>
                         <th
                           style={{
-                            width: "12%",
+                            width: "15%",
                             padding: "12px 8px",
                             fontWeight: 600,
                             textAlign: "right",
@@ -688,7 +690,7 @@ const MaterialRequests = () => {
                         </th>
                         <th
                           style={{
-                            width: "7%",
+                            width: "5%",
                             padding: "12px 8px",
                             fontWeight: 600,
                             textAlign: "center",
@@ -704,7 +706,7 @@ const MaterialRequests = () => {
                           key={index}
                           style={{ borderBottom: "1px solid #dee2e6" }}
                         >
-                          {/* <td
+                          <td
                             style={{
                               padding: "10px 8px",
                               verticalAlign: "middle",
@@ -714,10 +716,10 @@ const MaterialRequests = () => {
                             }}
                           >
                             {index + 1}
-                          </td> */}
+                          </td>
                           <td style={{ padding: "10px 8px" }}>
                             <select
-                              className="form-select form-select-sm"
+                              className="form-select form-select-sm underline-select"
                               value={item.itemName}
                               onChange={(e) =>
                                 handleLineItemChange(
@@ -741,7 +743,7 @@ const MaterialRequests = () => {
                           <td style={{ padding: "10px 8px" }}>
                             <input
                               type="text"
-                              className="form-control form-control-sm"
+                              className="form-control form-control-sm underline-input"
                               value={item.description}
                               onChange={(e) =>
                                 handleLineItemChange(
@@ -758,7 +760,7 @@ const MaterialRequests = () => {
                           <td style={{ padding: "10px 8px" }}>
                             <input
                               type="number"
-                              className="form-control form-control-sm text-center"
+                              className="form-control form-control-sm text-center underline-input"
                               value={item.quantity}
                               onChange={(e) =>
                                 handleLineItemChange(
@@ -776,7 +778,7 @@ const MaterialRequests = () => {
                           </td>
                           <td style={{ padding: "10px 8px" }}>
                             <select
-                              className="form-select form-select-sm"
+                              className="form-select form-select-sm underline-select"
                               value={item.quantityType}
                               onChange={(e) =>
                                 handleLineItemChange(
@@ -799,28 +801,18 @@ const MaterialRequests = () => {
                           </td>
                           <td style={{ padding: "10px 8px" }}>
                             <div className="input-group input-group-sm">
-                              <span
-                                className="input-group-text"
-                                style={{ fontSize: "0.85rem" }}
-                              >
-                                $
-                              </span>
-                              <input
-                                type="number"
-                                className="form-control form-control-sm text-end"
+                              <NumericFormat
+                                className="form-control form-control-sm text-end underline-input"
                                 value={item.amount}
-                                onChange={(e) =>
-                                  handleLineItemChange(
-                                    index,
-                                    "amount",
-                                    e.target.value
-                                  )
-                                }
-                                onKeyDown={(e) => handleKeyDown(e, index)}
+                                thousandSeparator
+                                allowNegative={false}
+                                decimalScale={2}
+                                fixedDecimalScale
                                 placeholder="0.00"
-                                step="0.01"
-                                min="0"
-                                style={{ fontSize: "0.9rem" }}
+                                onValueChange={(values) => {
+                                  const { value } = values; // numeric string without separators
+                                  handleLineItemChange(index, "amount", value);
+                                }}
                               />
                             </div>
                           </td>
@@ -833,11 +825,10 @@ const MaterialRequests = () => {
                               backgroundColor: "#f8f9fa",
                             }}
                           >
-                            $
-                            {(
+                            {formatCurrency(
                               (parseFloat(item.quantity) || 0) *
-                              (parseFloat(item.amount) || 0)
-                            ).toFixed(2)}
+                                (parseFloat(item.amount) || 0)
+                            )}
                           </td>
                           <td
                             style={{ padding: "10px 8px", textAlign: "center" }}
@@ -850,7 +841,7 @@ const MaterialRequests = () => {
                                 title="Remove line"
                                 style={{ padding: "4px 8px" }}
                               >
-                                <i className="bi bi-trash"></i>
+                                <i className="fa-solid fa-trash"></i>
                               </button>
                             )}
                           </td>
@@ -878,74 +869,84 @@ const MaterialRequests = () => {
                             color: "#0d6efd",
                           }}
                         >
-                          $
-                          {lineItems
-                            .reduce(
+                          {formatCurrency(
+                            lineItems.reduce(
                               (sum, item) =>
                                 sum +
                                 (parseFloat(item.quantity) || 0) *
                                   (parseFloat(item.amount) || 0),
                               0
                             )
-                            .toFixed(2)}
+                          )}
                         </td>
                         <td></td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
-                <div className="mt-2">
-                  <small className="text-muted">
-                    <i className="bi bi-info-circle me-1"></i>
-                    Press <kbd>Enter</kbd> in any field to add a new line item
-                  </small>
-                </div>
               </div>
 
               {/* Message & Attachments Section */}
               <div className="mb-4">
                 <h6 className="mb-3">
-                  <i className="bi bi-chat-left-text me-2"></i>
-                  Message & Attachments
+                  <i className="fa-solid fa-comment-dots me-2"></i>
+                  Comment
                 </h6>
                 <div
                   className="border rounded p-3"
-                  style={{ backgroundColor: "#f8f9fa", position: "relative" }}
+                  style={{ backgroundColor: "#f8f9fa" }}
                 >
-                  <div className="position-relative">
+                  <div
+                    className="position-relative"
+                    style={{ display: "inline-block", width: "100%" }}
+                  >
                     <textarea
-                      className="form-control"
+                      className="form-control underline-textarea"
                       rows="4"
                       placeholder="Add a message or note... Type @ to mention someone"
                       value={message}
                       onChange={handleMessageChange}
-                      style={{ paddingRight: "50px" }}
+                      style={{ paddingRight: "50px", paddingBottom: "40px" }}
                     />
-                    <label
-                      htmlFor="attachmentInput"
-                      className="position-absolute"
+                    {/* Attachment Icon Inside Textarea */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        document.getElementById("attachmentInput").click()
+                      }
+                      className="btn btn-link position-absolute"
                       style={{
-                        top: "10px",
+                        bottom: "10px",
                         right: "10px",
+                        padding: "0",
+                        color: "#0d6efd",
+                        textDecoration: "none",
                         cursor: "pointer",
-                        padding: "5px",
-                        backgroundColor: "#ffffff",
-                        borderRadius: "4px",
-                        border: "1px solid #dee2e6",
+                        zIndex: "10",
+                        fontSize: "1.25rem",
+                        lineHeight: "1",
                       }}
                       title="Attach files"
                     >
-                      <i className="bi bi-paperclip fs-5 text-primary"></i>
-                    </label>
+                      <i className="fa-solid fa-paperclip"></i>
+                    </button>
                     <input
                       type="file"
                       id="attachmentInput"
                       multiple
                       onChange={handleFileChange}
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.txt,.csv,.zip"
                       style={{ display: "none" }}
                     />
                   </div>
+
+                  {/* File Count Info */}
+                  {attachments.length > 0 && (
+                    <small className="text-muted d-block mt-2">
+                      <i className="fa-solid fa-file me-1"></i>
+                      {attachments.length} file(s) attached
+                    </small>
+                  )}
 
                   {/* @Mention Dropdown */}
                   {showMentionDropdown && filteredUsers.length > 0 && (
@@ -976,7 +977,10 @@ const MaterialRequests = () => {
                   {/* Attached Files List */}
                   {attachments.length > 0 && (
                     <div className="mt-3">
-                      <strong className="d-block mb-2">Attached Files:</strong>
+                      <strong className="d-block mb-2">
+                        <i className="fa-solid fa-file me-1"></i>
+                        Attached Files ({attachments.length}):
+                      </strong>
                       <ul className="list-group">
                         {attachments.map((file, index) => (
                           <li
@@ -984,7 +988,7 @@ const MaterialRequests = () => {
                             className="list-group-item d-flex justify-content-between align-items-center"
                           >
                             <div>
-                              <i className="bi bi-file-earmark me-2"></i>
+                              <i className="fa-solid fa-file me-2"></i>
                               {file.name}
                               <small className="text-muted ms-2">
                                 ({(file.size / 1024).toFixed(2)} KB)
@@ -995,7 +999,7 @@ const MaterialRequests = () => {
                               className="btn btn-sm btn-outline-danger"
                               onClick={() => removeAttachment(index)}
                             >
-                              <i className="bi bi-x-lg"></i>
+                              <i className="fa-solid fa-xmark"></i>
                             </button>
                           </li>
                         ))}
@@ -1007,7 +1011,7 @@ const MaterialRequests = () => {
 
               <div className="col-12">
                 <button type="submit" className="btn btn-primary me-2">
-                  <i className="bi bi-check-circle me-2"></i>
+                  <i className="fa-solid fa-circle-check me-2"></i>
                   Submit Request
                 </button>
                 <button
@@ -1124,7 +1128,7 @@ const MaterialRequests = () => {
             <div className="modal-content">
               <div className="modal-header bg-primary text-white">
                 <h5 className="modal-title">
-                  <i className="bi bi-clipboard-check me-2"></i>
+                  <i className="fa-solid fa-clipboard-check me-2"></i>
                   Approve Material Request
                 </h5>
                 <button
@@ -1179,7 +1183,7 @@ const MaterialRequests = () => {
                 <hr />
 
                 <h6 className="mb-3">
-                  <i className="bi bi-list-ul me-2"></i>Line Items
+                  <i className="fa-solid fa-list-ul me-2"></i>Line Items
                 </h6>
                 <div className="table-responsive mb-4">
                   <table className="table table-sm table-bordered">
@@ -1198,7 +1202,7 @@ const MaterialRequests = () => {
                           <td>{item.itemName}</td>
                           <td>{item.quantity}</td>
                           <td>{item.quantityType}</td>
-                          <td>₦{item.amount?.toLocaleString() || 0}</td>
+                          <td>{formatCurrency(item.amount)}</td>
                           <td>{item.description || "-"}</td>
                         </tr>
                       ))}
@@ -1222,7 +1226,7 @@ const MaterialRequests = () => {
                       <div className="mt-2">
                         {selectedRequest.attachments.map((file, idx) => (
                           <span key={idx} className="badge bg-secondary me-2">
-                            <i className="bi bi-file-earmark me-1"></i>
+                            <i className="fa-solid fa-file me-1"></i>
                             {file}
                           </span>
                         ))}
@@ -1233,7 +1237,7 @@ const MaterialRequests = () => {
                 <hr />
 
                 <h6 className="mb-3 text-success">
-                  <i className="bi bi-check-circle me-2"></i>
+                  <i className="fa-solid fa-circle-check me-2"></i>
                   Approval Action
                 </h6>
 
@@ -1285,7 +1289,7 @@ const MaterialRequests = () => {
                     navigate("/dashboard/material-requests");
                   }}
                 >
-                  <i className="bi bi-x-circle me-2"></i>
+                  <i className="fa-solid fa-circle-xmark me-2"></i>
                   Cancel
                 </button>
                 <button
@@ -1294,7 +1298,7 @@ const MaterialRequests = () => {
                   onClick={handleRejectRequest}
                   disabled={!rejectionReason.trim()}
                 >
-                  <i className="bi bi-x-lg me-2"></i>
+                  <i className="fa-solid fa-xmark me-2"></i>
                   Reject Request
                 </button>
                 <button
@@ -1303,7 +1307,7 @@ const MaterialRequests = () => {
                   onClick={handleApproveRequest}
                   disabled={!selectedVendor}
                 >
-                  <i className="bi bi-check-lg me-2"></i>
+                  <i className="fa-solid fa-check me-2"></i>
                   Approve & Create PO
                 </button>
               </div>

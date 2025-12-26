@@ -5,6 +5,7 @@ import Skeleton from "../Skeleton";
 import EmptyState from "../EmptyState";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
+import { formatCurrency } from "../../services/currency";
 
 const Finance = () => {
   const [pendingPayments, setPendingPayments] = useState([]);
@@ -93,7 +94,7 @@ const Finance = () => {
                     <th>Vendor</th>
                     <th>Requester</th>
                     <th>Order Date</th>
-                    <th>Amount (₦)</th>
+                    <th>Amount</th>
                     <th>Review Notes</th>
                     <th>Action</th>
                   </tr>
@@ -117,7 +118,7 @@ const Finance = () => {
                             : "N/A"}
                         </td>
                         <td className="fw-bold text-success">
-                          ₦{po.totalAmount?.toLocaleString() || 0}
+                          {formatCurrency(po.totalAmount || 0)}
                         </td>
                         <td>
                           {po.reviewNotes ? (
@@ -164,27 +165,27 @@ const Finance = () => {
           <div className="col-md-3">
             <div className="card p-3">
               <h5 className="mb-2">Total Income</h5>
-              <p className="h3 mb-0 text-success">$325,450</p>
+              <p className="h3 mb-0 text-success">{formatCurrency(325450)}</p>
               <small className="text-success">+15% this month</small>
             </div>
           </div>
           <div className="col-md-3">
             <div className="card p-3">
               <h5 className="mb-2">Total Expenses</h5>
-              <p className="h3 mb-0 text-danger">$198,320</p>
+              <p className="h3 mb-0 text-danger">{formatCurrency(198320)}</p>
               <small className="text-danger">+8% this month</small>
             </div>
           </div>
           <div className="col-md-3">
             <div className="card p-3">
               <h5 className="mb-2">Accounts Payable</h5>
-              <p className="h3 mb-0 text-warning">$45,670</p>
+              <p className="h3 mb-0 text-warning">{formatCurrency(45670)}</p>
             </div>
           </div>
           <div className="col-md-3">
             <div className="card p-3">
               <h5 className="mb-2">Accounts Receivable</h5>
-              <p className="h3 mb-0 text-info">$78,920</p>
+              <p className="h3 mb-0 text-info">{formatCurrency(78920)}</p>
             </div>
           </div>
         </div>
@@ -200,7 +201,9 @@ const Finance = () => {
                 <strong>Payment Received - Client ABC</strong>
                 <div className="small text-secondary">Invoice #12345</div>
               </div>
-              <span className="text-success fw-bold">+$12,500</span>
+              <span className="text-success fw-bold">
+                +{formatCurrency(12500)}
+              </span>
             </div>
           </div>
           <div className="list-group-item">
@@ -209,7 +212,9 @@ const Finance = () => {
                 <strong>Vendor Payment - Office Supplies</strong>
                 <div className="small text-secondary">Invoice #67890</div>
               </div>
-              <span className="text-danger fw-bold">-$3,450</span>
+              <span className="text-danger fw-bold">
+                -{formatCurrency(3450)}
+              </span>
             </div>
           </div>
           <div className="list-group-item">
@@ -218,7 +223,9 @@ const Finance = () => {
                 <strong>Salary Payment - Batch Processing</strong>
                 <div className="small text-secondary">Monthly Payroll</div>
               </div>
-              <span className="text-danger fw-bold">-$85,000</span>
+              <span className="text-danger fw-bold">
+                -{formatCurrency(85000)}
+              </span>
             </div>
           </div>
         </div>
@@ -229,21 +236,21 @@ const Finance = () => {
         <div className="col-md-4">
           <div className="card p-3">
             <h5 className="mb-2">Total Revenue</h5>
-            <p className="h3 mb-0 text-success">$245,890</p>
+            <p className="h3 mb-0 text-success">{formatCurrency(245890)}</p>
             <small className="text-success">+12% from last month</small>
           </div>
         </div>
         <div className="col-md-4">
           <div className="card p-3">
             <h5 className="mb-2">Total Expenses</h5>
-            <p className="h3 mb-0 text-danger">$178,420</p>
+            <p className="h3 mb-0 text-danger">{formatCurrency(178420)}</p>
             <small className="text-danger">+5% from last month</small>
           </div>
         </div>
         <div className="col-md-4">
           <div className="card p-3">
             <h5 className="mb-2">Net Profit</h5>
-            <p className="h3 mb-0 text-primary">$67,470</p>
+            <p className="h3 mb-0 text-primary">{formatCurrency(67470)}</p>
             <small className="text-success">+23% from last month</small>
           </div>
         </div>

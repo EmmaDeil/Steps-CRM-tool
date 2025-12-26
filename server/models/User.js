@@ -60,6 +60,26 @@ const userSchema = new mongoose.Schema({
     ref: 'User',
   },
   invitedAt: Date,
+  profilePicture: {
+    type: String,
+    default: null,
+  },
+  phoneNumber: {
+    type: String,
+    default: null,
+  },
+  department: {
+    type: String,
+    default: null,
+  },
+  jobTitle: {
+    type: String,
+    default: null,
+  },
+  bio: {
+    type: String,
+    default: null,
+  },
 }, {
   timestamps: true,
 });
