@@ -1,8 +1,15 @@
 import React from "react";
+import Breadcrumb from "../Breadcrumb";
 
 const HRManagement = () => {
   return (
-    <div className="p-4">
+    <div className="w-full p-3">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "HR Management", icon: "fa-user-tie" },
+        ]}
+      />
       <h2 className="mb-3">HR Management</h2>
       <p className="text-secondary mb-4">
         Manage employee records, attendance, and human resources.

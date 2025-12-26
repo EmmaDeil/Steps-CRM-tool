@@ -3,6 +3,7 @@ import { useUser } from "@clerk/clerk-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
+import Breadcrumb from "../Breadcrumb";
 
 const MaterialRequests = () => {
   const { user } = useUser();
@@ -101,11 +102,12 @@ const MaterialRequests = () => {
     try {
       const response = await apiService.get("/api/vendors");
       setVendors(response.data || []);
-    } catch (err) {
+    } catch {
+      // Silently fail - vendors are optional
     }
   };
 
-  const fetchRequestForApproval = async (requestId) => {
+  const fetchRequestForApproval = React.useCallback(async (requestId) => {
     try {
       const response = await apiService.get(`/api/material-requests`);
       const request = response.data.find((r) => r._id === requestId);
@@ -116,10 +118,10 @@ const MaterialRequests = () => {
       } else {
         toast.error("Request not found");
       }
-    } catch (err) {
+    } catch {
       toast.error("Failed to load request");
     }
-  };
+  }, []);
 
   // Check for approval action from email link
   useEffect(() => {
@@ -152,7 +154,7 @@ const MaterialRequests = () => {
       setSelectedVendor("");
       navigate("/dashboard/material-requests");
       fetchRequests();
-    } catch (err) {
+    } catch {
       toast.error("Failed to approve request");
     }
   };
@@ -176,7 +178,7 @@ const MaterialRequests = () => {
       setRejectionReason("");
       navigate("/dashboard/material-requests");
       fetchRequests();
-    } catch (err) {
+    } catch {
       toast.error("Failed to reject request");
     }
   };
@@ -195,7 +197,8 @@ const MaterialRequests = () => {
         if (parsed.lineItems) setLineItems(parsed.lineItems);
         if (parsed.message) setMessage(parsed.message);
         // Note: attachments (File objects) cannot be stored in localStorage
-      } catch (err) {
+      } catch {
+        // Ignore parsing errors for localStorage
       }
     }
   }, []);
@@ -225,7 +228,7 @@ const MaterialRequests = () => {
       const response = await apiService.get("/api/material-requests");
       setRequests(response.data || []);
       setError(null);
-    } catch (err) {
+    } catch {
       setError("Failed to load material requests");
     } finally {
       setLoading(false);
@@ -383,7 +386,7 @@ const MaterialRequests = () => {
       localStorage.removeItem("materialRequestsState");
 
       fetchRequests();
-    } catch (err) {
+    } catch {
       toast.error("Failed to submit request");
     }
   };
@@ -405,7 +408,13 @@ const MaterialRequests = () => {
   }
 
   return (
-    <div className="container-fluid p-4">
+    <div className="container-fluid">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "Material Requests", icon: "fa-clipboard-list" },
+        ]}
+      />
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2></h2>
         <div className="d-flex gap-2">

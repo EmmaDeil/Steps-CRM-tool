@@ -1,8 +1,15 @@
 import React from "react";
+import Breadcrumb from "../Breadcrumb";
 
 const Inventory = () => {
   return (
-    <div className="p-4">
+    <div className="w-full p-3">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "Inventory", icon: "fa-boxes" },
+        ]}
+      />
       <h2 className="mb-3">Inventory Management</h2>
       <p className="text-secondary mb-4">
         Track and manage your organization's inventory and stock levels.

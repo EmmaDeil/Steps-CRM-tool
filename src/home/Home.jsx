@@ -5,6 +5,7 @@ import { useAppContext } from "../context/useAppContext";
 import Navbar from "../components/Navbar";
 import Breadcrumb from "../components/Breadcrumb";
 import { apiService } from "../services/api";
+import Footer from "../components/Footer";
 
 // Dynamically load module components with fallback mapping for renamed modules
 const loadModuleComponent = (componentName) => {
@@ -13,6 +14,11 @@ const loadModuleComponent = (componentName) => {
   // Fallback mapping for renamed/legacy component names
   const componentMapping = {
     FinanceReports: "Finance",
+    Admin: "Admin",
+    "Admin Controls": "Admin",
+    AdminControls: "Admin",
+    AdminControl: "Admin",
+    SignatureManagement: "DocSign",
   };
 
   const finalComponentName = componentMapping[componentName] || componentName;
@@ -40,8 +46,9 @@ const iconMap = {
   Attendance: { icon: "fa-id-badge", color: "emerald" },
   "HR Management": { icon: "fa-people-group", color: "rose" },
   "Security Logs": { icon: "fa-lock", color: "red" },
+  DocSign: { icon: "fa-pen-fancy", color: "pink" },
   "Signature Management": { icon: "fa-pen-fancy", color: "pink" },
-  "Admin Controls": { icon: "fa-sliders", color: "gray" },
+  Admin: { icon: "fa-sliders", color: "gray" },
 };
 
 export default function Home() {
@@ -105,14 +112,14 @@ export default function Home() {
           <Navbar user={user} />
           <div className="flex-1 flex items-center justify-center px-4 py-10">
             <div className="text-center">
-              <h3 className="text-xl font-bold mb-2 text-[#111418] dark:text-white">
+              <h3 className="text-xl font-bold mb-2 text-[#111418]">
                 Module Not Found
               </h3>
-              <p className="text-sm text-[#617589] dark:text-gray-400 mb-6">
+              <p className="text-sm text-[#617589] mb-6">
                 No module with id {id}
               </p>
               <button
-                className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 hover:bg-blue-50"
                 onClick={() => navigate("/home")}
               >
                 <i className="fa-solid fa-home text-base"></i>
@@ -130,14 +137,14 @@ export default function Home() {
         <div className="min-h-screen flex flex-col">
           <Navbar user={user} />
           <div className="flex-1 flex items-center justify-center px-4 py-10">
-            <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-200 px-6 py-4 text-center">
+            <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 px-6 py-4 text-center">
               <h3 className="text-lg font-bold mb-2">🔒 Access Denied</h3>
-              <p className="text-sm mb-3 text-[#617589] dark:text-gray-400">
+              <p className="text-sm mb-3 text-[#617589]">
                 You do not have permission to access the{" "}
                 <strong>{found.name}</strong> module.
               </p>
               <button
-                className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 hover:bg-blue-50"
                 onClick={() => navigate("/home")}
               >
                 <i className="fa-solid fa-home text-base"></i>
@@ -154,15 +161,6 @@ export default function Home() {
       return (
         <div className="min-h-screen flex flex-col">
           <Navbar user={user} />
-          <Breadcrumb
-            items={[
-              { label: "Home", href: "/home", icon: "fa-house" },
-              {
-                label: found.name,
-                icon: iconMap[found.name]?.icon || "fa-cube",
-              },
-            ]}
-          />
           <div className="flex-1">
             <Suspense
               fallback={
@@ -181,14 +179,14 @@ export default function Home() {
       <div className="min-h-screen flex flex-col">
         <Navbar user={user} />
         <div className="flex-1 flex items-center justify-center px-4 py-10">
-          <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-200 px-6 py-4 text-center">
+          <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 px-6 py-4 text-center">
             <h3 className="text-lg font-bold mb-2">⚠️ Module Not Available</h3>
-            <p className="text-sm mb-3 text-[#617589] dark:text-gray-400">
+            <p className="text-sm mb-3 text-[#617589]">
               The <strong>{found.name}</strong> module is currently under
               development.
             </p>
             <button
-              className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+              className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 hover:bg-blue-50"
               onClick={() => navigate("/home")}
             >
               <i className="fa-solid fa-home text-base"></i>
@@ -202,7 +200,7 @@ export default function Home() {
 
   // ===== HOME LIST VIEW =====
   return (
-    <div className="min-h-screen flex flex-col bg-background-light text-[#111418] dark:bg-background-dark dark:text-white font-display">
+    <div className="min-h-screen flex flex-col bg-background-light text-[#111418] font-display">
       {/* Navbar */}
       <Navbar user={user} />
 
@@ -216,17 +214,17 @@ export default function Home() {
             </div>
             <input
               aria-label="Search"
-              className="block w-full pl-12 pr-4 py-4 rounded-full border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] text-[#111418] dark:text-white placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-primary shadow-sm hover:shadow-md transition-all duration-200"
+              className="block w-full pl-12 pr-4 py-4 rounded-full border border-[#dbe0e6] bg-white text-[#111418] placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-primary shadow-sm hover:shadow-md transition-all duration-200"
               placeholder="Search modules, documents, or tasks..."
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <h1 className="text-3xl md:text-5xl font-black text-[#111418] dark:text-white mb-4 tracking-tight">
+          <h1 className="text-3xl md:text-5xl font-black text-[#111418] mb-4 tracking-tight">
             Welcome back{user?.firstName ? `, ${user.firstName}` : ""}
           </h1>
-          <p className="text-lg text-[#617589] dark:text-gray-400">
+          <p className="text-lg text-[#617589]">
             Select a module to launch your workspace.
           </p>
         </div>
@@ -237,11 +235,11 @@ export default function Home() {
             Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
-                className="relative flex flex-col items-center p-8 bg-white dark:bg-[#1e293b] rounded-2xl border border-[#dbe0e6] dark:border-gray-700 shadow-sm h-[260px]"
+                className="relative flex flex-col items-center p-8 bg-white rounded-2xl border border-[#dbe0e6] shadow-sm h-[260px]"
               >
-                <div className="size-24 rounded-2xl bg-gray-100 dark:bg-gray-800 mb-6" />
-                <div className="h-4 w-40 bg-gray-200 dark:bg-gray-700 rounded-full mb-2" />
-                <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                <div className="size-24 rounded-2xl bg-gray-100 mb-6" />
+                <div className="h-4 w-40 bg-gray-200 rounded-full mb-2" />
+                <div className="h-3 w-24 bg-gray-200 rounded-full" />
               </div>
             ))}
 
@@ -267,23 +265,23 @@ export default function Home() {
               };
               const colorClass =
                 {
-                  blue: "from-blue-50 to-blue-100 text-blue-600 border-blue-100 dark:from-blue-900/40 dark:to-blue-800/20 dark:border-blue-800/30",
+                  blue: "from-blue-50 to-blue-100 text-blue-600 border-blue-100",
                   orange:
-                    "from-orange-50 to-orange-100 text-orange-600 border-orange-100 dark:from-orange-900/40 dark:to-orange-800/20 dark:border-orange-800/30",
+                    "from-orange-50 to-orange-100 text-orange-600 border-orange-100",
                   green:
-                    "from-green-50 to-green-100 text-green-600 border-green-100 dark:from-green-900/40 dark:to-green-800/20 dark:border-green-800/30",
+                    "from-green-50 to-green-100 text-green-600 border-green-100",
                   purple:
-                    "from-purple-50 to-purple-100 text-purple-600 border-purple-100 dark:from-purple-900/40 dark:to-purple-800/20 dark:border-purple-800/30",
+                    "from-purple-50 to-purple-100 text-purple-600 border-purple-100",
                   indigo:
-                    "from-indigo-50 to-indigo-100 text-indigo-600 border-indigo-100 dark:from-indigo-900/40 dark:to-indigo-800/20 dark:border-indigo-800/30",
-                  teal: "from-teal-50 to-teal-100 text-teal-600 border-teal-100 dark:from-teal-900/40 dark:to-teal-800/20 dark:border-teal-800/30",
-                  cyan: "from-cyan-50 to-cyan-100 text-cyan-600 border-cyan-100 dark:from-cyan-900/40 dark:to-cyan-800/20 dark:border-cyan-800/30",
+                    "from-indigo-50 to-indigo-100 text-indigo-600 border-indigo-100",
+                  teal: "from-teal-50 to-teal-100 text-teal-600 border-teal-100",
+                  cyan: "from-cyan-50 to-cyan-100 text-cyan-600 border-cyan-100",
                   emerald:
-                    "from-emerald-50 to-emerald-100 text-emerald-600 border-emerald-100 dark:from-emerald-900/40 dark:to-emerald-800/20 dark:border-emerald-800/30",
-                  rose: "from-rose-50 to-rose-100 text-rose-600 border-rose-100 dark:from-rose-900/40 dark:to-rose-800/20 dark:border-rose-800/30",
-                  red: "from-red-50 to-red-100 text-red-600 border-red-100 dark:from-red-900/40 dark:to-red-800/20 dark:border-red-800/30",
-                  pink: "from-pink-50 to-pink-100 text-pink-600 border-pink-100 dark:from-pink-900/40 dark:to-pink-800/20 dark:border-pink-800/30",
-                  gray: "from-gray-50 to-gray-100 text-gray-600 border-gray-100 dark:from-gray-900/40 dark:to-gray-800/20 dark:border-gray-800/30",
+                    "from-emerald-50 to-emerald-100 text-emerald-600 border-emerald-100",
+                  rose: "from-rose-50 to-rose-100 text-rose-600 border-rose-100",
+                  red: "from-red-50 to-red-100 text-red-600 border-red-100",
+                  pink: "from-pink-50 to-pink-100 text-pink-600 border-pink-100",
+                  gray: "from-gray-50 to-gray-100 text-gray-600 border-gray-100",
                 }[icon.color] ||
                 "from-gray-50 to-gray-100 text-gray-600 border-gray-100";
 
@@ -292,21 +290,21 @@ export default function Home() {
                   key={m.id}
                   onClick={() => handleOpenModule(m.id)}
                   aria-label={`Open ${m.name} module`}
-                  className="group relative flex flex-col items-center p-8 bg-white dark:bg-[#1e293b] rounded-2xl border border-[#dbe0e6] dark:border-gray-700 shadow-sm h-[260px] hover:shadow-xl transition-shadow"
+                  className="group relative flex flex-col items-center p-8 bg-white rounded-2xl border border-[#dbe0e6] shadow-sm h-[260px] hover:shadow-xl transition-shadow"
                 >
                   <div
                     className={`size-24 rounded-2xl bg-gradient-to-br ${colorClass} flex items-center justify-center mb-6 shadow-sm border`}
                   >
                     <i className={`fa-solid ${icon.icon} text-5xl`}></i>
                   </div>
-                  <h3 className="text-xl font-bold text-[#111418] dark:text-white mb-2">
+                  <h3 className="text-xl font-bold text-[#111418] mb-2">
                     {m.name}
                   </h3>
-                  <p className="text-sm text-[#617589] dark:text-gray-400 text-center">
+                  <p className="text-sm text-[#617589] text-center">
                     Click to access this module
                   </p>
-                  <div className="mt-3 py-1 px-3 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs font-semibold rounded-full">
-                    Open
+                  <div className="mt-3 py-1 px-3 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full">
+                    Explore
                   </div>
                 </button>
               );
@@ -314,15 +312,7 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="mt-auto w-full text-center py-6 text-sm text-[#617589] dark:text-gray-500 border-t border-[#dbe0e6] dark:border-gray-800 bg-white dark:bg-[#111418]">
-        <div className="flex flex-col md:flex-row items-center justify-center gap-4">
-          <p>
-            {new Date().getFullYear()} Acme Corp Business Suite. All rights
-            reserved.
-          </p>
-        </div>
-      </footer>
+      <Footer variant="default" company="Acme Corp Business Suite" />
     </div>
   );
 }

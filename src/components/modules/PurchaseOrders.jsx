@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
+import Breadcrumb from "../Breadcrumb";
 
 const PurchaseOrders = () => {
   const { user } = useUser();
@@ -81,7 +82,7 @@ const PurchaseOrders = () => {
       setReviewingPO(null);
       setReviewNotes("");
       fetchOrders();
-    } catch (err) {
+    } catch {
       toast.error("Failed to submit review");
     }
   };
@@ -139,7 +140,8 @@ const PurchaseOrders = () => {
     try {
       const response = await apiService.get("/api/vendors");
       setVendors(response.data || []);
-    } catch (err) {
+    } catch {
+      // Silently fail - vendors are optional
     }
   };
 
@@ -158,7 +160,7 @@ const PurchaseOrders = () => {
       const response = await apiService.get("/api/purchase-orders");
       setOrders(response.data || []);
       setError(null);
-    } catch (err) {
+    } catch {
       setError("Failed to load purchase orders");
     } finally {
       setLoading(false);
@@ -287,7 +289,7 @@ const PurchaseOrders = () => {
       setShowForm(false);
       resetForm();
       fetchOrders();
-    } catch (err) {
+    } catch {
       alert("Failed to create purchase order. Please try again.");
     }
   };
@@ -345,6 +347,12 @@ const PurchaseOrders = () => {
 
   return (
     <div className="container-fluid p-4">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "Purchase Orders", icon: "fa-file-invoice" },
+        ]}
+      />
       {showForm ? (
         <div className="card">
           <div className="card-header bg-primary text-white">
@@ -701,7 +709,7 @@ const PurchaseOrders = () => {
         </div>
       ) : (
         <>
-          <div className="d-flex justify-content-between align-items-center mb-4">
+          <div className="d-flex justify-content-between align-items-center mb-4 p-4">
             <h2>Purchase Orders</h2>
             <div className="d-flex gap-2">
               {/* Filter Dropdown */}

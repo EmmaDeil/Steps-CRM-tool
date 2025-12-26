@@ -1,414 +1,471 @@
-import React, { useState, useEffect } from "react";
-import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
-import { apiService } from "../../services/api";
+import React, { useState } from "react";
+import toast from "react-hot-toast";
+import Breadcrumb from "../Breadcrumb";
 
 const Analytics = () => {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [materialRequests, setMaterialRequests] = useState([]);
-  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [reportType, setReportType] = useState("Facility Usage Report");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [department, setDepartment] = useState("All Departments");
+  const [includeDrafts, setIncludeDrafts] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    const fetchAnalytics = async () => {
-      setLoading(true);
-      try {
-        const res = await apiService.get("/api/analytics");
-        if (mounted) setData(res.data || {});
-      } catch (err) {
-        if (mounted) setError(err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    const fetchMaterialRequests = async () => {
-      try {
-        const res = await apiService.get("/api/material-requests");
-        if (mounted) setMaterialRequests(res.data || []);
-      } catch {
-        // Handle error silently
-      }
-    };
-
-    const fetchPurchaseOrders = async () => {
-      try {
-        const res = await apiService.get("/api/purchase-orders");
-        if (mounted) setPurchaseOrders(res.data || []);
-      } catch {
-        // Handle error silently
-      }
-    };
-
-    fetchAnalytics();
-    fetchMaterialRequests();
-    fetchPurchaseOrders();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const COLORS = [
-    "#0d6efd",
-    "#6c757d",
-    "#198754",
-    "#ffc107",
-    "#dc3545",
-    "#0dcaf0",
-  ];
-
-  const moduleUsageData = data?.moduleUsage || [];
-  const activityData = data?.recentActivity || [];
-  const stats = data?.stats || {
-    totalModules: moduleUsageData.length || 0,
-    activeUsers: data?.stats?.activeUsers || 0,
-    todayActions: data?.stats?.todayActions || 0,
-    alerts: data?.stats?.alerts || 0,
+  const stats = {
+    totalReports: 1248,
+    reportsGrowth: "+12% this month",
+    pendingApprovals: 34,
+    approvalStatus: "Requires attention",
+    facilityUsage: "87%",
+    usageChange: "+25% vs last week",
+    avgProcessingTime: "1.2 Days",
+    slaStatus: "Within SLA",
   };
 
-  const materialRequestsStats = {
-    total: materialRequests.length,
-    pending: materialRequests.filter((r) => r.status === "pending").length,
-    approved: materialRequests.filter((r) => r.status === "approved").length,
-    rejected: materialRequests.filter((r) => r.status === "rejected").length,
+  const [reports] = useState([
+    {
+      id: 1,
+      name: "Q3 Facility Usage",
+      reportId: "ID: #RPT-2023-088",
+      module: "Facility Mgmt",
+      dateGenerated: "Oct 24, 2023",
+      status: "Ready",
+      icon: "fa-building",
+      iconColor: "bg-blue-100 text-blue-600",
+    },
+    {
+      id: 2,
+      name: "Monthly Expense Summary",
+      reportId: "ID: #RPT-2023-077",
+      module: "Financials",
+      dateGenerated: "Oct 23, 2023",
+      status: "Ready",
+      icon: "fa-dollar-sign",
+      iconColor: "bg-purple-100 text-purple-600",
+    },
+    {
+      id: 3,
+      name: "Staff Attendance Log",
+      reportId: "ID: #RPT-2023-074",
+      module: "HR & Admin",
+      dateGenerated: "Oct 22, 2023",
+      status: "Processing",
+      icon: "fa-users",
+      iconColor: "bg-orange-100 text-orange-600",
+    },
+    {
+      id: 4,
+      name: "Q2 Facility Usage",
+      reportId: "ID: #RPT-2023-045",
+      module: "Facility Mgmt",
+      dateGenerated: "Jul 15, 2023",
+      status: "Ready",
+      icon: "fa-building",
+      iconColor: "bg-blue-100 text-blue-600",
+    },
+    {
+      id: 5,
+      name: "Annual Budget Review",
+      reportId: "ID: #RPT-2023-012",
+      module: "Financials",
+      dateGenerated: "Jan 10, 2023",
+      status: "Archived",
+      icon: "fa-file-invoice-dollar",
+      iconColor: "bg-purple-100 text-purple-600",
+    },
+  ]);
+
+  const filteredReports = reports.filter(
+    (report) =>
+      report.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      report.reportId.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const getStatusColor = (status) => {
+    const colors = {
+      Ready: "bg-green-100 text-green-700",
+      Processing: "bg-yellow-100 text-yellow-700",
+      Archived: "bg-gray-100 text-gray-700",
+    };
+    return colors[status] || "bg-gray-100 text-gray-700";
   };
 
-  const purchaseOrdersStats = {
-    total: purchaseOrders.length,
-    totalValue: purchaseOrders.reduce((sum, o) => sum + (o.amount || 0), 0),
-    pendingApproval: purchaseOrders.filter((o) => o.status === "submitted")
-      .length,
-    received: purchaseOrders.filter((o) => o.status === "received").length,
+  const getStatusIcon = (status) => {
+    const icons = {
+      Ready: "fa-circle-check",
+      Processing: "fa-clock",
+      Archived: "fa-box-archive",
+    };
+    return icons[status] || "fa-circle";
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
+  const handleGenerateReport = () => {
+    toast.success("Generating report...");
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-sm text-[#617589] dark:text-gray-400">
-            Loading analytics data...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6 max-w-md">
-          <h3 className="text-lg font-bold text-red-700 dark:text-red-400 mb-2">
-            Error Loading Analytics
-          </h3>
-          <p className="text-sm text-red-600 dark:text-red-300">
-            Failed to load analytics data. Please try again later.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const handleResetFilters = () => {
+    setReportType("Facility Usage Report");
+    setStartDate("");
+    setEndDate("");
+    setDepartment("All Departments");
+    setIncludeDrafts(false);
+    toast.success("Filters reset");
+  };
 
   return (
-    <div className="w-full px-4 py-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                Total Modules
-              </p>
-              <h3 className="text-2xl font-bold text-[#111418] dark:text-white">
-                {stats.totalModules}
-              </h3>
-            </div>
-            <div className="text-3xl">📦</div>
-          </div>
-        </div>
-        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                Active Users
-              </p>
-              <h3 className="text-2xl font-bold text-[#111418] dark:text-white">
-                {stats.activeUsers}
-              </h3>
-            </div>
-            <div className="text-3xl">👥</div>
-          </div>
-        </div>
-        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                Today's Actions
-              </p>
-              <h3 className="text-2xl font-bold text-[#111418] dark:text-white">
-                {stats.todayActions}
-              </h3>
-            </div>
-            <div className="text-3xl">⚡</div>
-          </div>
-        </div>
-        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                Alerts
-              </p>
-              <h3 className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                {stats.alerts}
-              </h3>
-            </div>
-            <div className="text-3xl">🔔</div>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "Analytics & Reports", icon: "fa-chart-line" },
+        ]}
+      />
 
-      {/* Material Requests Summary */}
-      <div className="mb-6">
-        <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">
-          Material Requests Overview
-        </h5>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                  Total Requests
-                </p>
-                <h3 className="text-2xl font-bold text-[#111418] dark:text-white">
-                  {materialRequestsStats.total}
-                </h3>
-              </div>
-              <div className="text-3xl">📋</div>
-            </div>
+      <div className="w-full p-6">
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-[#111418] mb-2">
+              Analytics & Reporting
+            </h1>
+            <p className="text-gray-600">
+              Generate comprehensive reports for facility usage, financials, and
+              approval statistics. Export data in multiple formats for offline
+              analysis.
+            </p>
           </div>
-          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                  Pending
-                </p>
-                <h3 className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                  {materialRequestsStats.pending}
-                </h3>
-              </div>
-              <div className="text-3xl">⏳</div>
-            </div>
-          </div>
-          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                  Approved
-                </p>
-                <h3 className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {materialRequestsStats.approved}
-                </h3>
-              </div>
-              <div className="text-3xl">✅</div>
-            </div>
-          </div>
-          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                  Rejected
-                </p>
-                <h3 className="text-2xl font-bold text-red-600 dark:text-red-400">
-                  {materialRequestsStats.rejected}
-                </h3>
-              </div>
-              <div className="text-3xl">❌</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Purchase Orders Summary */}
-      <div className="mb-6">
-        <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">
-          Purchase Orders Overview
-        </h5>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                  Total Orders
-                </p>
-                <h3 className="text-2xl font-bold text-[#111418] dark:text-white">
-                  {purchaseOrdersStats.total}
-                </h3>
-              </div>
-              <div className="text-3xl">📦</div>
-            </div>
-          </div>
-          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                  Total Value
-                </p>
-                <h3 className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {formatCurrency(purchaseOrdersStats.totalValue)}
-                </h3>
-              </div>
-              <div className="text-3xl">💰</div>
-            </div>
-          </div>
-          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                  Pending Approval
-                </p>
-                <h3 className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
-                  {purchaseOrdersStats.pendingApproval}
-                </h3>
-              </div>
-              <div className="text-3xl">⏱️</div>
-            </div>
-          </div>
-          <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4 h-full">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[#617589] dark:text-gray-400 mb-1">
-                  Received
-                </p>
-                <h3 className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {purchaseOrdersStats.received}
-                </h3>
-              </div>
-              <div className="text-3xl">✅</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4">
-          <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">
-            Module Usage
-          </h5>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={moduleUsageData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }) =>
-                  `${name} ${(percent * 100).toFixed(0)}%`
-                }
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {moduleUsageData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={COLORS[index % COLORS.length]}
-                  />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+          <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors flex items-center gap-2">
+            <i className="fa-solid fa-bookmark"></i>
+            Saved Reports
+          </button>
         </div>
 
-        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4">
-          <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">
-            Weekly Activity
-          </h5>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={activityData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="actions"
-                stroke="#0d6efd"
-                strokeWidth={2}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Total Reports Generated */}
+          <div className="bg-white rounded-lg p-6 border border-gray-200">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">
+                  Total Reports Generated
+                </p>
+                <p className="text-3xl font-bold text-[#111418]">
+                  {stats.totalReports.toLocaleString()}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i className="fa-solid fa-chart-bar text-blue-600"></i>
+              </div>
+            </div>
+            <p className="text-sm text-green-600 font-medium">
+              <i className="fa-solid fa-arrow-up mr-1"></i>
+              {stats.reportsGrowth}
+            </p>
+          </div>
+
+          {/* Pending Approvals */}
+          <div className="bg-white rounded-lg p-6 border border-gray-200">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Pending Approvals</p>
+                <p className="text-3xl font-bold text-[#111418]">
+                  {stats.pendingApprovals}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                <i className="fa-solid fa-clock text-orange-600"></i>
+              </div>
+            </div>
+            <p className="text-sm text-orange-600 font-medium">
+              {stats.approvalStatus}
+            </p>
+          </div>
+
+          {/* Facility Usage */}
+          <div className="bg-white rounded-lg p-6 border border-gray-200">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Facility Usage</p>
+                <p className="text-3xl font-bold text-[#111418]">
+                  {stats.facilityUsage}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                <i className="fa-solid fa-building text-purple-600"></i>
+              </div>
+            </div>
+            <p className="text-sm text-green-600 font-medium">
+              <i className="fa-solid fa-arrow-up mr-1"></i>
+              {stats.usageChange}
+            </p>
+          </div>
+
+          {/* Avg Processing Time */}
+          <div className="bg-white rounded-lg p-6 border border-gray-200">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">
+                  Avg. Processing Time
+                </p>
+                <p className="text-3xl font-bold text-[#111418]">
+                  {stats.avgProcessingTime}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i className="fa-solid fa-hourglass-half text-blue-600"></i>
+              </div>
+            </div>
+            <p className="text-sm text-blue-600 font-medium">
+              {stats.slaStatus}
+            </p>
+          </div>
         </div>
 
-        <div className="lg:col-span-2 rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4">
-          <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">
-            Module Performance
-          </h5>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={moduleUsageData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="value" fill="#0d6efd" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Recent Activities */}
-      <div className="mt-4">
-        <div className="rounded-lg border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1e293b] p-4">
-          <h5 className="text-lg font-bold text-[#111418] dark:text-white mb-4">
-            Recent Activities
-          </h5>
-          <div className="space-y-3">
-            {(data?.recentActivities || []).map((activity) => (
-              <div
-                key={activity.id}
-                className="flex items-center justify-between border-b border-[#dbe0e6] dark:border-gray-700 pb-3 last:border-b-0"
-              >
-                <div>
-                  <h6 className="text-sm font-semibold text-[#111418] dark:text-white mb-1">
-                    {activity.user}
-                  </h6>
-                  <p className="text-xs text-[#617589] dark:text-gray-400">
-                    {activity.action} in{" "}
-                    <span className="inline-block px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-semibold">
-                      {activity.module}
-                    </span>
-                  </p>
+        {/* Main Content - Report Configuration and Recent Reports */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Report Configuration Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <i className="fa-solid fa-sliders text-blue-600"></i>
                 </div>
-                <small className="text-xs text-[#617589] dark:text-gray-400">
-                  {activity.time}
-                </small>
+                <h3 className="text-lg font-bold text-[#111418]">
+                  Report Configuration
+                </h3>
               </div>
-            ))}
+
+              <div className="space-y-4">
+                {/* Report Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Report Type
+                  </label>
+                  <select
+                    value={reportType}
+                    onChange={(e) => setReportType(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option>Facility Usage Report</option>
+                    <option>Financial Report</option>
+                    <option>Attendance Report</option>
+                    <option>Approval Statistics</option>
+                    <option>Custom Report</option>
+                  </select>
+                </div>
+
+                {/* Date Range */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Date Range
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      placeholder="mm/c/□"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      placeholder="mm/c/□"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Department */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Department
+                  </label>
+                  <select
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option>All Departments</option>
+                    <option>Finance</option>
+                    <option>HR & Admin</option>
+                    <option>Facility Management</option>
+                    <option>IT Security</option>
+                  </select>
+                </div>
+
+                {/* Include Drafts */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="includeDrafts"
+                    checked={includeDrafts}
+                    onChange={(e) => setIncludeDrafts(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label
+                    htmlFor="includeDrafts"
+                    className="text-sm text-gray-700"
+                  >
+                    Include Drafts
+                  </label>
+                </div>
+
+                {/* Generate Button */}
+                <button
+                  onClick={handleGenerateReport}
+                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
+                >
+                  <i className="fa-solid fa-wand-magic-sparkles"></i>
+                  Generate Report
+                </button>
+
+                {/* Reset Filters */}
+                <button
+                  onClick={handleResetFilters}
+                  className="w-full px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors text-sm"
+                >
+                  Reset Filters
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Reports Table */}
+          <div className="lg:col-span-3">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-[#111418]">
+                    Recent Reports
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                      <i className="fa-solid fa-list"></i>
+                    </button>
+                    <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                      <i className="fa-solid fa-print"></i>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search */}
+                <div className="relative">
+                  <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                  <input
+                    type="text"
+                    placeholder="Search reports..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Report Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Module
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Date Generated
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredReports.map((report) => (
+                      <tr key={report.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-10 h-10 ${report.iconColor} rounded-lg flex items-center justify-center`}
+                            >
+                              <i className={`fa-solid ${report.icon}`}></i>
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {report.name}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                {report.reportId}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm text-gray-900">
+                            {report.module}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm text-gray-900">
+                            {report.dateGenerated}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                              report.status
+                            )}`}
+                          >
+                            <i
+                              className={`fa-solid ${getStatusIcon(
+                                report.status
+                              )}`}
+                            ></i>
+                            {report.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                              <i className="fa-solid fa-eye"></i>
+                            </button>
+                            <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                              <i className="fa-solid fa-download"></i>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                <p className="text-sm text-gray-600">
+                  Showing 1 to 5 of 128 results
+                </p>
+                <div className="flex items-center gap-2">
+                  <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 text-sm">
+                    Previous
+                  </button>
+                  <button className="px-3 py-1 bg-blue-600 text-white rounded text-sm font-medium">
+                    1
+                  </button>
+                  <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 text-sm">
+                    2
+                  </button>
+                  <span className="px-2 text-gray-500">...</span>
+                  <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 text-sm">
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

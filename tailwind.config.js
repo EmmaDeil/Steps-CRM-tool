@@ -3,7 +3,6 @@ import forms from '@tailwindcss/forms';
 import containerQueries from '@tailwindcss/container-queries';
 
 export default {
-  darkMode: 'class',
   content: [
     './index.html',
     './src/**/*.{js,jsx,ts,tsx}',
@@ -13,7 +12,6 @@ export default {
       colors: {
         primary: '#137fec',
         'background-light': '#f6f7f8',
-        'background-dark': '#101922',
       },
       fontFamily: {
         display: ['Inter', 'sans-serif'],

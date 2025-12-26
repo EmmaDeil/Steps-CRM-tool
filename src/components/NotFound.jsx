@@ -13,7 +13,7 @@ const NotFound = () => {
         </p>
         <Link
           to="/home"
-          className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+          className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 hover:bg-blue-50"
         >
           <i className="fa-solid fa-home text-base"></i>
           Home

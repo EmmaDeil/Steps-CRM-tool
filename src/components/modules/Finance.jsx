@@ -4,6 +4,7 @@ import Pagination from "../Pagination";
 import Skeleton from "../Skeleton";
 import EmptyState from "../EmptyState";
 import toast from "react-hot-toast";
+import Breadcrumb from "../Breadcrumb";
 
 const Finance = () => {
   const [pendingPayments, setPendingPayments] = useState([]);
@@ -22,7 +23,8 @@ const Finance = () => {
         "/api/purchase-orders/pending-payment"
       );
       setPendingPayments(response.data || []);
-    } catch (err) {
+    } catch {
+      // Error is handled by finally block
     } finally {
       setLoading(false);
     }
@@ -42,12 +44,19 @@ const Finance = () => {
       toast.success("Payment recorded successfully");
       fetchPendingPayments();
     } catch (err) {
+      console.error("Error recording payment:", err);
       toast.error("Failed to record payment");
     }
   };
 
   return (
-    <div className="p-4">
+    <div className="w-full p-3">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "Finance", icon: "fa-coins" },
+        ]}
+      />
       <h2 className="mb-3">Finance</h2>
       <p className="text-secondary mb-4">
         Manage financial operations, budgets, and payment processing.

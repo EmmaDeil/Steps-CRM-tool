@@ -1,8 +1,15 @@
 import React from "react";
+import Breadcrumb from "../Breadcrumb";
 
 const FacilityMaintenance = () => {
   return (
-    <div className="p-4">
+    <div className="w-full">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "Facility Maintenance", icon: "fa-wrench" },
+        ]}
+      />
       <h2 className="mb-3">Facility Maintenance</h2>
       <p className="text-secondary mb-4">
         Track maintenance requests, schedules, and facility management.

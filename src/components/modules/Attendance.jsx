@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
+import Breadcrumb from "../Breadcrumb";
 
 const API_BASE_URL = "https://attendance-app-swart-iota.vercel.app";
 
@@ -100,7 +101,13 @@ const Attendance = () => {
     stats.total > 0 ? ((stats.present / stats.total) * 100).toFixed(1) : 0;
 
   return (
-    <div className="p-4">
+    <div className="w-full">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "Attendance", icon: "fa-calendar-check" },
+        ]}
+      />
       <div className="row g-3 mt-2">
         <div className="col-md-3">
           <div className="card p-3">

@@ -1,12 +1,11 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { useAppContext } from "../../context/useAppContext";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
+import Breadcrumb from "../Breadcrumb";
 
 const RetirementManagement = () => {
-  const navigate = useNavigate();
   const { user } = useUser();
   const [lineItems, setLineItems] = useState([]);
   const [newItem, setNewItem] = useState({
@@ -23,6 +22,53 @@ const RetirementManagement = () => {
     inflowAmount,
     setInflowAmount,
   } = useAppContext();
+
+  const fetchPreviousMonthBalance = useCallback(async () => {
+    try {
+      const [year, month] = monthYear.split("-");
+      const prevMonth = parseInt(month) - 1;
+      let prevYear = parseInt(year);
+      let prevMonthStr;
+
+      if (prevMonth < 1) {
+        prevYear -= 1;
+        prevMonthStr = `${prevYear}-12`;
+      } else {
+        prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
+      }
+
+      // Fetch all retirement breakdowns for the user
+      const response = await apiService.get(
+        `/api/retirement-breakdown?userId=${user?.id}`
+      );
+      const breakdowns = response.data || [];
+
+      // Find the previous month's breakdown
+      const prevMonthData = breakdowns.find(
+        (breakdown) => breakdown.monthYear === prevMonthStr
+      );
+
+      if (prevMonthData) {
+        // Auto-fill with the previous month's closing balance (newOpeningBalance)
+        setPreviousClosingBalance(prevMonthData.newOpeningBalance || 0);
+        toast.success(
+          `Previous closing balance auto-filled: $${(
+            prevMonthData.newOpeningBalance || 0
+          ).toLocaleString()}`
+        );
+      } else {
+        // If no previous month data, clear the field for manual entry
+        setPreviousClosingBalance("");
+      }
+    } catch (error) {
+      console.error("Error fetching previous month balance:", error);
+      // Don't show error toast here as it might not be critical
+    }
+  }, [monthYear, setPreviousClosingBalance, user?.id]);
+
+  useEffect(() => {
+    fetchPreviousMonthBalance();
+  }, [monthYear, fetchPreviousMonthBalance]);
 
   const handleAddLineItem = () => {
     if (
@@ -128,45 +174,45 @@ const RetirementManagement = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:from-[#0f172a] dark:to-[#1e293b] p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Breadcrumb */}
-        <div className="mb-6 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <button
-            onClick={() => navigate("/home")}
-            className="hover:text-blue-600 transition-colors"
-          >
-            Home
-          </button>
-          <span>/</span>
-          <span className="text-gray-800 dark:text-gray-200">Retirement</span>
-        </div>
+    <div className="min-h-screen bg-slate-100 p-4">
+      <div className="w-full">
+        <Breadcrumb
+          items={[
+            { label: "Home", href: "/home", icon: "fa-house" },
+            {
+              label: "Accounting",
+              href: "/home/1",
+              icon: "fa-calculator",
+            },
+            { label: "Retirement Management", icon: "fa-umbrella-beach" },
+          ]}
+        />
 
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
               Retirement
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-gray-600">
               Record the breakdown of how you spent the inflow payment from
               finance.
             </p>
           </div>
           <div className="flex gap-4 items-end">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Month & Year
               </label>
               <input
                 type="month"
                 value={monthYear}
                 onChange={(e) => setMonthYear(e.target.value)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Previous Closing Balance
               </label>
               <input
@@ -176,11 +222,11 @@ const RetirementManagement = () => {
                 placeholder="0.00"
                 step="0.01"
                 min="0"
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm w-40"
+                className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm w-40"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Inflow Received (This Month)
               </label>
               <input
@@ -190,38 +236,38 @@ const RetirementManagement = () => {
                 placeholder="0.00"
                 step="0.01"
                 min="0"
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm w-40"
+                className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm w-40"
               />
             </div>
           </div>
         </div>
 
         {/* Main Card */}
-        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-gray-200 dark:border-gray-700 shadow p-6 mb-6">
+        <div className="bg-white rounded-lg border border-gray-200 shadow p-6 mb-6">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                <tr className="border-b border-gray-200">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
                     Description
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
                     Quantity
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
                     Amount
                   </th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {/* Inline input row */}
-                <tr className="bg-gray-50 dark:bg-gray-800/40">
+                <tr className="bg-gray-50">
                   <td className="px-6 py-2">
                     <input
                       type="date"
@@ -232,7 +278,7 @@ const RetirementManagement = () => {
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                     />
                   </td>
                   <td className="px-6 py-2">
@@ -246,7 +292,7 @@ const RetirementManagement = () => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
                       placeholder="e.g., Office Supplies"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                     />
                   </td>
                   <td className="px-6 py-2">
@@ -261,7 +307,7 @@ const RetirementManagement = () => {
                       }}
                       placeholder="0"
                       min="1"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                     />
                   </td>
                   <td className="px-6 py-2">
@@ -277,7 +323,7 @@ const RetirementManagement = () => {
                       placeholder="0.00"
                       step="0.01"
                       min="0"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-[#0f172a] text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                     />
                   </td>
                   <td className="px-6 py-2 text-center">
@@ -296,7 +342,7 @@ const RetirementManagement = () => {
                   <tr>
                     <td
                       colSpan={5}
-                      className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+                      className="px-6 py-6 text-center text-sm text-gray-500"
                     >
                       No expenses added yet.
                     </td>
@@ -305,18 +351,18 @@ const RetirementManagement = () => {
                   lineItems.map((item) => (
                     <tr
                       key={item.id}
-                      className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                      className="border-t border-gray-200 hover:bg-gray-50 transition-colors"
                     >
-                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
+                      <td className="px-6 py-4 text-sm text-gray-900">
                         {item.date}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-white font-medium">
+                      <td className="px-6 py-4 text-sm text-gray-900 font-medium">
                         {item.description}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                      <td className="px-6 py-4 text-sm text-gray-600">
                         {item.quantity}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-white font-semibold">
+                      <td className="px-6 py-4 text-sm text-gray-900 font-semibold">
                         {formatCurrency(item.amount)}
                       </td>
                       <td className="px-6 py-4 text-center">
@@ -337,34 +383,30 @@ const RetirementManagement = () => {
         </div>
 
         {/* Summary Section */}
-        <div className="bg-white dark:bg-[#1e293b] rounded-lg border border-gray-200 dark:border-gray-700 shadow p-6">
+        <div className="bg-white rounded-lg border border-gray-200 shadow p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
-              <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+              <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-1">
                 Summary for {formatMonthYear(monthYear) || "(select month)"}
               </h3>
               <div className="mt-2 space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">
+                  <span className="text-gray-600">
                     Previous Closing Balance
                   </span>
-                  <span className="font-semibold text-gray-900 dark:text-white">
+                  <span className="font-semibold text-gray-900">
                     {formatCurrency(Number(previousClosingBalance) || 0)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">
-                    Inflow Received
-                  </span>
-                  <span className="font-semibold text-gray-900 dark:text-white">
+                  <span className="text-gray-600">Inflow Received</span>
+                  <span className="font-semibold text-gray-900">
                     {formatCurrency(Number(inflowAmount) || 0)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">
-                    Total Expenses
-                  </span>
-                  <span className="font-semibold text-blue-600 dark:text-blue-400">
+                  <span className="text-gray-600">Total Expenses</span>
+                  <span className="font-semibold text-blue-600">
                     {formatCurrency(calculateTotal())}
                   </span>
                 </div>
@@ -372,10 +414,10 @@ const RetirementManagement = () => {
             </div>
             <div className="flex items-center md:justify-end">
               <div className="text-right">
-                <div className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+                <div className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-1">
                   New Opening Balance
                 </div>
-                <div className="text-4xl font-bold text-green-600 dark:text-green-400">
+                <div className="text-4xl font-bold text-green-600">
                   {formatCurrency(calculateNewOpeningBalance())}
                 </div>
               </div>
@@ -386,7 +428,7 @@ const RetirementManagement = () => {
           <div className="flex gap-3 justify-end">
             <button
               onClick={handleReset}
-              className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium text-sm"
+              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm"
             >
               Clear
             </button>
@@ -395,7 +437,7 @@ const RetirementManagement = () => {
               disabled={!monthYear}
               className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${
                 !monthYear
-                  ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                   : "bg-slate-700 text-white hover:bg-slate-800"
               }`}
             >
@@ -413,7 +455,7 @@ const RetirementManagement = () => {
                 lineItems.length === 0 ||
                 !monthYear ||
                 previousClosingBalance === ""
-                  ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                   : "bg-blue-600 text-white hover:bg-blue-700"
               }`}
             >

@@ -9,12 +9,13 @@ const modules = [
   { id: 4, name: "Facility Maintenance", componentName: "FacilityMaintenance" },
   { id: 5, name: "Finance", componentName: "Finance" },
   { id: 6, name: "Security Logs", componentName: "SecurityLogs" },
-  { id: 7, name: "Admin Controls", componentName: "AdminControls" },
+  { id: 7, name: "Admin", componentName: "Admin" },
   { id: 8, name: "Attendance", componentName: "Attendance" },
-  { id: 9, name: "Signature Management", componentName: "SignatureManagement" },
+  { id: 9, name: "DocSign", componentName: "DocSign" },
   { id: 10, name: "Material Requests", componentName: "MaterialRequests" },
   { id: 11, name: "Purchase Orders", componentName: "PurchaseOrders" },
   { id: 12, name: "Analytics", componentName: "Analytics" },
+  { id: 13, name: "Policy Management", componentName: "PolicyManagement" },
 ];
 
 const analytics = {

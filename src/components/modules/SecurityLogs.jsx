@@ -1,8 +1,15 @@
 import React from "react";
+import Breadcrumb from "../Breadcrumb";
 
 const SecurityLogs = () => {
   return (
-    <div className="p-4">
+    <div className="w-full">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "Security Logs", icon: "fa-shield" },
+        ]}
+      />
       <h2 className="mb-3">Security Logs</h2>
       <p className="text-secondary mb-4">
         Monitor system access, security events, and audit trails.
