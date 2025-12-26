@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
+import { useDepartments } from "../../context/useDepartments";
 
 const Analytics = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -8,6 +9,7 @@ const Analytics = () => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [department, setDepartment] = useState("All Departments");
+  const { departments, loading: departmentsLoading } = useDepartments();
   const [includeDrafts, setIncludeDrafts] = useState(false);
 
   const stats = {
@@ -110,6 +112,8 @@ const Analytics = () => {
     setIncludeDrafts(false);
     toast.success("Filters reset");
   };
+
+  // Departments now provided by useDepartments()
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -287,10 +291,15 @@ const Analytics = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   >
                     <option>All Departments</option>
-                    <option>Finance</option>
-                    <option>HR & Admin</option>
-                    <option>Facility Management</option>
-                    <option>IT Security</option>
+                    {departmentsLoading ? (
+                      <option disabled>Loading departments...</option>
+                    ) : (
+                      departments.map((dept) => (
+                        <option key={dept.id} value={dept.name}>
+                          {dept.name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 

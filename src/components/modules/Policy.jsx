@@ -1,77 +1,32 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
+import { apiService } from "../../services/api";
 import Breadcrumb from "../Breadcrumb";
+import { useDepartments } from "../../context/useDepartments";
 
-const PolicyManagement = () => {
+const Policy = () => {
   const { user } = useUser();
-  const [policies, setPolicies] = useState([
-    {
-      id: 1,
-      title: "Data Privacy & Protection",
-      category: "IT Security",
-      policyId: "ID: POL-2023-001",
-      version: "v2.4",
-      lastUpdated: "Oct 24, 2023",
-      time: "2:30 PM",
-      author: "Sarah Jenkins",
-      authorAvatar: "SJ",
-      status: "Published",
-    },
-    {
-      id: 2,
-      title: "Remote Work Guidelines",
-      category: "HR",
-      policyId: "ID: POL-2023-042",
-      version: "v1.0",
-      lastUpdated: "Nov 01, 2023",
-      time: "09:15 AM",
-      author: "Michael Chen",
-      authorAvatar: "MC",
-      status: "Draft",
-    },
-    {
-      id: 3,
-      title: "Social Media Usage",
-      category: "Marketing",
-      policyId: "ID: POL-2023-018",
-      version: "v3.1",
-      lastUpdated: "Sep 12, 2023",
-      time: "4:45 PM",
-      author: "Emma Wilson",
-      authorAvatar: "EW",
-      status: "Review",
-    },
-    {
-      id: 4,
-      title: "Expense Reimbursement",
-      category: "Finance",
-      policyId: "ID: POL-2023-009",
-      version: "v1.2",
-      lastUpdated: "Oct 10, 2023",
-      time: "11:00 AM",
-      author: "David Kim",
-      authorAvatar: "DK",
-      status: "Published",
-    },
-    {
-      id: 5,
-      title: "Anti-Bribery Policy",
-      category: "Legal",
-      policyId: "ID: POL-2023-099",
-      version: "v4.0",
-      lastUpdated: "Aug 15, 2023",
-      time: "1:20 PM",
-      author: "Sarah Jenkins",
-      authorAvatar: "SJ",
-      status: "Expiring",
-    },
-  ]);
+  const [policies, setPolicies] = useState([]);
+  const [policiesLoading, setPoliciesLoading] = useState(true);
+  const { departments, loading: departmentsLoading } = useDepartments();
+  const [stats, setStats] = useState({
+    totalPolicies: 0,
+    totalChange: "Loading...",
+    published: 0,
+    publishedStatus: "Loading...",
+    drafts: 0,
+    draftsPending: "Loading...",
+    reviewRequired: 0,
+    reviewStatus: "Loading...",
+  });
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [departmentFilter, setDepartmentFilter] = useState("All Departments");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editingPolicy, setEditingPolicy] = useState(null);
 
   // Form fields for creating new policy
   const [newPolicyTitle, setNewPolicyTitle] = useState("");
@@ -86,7 +41,7 @@ const PolicyManagement = () => {
   const [approvalModal, setApprovalModal] = useState(null);
   const [versionHistoryModal, setVersionHistoryModal] = useState(null);
 
-  // Version history data (simulated)
+  // eslint-disable-next-line no-unused-vars
   const versionHistoryData = {
     1: [
       {
@@ -187,16 +142,62 @@ const PolicyManagement = () => {
     ],
   };
 
-  const stats = {
-    totalPolicies: 42,
-    totalChange: "+3 this month",
-    published: 35,
-    publishedStatus: "Active and visible",
-    drafts: 5,
-    draftsPending: "2 pending approval",
-    reviewRequired: 2,
-    reviewStatus: "Expiring soon",
-  };
+  // Fetch policy statistics from API
+  const fetchStats = useCallback(async () => {
+    try {
+      const response = await apiService.get("/api/policies/stats");
+      if (response.data) {
+        setStats(response.data);
+      }
+    } catch (error) {
+      console.error("Error fetching policy stats:", error);
+      toast.error("Failed to load policy statistics");
+    }
+  }, []);
+
+  // Fetch policies from API
+  const fetchPolicies = useCallback(async () => {
+    setPoliciesLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter && statusFilter !== "All Statuses") {
+        params.append("status", statusFilter);
+      }
+      if (departmentFilter && departmentFilter !== "All Departments") {
+        params.append("category", departmentFilter);
+      }
+      if (searchQuery) {
+        params.append("search", searchQuery);
+      }
+
+      const response = await apiService.get(
+        `/api/policies?${params.toString()}`
+      );
+      if (response.data) {
+        setPolicies(response.data);
+      }
+    } catch (error) {
+      console.error("Error fetching policies:", error);
+      toast.error("Failed to load policies");
+    } finally {
+      setPoliciesLoading(false);
+    }
+  }, [statusFilter, departmentFilter, searchQuery]);
+
+  // Fetch initial data on mount
+  useEffect(() => {
+    fetchStats();
+    fetchPolicies();
+  }, [fetchStats, fetchPolicies]);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchPolicies();
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
 
   // Generate Policy ID when department changes
   const generatePolicyId = (department) => {
@@ -206,14 +207,10 @@ const PolicyManagement = () => {
     }
 
     const currentYear = new Date().getFullYear();
-    const departmentCodes = {
-      "IT Security": "ITS",
-      HR: "HR",
-      Finance: "FIN",
-      Legal: "LEG",
-      Marketing: "MKT",
-      Operations: "OPS",
-    };
+
+    // Find department code from API data
+    const deptData = departments.find((d) => d.name === department);
+    const code = deptData ? deptData.code : "GEN";
 
     // Count existing policies for this department
     const departmentPolicies = policies.filter(
@@ -221,7 +218,6 @@ const PolicyManagement = () => {
     );
     const nextNumber = String(departmentPolicies.length + 1).padStart(3, "0");
 
-    const code = departmentCodes[department] || "GEN";
     const policyId = `POL-${currentYear}-${code}-${nextNumber}`;
     setGeneratedPolicyId(policyId);
   };
@@ -252,8 +248,21 @@ const PolicyManagement = () => {
         toast.error("File size must be less than 10MB");
         return;
       }
-      setNewPolicyDocument(file);
-      toast.success(`Document "${file.name}" uploaded successfully`);
+
+      // Convert file to base64
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewPolicyDocument({
+          name: file.name,
+          type: file.type,
+          data: reader.result, // base64 data URL
+        });
+        toast.success(`Document "${file.name}" uploaded successfully`);
+      };
+      reader.onerror = () => {
+        toast.error("Error reading file");
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -267,7 +276,7 @@ const PolicyManagement = () => {
   };
 
   // Handle create policy
-  const handleCreatePolicy = () => {
+  const handleCreatePolicy = async () => {
     // Validation
     if (!newPolicyTitle.trim()) {
       toast.error("Please enter a policy title");
@@ -286,33 +295,33 @@ const PolicyManagement = () => {
       return;
     }
 
-    // Create new policy
-    const newPolicy = {
-      id: policies.length + 1,
-      title: newPolicyTitle,
-      category: newPolicyDepartment,
-      policyId: `ID: ${generatedPolicyId}`,
-      version: "v1.0",
-      lastUpdated: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-      }),
-      time: new Date().toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      author: user?.fullName || "Unknown User",
-      authorAvatar: user?.firstName?.[0] + user?.lastName?.[0] || "UN",
-      status: "Draft",
-      description: newPolicyDescription,
-      document: newPolicyDocument.name,
-    };
+    try {
+      const policyData = {
+        title: newPolicyTitle,
+        category: newPolicyDepartment,
+        description: newPolicyDescription,
+        documentData: newPolicyDocument.data,
+        documentName: newPolicyDocument.name,
+        documentType: newPolicyDocument.type,
+        author: {
+          userId: user?.id || "unknown",
+          userName: user?.fullName || "Unknown User",
+          userEmail: user?.primaryEmailAddress?.emailAddress || "",
+          initials: user?.firstName?.[0] + user?.lastName?.[0] || "UN",
+        },
+      };
 
-    setPolicies([newPolicy, ...policies]);
-    toast.success(`Policy "${newPolicyTitle}" created successfully!`);
-    setShowCreateModal(false);
-    resetForm();
+      const response = await apiService.post("/api/policies", policyData);
+      if (response.data) {
+        toast.success(`Policy "${newPolicyTitle}" created successfully!`);
+        setShowCreateModal(false);
+        resetForm();
+        fetchPolicies(); // Refresh the list
+      }
+    } catch (error) {
+      console.error("Error creating policy:", error);
+      toast.error("Failed to create policy");
+    }
   };
 
   // Handle cancel
@@ -322,55 +331,141 @@ const PolicyManagement = () => {
   };
 
   // Submit policy for approval
-  const handleSubmitForApproval = (policyId) => {
-    const updatedPolicies = policies.map((p) =>
-      p.id === policyId ? { ...p, status: "Pending Approval" } : p
-    );
-    setPolicies(updatedPolicies);
-    setActionMenuOpen(null);
-    toast.success("Policy submitted for approval");
-  };
-
-  // Approve policy
-  const handleApprovePolicy = (policyId) => {
-    const updatedPolicies = policies.map((p) =>
-      p.id === policyId ? { ...p, status: "Published" } : p
-    );
-    setPolicies(updatedPolicies);
-    setApprovalModal(null);
-    setActionMenuOpen(null);
-    toast.success("Policy approved and published");
-  };
-
-  // Reject policy
-  const handleRejectPolicy = (policyId) => {
-    const updatedPolicies = policies.map((p) =>
-      p.id === policyId ? { ...p, status: "Draft" } : p
-    );
-    setPolicies(updatedPolicies);
-    setApprovalModal(null);
-    setActionMenuOpen(null);
-    toast.error("Policy rejected and returned to draft");
-  };
-
-  // Delete policy
-  const handleDeletePolicy = (policyId) => {
-    if (window.confirm("Are you sure you want to delete this policy?")) {
-      setPolicies(policies.filter((p) => p.id !== policyId));
+  const handleSubmitForApproval = async (policyId) => {
+    try {
+      await apiService.patch(`/api/policies/${policyId}/submit`);
+      toast.success("Policy submitted for approval");
       setActionMenuOpen(null);
-      toast.success("Policy deleted successfully");
+      fetchPolicies();
+    } catch (error) {
+      console.error("Error submitting policy:", error);
+      toast.error("Failed to submit policy");
     }
   };
 
-  // Edit policy
-  const handleEditPolicy = () => {
-    toast.info("Edit functionality coming soon");
-    setActionMenuOpen(null);
+  // Approve policy
+  const handleApprovePolicy = async (policyId) => {
+    try {
+      await apiService.patch(`/api/policies/${policyId}/approve`, {
+        approvedBy: {
+          userId: user?.id || "unknown",
+          userName: user?.fullName || "Unknown User",
+        },
+      });
+      toast.success("Policy approved and published");
+      setApprovalModal(null);
+      setActionMenuOpen(null);
+      fetchPolicies();
+    } catch (error) {
+      console.error("Error approving policy:", error);
+      toast.error("Failed to approve policy");
+    }
+  };
+
+  // Reject policy
+  const handleRejectPolicy = async (policyId) => {
+    try {
+      await apiService.patch(`/api/policies/${policyId}/reject`);
+      toast.error("Policy rejected and returned to draft");
+      setApprovalModal(null);
+      setActionMenuOpen(null);
+      fetchPolicies();
+    } catch (error) {
+      console.error("Error rejecting policy:", error);
+      toast.error("Failed to reject policy");
+    }
+  };
+
+  // Delete policy
+  const handleDeletePolicy = async (policyId) => {
+    if (window.confirm("Are you sure you want to delete this policy?")) {
+      try {
+        await apiService.delete(`/api/policies/${policyId}`);
+        toast.success("Policy deleted successfully");
+        setActionMenuOpen(null);
+        fetchPolicies();
+      } catch (error) {
+        console.error("Error deleting policy:", error);
+        toast.error("Failed to delete policy");
+      }
+    }
+  };
+
+  // Edit policy - open edit modal
+  const handleEditPolicy = (policyId) => {
+    const policy = policies.find((p) => p._id === policyId);
+    if (policy) {
+      setEditingPolicy(policy);
+      setNewPolicyTitle(policy.title);
+      setNewPolicyDepartment(policy.category);
+      setNewPolicyDescription(policy.description);
+      setNewPolicyDocument(null); // Allow uploading new document
+      setEditMode(true);
+      setShowCreateModal(true);
+      setActionMenuOpen(null);
+    }
+  };
+
+  // Update policy
+  const handleUpdatePolicy = async () => {
+    if (
+      !newPolicyTitle.trim() ||
+      !newPolicyDepartment ||
+      !newPolicyDescription.trim()
+    ) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    try {
+      const updateData = {
+        title: newPolicyTitle,
+        description: newPolicyDescription,
+        author: {
+          userId: user?.id || "unknown",
+          userName: user?.fullName || "Unknown User",
+          userEmail: user?.primaryEmailAddress?.emailAddress || "",
+          initials: user?.firstName?.[0] + user?.lastName?.[0] || "UN",
+        },
+      };
+
+      // If new document is uploaded, include it
+      if (newPolicyDocument && newPolicyDocument.data) {
+        updateData.documentData = newPolicyDocument.data;
+        updateData.documentName = newPolicyDocument.name;
+        updateData.documentType = newPolicyDocument.type;
+        updateData.changes = "Updated document and content";
+      } else {
+        updateData.changes = "Updated policy details";
+      }
+
+      await apiService.patch(`/api/policies/${editingPolicy._id}`, updateData);
+      toast.success("Policy updated successfully");
+      setShowCreateModal(false);
+      setEditMode(false);
+      setEditingPolicy(null);
+      resetForm();
+      fetchPolicies();
+    } catch (error) {
+      console.error("Error updating policy:", error);
+      toast.error("Failed to update policy");
+    }
   };
 
   // Download policy
   const handleDownloadPolicy = (policy) => {
-    toast.success(`Downloading ${policy.document || policy.title}`);
+    if (policy.documentUrl) {
+      // Create a temporary link to download the base64 file
+      const link = document.createElement("a");
+      link.href = policy.documentUrl;
+      link.download = policy.documentName || `${policy.title}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(`Downloading ${policy.documentName || policy.title}`);
+    } else {
+      toast.error("Document not available");
+    }
     setActionMenuOpen(null);
   };
 
@@ -381,39 +476,27 @@ const PolicyManagement = () => {
   };
 
   // Restore previous version
-  const handleRestoreVersion = (policyId, versionToRestore) => {
-    const updatedPolicies = policies.map((p) => {
-      if (p.id === policyId) {
-        // Increment version number when restoring
-        const currentVersionNum = parseFloat(p.version.replace("v", ""));
-        const newVersion = `v${(currentVersionNum + 0.1).toFixed(1)}`;
-        return {
-          ...p,
-          version: newVersion,
-          lastUpdated: new Date().toLocaleDateString("en-US", {
-            month: "short",
-            day: "2-digit",
-            year: "numeric",
-          }),
-          time: new Date().toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          author: user?.fullName || "Unknown User",
-          authorAvatar: user?.firstName?.[0] + user?.lastName?.[0] || "UN",
-          status: "Draft", // Restored versions start as Draft
-        };
-      }
-      return p;
-    });
-    setPolicies(updatedPolicies);
-    setVersionHistoryModal(null);
-    toast.success(`Version ${versionToRestore.version} restored as new draft`);
-  };
-
-  // Compare versions
-  const handleCompareVersions = (version1, version2) => {
-    toast.info(`Comparing ${version1} and ${version2}`);
+  const handleRestoreVersion = async (policyId, versionToRestore) => {
+    try {
+      await apiService.patch(`/api/policies/${policyId}/restore-version`, {
+        versionToRestore: versionToRestore.version,
+        author: {
+          userId: user?.id || "unknown",
+          userName: user?.fullName || "Unknown User",
+          userEmail: user?.primaryEmailAddress?.emailAddress || "",
+          initials: user?.firstName?.[0] + user?.lastName?.[0] || "UN",
+        },
+      });
+      toast.success(
+        `Version ${versionToRestore.version} restored successfully`
+      );
+      setVersionHistoryModal(null);
+      setActionMenuOpen(null);
+      fetchPolicies();
+    } catch (error) {
+      console.error("Error restoring version:", error);
+      toast.error("Failed to restore version");
+    }
   };
 
   const filteredPolicies = policies.filter((policy) => {
@@ -447,25 +530,25 @@ const PolicyManagement = () => {
   };
 
   const getCategoryIcon = (category) => {
-    const icons = {
-      "IT Security": "fa-shield-halved",
-      HR: "fa-users",
-      Marketing: "fa-bullhorn",
-      Finance: "fa-dollar-sign",
-      Legal: "fa-gavel",
-    };
-    return icons[category] || "fa-file";
+    const deptData = departments.find((d) => d.name === category);
+    return deptData
+      ? `fa-${deptData.icon}`.replace("fa-fa-", "fa-")
+      : "fa-file";
   };
 
   const getCategoryColor = (category) => {
-    const colors = {
-      "IT Security": "bg-blue-100 text-blue-700",
-      HR: "bg-purple-100 text-purple-700",
-      Marketing: "bg-orange-100 text-orange-700",
-      Finance: "bg-green-100 text-green-700",
-      Legal: "bg-red-100 text-red-700",
+    const deptData = departments.find((d) => d.name === category);
+    if (!deptData) return "bg-gray-100 text-gray-700";
+
+    const colorMap = {
+      blue: "bg-blue-100 text-blue-700",
+      purple: "bg-purple-100 text-purple-700",
+      green: "bg-green-100 text-green-700",
+      red: "bg-red-100 text-red-700",
+      orange: "bg-orange-100 text-orange-700",
+      gray: "bg-gray-100 text-gray-700",
     };
-    return colors[category] || "bg-gray-100 text-gray-700";
+    return colorMap[deptData.color] || "bg-gray-100 text-gray-700";
   };
 
   return (
@@ -480,9 +563,7 @@ const PolicyManagement = () => {
       <div className="w-full p-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-[#111418] mb-2">
-            Policy Management
-          </h1>
+          <h1 className="text-3xl font-bold text-[#111418] mb-2"></h1>
           <p className="text-gray-600">
             Create, view, and manage organizational policies. Ensure compliance
             across all departments.
@@ -598,11 +679,15 @@ const PolicyManagement = () => {
               className="px-5 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option>All Departments</option>
-              <option>IT Security</option>
-              <option>HR</option>
-              <option>Finance</option>
-              <option>Legal</option>
-              <option>Marketing</option>
+              {departmentsLoading ? (
+                <option disabled>Loading departments...</option>
+              ) : (
+                departments.map((dept) => (
+                  <option key={dept.id} value={dept.name}>
+                    {dept.name}
+                  </option>
+                ))
+              )}
             </select>
 
             {/* View Mode Toggle */}
@@ -666,142 +751,202 @@ const PolicyManagement = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredPolicies.map((policy) => (
-                <tr key={policy.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-10 h-10 ${getCategoryColor(
-                          policy.category
-                        )} rounded-lg flex items-center justify-center`}
-                      >
-                        <i
-                          className={`fa-solid ${getCategoryIcon(
-                            policy.category
-                          )}`}
-                        ></i>
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {policy.title}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {policy.category} • {policy.policyId}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-sm font-medium text-gray-900">
-                      {policy.version}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div>
-                      <p className="text-sm text-gray-900">
-                        {policy.lastUpdated}
-                      </p>
-                      <p className="text-xs text-gray-500">{policy.time}</p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-xs font-semibold">
-                        {policy.authorAvatar}
-                      </div>
-                      <span className="text-sm text-gray-900">
-                        {policy.author}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                        policy.status
-                      )}`}
-                    >
-                      <i
-                        className={`fa-solid ${getStatusIcon(policy.status)}`}
-                      ></i>
-                      {policy.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right relative">
-                    <button
-                      onClick={() =>
-                        setActionMenuOpen(
-                          actionMenuOpen === policy.id ? null : policy.id
-                        )
-                      }
-                      className="text-gray-600 hover:text-gray-900 px-3 py-1 rounded hover:bg-gray-100 transition-colors"
-                    >
-                      <i className="fa-solid fa-ellipsis-vertical"></i>
-                    </button>
-
-                    {/* Action Dropdown Menu */}
-                    {actionMenuOpen === policy.id && (
-                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
-                        <div className="py-1">
-                          <button
-                            onClick={() => setViewPolicyModal(policy)}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                          >
-                            <i className="fa-solid fa-eye"></i>
-                            View Policy
-                          </button>
-                          <button
-                            onClick={() => handleDownloadPolicy(policy)}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                          >
-                            <i className="fa-solid fa-download"></i>
-                            Download
-                          </button>
-                          <button
-                            onClick={() => handleViewVersionHistory(policy)}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                          >
-                            <i className="fa-solid fa-clock-rotate-left"></i>
-                            Version History
-                          </button>
-                          {policy.status === "Draft" && (
-                            <button
-                              onClick={() => handleSubmitForApproval(policy.id)}
-                              className="w-full text-left px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 flex items-center gap-2"
-                            >
-                              <i className="fa-solid fa-paper-plane"></i>
-                              Submit for Approval
-                            </button>
-                          )}
-                          {policy.status === "Pending Approval" && (
-                            <button
-                              onClick={() => setApprovalModal(policy)}
-                              className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 flex items-center gap-2"
-                            >
-                              <i className="fa-solid fa-check-circle"></i>
-                              Review & Approve
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleEditPolicy(policy.id)}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                          >
-                            <i className="fa-solid fa-pen"></i>
-                            Edit
-                          </button>
-                          <hr className="my-1" />
-                          <button
-                            onClick={() => handleDeletePolicy(policy.id)}
-                            className="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 flex items-center gap-2"
-                          >
-                            <i className="fa-solid fa-trash"></i>
-                            Delete
-                          </button>
+              {policiesLoading ? (
+                // Loading skeletons
+                [...Array(5)].map((_, idx) => (
+                  <tr key={idx} className="animate-pulse">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gray-200 rounded-lg"></div>
+                        <div className="flex-1">
+                          <div className="h-4 bg-gray-200 rounded w-48 mb-2"></div>
+                          <div className="h-3 bg-gray-200 rounded w-32"></div>
                         </div>
                       </div>
-                    )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-4 bg-gray-200 rounded w-12"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-4 bg-gray-200 rounded w-28 mb-2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-20"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+                        <div className="h-4 bg-gray-200 rounded w-24"></div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-6 bg-gray-200 rounded-full w-20"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-8 bg-gray-200 rounded w-8"></div>
+                    </td>
+                  </tr>
+                ))
+              ) : filteredPolicies.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-12 text-center">
+                    <i className="fa-solid fa-inbox text-gray-300 text-4xl mb-3"></i>
+                    <p className="text-gray-500">No policies found</p>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredPolicies.map((policy) => (
+                  <tr key={policy._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-10 h-10 ${getCategoryColor(
+                            policy.category
+                          )} rounded-lg flex items-center justify-center`}
+                        >
+                          <i
+                            className={`fa-solid ${getCategoryIcon(
+                              policy.category
+                            )}`}
+                          ></i>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {policy.title}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {policy.category} • {policy.policyId}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-medium text-gray-900">
+                        {policy.version}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div>
+                        <p className="text-sm text-gray-900">
+                          {new Date(policy.lastUpdated).toLocaleDateString(
+                            "en-US",
+                            {
+                              month: "short",
+                              day: "2-digit",
+                              year: "numeric",
+                            }
+                          )}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(policy.lastUpdated).toLocaleTimeString(
+                            "en-US",
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-xs font-semibold">
+                          {policy.author?.initials || "??"}
+                        </div>
+                        <span className="text-sm text-gray-900">
+                          {policy.author?.userName || "Unknown"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                          policy.status
+                        )}`}
+                      >
+                        <i
+                          className={`fa-solid ${getStatusIcon(policy.status)}`}
+                        ></i>
+                        {policy.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right relative">
+                      <button
+                        onClick={() =>
+                          setActionMenuOpen(
+                            actionMenuOpen === policy._id ? null : policy._id
+                          )
+                        }
+                        className="text-gray-600 hover:text-gray-900 px-3 py-1 rounded hover:bg-gray-100 transition-colors"
+                      >
+                        <i className="fa-solid fa-ellipsis-vertical"></i>
+                      </button>
+
+                      {/* Action Dropdown Menu */}
+                      {actionMenuOpen === policy._id && (
+                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                          <div className="py-1">
+                            <button
+                              onClick={() => setViewPolicyModal(policy)}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                            >
+                              <i className="fa-solid fa-eye"></i>
+                              View Policy
+                            </button>
+                            <button
+                              onClick={() => handleDownloadPolicy(policy)}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                            >
+                              <i className="fa-solid fa-download"></i>
+                              Download
+                            </button>
+                            <button
+                              onClick={() => handleViewVersionHistory(policy)}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                            >
+                              <i className="fa-solid fa-clock-rotate-left"></i>
+                              Version History
+                            </button>
+                            {policy.status === "Draft" && (
+                              <button
+                                onClick={() =>
+                                  handleSubmitForApproval(policy._id)
+                                }
+                                className="w-full text-left px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 flex items-center gap-2"
+                              >
+                                <i className="fa-solid fa-paper-plane"></i>
+                                Submit for Approval
+                              </button>
+                            )}
+                            {policy.status === "Pending Approval" && (
+                              <button
+                                onClick={() => setApprovalModal(policy)}
+                                className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 flex items-center gap-2"
+                              >
+                                <i className="fa-solid fa-check-circle"></i>
+                                Review & Approve
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleEditPolicy(policy._id)}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                            >
+                              <i className="fa-solid fa-pen"></i>
+                              Edit
+                            </button>
+                            <hr className="my-1" />
+                            <button
+                              onClick={() => handleDeletePolicy(policy._id)}
+                              className="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 flex items-center gap-2"
+                            >
+                              <i className="fa-solid fa-trash"></i>
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
 
@@ -841,7 +986,7 @@ const PolicyManagement = () => {
           <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
               <h2 className="text-xl font-bold text-gray-900">
-                Create New Policy
+                {editMode ? "Edit Policy" : "Create New Policy"}
               </h2>
               <button
                 onClick={handleCancelCreate}
@@ -877,12 +1022,15 @@ const PolicyManagement = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Department</option>
-                  <option>IT Security</option>
-                  <option>HR</option>
-                  <option>Finance</option>
-                  <option>Legal</option>
-                  <option>Marketing</option>
-                  <option>Operations</option>
+                  {departmentsLoading ? (
+                    <option disabled>Loading departments...</option>
+                  ) : (
+                    departments.map((dept) => (
+                      <option key={dept.id} value={dept.name}>
+                        {dept.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -975,11 +1123,13 @@ const PolicyManagement = () => {
                 Cancel
               </button>
               <button
-                onClick={handleCreatePolicy}
+                onClick={editMode ? handleUpdatePolicy : handleCreatePolicy}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
               >
-                <i className="fa-solid fa-plus"></i>
-                Create Policy
+                <i
+                  className={`fa-solid ${editMode ? "fa-save" : "fa-plus"}`}
+                ></i>
+                {editMode ? "Update Policy" : "Create Policy"}
               </button>
             </div>
           </div>
@@ -1091,17 +1241,29 @@ const PolicyManagement = () => {
                   {/* Document Viewer Header */}
                   <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
                     <div className="flex items-center gap-2">
-                      <i className="fa-solid fa-file-pdf text-red-500 text-lg"></i>
+                      <i
+                        className={`fa-solid ${
+                          viewPolicyModal.documentType?.includes("pdf")
+                            ? "fa-file-pdf text-red-500"
+                            : viewPolicyModal.documentType?.includes("word")
+                            ? "fa-file-word text-blue-500"
+                            : "fa-file text-gray-500"
+                        } text-lg`}
+                      ></i>
                       <span className="text-sm font-medium text-gray-900">
-                        {viewPolicyModal.document ||
+                        {viewPolicyModal.documentName ||
                           `${viewPolicyModal.title}.pdf`}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() =>
-                          toast.info("Opening document in full screen...")
-                        }
+                        onClick={() => {
+                          if (viewPolicyModal.documentUrl) {
+                            window.open(viewPolicyModal.documentUrl, "_blank");
+                          } else {
+                            toast.error("Document not available");
+                          }
+                        }}
                         className="px-3 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
                       >
                         <i className="fa-solid fa-expand mr-1"></i>
@@ -1111,108 +1273,52 @@ const PolicyManagement = () => {
                   </div>
 
                   {/* Document Content Area */}
-                  <div className="p-6 bg-white max-h-96 overflow-y-auto">
-                    {/* Simulated document content */}
-                    <div className="prose prose-sm max-w-none">
-                      <h2 className="text-lg font-bold text-gray-900 mb-4">
-                        {viewPolicyModal.title}
-                      </h2>
-
-                      <div className="mb-4 text-xs text-gray-500">
-                        <p>Policy ID: {viewPolicyModal.policyId}</p>
-                        <p>Version: {viewPolicyModal.version}</p>
-                        <p>Effective Date: {viewPolicyModal.lastUpdated}</p>
-                        <p>Department: {viewPolicyModal.category}</p>
+                  <div className="bg-white max-h-96 overflow-y-auto">
+                    {viewPolicyModal.documentUrl ? (
+                      viewPolicyModal.documentType?.includes("pdf") ? (
+                        // PDF Embed
+                        <embed
+                          src={viewPolicyModal.documentUrl}
+                          type="application/pdf"
+                          className="w-full h-96"
+                        />
+                      ) : (
+                        // For DOC/DOCX or other formats, show download option
+                        <div className="p-12 text-center">
+                          <i className="fa-solid fa-file-word text-blue-500 text-6xl mb-4"></i>
+                          <p className="text-gray-700 mb-2">Word Document</p>
+                          <p className="text-sm text-gray-500 mb-4">
+                            This document format cannot be previewed in the
+                            browser
+                          </p>
+                          <button
+                            onClick={() =>
+                              handleDownloadPolicy(viewPolicyModal)
+                            }
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors inline-flex items-center gap-2"
+                          >
+                            <i className="fa-solid fa-download"></i>
+                            Download to View
+                          </button>
+                        </div>
+                      )
+                    ) : (
+                      <div className="p-12 text-center">
+                        <i className="fa-solid fa-file-circle-xmark text-gray-300 text-6xl mb-4"></i>
+                        <p className="text-gray-500">Document not available</p>
                       </div>
-
-                      <hr className="my-4" />
-
-                      <h3 className="text-base font-semibold text-gray-900 mb-2">
-                        1. Purpose
-                      </h3>
-                      <p className="text-sm text-gray-700 mb-4 leading-relaxed">
-                        {viewPolicyModal.description ||
-                          "This policy outlines the guidelines, procedures, and requirements for ensuring compliance with organizational standards and regulatory requirements."}
-                      </p>
-
-                      <h3 className="text-base font-semibold text-gray-900 mb-2">
-                        2. Scope
-                      </h3>
-                      <p className="text-sm text-gray-700 mb-4 leading-relaxed">
-                        This policy applies to all employees, contractors, and
-                        third-party personnel who have access to company
-                        resources and information systems within the{" "}
-                        {viewPolicyModal.category} department.
-                      </p>
-
-                      <h3 className="text-base font-semibold text-gray-900 mb-2">
-                        3. Policy Guidelines
-                      </h3>
-                      <ul className="list-disc pl-5 text-sm text-gray-700 space-y-2 mb-4">
-                        <li>
-                          All personnel must adhere to the guidelines outlined
-                          in this document
-                        </li>
-                        <li>
-                          Violations of this policy may result in disciplinary
-                          action
-                        </li>
-                        <li>
-                          Regular training and awareness programs will be
-                          conducted
-                        </li>
-                        <li>
-                          This policy will be reviewed annually and updated as
-                          necessary
-                        </li>
-                      </ul>
-
-                      <h3 className="text-base font-semibold text-gray-900 mb-2">
-                        4. Responsibilities
-                      </h3>
-                      <p className="text-sm text-gray-700 mb-4 leading-relaxed">
-                        Department heads are responsible for ensuring compliance
-                        with this policy. All employees must report any
-                        violations or concerns to their immediate supervisor or
-                        the compliance department.
-                      </p>
-
-                      <h3 className="text-base font-semibold text-gray-900 mb-2">
-                        5. Compliance & Monitoring
-                      </h3>
-                      <p className="text-sm text-gray-700 mb-4 leading-relaxed">
-                        Regular audits will be conducted to ensure adherence to
-                        this policy. Non-compliance will be addressed through
-                        appropriate corrective measures.
-                      </p>
-
-                      <hr className="my-4" />
-
-                      <div className="text-xs text-gray-500">
-                        <p>Document prepared by: {viewPolicyModal.author}</p>
-                        <p>
-                          Last modified: {viewPolicyModal.lastUpdated} at{" "}
-                          {viewPolicyModal.time}
-                        </p>
-                      </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* Document Viewer Footer */}
-                  <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-t border-gray-200">
-                    <span className="text-xs text-gray-500">
-                      Page 1 of 1 • 5 sections
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded transition-colors">
-                        <i className="fa-solid fa-magnifying-glass-minus"></i>
-                      </button>
-                      <span className="text-xs text-gray-600">100%</span>
-                      <button className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded transition-colors">
-                        <i className="fa-solid fa-magnifying-glass-plus"></i>
-                      </button>
-                    </div>
-                  </div>
+                  {viewPolicyModal.documentUrl &&
+                    viewPolicyModal.documentType?.includes("pdf") && (
+                      <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-t border-gray-200">
+                        <span className="text-xs text-gray-500">
+                          {viewPolicyModal.documentName}
+                        </span>
+                      </div>
+                    )}
                 </div>
               </div>
 
@@ -1443,14 +1549,14 @@ const PolicyManagement = () => {
                 </p>
                 <div className="flex gap-3">
                   <button
-                    onClick={() => handleApprovePolicy(approvalModal.id)}
+                    onClick={() => handleApprovePolicy(approvalModal._id)}
                     className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                   >
                     <i className="fa-solid fa-check-circle"></i>
                     Approve & Publish
                   </button>
                   <button
-                    onClick={() => handleRejectPolicy(approvalModal.id)}
+                    onClick={() => handleRejectPolicy(approvalModal._id)}
                     className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                   >
                     <i className="fa-solid fa-times-circle"></i>
@@ -1527,12 +1633,13 @@ const PolicyManagement = () => {
                   Version Timeline
                 </h3>
 
-                {versionHistoryData[versionHistoryModal.id] ? (
+                {versionHistoryModal.versionHistory &&
+                versionHistoryModal.versionHistory.length > 0 ? (
                   <div className="relative">
                     {/* Timeline line */}
                     <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gray-200"></div>
 
-                    {versionHistoryData[versionHistoryModal.id].map(
+                    {versionHistoryModal.versionHistory.map(
                       (version, index) => (
                         <div
                           key={index}
@@ -1541,7 +1648,7 @@ const PolicyManagement = () => {
                           {/* Timeline dot */}
                           <div
                             className={`absolute left-3 w-4 h-4 rounded-full border-2 ${
-                              version.isCurrent
+                              version.status === "Current"
                                 ? "bg-blue-600 border-blue-600"
                                 : "bg-white border-gray-300"
                             }`}
@@ -1550,7 +1657,7 @@ const PolicyManagement = () => {
                           {/* Version card */}
                           <div
                             className={`bg-white rounded-lg border ${
-                              version.isCurrent
+                              version.status === "Current"
                                 ? "border-blue-300 shadow-md"
                                 : "border-gray-200"
                             } p-4`}
@@ -1561,21 +1668,36 @@ const PolicyManagement = () => {
                                   <h4 className="font-semibold text-gray-900">
                                     {version.version}
                                   </h4>
-                                  {version.isCurrent && (
+                                  {version.status === "Current" && (
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
                                       Current
                                     </span>
                                   )}
                                 </div>
                                 <p className="text-xs text-gray-500 mb-2">
-                                  {version.date} at {version.time}
+                                  {new Date(version.date).toLocaleDateString(
+                                    "en-US",
+                                    {
+                                      month: "short",
+                                      day: "2-digit",
+                                      year: "numeric",
+                                    }
+                                  )}{" "}
+                                  at{" "}
+                                  {new Date(version.date).toLocaleTimeString(
+                                    "en-US",
+                                    {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    }
+                                  )}
                                 </p>
                               </div>
-                              {!version.isCurrent && (
+                              {version.status !== "Current" && (
                                 <button
                                   onClick={() =>
                                     handleRestoreVersion(
-                                      versionHistoryModal.id,
+                                      versionHistoryModal._id,
                                       version
                                     )
                                   }
@@ -1589,10 +1711,10 @@ const PolicyManagement = () => {
 
                             <div className="flex items-center gap-2 mb-3">
                               <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 text-xs font-semibold">
-                                {version.authorAvatar}
+                                {version.author?.initials || "??"}
                               </div>
                               <span className="text-sm text-gray-700">
-                                {version.author}
+                                {version.author?.userName || "Unknown"}
                               </span>
                             </div>
 
@@ -1603,11 +1725,13 @@ const PolicyManagement = () => {
 
                             <div className="flex items-center gap-2 mt-3">
                               <button
-                                onClick={() =>
-                                  toast.info(
-                                    `Viewing ${version.version} document...`
-                                  )
-                                }
+                                onClick={() => {
+                                  if (version.documentUrl) {
+                                    window.open(version.documentUrl, "_blank");
+                                  } else {
+                                    toast.error("Document not available");
+                                  }
+                                }}
                                 className="text-xs font-medium text-gray-600 hover:text-gray-900 flex items-center gap-1"
                               >
                                 <i className="fa-solid fa-eye"></i>
@@ -1615,43 +1739,28 @@ const PolicyManagement = () => {
                               </button>
                               <span className="text-gray-300">•</span>
                               <button
-                                onClick={() =>
-                                  toast.success(
-                                    `Downloading ${version.version}...`
-                                  )
-                                }
+                                onClick={() => {
+                                  if (version.documentUrl) {
+                                    const link = document.createElement("a");
+                                    link.href = version.documentUrl;
+                                    link.download =
+                                      version.documentName ||
+                                      `${versionHistoryModal.title}_${version.version}.pdf`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    toast.success(
+                                      `Downloading ${version.version}...`
+                                    );
+                                  } else {
+                                    toast.error("Document not available");
+                                  }
+                                }}
                                 className="text-xs font-medium text-gray-600 hover:text-gray-900 flex items-center gap-1"
                               >
                                 <i className="fa-solid fa-download"></i>
                                 Download
                               </button>
-                              {index <
-                                versionHistoryData[versionHistoryModal.id]
-                                  .length -
-                                  1 && (
-                                <>
-                                  <span className="text-gray-300">•</span>
-                                  <button
-                                    onClick={() =>
-                                      handleCompareVersions(
-                                        version.version,
-                                        versionHistoryData[
-                                          versionHistoryModal.id
-                                        ][index + 1].version
-                                      )
-                                    }
-                                    className="text-xs font-medium text-gray-600 hover:text-gray-900 flex items-center gap-1"
-                                  >
-                                    <i className="fa-solid fa-code-compare"></i>
-                                    Compare with{" "}
-                                    {
-                                      versionHistoryData[
-                                        versionHistoryModal.id
-                                      ][index + 1].version
-                                    }
-                                  </button>
-                                </>
-                              )}
                             </div>
                           </div>
                         </div>
@@ -1689,4 +1798,4 @@ const PolicyManagement = () => {
   );
 };
 
-export default PolicyManagement;
+export default Policy;

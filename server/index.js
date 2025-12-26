@@ -13,6 +13,7 @@ const dotenv = require('dotenv');
 dotenv.config({ path: path.join(__dirname, '.env') });
 
 const { validate, validationRules } = require('./middleware/validation');
+const api = require('./api');
 const ModuleModel = require('./models/Module');
 const AnalyticsModel = require('./models/Analytics');
 const AttendanceModel = require('./models/Attendance');
@@ -25,6 +26,7 @@ const DocumentModel = require('./models/Document');
 const UserModel = require('./models/User');
 const SecuritySettingsModel = require('./models/SecuritySettings');
 const AuditLogModel = require('./models/AuditLog');
+const PolicyModel = require('./models/Policy');
 const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail } = require('./utils/emailService');
 const seed = require('./data');
 
@@ -1071,6 +1073,802 @@ async function start() {
     } catch (err) {
       console.error('Error exporting audit logs:', err);
       res.status(500).json({ message: 'Failed to export audit logs' });
+    }
+  });
+
+  // Bulk export selected audit logs
+  app.post('/api/audit-logs/export', async (req, res) => {
+    try {
+      const { logIds } = req.body;
+      
+      if (!logIds || !Array.isArray(logIds) || logIds.length === 0) {
+        return res.status(400).json({ message: 'No logs selected for export' });
+      }
+
+      const logs = await AuditLogModel.find({ _id: { $in: logIds } }).sort({ timestamp: -1 });
+
+      // Generate CSV
+      const headers = ['Timestamp', 'Actor', 'Action', 'IP Address', 'Description', 'Status'];
+      const csvRows = [headers.join(',')];
+
+      logs.forEach(log => {
+        const row = [
+          new Date(log.timestamp).toISOString(),
+          `"${log.actor.userName || 'Unknown'}"`,
+          log.action,
+          log.ipAddress,
+          `"${log.description}"`,
+          log.status,
+        ];
+        csvRows.push(row.join(','));
+      });
+
+      const csv = csvRows.join('\\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=selected-audit-logs.csv');
+      res.send(csv);
+    } catch (err) {
+      console.error('Error exporting selected logs:', err);
+      res.status(500).json({ message: 'Failed to export selected logs' });
+    }
+  });
+
+  // Get notification rules
+  app.get('/api/security/notification-rules', async (req, res) => {
+    try {
+      const settings = await SecuritySettingsModel.findOne();
+      if (!settings || !settings.notificationRules) {
+        return res.json({ rules: [] });
+      }
+      res.json({ rules: settings.notificationRules });
+    } catch (err) {
+      console.error('Error fetching notification rules:', err);
+      res.status(500).json({ message: 'Failed to fetch notification rules' });
+    }
+  });
+
+  // Add notification rule
+  app.post('/api/security/notification-rules', async (req, res) => {
+    try {
+      const { name, event, condition, recipient, enabled } = req.body;
+      
+      if (!name || !event || !condition || !recipient) {
+        return res.status(400).json({ message: 'Missing required fields' });
+      }
+
+      let settings = await SecuritySettingsModel.findOne();
+      if (!settings) {
+        settings = new SecuritySettingsModel({ notificationRules: [] });
+      }
+
+      const newRule = {
+        name,
+        event,
+        condition,
+        recipient,
+        enabled: enabled !== undefined ? enabled : true,
+      };
+
+      settings.notificationRules = settings.notificationRules || [];
+      settings.notificationRules.push(newRule);
+      await settings.save();
+
+      const addedRule = settings.notificationRules[settings.notificationRules.length - 1];
+      res.json({ rule: addedRule });
+    } catch (err) {
+      console.error('Error adding notification rule:', err);
+      res.status(500).json({ message: 'Failed to add notification rule' });
+    }
+  });
+
+  // Delete notification rule
+  app.delete('/api/security/notification-rules/:ruleId', async (req, res) => {
+    try {
+      const { ruleId } = req.params;
+      
+      const settings = await SecuritySettingsModel.findOne();
+      if (!settings) {
+        return res.status(404).json({ message: 'Settings not found' });
+      }
+
+      settings.notificationRules = settings.notificationRules.filter(
+        rule => rule._id.toString() !== ruleId
+      );
+      await settings.save();
+
+      res.json({ message: 'Notification rule deleted' });
+    } catch (err) {
+      console.error('Error deleting notification rule:', err);
+      res.status(500).json({ message: 'Failed to delete notification rule' });
+    }
+  });
+
+  // Get settings history
+  app.get('/api/security/settings-history', async (req, res) => {
+    try {
+      const settings = await SecuritySettingsModel.findOne();
+      if (!settings || !settings.settingsHistory) {
+        return res.json({ history: [] });
+      }
+      // Return last 50 entries, sorted by timestamp descending
+      const history = settings.settingsHistory
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, 50);
+      res.json({ history });
+    } catch (err) {
+      console.error('Error fetching settings history:', err);
+      res.status(500).json({ message: 'Failed to fetch settings history' });
+    }
+  });
+
+  // Panic logout - terminate all sessions
+  app.post('/api/security/panic-logout', async (req, res) => {
+    try {
+      // In a real implementation, this would:
+      // 1. Clear all session tokens
+      // 2. Force logout all users
+      // 3. Notify administrators
+      // For now, we'll just log the action
+      
+      // Create audit log
+      await AuditLogModel.create({
+        action: 'Panic Logout',
+        description: 'Emergency logout initiated for all users',
+        status: 'Success',
+        actor: {
+          userName: req.body.userName || 'System Administrator',
+          userEmail: req.body.userEmail || 'admin@system.com',
+          initials: req.body.initials || 'SA',
+        },
+        ipAddress: req.ip || req.connection.remoteAddress,
+        actionColor: 'red',
+        timestamp: new Date(),
+      });
+
+      res.json({ message: 'All users have been logged out', count: 0 });
+    } catch (err) {
+      console.error('Error during panic logout:', err);
+      res.status(500).json({ message: 'Failed to execute panic logout' });
+    }
+  });
+
+  // ===================================
+  // POLICY MANAGEMENT ROUTES
+  // ===================================
+
+  // Get departments list
+  app.get('/api/departments', async (req, res) => {
+    try {
+      const departments = [
+        { id: 1, name: 'IT Security', code: 'ITS', icon: 'fa-shield-halved', color: 'blue' },
+        { id: 2, name: 'HR', code: 'HR', icon: 'fa-users', color: 'purple' },
+        { id: 3, name: 'Finance', code: 'FIN', icon: 'fa-dollar-sign', color: 'green' },
+        { id: 4, name: 'Legal', code: 'LEG', icon: 'fa-gavel', color: 'red' },
+        { id: 5, name: 'Marketing', code: 'MKT', icon: 'fa-bullhorn', color: 'orange' },
+        { id: 6, name: 'Operations', code: 'OPS', icon: 'fa-cogs', color: 'gray' },
+      ];
+      res.json({ departments });
+    } catch (err) {
+      console.error('Error fetching departments:', err);
+      res.status(500).json({ message: 'Failed to fetch departments' });
+    }
+  });
+
+  // Get policy statistics
+  app.get('/api/policies/stats', async (req, res) => {
+    try {
+      const totalPolicies = await PolicyModel.countDocuments();
+      const published = await PolicyModel.countDocuments({ status: 'Published' });
+      const drafts = await PolicyModel.countDocuments({ status: 'Draft' });
+      const pendingApproval = await PolicyModel.countDocuments({ status: 'Pending Approval' });
+      const reviewRequired = await PolicyModel.countDocuments({ status: 'Review' });
+      const expiring = await PolicyModel.countDocuments({ status: 'Expiring' });
+
+      // Calculate change from last month (simplified - you can make this more sophisticated)
+      const lastMonthDate = new Date();
+      lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+      const lastMonthCount = await PolicyModel.countDocuments({
+        createdAt: { $gte: lastMonthDate }
+      });
+
+      const stats = {
+        totalPolicies,
+        totalChange: lastMonthCount > 0 ? `+${lastMonthCount} this month` : 'No change',
+        published,
+        publishedStatus: 'Active and visible',
+        drafts,
+        draftsPending: pendingApproval > 0 ? `${pendingApproval} pending approval` : 'None',
+        reviewRequired: reviewRequired + expiring,
+        reviewStatus: expiring > 0 ? 'Expiring soon' : 'Up to date',
+      };
+
+      res.json(stats);
+    } catch (err) {
+      console.error('Error fetching policy stats:', err);
+      res.status(500).json({ message: 'Failed to fetch policy stats' });
+    }
+  });
+
+  // Get all policies with filtering
+  app.get('/api/policies', async (req, res) => {
+    try {
+      const { status, category, search } = req.query;
+      let query = {};
+
+      if (status && status !== 'All Statuses') {
+        query.status = status;
+      }
+      if (category && category !== 'All Departments') {
+        query.category = category;
+      }
+      if (search) {
+        query.$or = [
+          { title: { $regex: search, $options: 'i' } },
+          { policyId: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } }
+        ];
+      }
+
+      const policies = await PolicyModel.find(query).sort({ lastUpdated: -1 });
+      res.json(policies);
+    } catch (err) {
+      console.error('Error fetching policies:', err);
+      res.status(500).json({ message: 'Failed to fetch policies' });
+    }
+  });
+
+  // Get single policy by ID
+  app.get('/api/policies/:id', async (req, res) => {
+    try {
+      const policy = await PolicyModel.findById(req.params.id);
+      if (!policy) {
+        return res.status(404).json({ message: 'Policy not found' });
+      }
+      res.json(policy);
+    } catch (err) {
+      console.error('Error fetching policy:', err);
+      res.status(500).json({ message: 'Failed to fetch policy' });
+    }
+  });
+
+  // Create new policy (with base64 document upload)
+  app.post('/api/policies', async (req, res) => {
+    try {
+      const {
+        title,
+        category,
+        description,
+        documentData, // base64 string
+        documentName,
+        documentType,
+        author
+      } = req.body;
+
+      // Validation
+      if (!title || !category || !description || !documentData || !documentName) {
+        return res.status(400).json({ message: 'Missing required fields' });
+      }
+
+      // Generate policy ID
+      const currentYear = new Date().getFullYear();
+      const departmentCodes = {
+        'IT Security': 'ITS',
+        'HR': 'HR',
+        'Finance': 'FIN',
+        'Legal': 'LEG',
+        'Marketing': 'MKT',
+        'Operations': 'OPS'
+      };
+
+      const existingPolicies = await PolicyModel.countDocuments({ category });
+      const nextNumber = String(existingPolicies + 1).padStart(3, '0');
+      const code = departmentCodes[category] || 'GEN';
+      const policyId = `POL-${currentYear}-${code}-${nextNumber}`;
+
+      // Create policy
+      const newPolicy = new PolicyModel({
+        title,
+        category,
+        policyId,
+        description,
+        documentUrl: documentData, // Store base64 data URL
+        documentName,
+        documentType,
+        author,
+        version: 'v1.0',
+        status: 'Draft',
+        versionHistory: [{
+          version: 'v1.0',
+          date: new Date(),
+          author,
+          changes: 'Initial version',
+          status: 'Current',
+          documentUrl: documentData,
+          documentName
+        }]
+      });
+
+      await newPolicy.save();
+      
+      res.status(201).json(newPolicy);
+    } catch (err) {
+      console.error('Error creating policy:', err);
+      res.status(500).json({ message: 'Failed to create policy' });
+    }
+  });
+
+  // Update policy
+  app.patch('/api/policies/:id', async (req, res) => {
+    try {
+      const {
+        title,
+        description,
+        status,
+        documentData,
+        documentName,
+        documentType,
+        changes,
+        author
+      } = req.body;
+
+      const policy = await PolicyModel.findById(req.params.id);
+      if (!policy) {
+        return res.status(404).json({ message: 'Policy not found' });
+      }
+
+      // Update fields
+      if (title) policy.title = title;
+      if (description) policy.description = description;
+      if (status) policy.status = status;
+      
+      // If new document is uploaded, increment version
+      if (documentData && documentName) {
+        // Archive current version
+        policy.versionHistory.forEach(v => {
+          if (v.status === 'Current') v.status = 'Archived';
+        });
+
+        // Increment version
+        const currentVersionNum = parseFloat(policy.version.replace('v', ''));
+        const newVersion = `v${(currentVersionNum + 0.1).toFixed(1)}`;
+        
+        policy.version = newVersion;
+        policy.documentUrl = documentData;
+        policy.documentName = documentName;
+        policy.documentType = documentType;
+        
+        // Add to version history
+        policy.versionHistory.push({
+          version: newVersion,
+          date: new Date(),
+          author,
+          changes: changes || 'Updated document',
+          status: 'Current',
+          documentUrl: documentData,
+          documentName
+        });
+      }
+
+      policy.lastUpdated = new Date();
+      await policy.save();
+
+      res.json(policy);
+    } catch (err) {
+      console.error('Error updating policy:', err);
+      res.status(500).json({ message: 'Failed to update policy' });
+    }
+  });
+
+  // Delete policy
+  app.delete('/api/policies/:id', async (req, res) => {
+    try {
+      const policy = await PolicyModel.findByIdAndDelete(req.params.id);
+      if (!policy) {
+        return res.status(404).json({ message: 'Policy not found' });
+      }
+      res.json({ message: 'Policy deleted successfully' });
+    } catch (err) {
+      console.error('Error deleting policy:', err);
+      res.status(500).json({ message: 'Failed to delete policy' });
+    }
+  });
+
+  // Approve policy
+  app.patch('/api/policies/:id/approve', async (req, res) => {
+    try {
+      const { approvedBy } = req.body;
+      
+      const policy = await PolicyModel.findById(req.params.id);
+      if (!policy) {
+        return res.status(404).json({ message: 'Policy not found' });
+      }
+
+      policy.status = 'Published';
+      policy.approvedBy = {
+        userId: approvedBy.userId,
+        userName: approvedBy.userName,
+        approvedDate: new Date()
+      };
+      policy.lastUpdated = new Date();
+      
+      await policy.save();
+      res.json(policy);
+    } catch (err) {
+      console.error('Error approving policy:', err);
+      res.status(500).json({ message: 'Failed to approve policy' });
+    }
+  });
+
+  // Reject policy (return to draft)
+  app.patch('/api/policies/:id/reject', async (req, res) => {
+    try {
+      const policy = await PolicyModel.findById(req.params.id);
+      if (!policy) {
+        return res.status(404).json({ message: 'Policy not found' });
+      }
+
+      policy.status = 'Draft';
+      policy.lastUpdated = new Date();
+      
+      await policy.save();
+      res.json(policy);
+    } catch (err) {
+      console.error('Error rejecting policy:', err);
+      res.status(500).json({ message: 'Failed to reject policy' });
+    }
+  });
+
+  // Submit policy for approval
+  app.patch('/api/policies/:id/submit', async (req, res) => {
+    try {
+      const policy = await PolicyModel.findById(req.params.id);
+      if (!policy) {
+        return res.status(404).json({ message: 'Policy not found' });
+      }
+
+      policy.status = 'Pending Approval';
+      policy.lastUpdated = new Date();
+      
+      await policy.save();
+      res.json(policy);
+    } catch (err) {
+      console.error('Error submitting policy:', err);
+      res.status(500).json({ message: 'Failed to submit policy' });
+    }
+  });
+
+  // Restore version
+  app.patch('/api/policies/:id/restore-version', async (req, res) => {
+    try {
+      const { versionToRestore, author } = req.body;
+      
+      const policy = await PolicyModel.findById(req.params.id);
+      if (!policy) {
+        return res.status(404).json({ message: 'Policy not found' });
+      }
+
+      const historyVersion = policy.versionHistory.find(v => v.version === versionToRestore);
+      if (!historyVersion) {
+        return res.status(404).json({ message: 'Version not found in history' });
+      }
+
+      // Archive current version
+      policy.versionHistory.forEach(v => {
+        if (v.status === 'Current') v.status = 'Archived';
+      });
+
+      // Increment version
+      const currentVersionNum = parseFloat(policy.version.replace('v', ''));
+      const newVersion = `v${(currentVersionNum + 0.1).toFixed(1)}`;
+      
+      policy.version = newVersion;
+      policy.documentUrl = historyVersion.documentUrl;
+      policy.documentName = historyVersion.documentName;
+      
+      // Add restored version to history
+      policy.versionHistory.push({
+        version: newVersion,
+        date: new Date(),
+        author,
+        changes: `Restored from ${versionToRestore}`,
+        status: 'Current',
+        documentUrl: historyVersion.documentUrl,
+        documentName: historyVersion.documentName
+      });
+
+      policy.lastUpdated = new Date();
+      await policy.save();
+
+      res.json(policy);
+    } catch (err) {
+      console.error('Error restoring version:', err);
+      res.status(500).json({ message: 'Failed to restore version' });
+    }
+  });
+
+  // ===================================
+  // HR MANAGEMENT ROUTES
+  // ===================================
+
+  // In-memory sample data for HR dashboard
+  const hrData = {
+    employees: [
+      { id: 'e1', name: 'Sarah Jenkins', email: 'sarah.j@company.com', role: 'Product Manager', department: 'Product', status: 'Active', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDuiE8m7uH1WQVnfTGmVuYm9exoMTgg4IcNALgCTd3hWW9Vpwm-jpiFyqU0qlPRUtyokT0rbP0N5TTBkf1LoYVuXbC6rLTFhVYE6HMQynWIIdMpu375MNBV8yw7gajwRPUugUmb-vG57rkjheTg8b_wd4C1zsVQ5FaxE0foWLzRO43bfDkAVldMfE2Ig5DdWlpKGxP4_zHzCmgFvOm9W-VCkQCuh-FumLFHvh_ghWU3a5cndN0ls-Ec7UZLCx6S4Qf5ZnetieRG4dk' },
+      { id: 'e2', name: 'Michael Chen', email: 'm.chen@company.com', role: 'Senior Developer', department: 'Engineering', status: 'Active', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDjBWbOUw-8uQ2bd9vogLgtemig-qQTvjQ8Zv29Bd_cwOcGUsi9uurrQ1twgDxW4gpnZGfOEKRcr-JElaIT86gvlNU-SfPI_6qaXsBTPhLJUoVUOZEf-lTShLIU1NGFRf9fn8gFawsB31cbFNHdoVWcSuDfQ1ejxZERh6mvbBkyeP6AwImggXemWreTckEyhifxgyW8svuoCfozgw-SA6scCAjf99e_MN_rlU_6iD2B1lLr-DHssqf3F1S1uu1W8TTwMahJgJLeTyw' },
+      { id: 'e3', name: 'Jessica Lee', email: 'j.lee@company.com', role: 'UX Designer', department: 'Design', status: 'On Leave', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBiQjuyAfghLhGYwDLtEn7yLZsJ0CbLyxPo_tuNdWo-cSWHCh2P-G45yGqCeK2udz4tic3YcfirguC_Hfv4eo79Ad8DikKv3L6J-_pAQ2tCVZxrn530bcfr5xRQdCzZmVUkdGhf0s6zNnObpYczSri9Zheswh-W0MSJJqkNDLJBlKjoa3YvrFsZD6cAXQs0cprimwHA06ojJJ9PJNGAF_3aw209UBq0IgMWk09LibFWqLNjCrk0DG7s5n9OgFAMMWHRAw9e84OjiOU' },
+      { id: 'e4', name: 'Emily Davis', email: 'e.davis@company.com', role: 'HR Specialist', department: 'HR', status: 'Active', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA4H25ln_ynzgML7c5_Xd9FqsNzoifurVEkBjP94CLN_HChdWYYnEHCGG58u3QeP1psN5CvhMKzes5Qk9CZ2LqiA8N_Yo0KuAaE1zAUrx0hGel-F3lI_7hvd3Ws6kkN-2itUV1ktkUnJ903Nv9ywQO7oO_xrDTh-UyAw6mYlOrXyMy8Ej3sUf-azlHCG58pyllq21ErlC1yg5xheqX0HhIrIiYMYr6LKdCEIOAAjgnNDfIvgBgEugM8K7fylAE4nmLgbCJQA8gQFeY' },
+      { id: 'e5', name: 'Mark Wilson', email: 'mark.w@company.com', role: 'QA Engineer', department: 'Engineering', status: 'Active', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBzXmjWz74EG2YsFkNOfcRTS19Zvz_3bIL0B4WQGl04mK8s3v1dqEDNeBkKsAVumPXPIoirGq2UcAa4lmpIaabP0wsa0TPPdBqnXwrXDH5XdzeGN0vZLHFfyGQ1yipiOBSzg8uq-gBLbCoOrn2j9ugnHEFNbMGcsIPp2gkTqUkskrWQPa6CjbvBX-9waCcXCp4jn6ZXqnvMRwzsRQ26z12MF7uOFK-hxWcdZzY1mM_pkl-9N8bWR_kP5zzdwH9P87RgG5ccvwWu9IE' },
+    ],
+    requisitions: [
+      { id: 'r1', title: 'Senior Frontend Dev', candidates: 3, progressPct: 70 },
+      { id: 'r2', title: 'Marketing Lead', candidates: 8, progressPct: 30 },
+      { id: 'r3', title: 'Payroll Manager', candidates: 5, progressPct: 45 },
+    ],
+    turnoverRates6m: [2.1, 1.8, 2.5, 1.5, 1.0, 1.2],
+    turnoverRatesYtd: [1.6, 2.0, 2.3, 2.8, 2.1, 1.9, 1.7, 1.8, 1.5, 1.2, 1.3, 1.4],
+    months6m: ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'],
+    leaveRequests: [
+      { id: 'l1', name: 'Mark Wilson', type: 'Sick Leave', range: 'Dec 24-25', status: 'pending' },
+      { id: 'l2', name: 'Emily Davis', type: 'Vacation', range: 'Dec 28-Jan 2', status: 'pending' },
+    ],
+    performance: { q3CompletedPct: 85, pending: { selfReviews: 12, managerReviews: 4 } },
+    training: [
+      { id: 't1', name: 'Security 101', dueInDays: 3, completionPercent: 75, icon: 'security' },
+      { id: 't2', name: 'Compliance', dueInDays: 7, completionPercent: 20, icon: 'gavel' },
+    ],
+    payrollNext: { date: '2025-12-30', runApproved: true },
+  };
+
+  // Employees
+  app.get('/api/hr/employees', async (req, res) => {
+    try {
+      const { search } = req.query;
+      let list = hrData.employees;
+      if (search) {
+        const q = String(search).toLowerCase();
+        list = list.filter(
+          (e) => e.name.toLowerCase().includes(q) || e.email.toLowerCase().includes(q)
+        );
+      }
+      res.json(list);
+    } catch (err) {
+      console.error('Error fetching employees:', err);
+      res.status(500).json({ message: 'Failed to fetch employees' });
+    }
+  });
+
+  // Requisitions
+  app.get('/api/hr/requisitions', async (_req, res) => {
+    res.json(hrData.requisitions);
+  });
+
+  // Analytics
+  app.get('/api/hr/analytics', async (req, res) => {
+    const range = req.query.range === 'ytd' ? 'ytd' : '6m';
+    const turnover = range === 'ytd' ? hrData.turnoverRatesYtd : hrData.turnoverRates6m;
+    const months = range === 'ytd' ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] : hrData.months6m;
+    res.json({ turnoverRates: turnover, months, newHires: 42 });
+  });
+
+  // Leave Requests
+  app.get('/api/hr/leave-requests', async (_req, res) => {
+    res.json(hrData.leaveRequests);
+  });
+
+  app.post('/api/hr/leave-requests/:id/approve', async (req, res) => {
+    const { id } = req.params;
+    const item = hrData.leaveRequests.find((l) => l.id === id);
+    if (!item) return res.status(404).json({ message: 'Not found' });
+    item.status = 'approved';
+    res.json({ message: 'Approved', data: item });
+  });
+
+  app.post('/api/hr/leave-requests/:id/reject', async (req, res) => {
+    const { id } = req.params;
+    const item = hrData.leaveRequests.find((l) => l.id === id);
+    if (!item) return res.status(404).json({ message: 'Not found' });
+    item.status = 'rejected';
+    res.json({ message: 'Rejected', data: item });
+  });
+
+  // Performance
+  app.get('/api/hr/performance', async (_req, res) => {
+    res.json(hrData.performance);
+  });
+
+  // Training
+  app.get('/api/hr/training', async (_req, res) => {
+    res.json(hrData.training);
+  });
+
+  // Payroll Next
+  app.get('/api/hr/payroll-next', async (_req, res) => {
+    res.json(hrData.payrollNext);
+  });
+
+  // ===========================
+  // Leave Allocation Routes
+  // ===========================
+  
+  // Get leave allocations (with optional filters)
+  app.get('/api/hr/leave-allocations', async (req, res) => {
+    try {
+      const query = {};
+      if (req.query.employeeId) query.employeeId = req.query.employeeId;
+      if (req.query.year) query.year = parseInt(req.query.year);
+      
+      const allocations = await api.getLeaveAllocations(query);
+      res.json({ success: true, data: allocations });
+    } catch (error) {
+      console.error('Error fetching leave allocations:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create or update leave allocation
+  app.post('/api/hr/leave-allocations', async (req, res) => {
+    try {
+      const allocation = await api.createLeaveAllocation(req.body);
+      res.status(201).json({ success: true, data: allocation });
+    } catch (error) {
+      console.error('Error creating leave allocation:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ===========================
+  // Leave Request Routes
+  // ===========================
+  
+  // Get leave requests (with optional filters)
+  app.get('/api/approval/leave-requests', async (req, res) => {
+    try {
+      const query = {};
+      if (req.query.employeeId) query.employeeId = req.query.employeeId;
+      if (req.query.managerId) query.managerId = req.query.managerId;
+      if (req.query.status) query.status = req.query.status;
+      
+      const requests = await api.getLeaveRequests(query);
+      res.json({ success: true, data: requests });
+    } catch (error) {
+      console.error('Error fetching leave requests:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create leave request
+  app.post('/api/approval/leave-requests', async (req, res) => {
+    try {
+      const request = await api.createLeaveRequest(req.body);
+      res.status(201).json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error creating leave request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Manager approves leave request
+  app.post('/api/approval/leave-requests/:id/manager-approve', async (req, res) => {
+    try {
+      const { comments } = req.body;
+      const request = await api.updateLeaveRequestStatus(
+        req.params.id,
+        'approved_manager',
+        comments,
+        'manager'
+      );
+      
+      // Send email to HR for final approval
+      // You can add email logic here
+      
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error approving leave request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Manager rejects leave request
+  app.post('/api/approval/leave-requests/:id/manager-reject', async (req, res) => {
+    try {
+      const { comments } = req.body;
+      const request = await api.updateLeaveRequestStatus(
+        req.params.id,
+        'rejected_manager',
+        comments,
+        'manager'
+      );
+      
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error rejecting leave request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // HR approves leave request (final approval)
+  app.post('/api/approval/leave-requests/:id/hr-approve', async (req, res) => {
+    try {
+      const { comments } = req.body;
+      const request = await api.updateLeaveRequestStatus(
+        req.params.id,
+        'approved',
+        comments,
+        'hr'
+      );
+      
+      // Update leave allocation usage
+      const allocation = await api.getLeaveAllocations({
+        employeeId: request.employeeId,
+        year: new Date(request.fromDate).getFullYear()
+      });
+      
+      if (allocation && allocation.length > 0 && request.leaveType !== 'unpaid') {
+        await api.updateLeaveUsage(
+          request.employeeId,
+          new Date(request.fromDate).getFullYear(),
+          request.leaveType,
+          request.days
+        );
+      }
+      
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error approving leave request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // HR rejects leave request
+  app.post('/api/approval/leave-requests/:id/hr-reject', async (req, res) => {
+    try {
+      const { comments } = req.body;
+      const request = await api.updateLeaveRequestStatus(
+        req.params.id,
+        'rejected',
+        comments,
+        'hr'
+      );
+      
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error rejecting leave request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Send leave approval email (to manager or HR)
+  app.post('/api/send-leave-approval-email', async (req, res) => {
+    try {
+      const {
+        to,
+        employeeName,
+        employeeId,
+        leaveType,
+        fromDate,
+        toDate,
+        days,
+        reason,
+        managerName,
+        approvalStage
+      } = req.body;
+
+      await sendApprovalEmail({
+        to,
+        employeeName,
+        employeeId,
+        amount: `${days} days`,
+        reason: reason || 'N/A',
+        approver: managerName,
+        requestType: `leave (${leaveType})`,
+        additionalInfo: `From: ${fromDate}, To: ${toDate}\nApproval Stage: ${approvalStage}`,
+      });
+
+      res.json({ success: true, message: 'Email sent successfully' });
+    } catch (error) {
+      console.error('Error sending leave approval email:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 

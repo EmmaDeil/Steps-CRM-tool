@@ -3,7 +3,7 @@
 // and can be replaced with a real database later.
 
 const modules = [
-  { id: 1, name: "Accounting", componentName: "Accounting" },
+  { id: 1, name: "Approval", componentName: "Approval" },
   { id: 2, name: "Inventory", componentName: "Inventory" },
   { id: 3, name: "HR Management", componentName: "HRManagement" },
   { id: 4, name: "Facility Maintenance", componentName: "FacilityMaintenance" },
@@ -15,7 +15,7 @@ const modules = [
   { id: 10, name: "Material Requests", componentName: "MaterialRequests" },
   { id: 11, name: "Purchase Orders", componentName: "PurchaseOrders" },
   { id: 12, name: "Analytics", componentName: "Analytics" },
-  { id: 13, name: "Policy Management", componentName: "PolicyManagement" },
+  { id: 13, name: "Policy", componentName: "Policy" },
 ];
 
 const analytics = {

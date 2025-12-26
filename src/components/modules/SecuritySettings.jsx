@@ -44,19 +44,35 @@ const SecuritySettings = () => {
     pages: 0,
   });
 
-  // Modal States (for future implementation)
-  // eslint-disable-next-line no-unused-vars
+  // Modal States
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  // eslint-disable-next-line no-unused-vars
   const [showMFAModal, setShowMFAModal] = useState(false);
-  // eslint-disable-next-line no-unused-vars
   const [showSessionModal, setShowSessionModal] = useState(false);
+  const [showLogDetailsModal, setShowLogDetailsModal] = useState(false);
+  const [selectedLog, setSelectedLog] = useState(null);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [showCustomDateModal, setShowCustomDateModal] = useState(false);
 
-  // Old hardcoded data removed - now using API
+  // Filters
   const [dateFilter, setDateFilter] = useState("Last 30 Days");
+  const [customDateRange, setCustomDateRange] = useState({
+    start: "",
+    end: "",
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [actionFilter, setActionFilter] = useState("All Actions");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
+
+  // Bulk Actions
+  const [selectedLogs, setSelectedLogs] = useState([]);
+  const [selectAll, setSelectAll] = useState(false);
+
+  // Notification Rules
+  const [notificationRules, setNotificationRules] = useState([]);
+
+  // Settings History
+  const [settingsHistory, setSettingsHistory] = useState([]);
+  const [showSettingsHistory, setShowSettingsHistory] = useState(false);
 
   // Fetch security settings
   const fetchSecuritySettings = useCallback(async () => {
@@ -73,6 +89,30 @@ const SecuritySettings = () => {
       toast.error("Failed to load security settings");
     } finally {
       setSettingsLoading(false);
+    }
+  }, []);
+
+  // Fetch notification rules
+  const fetchNotificationRules = useCallback(async () => {
+    try {
+      const response = await apiService.get("/api/security/notification-rules");
+      if (response.data) {
+        setNotificationRules(response.data.rules || []);
+      }
+    } catch (error) {
+      console.error("Error fetching notification rules:", error);
+    }
+  }, []);
+
+  // Fetch settings history
+  const fetchSettingsHistory = useCallback(async () => {
+    try {
+      const response = await apiService.get("/api/security/settings-history");
+      if (response.data) {
+        setSettingsHistory(response.data.history || []);
+      }
+    } catch (error) {
+      console.error("Error fetching settings history:", error);
     }
   }, []);
 
@@ -115,18 +155,27 @@ const SecuritySettings = () => {
         const now = new Date();
         let startDate;
 
-        switch (dateFilter) {
-          case "Last 24 Hours":
-            startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-            break;
-          case "Last 7 Days":
-            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            break;
-          case "Last 30 Days":
-            startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            break;
-          default:
-            startDate = null;
+        if (
+          dateFilter === "Custom Range" &&
+          customDateRange.start &&
+          customDateRange.end
+        ) {
+          startDate = new Date(customDateRange.start);
+          params.append("endDate", new Date(customDateRange.end).toISOString());
+        } else {
+          switch (dateFilter) {
+            case "Last 24 Hours":
+              startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+              break;
+            case "Last 7 Days":
+              startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+              break;
+            case "Last 30 Days":
+              startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+              break;
+            default:
+              startDate = null;
+          }
         }
 
         if (startDate) {
@@ -156,6 +205,7 @@ const SecuritySettings = () => {
     statusFilter,
     searchQuery,
     dateFilter,
+    customDateRange,
   ]);
 
   // Initial load
@@ -163,7 +213,15 @@ const SecuritySettings = () => {
     fetchSecuritySettings();
     fetchActiveUsers();
     fetchAuditLogs();
-  }, [fetchSecuritySettings, fetchActiveUsers, fetchAuditLogs]);
+    fetchNotificationRules();
+    fetchSettingsHistory();
+  }, [
+    fetchSecuritySettings,
+    fetchActiveUsers,
+    fetchAuditLogs,
+    fetchNotificationRules,
+    fetchSettingsHistory,
+  ]);
 
   // Debounced search
   useEffect(() => {
@@ -219,6 +277,177 @@ const SecuritySettings = () => {
     if (newPage >= 1 && newPage <= pagination.pages) {
       setPagination((prev) => ({ ...prev, page: newPage }));
     }
+  };
+
+  // Handle bulk selection
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedLogs([]);
+      setSelectAll(false);
+    } else {
+      setSelectedLogs(activityLogs.map((log) => log._id));
+      setSelectAll(true);
+    }
+  };
+
+  const handleSelectLog = (logId) => {
+    setSelectedLogs((prev) => {
+      if (prev.includes(logId)) {
+        return prev.filter((id) => id !== logId);
+      } else {
+        return [...prev, logId];
+      }
+    });
+  };
+
+  // Handle bulk export
+  const handleBulkExport = async () => {
+    if (selectedLogs.length === 0) {
+      toast.error("No logs selected");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${apiService.defaults.baseURL}/api/audit-logs/export`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ logIds: selectedLogs }),
+        }
+      );
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `selected-logs-${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success(`Exported ${selectedLogs.length} logs`);
+      setSelectedLogs([]);
+      setSelectAll(false);
+    } catch (error) {
+      console.error("Error exporting logs:", error);
+      toast.error("Failed to export logs");
+    }
+  };
+
+  // Handle update password policy
+  const handleUpdatePasswordPolicy = async (updatedPolicy) => {
+    try {
+      await apiService.patch("/api/security/settings", {
+        passwordPolicy: updatedPolicy,
+      });
+      setPasswordPolicy(updatedPolicy);
+      setShowPasswordModal(false);
+      toast.success("Password policy updated");
+      fetchSettingsHistory(); // Refresh history
+    } catch (error) {
+      console.error("Error updating password policy:", error);
+      toast.error("Failed to update password policy");
+    }
+  };
+
+  // Handle update MFA settings
+  const handleUpdateMFASettings = async (updatedSettings) => {
+    try {
+      await apiService.patch("/api/security/settings", {
+        mfaSettings: updatedSettings,
+      });
+      setMfaSettings(updatedSettings);
+      setShowMFAModal(false);
+      toast.success("MFA settings updated");
+      fetchSettingsHistory();
+    } catch (error) {
+      console.error("Error updating MFA settings:", error);
+      toast.error("Failed to update MFA settings");
+    }
+  };
+
+  // Handle update session control
+  const handleUpdateSessionControl = async (updatedControl) => {
+    try {
+      await apiService.patch("/api/security/settings", {
+        sessionControl: updatedControl,
+      });
+      setSessionControl(updatedControl);
+      setShowSessionModal(false);
+      toast.success("Session control updated");
+      fetchSettingsHistory();
+    } catch (error) {
+      console.error("Error updating session control:", error);
+      toast.error("Failed to update session control");
+    }
+  };
+
+  // Handle panic logout all users
+  const handlePanicLogout = async () => {
+    if (
+      !window.confirm(
+        "Are you sure you want to log out ALL users? This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await apiService.post("/api/security/panic-logout");
+      toast.success("All users have been logged out");
+      fetchActiveUsers();
+    } catch (error) {
+      console.error("Error during panic logout:", error);
+      toast.error("Failed to logout all users");
+    }
+  };
+
+  // Handle add notification rule
+  const handleAddNotificationRule = async (rule) => {
+    try {
+      const response = await apiService.post(
+        "/api/security/notification-rules",
+        rule
+      );
+      setNotificationRules((prev) => [...prev, response.data.rule]);
+      toast.success("Notification rule added");
+    } catch (error) {
+      console.error("Error adding notification rule:", error);
+      toast.error("Failed to add notification rule");
+    }
+  };
+
+  // Handle delete notification rule
+  const handleDeleteNotificationRule = async (ruleId) => {
+    try {
+      await apiService.delete(`/api/security/notification-rules/${ruleId}`);
+      setNotificationRules((prev) =>
+        prev.filter((rule) => rule._id !== ruleId)
+      );
+      toast.success("Notification rule deleted");
+    } catch (error) {
+      console.error("Error deleting notification rule:", error);
+      toast.error("Failed to delete notification rule");
+    }
+  };
+
+  // Handle view log details
+  const handleViewLogDetails = (log) => {
+    setSelectedLog(log);
+    setShowLogDetailsModal(true);
+  };
+
+  // Handle apply custom date range
+  const handleApplyCustomDate = () => {
+    if (!customDateRange.start || !customDateRange.end) {
+      toast.error("Please select both start and end dates");
+      return;
+    }
+    setDateFilter("Custom Range");
+    setShowCustomDateModal(false);
+    // fetchAuditLogs will be triggered by useEffect
   };
 
   const getStatusColor = (status) => {
@@ -457,13 +686,45 @@ const SecuritySettings = () => {
                   View and export detailed records of all system events.
                 </p>
               </div>
-              <button
-                onClick={handleExportCSV}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
-              >
-                <i className="fa-solid fa-download"></i>
-                Export CSV
-              </button>
+              <div className="flex items-center gap-3">
+                {selectedLogs.length > 0 && (
+                  <>
+                    <span className="text-sm text-gray-600">
+                      {selectedLogs.length} selected
+                    </span>
+                    <button
+                      onClick={handleBulkExport}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+                    >
+                      <i className="fa-solid fa-download"></i>
+                      Export Selected
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedLogs([]);
+                        setSelectAll(false);
+                      }}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+                    >
+                      Clear
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setShowNotificationModal(true)}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+                >
+                  <i className="fa-solid fa-bell"></i>
+                  Alert Rules
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+                >
+                  <i className="fa-solid fa-download"></i>
+                  Export All
+                </button>
+              </div>
             </div>
 
             {/* Filters */}
@@ -472,7 +733,13 @@ const SecuritySettings = () => {
                 <i className="fa-solid fa-calendar absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                 <select
                   value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
+                  onChange={(e) => {
+                    if (e.target.value === "Custom Range") {
+                      setShowCustomDateModal(true);
+                    } else {
+                      setDateFilter(e.target.value);
+                    }
+                  }}
                   className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
                 >
                   <option>Last 30 Days</option>
@@ -520,6 +787,14 @@ const SecuritySettings = () => {
                   <option>Failed</option>
                 </select>
               </div>
+
+              <button
+                onClick={() => setShowSettingsHistory(true)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium flex items-center gap-2 transition-colors"
+              >
+                <i className="fa-solid fa-history"></i>
+                Settings History
+              </button>
             </div>
           </div>
 
@@ -528,6 +803,14 @@ const SecuritySettings = () => {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="px-6 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={selectAll}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Timestamp
                   </th>
@@ -546,6 +829,9 @@ const SecuritySettings = () => {
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Status
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -553,6 +839,9 @@ const SecuritySettings = () => {
                   // Loading skeleton
                   [...Array(5)].map((_, idx) => (
                     <tr key={idx} className="animate-pulse">
+                      <td className="px-6 py-4">
+                        <div className="w-4 h-4 bg-gray-200 rounded"></div>
+                      </td>
                       <td className="px-6 py-4">
                         <div className="h-4 bg-gray-200 rounded w-32"></div>
                       </td>
@@ -574,11 +863,14 @@ const SecuritySettings = () => {
                       <td className="px-6 py-4">
                         <div className="h-6 bg-gray-200 rounded-full w-20"></div>
                       </td>
+                      <td className="px-6 py-4">
+                        <div className="h-8 bg-gray-200 rounded w-16"></div>
+                      </td>
                     </tr>
                   ))
                 ) : activityLogs.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center">
+                    <td colSpan="8" className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <i className="fa-solid fa-inbox text-gray-300 text-4xl"></i>
                         <p className="text-gray-500 font-medium">
@@ -593,6 +885,14 @@ const SecuritySettings = () => {
                 ) : (
                   activityLogs.map((log) => (
                     <tr key={log._id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedLogs.includes(log._id)}
+                          onChange={() => handleSelectLog(log._id)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2 text-sm text-gray-900">
                           <i className="fa-solid fa-clock text-gray-400"></i>
@@ -639,6 +939,14 @@ const SecuritySettings = () => {
                           ></i>
                           {log.status}
                         </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => handleViewLogDetails(log)}
+                          className="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-lg text-sm font-medium transition-colors"
+                        >
+                          Details
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -698,6 +1006,921 @@ const SecuritySettings = () => {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Password Policy Modal */}
+      {showPasswordModal && (
+        <PasswordPolicyModal
+          passwordPolicy={passwordPolicy}
+          onClose={() => setShowPasswordModal(false)}
+          onSave={handleUpdatePasswordPolicy}
+        />
+      )}
+
+      {/* MFA Settings Modal */}
+      {showMFAModal && (
+        <MFASettingsModal
+          mfaSettings={mfaSettings}
+          onClose={() => setShowMFAModal(false)}
+          onSave={handleUpdateMFASettings}
+        />
+      )}
+
+      {/* Session Control Modal */}
+      {showSessionModal && (
+        <SessionControlModal
+          sessionControl={sessionControl}
+          onClose={() => setShowSessionModal(false)}
+          onSave={handleUpdateSessionControl}
+          onPanicLogout={handlePanicLogout}
+        />
+      )}
+
+      {/* Log Details Modal */}
+      {showLogDetailsModal && selectedLog && (
+        <LogDetailsModal
+          log={selectedLog}
+          onClose={() => setShowLogDetailsModal(false)}
+        />
+      )}
+
+      {/* Custom Date Range Modal */}
+      {showCustomDateModal && (
+        <CustomDateRangeModal
+          customDateRange={customDateRange}
+          setCustomDateRange={setCustomDateRange}
+          onClose={() => setShowCustomDateModal(false)}
+          onApply={handleApplyCustomDate}
+        />
+      )}
+
+      {/* Notification Rules Modal */}
+      {showNotificationModal && (
+        <NotificationRulesModal
+          notificationRules={notificationRules}
+          onClose={() => setShowNotificationModal(false)}
+          onAddRule={handleAddNotificationRule}
+          onDeleteRule={handleDeleteNotificationRule}
+        />
+      )}
+
+      {/* Settings History Modal */}
+      {showSettingsHistory && (
+        <SettingsHistoryModal
+          settingsHistory={settingsHistory}
+          onClose={() => setShowSettingsHistory(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+// Password Policy Modal Component
+const PasswordPolicyModal = ({ passwordPolicy, onClose, onSave }) => {
+  const [formData, setFormData] = useState(passwordPolicy);
+
+  const handleSave = () => {
+    onSave(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-gray-900">
+              Password Policy Settings
+            </h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <i className="fa-solid fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div>
+            <label className="flex items-center gap-3 mb-4">
+              <input
+                type="checkbox"
+                checked={formData.enabled}
+                onChange={(e) =>
+                  setFormData({ ...formData, enabled: e.target.checked })
+                }
+                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <span className="text-lg font-semibold text-gray-900">
+                Enable Password Policy
+              </span>
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Minimum Length <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.minLength}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  minLength: parseInt(e.target.value),
+                })
+              }
+              min="8"
+              max="32"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              Password must be at least {formData.minLength} characters long
+            </p>
+          </div>
+
+          <div>
+            <label className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={formData.specialChars}
+                onChange={(e) =>
+                  setFormData({ ...formData, specialChars: e.target.checked })
+                }
+                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium text-gray-900">
+                Require special characters (!@#$%^&*)
+              </span>
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Password Expiry (days)
+            </label>
+            <input
+              type="number"
+              value={formData.expiry}
+              onChange={(e) =>
+                setFormData({ ...formData, expiry: parseInt(e.target.value) })
+              }
+              min="30"
+              max="365"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              Users will be prompted to change password after {formData.expiry}{" "}
+              days
+            </p>
+          </div>
+        </div>
+
+        <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// MFA Settings Modal Component
+const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
+  const [formData, setFormData] = useState(mfaSettings);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-gray-900">
+              Multi-Factor Authentication
+            </h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <i className="fa-solid fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div>
+            <label className="flex items-center gap-3 mb-4">
+              <input
+                type="checkbox"
+                checked={formData.enabled}
+                onChange={(e) =>
+                  setFormData({ ...formData, enabled: e.target.checked })
+                }
+                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <span className="text-lg font-semibold text-gray-900">
+                Enable MFA
+              </span>
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Authentication Method
+            </label>
+            <select
+              value={formData.method}
+              onChange={(e) =>
+                setFormData({ ...formData, method: e.target.value })
+              }
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option>Authenticator App</option>
+              <option>SMS</option>
+              <option>Email</option>
+              <option>Hardware Token</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Enforcement Policy
+            </label>
+            <select
+              value={formData.enforcement}
+              onChange={(e) =>
+                setFormData({ ...formData, enforcement: e.target.value })
+              }
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option>All Users</option>
+              <option>Admins Only</option>
+              <option>Optional</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Grace Period
+            </label>
+            <select
+              value={formData.gracePeriod}
+              onChange={(e) =>
+                setFormData({ ...formData, gracePeriod: e.target.value })
+              }
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option>None</option>
+              <option>7 Days</option>
+              <option>14 Days</option>
+              <option>30 Days</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave(formData)}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Session Control Modal Component
+const SessionControlModal = ({
+  sessionControl,
+  onClose,
+  onSave,
+  onPanicLogout,
+}) => {
+  const [formData, setFormData] = useState(sessionControl);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-gray-900">
+              Session Control
+            </h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <i className="fa-solid fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Idle Timeout (minutes)
+            </label>
+            <input
+              type="number"
+              value={formData.idleTimeout}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  idleTimeout: parseInt(e.target.value),
+                })
+              }
+              min="5"
+              max="120"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              Automatically log out inactive users after {formData.idleTimeout}{" "}
+              minutes
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Maximum Concurrent Sessions
+            </label>
+            <input
+              type="number"
+              value={formData.concurrentSessions}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  concurrentSessions: parseInt(e.target.value),
+                })
+              }
+              min="1"
+              max="10"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              Maximum number of simultaneous logins per user
+            </p>
+          </div>
+
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">
+                Active Users
+              </span>
+              <span className="text-2xl font-bold text-blue-600">
+                {sessionControl.activeUsers}
+              </span>
+            </div>
+            <p className="text-xs text-gray-500">Currently logged in users</p>
+          </div>
+
+          <div className="bg-red-50 border-2 border-red-300 p-4 rounded-lg">
+            <div className="flex items-center gap-3 mb-3">
+              <i className="fa-solid fa-triangle-exclamation text-red-600 text-xl"></i>
+              <h3 className="font-bold text-red-900">Emergency Panic Logout</h3>
+            </div>
+            <p className="text-sm text-red-700 mb-4">
+              This will immediately terminate all active user sessions. Use only
+              in emergency situations.
+            </p>
+            <button
+              onClick={onPanicLogout}
+              className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium flex items-center justify-center gap-2"
+            >
+              <i className="fa-solid fa-power-off"></i>
+              Logout All Users Now
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave(formData)}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Log Details Modal Component
+const LogDetailsModal = ({ log, onClose }) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-gray-900">Log Details</h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <i className="fa-solid fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="text-sm font-medium text-gray-500">
+                Timestamp
+              </label>
+              <p className="text-lg font-semibold text-gray-900 mt-1">
+                {new Date(log.timestamp).toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">
+                Action
+              </label>
+              <p className="text-lg font-semibold text-gray-900 mt-1">
+                {log.action}
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">Actor</label>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
+                  {log.actor?.initials || "??"}
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">
+                    {log.actor?.userName || "Unknown"}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {log.actor?.userEmail || "N/A"}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">
+                IP Address
+              </label>
+              <p className="text-lg font-mono font-semibold text-gray-900 mt-1">
+                {log.ipAddress || "N/A"}
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">
+                Status
+              </label>
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium mt-1 ${
+                  log.status === "Success"
+                    ? "bg-green-100 text-green-700"
+                    : "bg-red-100 text-red-700"
+                }`}
+              >
+                <i
+                  className={`fa-solid ${
+                    log.status === "Success"
+                      ? "fa-circle-check"
+                      : "fa-circle-xmark"
+                  }`}
+                ></i>
+                {log.status}
+              </span>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">
+                User Agent
+              </label>
+              <p className="text-sm text-gray-900 mt-1 break-all">
+                {log.userAgent || "N/A"}
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-500">
+              Description
+            </label>
+            <p className="text-gray-900 mt-1">{log.description}</p>
+          </div>
+
+          {log.metadata && (
+            <div>
+              <label className="text-sm font-medium text-gray-500 mb-2 block">
+                Additional Metadata
+              </label>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <pre className="text-sm text-gray-900 overflow-x-auto">
+                  {JSON.stringify(log.metadata, null, 2)}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Custom Date Range Modal Component
+const CustomDateRangeModal = ({
+  customDateRange,
+  setCustomDateRange,
+  onClose,
+  onApply,
+}) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-md w-full">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold text-gray-900">
+              Custom Date Range
+            </h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <i className="fa-solid fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Start Date
+            </label>
+            <input
+              type="date"
+              value={customDateRange.start}
+              onChange={(e) =>
+                setCustomDateRange({
+                  ...customDateRange,
+                  start: e.target.value,
+                })
+              }
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              End Date
+            </label>
+            <input
+              type="date"
+              value={customDateRange.end}
+              onChange={(e) =>
+                setCustomDateRange({ ...customDateRange, end: e.target.value })
+              }
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onApply}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Notification Rules Modal Component
+const NotificationRulesModal = ({
+  notificationRules,
+  onClose,
+  onAddRule,
+  onDeleteRule,
+}) => {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newRule, setNewRule] = useState({
+    name: "",
+    event: "Login",
+    condition: "Failed",
+    recipient: "",
+    enabled: true,
+  });
+
+  const handleAddRule = () => {
+    if (!newRule.name || !newRule.recipient) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    onAddRule(newRule);
+    setNewRule({
+      name: "",
+      event: "Login",
+      condition: "Failed",
+      recipient: "",
+      enabled: true,
+    });
+    setShowAddForm(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                Notification Rules
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Configure alerts for specific security events
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <i className="fa-solid fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          <div className="mb-6">
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2"
+            >
+              <i className="fa-solid fa-plus"></i>
+              Add New Rule
+            </button>
+          </div>
+
+          {showAddForm && (
+            <div className="bg-gray-50 p-4 rounded-lg mb-6 border-2 border-blue-200">
+              <h3 className="font-semibold text-gray-900 mb-4">
+                New Notification Rule
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Rule Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newRule.name}
+                    onChange={(e) =>
+                      setNewRule({ ...newRule, name: e.target.value })
+                    }
+                    placeholder="e.g., Failed Login Alerts"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Event Type
+                  </label>
+                  <select
+                    value={newRule.event}
+                    onChange={(e) =>
+                      setNewRule({ ...newRule, event: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option>Login</option>
+                    <option>Config Update</option>
+                    <option>Export</option>
+                    <option>Access Denied</option>
+                    <option>Password Change</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Condition
+                  </label>
+                  <select
+                    value={newRule.condition}
+                    onChange={(e) =>
+                      setNewRule({ ...newRule, condition: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option>Failed</option>
+                    <option>Success</option>
+                    <option>Any</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Recipient Email
+                  </label>
+                  <input
+                    type="email"
+                    value={newRule.recipient}
+                    onChange={(e) =>
+                      setNewRule({ ...newRule, recipient: e.target.value })
+                    }
+                    placeholder="admin@example.com"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-4">
+                <button
+                  onClick={() => setShowAddForm(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddRule}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Add Rule
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {notificationRules.length === 0 ? (
+              <div className="text-center py-12">
+                <i className="fa-solid fa-bell-slash text-gray-300 text-4xl mb-3"></i>
+                <p className="text-gray-500 font-medium">
+                  No notification rules configured
+                </p>
+                <p className="text-gray-400 text-sm">
+                  Add a rule to receive alerts for security events
+                </p>
+              </div>
+            ) : (
+              notificationRules.map((rule) => (
+                <div
+                  key={rule._id}
+                  className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-4">
+                    <div
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        rule.enabled ? "bg-green-100" : "bg-gray-100"
+                      }`}
+                    >
+                      <i
+                        className={`fa-solid fa-bell ${
+                          rule.enabled ? "text-green-600" : "text-gray-400"
+                        }`}
+                      ></i>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900">
+                        {rule.name}
+                      </h4>
+                      <p className="text-sm text-gray-600">
+                        Alert on{" "}
+                        <span className="font-medium">{rule.event}</span> -{" "}
+                        <span className="font-medium">{rule.condition}</span> →{" "}
+                        {rule.recipient}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onDeleteRule(rule._id)}
+                    className="px-3 py-1 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Settings History Modal Component
+const SettingsHistoryModal = ({ settingsHistory, onClose }) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                Settings Change History
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Track all changes to security configurations
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <i className="fa-solid fa-times text-xl"></i>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {settingsHistory.length === 0 ? (
+            <div className="text-center py-12">
+              <i className="fa-solid fa-clock-rotate-left text-gray-300 text-4xl mb-3"></i>
+              <p className="text-gray-500 font-medium">
+                No settings history available
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {settingsHistory.map((item, idx) => (
+                <div
+                  key={idx}
+                  className="border-l-4 border-blue-500 bg-gray-50 p-4 rounded-r-lg"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="font-semibold text-gray-900">
+                          {item.setting}
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          {new Date(item.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">
+                        {item.change}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-xs font-semibold">
+                          {item.changedBy?.initials || "??"}
+                        </div>
+                        <span className="text-sm text-gray-600">
+                          {item.changedBy?.userName || "Unknown"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>

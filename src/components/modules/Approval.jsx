@@ -5,19 +5,40 @@ import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 
-const Accounting = () => {
+const Approval = () => {
   const navigate = useNavigate();
   const { user } = useUser();
   const [advanceRequests, setAdvanceRequests] = useState([]);
   const [refundRequests, setRefundRequests] = useState([]);
   const [retirementBreakdowns, setRetirementBreakdowns] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [travelRequests, setTravelRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdvanceForm, setShowAdvanceForm] = useState(false);
   const [showRefundForm, setShowRefundForm] = useState(false);
   const [showRetirementHistory, setShowRetirementHistory] = useState(false);
   const [showMonthDetails, setShowMonthDetails] = useState(false);
+  const [showLeaveHistory, setShowLeaveHistory] = useState(false);
+  const [showLeaveForm, setShowLeaveForm] = useState(false);
+  const [showTravelHistory, setShowTravelHistory] = useState(false);
+  const [showTravelForm, setShowTravelForm] = useState(false);
   const [selectedMonthYear, setSelectedMonthYear] = useState(null);
   const [editingLineItems, setEditingLineItems] = useState({});
+  
+  // Leave form state
+  const [leaveFormData, setLeaveFormData] = useState({
+    leaveType: "",
+    fromDate: "",
+    toDate: "",
+    reason: "",
+    managerId: "",
+    managerName: "",
+    managerEmail: "",
+  });
+  const [leaveAllocation, setLeaveAllocation] = useState(null);
+  const [calculatedDays, setCalculatedDays] = useState(0);
+  const [remainingLeave, setRemainingLeave] = useState(null);
+
   const [staffList] = useState([
     {
       id: 1,
@@ -76,6 +97,91 @@ const Accounting = () => {
   const currentUserId = user?.id || "user_current";
   const currentEmployeeId = user?.publicMetadata?.employeeId || "EMP999";
   const currentDepartment = user?.publicMetadata?.department || "General";
+
+  // Fetch leave allocation for current user
+  useEffect(() => {
+    const fetchLeaveAllocation = async () => {
+      try {
+        const response = await apiService.get(
+          `/api/hr/leave-allocations?employeeId=${currentEmployeeId}&year=${new Date().getFullYear()}`
+        );
+        if (response?.data && response.data.length > 0) {
+          setLeaveAllocation(response.data[0]);
+          // Set manager info if available
+          if (response.data[0].managerId) {
+            setLeaveFormData((prev) => ({
+              ...prev,
+              managerId: response.data[0].managerId,
+              managerName: response.data[0].managerName,
+              managerEmail: response.data[0].managerEmail || "",
+            }));
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching leave allocation:", error);
+      }
+    };
+
+    if (currentEmployeeId) {
+      fetchLeaveAllocation();
+    }
+  }, [currentEmployeeId]);
+
+  // Calculate days and remaining leave when dates or leave type changes
+  useEffect(() => {
+    if (leaveFormData.fromDate && leaveFormData.toDate && leaveFormData.leaveType && leaveAllocation) {
+      const from = new Date(leaveFormData.fromDate);
+      const to = new Date(leaveFormData.toDate);
+      
+      if (to >= from) {
+        // Calculate business days (excluding weekends)
+        let days = 0;
+        const current = new Date(from);
+        while (current <= to) {
+          const dayOfWeek = current.getDay();
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
+            days++;
+          }
+          current.setDate(current.getDate() + 1);
+        }
+        setCalculatedDays(days);
+
+        // Calculate remaining leave based on type
+        let allocated = 0;
+        let used = 0;
+
+        switch (leaveFormData.leaveType) {
+          case "annual":
+            allocated = leaveAllocation.annualLeave || 0;
+            used = leaveAllocation.annualLeaveUsed || 0;
+            break;
+          case "sick":
+            allocated = leaveAllocation.sickLeave || 0;
+            used = leaveAllocation.sickLeaveUsed || 0;
+            break;
+          case "personal":
+            allocated = leaveAllocation.personalLeave || 0;
+            used = leaveAllocation.personalLeaveUsed || 0;
+            break;
+          case "unpaid":
+            allocated = 999; // Unlimited unpaid leave
+            used = 0;
+            break;
+          default:
+            allocated = 0;
+            used = 0;
+        }
+
+        const remaining = allocated - used - days;
+        setRemainingLeave({
+          allocated,
+          used,
+          requested: days,
+          remaining,
+        });
+      }
+    }
+  }, [leaveFormData.fromDate, leaveFormData.toDate, leaveFormData.leaveType, leaveAllocation]);
 
   // Fetch data from MongoDB
   const fetchData = async () => {
@@ -249,27 +355,105 @@ const Accounting = () => {
     }
   };
 
+  const handleLeaveSubmit = async (e) => {
+    e.preventDefault();
+
+    // Validation
+    if (!leaveFormData.leaveType) {
+      toast.error("Please select leave type");
+      return;
+    }
+
+    if (!leaveFormData.fromDate || !leaveFormData.toDate) {
+      toast.error("Please select dates");
+      return;
+    }
+
+    if (!leaveFormData.managerId || !leaveFormData.managerEmail) {
+      toast.error("Manager information is required");
+      return;
+    }
+
+    // Check if enough leave balance
+    if (remainingLeave && remainingLeave.remaining < 0 && leaveFormData.leaveType !== "unpaid") {
+      toast.error(`Insufficient ${leaveFormData.leaveType} leave balance`);
+      return;
+    }
+
+    const newRequest = {
+      employeeName: currentUserName,
+      employeeId: currentEmployeeId,
+      department: currentDepartment,
+      userId: currentUserId,
+      leaveType: leaveFormData.leaveType,
+      fromDate: leaveFormData.fromDate,
+      toDate: leaveFormData.toDate,
+      days: calculatedDays,
+      reason: leaveFormData.reason,
+      managerId: leaveFormData.managerId,
+      managerName: leaveFormData.managerName,
+      managerEmail: leaveFormData.managerEmail,
+      status: "pending_manager",
+      requestDate: new Date().toISOString().split("T")[0],
+    };
+
+    try {
+      // Save to database
+      const response = await apiService.post("/api/approval/leave-requests", newRequest);
+
+      if (!response || !response.data) {
+        throw new Error("Failed to save leave request");
+      }
+
+      // Send email to manager
+      try {
+        await apiService.post("/api/send-leave-approval-email", {
+          to: leaveFormData.managerEmail,
+          employeeName: currentUserName,
+          employeeId: currentEmployeeId,
+          leaveType: leaveFormData.leaveType,
+          fromDate: leaveFormData.fromDate,
+          toDate: leaveFormData.toDate,
+          days: calculatedDays,
+          reason: leaveFormData.reason,
+          managerName: leaveFormData.managerName,
+          approvalStage: "manager",
+        });
+      } catch (emailError) {
+        console.warn("Email notification failed:", emailError);
+      }
+
+      setShowLeaveForm(false);
+      setLeaveFormData({
+        leaveType: "",
+        fromDate: "",
+        toDate: "",
+        reason: "",
+        managerId: leaveAllocation?.managerId || "",
+        managerName: leaveAllocation?.managerName || "",
+        managerEmail: leaveAllocation?.managerEmail || "",
+      });
+      setCalculatedDays(0);
+      setRemainingLeave(null);
+      toast.success("Leave request submitted to manager for approval");
+      fetchData();
+    } catch (error) {
+      console.error("Error submitting leave request:", error);
+      toast.error(error.message || "Failed to submit leave request");
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 space-y-6 p-3">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 space-y-6 p-3 w-full">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
-          { label: "Accounting", icon: "fa-calculator" },
+          { label: "Approval", icon: "fa-clipboard-check" },
         ]}
       />
-      {/* Header */}
-      <div className="mb-8">
-        <h2 className="text-4xl font-bold text-[#111418] mb-2">
-          <i className="fa-solid fa-calculator mr-3 text-blue-600"></i>
-          Accounting
-        </h2>
-        <p className="text-[#617589] text-lg">
-          Manage your advance and refund requests with ease
-        </p>
-      </div>
 
       {/* Stats Cards */}
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded-lg border border-[#dbe0e6] shadow-sm p-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -312,7 +496,7 @@ const Accounting = () => {
       </div>
 
       {/* Request Cards Grid */}
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Advance Expense Request Card */}
         <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
           <div className="text-center">
@@ -387,10 +571,72 @@ const Accounting = () => {
             </div>
           </div>
         </div>
+
+        {/* Leave Request Card */}
+        <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center mx-auto mb-4">
+              <i className="fa-solid fa-calendar-days text-orange-600 text-3xl"></i>
+            </div>
+            <h3 className="text-2xl font-bold text-[#111418] mb-2">
+              Leave Request
+            </h3>
+            <p className="text-sm text-[#617589] mb-6">
+              Manage your leave and vacation days
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => setShowLeaveHistory(true)}
+                className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
+              >
+                <i className="fa-solid fa-history text-lg"></i>
+                View History
+              </button>
+              <button
+                onClick={() => setShowLeaveForm(true)}
+                className="px-6 py-2 border-2 border-orange-600 text-orange-600 rounded-lg hover:bg-orange-50 transition-all font-semibold flex items-center gap-2 mx-auto"
+              >
+                <i className="fa-solid fa-plus text-sm"></i>
+                Request Leave
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Travel Request Card */}
+        <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+              <i className="fa-solid fa-plane text-blue-600 text-3xl"></i>
+            </div>
+            <h3 className="text-2xl font-bold text-[#111418] mb-2">
+              Travel Request
+            </h3>
+            <p className="text-sm text-[#617589] mb-6">
+              Manage business travel and trip requests
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => setShowTravelHistory(true)}
+                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
+              >
+                <i className="fa-solid fa-history text-lg"></i>
+                View History
+              </button>
+              <button
+                onClick={() => setShowTravelForm(true)}
+                className="px-6 py-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-all font-semibold flex items-center gap-2 mx-auto"
+              >
+                <i className="fa-solid fa-plus text-sm"></i>
+                New Request
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* History Table - Full Screen */}
-      <div className="max-w-7xl mx-auto">
+      <div>
         <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg">
           <div className="p-6 border-b border-[#dbe0e6]">
             <h3 className="text-2xl font-bold text-[#111418] flex items-center gap-2">
@@ -1667,8 +1913,289 @@ const Accounting = () => {
           </div>
         </div>
       )}
-    </div>
+
+      {/* Leave History Modal */}
+      {showLeaveHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">
+          <div className="flex h-full max-h-[90vh] w-full max-w-2xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">
+              <h3 className="text-slate-900 text-xl font-bold">
+                Leave Request History
+              </h3>
+              <button
+                onClick={() => setShowLeaveHistory(false)}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+              >
+                <i className="fa-solid fa-times text-xl"></i>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {leaveRequests.length === 0 ? (
+                <div className="text-center py-12">
+                  <i className="fa-solid fa-calendar text-4xl text-slate-300 mb-4 block"></i>
+                  <p className="text-slate-500">No leave requests found</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {leaveRequests.map((leave) => (
+                    <div
+                      key={leave.id}
+                      className="border border-slate-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-semibold text-slate-900">
+                          {leave.type || "Leave"}
+                        </h4>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            leave.status === "approved"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : leave.status === "rejected"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {leave.status || "pending"}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600 mb-1">
+                        {leave.range || "No dates"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {leave.reason || "No reason provided"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="border-t border-slate-200 p-6 bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowLeaveHistory(false)}
+                className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Request Form Modal */}
+      {showLeaveForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">
+          <div className="flex h-full max-h-[90vh] w-full max-w-2xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">
+              <h3 className="text-slate-900 text-xl font-bold">
+                Request Leave
+              </h3>
+              <button
+                onClick={() => {
+                  setShowLeaveForm(false);
+                  setCalculatedDays(0);
+                  setRemainingLeave(null);
+                }}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+              >
+                <i className="fa-solid fa-times text-xl"></i>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {/* Leave Balance Summary */}
+              {leaveAllocation && (
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-3">Your Leave Balance ({leaveAllocation.year})</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <p className="text-blue-600">Annual Leave</p>
+                      <p className="font-bold text-blue-900">{leaveAllocation.annualLeave - (leaveAllocation.annualLeaveUsed || 0)} days left</p>
+                    </div>
+                    <div>
+                      <p className="text-blue-600">Sick Leave</p>
+                      <p className="font-bold text-blue-900">{leaveAllocation.sickLeave - (leaveAllocation.sickLeaveUsed || 0)} days left</p>
+                    </div>
+                    <div>
+                      <p className="text-blue-600">Personal Leave</p>
+                      <p className="font-bold text-blue-900">{leaveAllocation.personalLeave - (leaveAllocation.personalLeaveUsed || 0)} days left</p>
+                    </div>
+                    <div>
+                      <p className="text-blue-600">Manager</p>
+                      <p className="font-bold text-blue-900">{leaveAllocation.managerName}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <form className="space-y-5" onSubmit={handleLeaveSubmit}>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Leave Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={leaveFormData.leaveType}
+                    onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer"
+                  >
+                    <option value="">Select Type</option>
+                    <option value="annual">Annual Leave</option>
+                    <option value="sick">Sick Leave</option>
+                    <option value="personal">Personal Leave</option>
+                    <option value="unpaid">Unpaid Leave</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      From Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={leaveFormData.fromDate}
+                      onChange={(e) => setLeaveFormData({ ...leaveFormData, fromDate: e.target.value })}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      To Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={leaveFormData.toDate}
+                      onChange={(e) => setLeaveFormData({ ...leaveFormData, toDate: e.target.value })}
+                      min={leaveFormData.fromDate || new Date().toISOString().split('T')[0]}
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Live Calculation Display */}
+                {calculatedDays > 0 && remainingLeave && (
+                  <div className={`p-4 rounded-lg border ${remainingLeave.remaining >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-semibold text-slate-700">Days Requested:</span>
+                      <span className="text-lg font-bold text-slate-900">{calculatedDays} business days</span>
+                    </div>
+                    <div className="text-xs space-y-1 text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Allocated:</span>
+                        <span className="font-semibold">{remainingLeave.allocated} days</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Already Used:</span>
+                        <span className="font-semibold">{remainingLeave.used} days</span>
+                      </div>
+                      <div className="flex justify-between border-t border-slate-300 pt-1 mt-1">
+                        <span className="font-semibold">Remaining After Request:</span>
+                        <span className={`font-bold ${remainingLeave.remaining >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                          {remainingLeave.remaining} days
+                        </span>
+                      </div>
+                    </div>
+                    {remainingLeave.remaining < 0 && leaveFormData.leaveType !== 'unpaid' && (
+                      <div className="mt-2 text-xs text-red-700 font-medium">
+                        ⚠️ Insufficient leave balance. Consider selecting "Unpaid Leave" instead.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Manager <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={leaveFormData.managerName || "Not assigned"}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-700 h-12 px-4 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    {leaveFormData.managerName 
+                      ? `Your request will be sent to ${leaveFormData.managerName} for approval, then to HR.`
+                      : "Please contact HR to assign a manager before requesting leave."}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Reason
+                  </label>
+                  <textarea
+                    placeholder="Enter reason for leave"
+                    value={leaveFormData.reason}
+                    onChange={(e) => setLeaveFormData({ ...leaveFormData, reason: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 min-h-[100px] px-4 py-3 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                  ></textarea>
+                </div>
+              </form>
+            </div>
+            <div className="border-t border-slate-200 p-6 bg-slate-50 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowLeaveForm(false);
+                  setCalculatedDays(0);
+                  setRemainingLeave(null);
+                }}
+                className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLeaveSubmit}
+                disabled={!leaveFormData.managerId || (remainingLeave && remainingLeave.remaining < 0 && leaveFormData.leaveType !== 'unpaid')}
+                className="px-6 py-3 rounded-lg text-sm font-medium bg-primary text-white hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="fa-solid fa-check text-lg"></i>
+                Submit Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Travel History Modal */}
+      {showTravelHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">
+          <div className="flex h-full max-h-[90vh] w-full max-w-2xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">
+              <h3 className="text-slate-900 text-xl font-bold">Travel Request History</h3>
+              <button
+                onClick={() => setShowTravelHistory(false)}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+              >
+                <i className="fa-solid fa-times text-xl"></i>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {travelRequests.length === 0 ? (
+                <div className="text-center py-12">
+                  <i className="fa-solid fa-plane text-4xl text-slate-300 mb-4 block"></i>
+                  <p className="text-slate-500">No travel requests found</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {travelRequests.map((travel) => (
+                    <div key={travel.id} className="border border-slate-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 className="font-semibold text-slate-900">{travel.destination || 'Travel'}</h4>
+                          <p className="text-xs text-slate-500 mt-1">{travel.purpose || 'Business travel'}</p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          travel.status === 'approved'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : travel.status === 'rejected'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {travel.status || 'pending'}
+                        </span>\n                      </div>\n                      <p className="text-sm text-slate-600">{travel.dates || 'No dates'}</p>\n                    </div>\n                  ))}\n                </div>\n              )}\n            </div>\n            <div className="border-t border-slate-200 p-6 bg-slate-50 flex justify-end gap-3">\n              <button\n                onClick={() => setShowTravelHistory(false)}\n                className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all"\n              >\n                Close\n              </button>\n            </div>\n          </div>\n        </div>\n      )}\n\n      {/* Travel Request Form Modal */}\n      {showTravelForm && (\n        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">\n          <div className="flex h-full max-h-[90vh] w-full max-w-2xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">\n            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">\n              <h3 className="text-slate-900 text-xl font-bold">New Travel Request</h3>\n              <button\n                onClick={() => setShowTravelForm(false)}\n                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"\n              >\n                <i className="fa-solid fa-times text-xl"></i>\n              </button>\n            </div>\n            <div className="flex-1 overflow-y-auto p-6">\n              <form className="space-y-5">\n                <div>\n                  <label className="block text-sm font-medium text-slate-700 mb-2">Destination <span className="text-red-500">*</span></label>\n                  <input type="text" placeholder="e.g. New York, USA" className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all" />\n                </div>\n                <div>\n                  <label className="block text-sm font-medium text-slate-700 mb-2">Purpose <span className="text-red-500">*</span></label>\n                  <select className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer">\n                    <option value="">Select Purpose</option>\n                    <option value="conference">Conference</option>\n                    <option value="client-meeting">Client Meeting</option>\n                    <option value="training">Training</option>\n                    <option value="audit">Audit</option>\n                    <option value="other">Other</option>\n                  </select>\n                </div>\n                <div className="grid grid-cols-2 gap-4">\n                  <div>\n                    <label className="block text-sm font-medium text-slate-700 mb-2">From Date <span className="text-red-500">*</span></label>\n                    <input type="date" className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all" />\n                  </div>\n                  <div>\n                    <label className="block text-sm font-medium text-slate-700 mb-2">To Date <span className="text-red-500">*</span></label>\n                    <input type="date" className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all" />\n                  </div>\n                </div>\n                <div>\n                  <label className="block text-sm font-medium text-slate-700 mb-2">Budget <span className="text-red-500">*</span></label>\n                  <input type="number" placeholder="e.g. 5000" className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all" />\n                </div>\n                <div>\n                  <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>\n                  <textarea placeholder="Enter travel details and requirements" className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 min-h-[100px] px-4 py-3 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"></textarea>\n                </div>\n              </form>\n            </div>\n            <div className="border-t border-slate-200 p-6 bg-slate-50 flex gap-3 justify-end">\n              <button\n                onClick={() => setShowTravelForm(false)}\n                className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all"\n              >\n                Cancel\n              </button>\n              <button className="px-6 py-3 rounded-lg text-sm font-medium bg-primary text-white hover:bg-blue-700 transition-all flex items-center gap-2">\n                <i className="fa-solid fa-check text-lg"></i>\n                Submit Request\n              </button>\n            </div>\n          </div>\n        </div>\n      )}\n    </div>
   );
 };
 
-export default Accounting;
+export default Approval;

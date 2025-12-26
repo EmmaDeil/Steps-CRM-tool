@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
+import { useDepartments } from "../../context/useDepartments";
 
 const MaterialRequests = () => {
   const { user } = useUser();
@@ -82,19 +83,8 @@ const MaterialRequests = () => {
     "Meters",
     "Square Meters",
   ];
-
-  const departmentOptions = [
-    "Administration",
-    "Human Resources",
-    "Finance",
-    "Operations",
-    "Procurement",
-    "IT Department",
-    "Sales & Marketing",
-    "Customer Service",
-    "Research & Development",
-    "Maintenance",
-  ];
+  // Departments from centralized hook
+  const { departments, loading: departmentsLoading } = useDepartments();
 
   const previousStateRef = useRef(null);
 
@@ -106,6 +96,8 @@ const MaterialRequests = () => {
       // Silently fail - vendors are optional
     }
   };
+
+  // Departments are handled by useDepartments()
 
   const fetchRequestForApproval = React.useCallback(async (requestId) => {
     try {
@@ -594,11 +586,15 @@ const MaterialRequests = () => {
                     onChange={handleFormChange}
                   >
                     <option value="">Select department</option>
-                    {departmentOptions.map((dept) => (
-                      <option key={dept} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
+                    {departmentsLoading ? (
+                      <option disabled>Loading departments...</option>
+                    ) : (
+                      departments.map((dept) => (
+                        <option key={dept.id} value={dept.name}>
+                          {dept.name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
