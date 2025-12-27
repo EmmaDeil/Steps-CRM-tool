@@ -50,7 +50,7 @@ const Navbar = ({ user }) => {
 
   const handleNavigateToProfile = () => {
     setIsDropdownOpen(false);
-    navigate("/profile");
+    navigate("/home/profile");
   };
 
   return (

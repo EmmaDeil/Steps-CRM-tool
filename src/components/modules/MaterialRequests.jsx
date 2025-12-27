@@ -7,7 +7,7 @@ import Breadcrumb from "../Breadcrumb";
 import { useDepartments } from "../../context/useDepartments";
 import "../../assets/components/MaterialRequests.css";
 import { NumericFormat } from "react-number-format";
-import { formatCurrency, parseCurrencyString } from "../../services/currency";
+import { formatCurrency } from "../../services/currency";
 
 const MaterialRequests = () => {
   const { user } = useUser();
@@ -19,10 +19,13 @@ const MaterialRequests = () => {
   const [filterStatus, setFilterStatus] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [selectedVendor, setSelectedVendor] = useState("");
   const [vendors, setVendors] = useState([]);
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -48,19 +51,10 @@ const MaterialRequests = () => {
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionSearchTerm, setMentionSearchTerm] = useState("");
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [userList, setUserList] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
 
-  // User list for mentions (can be fetched from backend)
-  const userList = [
-    { id: 1, name: "John Doe", role: "Procurement Manager" },
-    { id: 2, name: "Jane Smith", role: "Department Head" },
-    { id: 3, name: "Bob Johnson", role: "Operations Manager" },
-    { id: 4, name: "Alice Brown", role: "Finance Manager" },
-    { id: 5, name: "Mike Wilson", role: "General Manager" },
-    { id: 6, name: "Sarah Davis", role: "HR Manager" },
-    { id: 7, name: "Tom Anderson", role: "IT Manager" },
-  ];
-
-  // Item and quantity type options (can be fetched from backend)
+  // Item and quantity type options
   const itemOptions = [
     "Office Supplies",
     "Computer Equipment",
@@ -86,7 +80,8 @@ const MaterialRequests = () => {
     "Meters",
     "Square Meters",
   ];
-  // Departments from centralized hook
+
+  // API integrations
   const { departments, loading: departmentsLoading } = useDepartments();
 
   const previousStateRef = useRef(null);
@@ -100,7 +95,28 @@ const MaterialRequests = () => {
     }
   };
 
-  // Departments are handled by useDepartments()
+  const fetchUsers = async () => {
+    try {
+      setUsersLoading(true);
+      const response = await apiService.get("/api/users", {
+        params: { status: "Active" },
+      });
+      const formattedUsers = (response.data || []).map((user) => ({
+        id: user._id,
+        name: user.fullName,
+        role: user.jobTitle || user.role || "Staff",
+        email: user.email,
+        department: user.department,
+      }));
+      setUserList(formattedUsers);
+    } catch (error) {
+      console.error("Failed to fetch users:", error);
+      // Keep empty array on error
+      setUserList([]);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
 
   const fetchRequestForApproval = React.useCallback(async (requestId) => {
     try {
@@ -180,6 +196,7 @@ const MaterialRequests = () => {
 
   useEffect(() => {
     fetchRequests();
+    fetchUsers();
 
     // Restore state from localStorage on mount
     const savedState = localStorage.getItem("materialRequestsState");
@@ -197,6 +214,18 @@ const MaterialRequests = () => {
       }
     }
   }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (activeDropdown && !event.target.closest(".dropdown")) {
+        setActiveDropdown(null);
+      }
+    };
+
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [activeDropdown]);
 
   // Save state to localStorage only when it actually changes
   useEffect(() => {
@@ -355,11 +384,23 @@ const MaterialRequests = () => {
         message: message, // Include message with mentions
       };
 
-      await apiService.post("/api/material-requests", requestData);
-      toast.success("Material request submitted successfully!");
+      if (isEditMode && selectedRequest) {
+        // Update existing request
+        await apiService.put(
+          `/api/material-requests/${selectedRequest._id}`,
+          requestData
+        );
+        toast.success("Material request updated successfully!");
+      } else {
+        // Create new request
+        await apiService.post("/api/material-requests", requestData);
+        toast.success("Material request submitted successfully!");
+      }
 
       // Reset form state
       setShowForm(false);
+      setIsEditMode(false);
+      setSelectedRequest(null);
       setFormData({
         requestType: "",
         approver: "",
@@ -386,6 +427,56 @@ const MaterialRequests = () => {
     }
   };
 
+  const handleViewRequest = (request) => {
+    setSelectedRequest(request);
+    setShowViewModal(true);
+    setActiveDropdown(null);
+  };
+
+  const handleEditRequest = (request) => {
+    setSelectedRequest(request);
+    setFormData({
+      requestType: request.requestType,
+      approver: request.approver,
+      department: request.department,
+    });
+    setLineItems(request.lineItems || []);
+    setMessage(request.message || "");
+    setIsEditMode(true);
+    setShowForm(true);
+    setActiveDropdown(null);
+  };
+
+  const handleApproveClick = (request) => {
+    setSelectedRequest(request);
+    setShowApprovalModal(true);
+    fetchVendors();
+    setActiveDropdown(null);
+  };
+
+  const handleRejectClick = (request) => {
+    setSelectedRequest(request);
+    setShowApprovalModal(true);
+    setActiveDropdown(null);
+  };
+
+  const toggleDropdown = (requestId) => {
+    setActiveDropdown(activeDropdown === requestId ? null : requestId);
+  };
+
+  const isUserApprover = (request) => {
+    return (
+      user?.fullName === request.approver ||
+      user?.primaryEmailAddress?.emailAddress === request.approverEmail
+    );
+  };
+
+  const canUserEdit = (request) => {
+    const isRequester = user?.fullName === request.requestedBy;
+    const isPending = request.status === "pending";
+    return isRequester && isPending;
+  };
+
   if (loading) {
     return (
       <div className="container-fluid p-4">
@@ -410,14 +501,14 @@ const MaterialRequests = () => {
           { label: "Material Requests", icon: "fa-clipboard-list" },
         ]}
       />
-      <div className="d-flex justify-content-between align-items-center mb-4">
+      <div className="d-flex justify-content-between align-items-center mb-4 mt-2">
         <h2></h2>
         <div className="d-flex gap-2">
           {/* Filter Dropdown - only show when viewing list */}
           {!showForm && (
             <div className="dropdown">
               <button
-                className="btn btn-outline-secondary dropdown-toggle"
+                className="btn btn-outline-secondary dropdown-toggle px-4"
                 type="button"
                 data-bs-toggle="dropdown"
                 aria-expanded="false"
@@ -496,7 +587,7 @@ const MaterialRequests = () => {
           <div className="card-header">
             <h5 className="mb-0">
               <i className="fa-solid fa-file-lines me-2"></i>
-              New Material Request
+              {isEditMode ? "Edit Material Request" : "New Material Request"}
             </h5>
           </div>
           <div className="card-body">
@@ -531,21 +622,15 @@ const MaterialRequests = () => {
                     required
                   >
                     <option value="">Select approver</option>
-                    <option value="John Doe">
-                      John Doe - Procurement Manager
-                    </option>
-                    <option value="Jane Smith">
-                      Jane Smith - Department Head
-                    </option>
-                    <option value="Bob Johnson">
-                      Bob Johnson - Operations Manager
-                    </option>
-                    <option value="Alice Brown">
-                      Alice Brown - Finance Manager
-                    </option>
-                    <option value="Mike Wilson">
-                      Mike Wilson - General Manager
-                    </option>
+                    {usersLoading ? (
+                      <option disabled>Loading users...</option>
+                    ) : (
+                      userList.map((user) => (
+                        <option key={user.id} value={user.name}>
+                          {user.name} - {user.role}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -574,14 +659,13 @@ const MaterialRequests = () => {
                     required
                   >
                     <option value="">Select type</option>
-                    <option value="urgent">RFQ</option>
-                    <option value="normal">Purchase OR</option>
-                    <option value="low-priority">Low Priority</option>
-                    <option value="bulk-order">Bulk Order</option>
-                    <option value="replacement">Replacement</option>
+                    <option value="rfq">RFQ</option>
+                    <option value="po">Purchase Order</option>
+                    <option value="material-request">Material Request</option>
+                    {/* <option value="bulk-order">Bulk Order</option>
+                    <option value="replacement">Replacement</option> */}
                   </select>
                 </div>
-
                 {/* Third Row: Department (narrower width) */}
                 <div className="col-md-6 col-lg-4 mb-3">
                   <label className="form-label">Department</label>
@@ -676,7 +760,7 @@ const MaterialRequests = () => {
                             textAlign: "right",
                           }}
                         >
-                          Price ($)
+                          Price
                         </th>
                         <th
                           style={{
@@ -686,7 +770,7 @@ const MaterialRequests = () => {
                             textAlign: "right",
                           }}
                         >
-                          Total ($)
+                          Total
                         </th>
                         <th
                           style={{
@@ -949,7 +1033,7 @@ const MaterialRequests = () => {
                   )}
 
                   {/* @Mention Dropdown */}
-                  {showMentionDropdown && filteredUsers.length > 0 && (
+                  {showMentionDropdown && (
                     <div
                       className="dropdown-menu show position-absolute mt-1"
                       style={{
@@ -959,18 +1043,29 @@ const MaterialRequests = () => {
                         width: "300px",
                       }}
                     >
-                      {filteredUsers.map((user) => (
-                        <button
-                          key={user.id}
-                          type="button"
-                          className="dropdown-item"
-                          onClick={() => selectMention(user.name)}
-                        >
-                          <strong>{user.name}</strong>
-                          <br />
-                          <small className="text-muted">{user.role}</small>
-                        </button>
-                      ))}
+                      {usersLoading ? (
+                        <div className="dropdown-item text-center">
+                          <span className="spinner-border spinner-border-sm me-2"></span>
+                          Loading users...
+                        </div>
+                      ) : filteredUsers.length > 0 ? (
+                        filteredUsers.map((user) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            className="dropdown-item"
+                            onClick={() => selectMention(user.name)}
+                          >
+                            <strong>{user.name}</strong>
+                            <br />
+                            <small className="text-muted">{user.role}</small>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="dropdown-item text-muted">
+                          No users found
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1012,12 +1107,16 @@ const MaterialRequests = () => {
               <div className="col-12">
                 <button type="submit" className="btn btn-primary me-2">
                   <i className="fa-solid fa-circle-check me-2"></i>
-                  Submit Request
+                  {isEditMode ? "Update Request" : "Submit Request"}
                 </button>
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => {
+                    setShowForm(false);
+                    setIsEditMode(false);
+                    setSelectedRequest(null);
+                  }}
                 >
                   Cancel
                 </button>
@@ -1031,7 +1130,7 @@ const MaterialRequests = () => {
       {!showForm && (
         <div className="card">
           <div className="card-body">
-            <div className="table-responsive">
+            <div className="table-responsive" style={{ overflow: "visible" }}>
               <table className="table table-hover">
                 <thead>
                   <tr>
@@ -1093,20 +1192,72 @@ const MaterialRequests = () => {
                           </span>
                         </td>
                         <td>{new Date(req.date).toLocaleDateString()}</td>
-                        <td>
-                          <button className="btn btn-sm btn-outline-primary me-2">
-                            View
-                          </button>
-                          {req.status === "pending" && (
-                            <>
-                              <button className="btn btn-sm btn-success me-2">
-                                Approve
-                              </button>
-                              <button className="btn btn-sm btn-danger">
-                                Reject
-                              </button>
-                            </>
-                          )}
+                        <td style={{ position: "relative" }}>
+                          <div
+                            className="dropdown"
+                            style={{ position: "static" }}
+                          >
+                            <button
+                              className="btn btn-sm btn-link text-secondary p-0"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleDropdown(req._id);
+                              }}
+                              style={{ border: "none", background: "none" }}
+                            >
+                              <i className="fa-solid fa-ellipsis-vertical"></i>
+                            </button>
+                            {activeDropdown === req._id && (
+                              <div
+                                className="dropdown-menu dropdown-menu-end show"
+                                style={{
+                                  position: "absolute",
+                                  right: 0,
+                                  top: "100%",
+                                  zIndex: 1050,
+                                  minWidth: "160px",
+                                }}
+                              >
+                                <button
+                                  className="dropdown-item"
+                                  onClick={() => handleViewRequest(req)}
+                                >
+                                  <i className="fa-solid fa-eye me-2"></i>
+                                  View
+                                </button>
+                                {canUserEdit(req) && (
+                                  <button
+                                    className="dropdown-item"
+                                    onClick={() => handleEditRequest(req)}
+                                  >
+                                    <i className="fa-solid fa-pen-to-square me-2"></i>
+                                    Edit
+                                  </button>
+                                )}
+                                {isUserApprover(req) &&
+                                  req.status === "pending" && (
+                                    <>
+                                      <div className="dropdown-divider"></div>
+                                      <button
+                                        className="dropdown-item text-success"
+                                        onClick={() => handleApproveClick(req)}
+                                      >
+                                        <i className="fa-solid fa-check me-2"></i>
+                                        Approve
+                                      </button>
+                                      <button
+                                        className="dropdown-item text-danger"
+                                        onClick={() => handleRejectClick(req)}
+                                      >
+                                        <i className="fa-solid fa-times me-2"></i>
+                                        Reject
+                                      </button>
+                                    </>
+                                  )}
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -1309,6 +1460,220 @@ const MaterialRequests = () => {
                 >
                   <i className="fa-solid fa-check me-2"></i>
                   Approve & Create PO
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Modal */}
+      {showViewModal && selectedRequest && (
+        <div
+          className="modal show d-block"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
+          <div className="modal-dialog modal-xl modal-dialog-scrollable">
+            <div className="modal-content">
+              <div className="modal-header bg-info text-white">
+                <h5 className="modal-title">
+                  <i className="fa-solid fa-eye me-2"></i>
+                  Material Request Details - #{selectedRequest.requestId}
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => {
+                    setShowViewModal(false);
+                    setSelectedRequest(null);
+                  }}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <strong>Request ID:</strong>{" "}
+                    {selectedRequest.requestId || selectedRequest._id}
+                  </div>
+                  <div className="col-md-6">
+                    <strong>Request Type:</strong>{" "}
+                    <span className="badge bg-info">
+                      {selectedRequest.requestType}
+                    </span>
+                  </div>
+                </div>
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <strong>Requested By:</strong> {selectedRequest.requestedBy}
+                  </div>
+                  <div className="col-md-6">
+                    <strong>Department:</strong> {selectedRequest.department}
+                  </div>
+                </div>
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <strong>Date:</strong>{" "}
+                    {new Date(
+                      selectedRequest.date || selectedRequest.createdAt
+                    ).toLocaleDateString()}
+                  </div>
+                  <div className="col-md-6">
+                    <strong>Status:</strong>{" "}
+                    <span
+                      className={`badge ${
+                        selectedRequest.status === "approved"
+                          ? "bg-success"
+                          : selectedRequest.status === "pending"
+                          ? "bg-warning"
+                          : selectedRequest.status === "rejected"
+                          ? "bg-danger"
+                          : "bg-secondary"
+                      }`}
+                    >
+                      {selectedRequest.status}
+                    </span>
+                  </div>
+                </div>
+
+                <h6 className="mb-3 mt-4">
+                  <i className="fa-solid fa-list me-2"></i>
+                  Line Items
+                </h6>
+                <div className="table-responsive">
+                  <table className="table table-hover table-striped mb-0">
+                    <thead className="table-primary">
+                      <tr>
+                        <th width="5%" className="text-center">
+                          #
+                        </th>
+                        <th width="25%">Item Name</th>
+                        <th width="10%" className="text-center">
+                          Quantity
+                        </th>
+                        <th width="10%">Unit</th>
+                        <th width="15%" className="text-end">
+                          Unit Price
+                        </th>
+                        <th width="15%" className="text-end">
+                          Total
+                        </th>
+                        <th width="20%">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(selectedRequest.lineItems || []).map((item, idx) => (
+                        <tr key={idx}>
+                          <td className="text-center fw-bold">{idx + 1}</td>
+                          <td className="fw-bold">{item.itemName}</td>
+                          <td className="text-center">{item.quantity}</td>
+                          <td>{item.quantityType}</td>
+                          <td className="text-end">
+                            {formatCurrency(item.amount)}
+                          </td>
+                          <td className="text-end fw-bold text-primary">
+                            {formatCurrency(item.quantity * item.amount)}
+                          </td>
+                          <td>
+                            <small>{item.description || "-"}</small>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="table-success">
+                      <tr>
+                        <th colSpan="5" className="text-end fs-6">
+                          Grand Total:
+                        </th>
+                        <th className="text-end fs-5 text-success">
+                          {formatCurrency(
+                            (selectedRequest.lineItems || []).reduce(
+                              (sum, item) => sum + item.quantity * item.amount,
+                              0
+                            )
+                          )}
+                        </th>
+                        <th></th>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* Additional Information */}
+                {(selectedRequest.message ||
+                  (selectedRequest.attachments &&
+                    selectedRequest.attachments.length > 0)) && (
+                  <div className="card mb-4">
+                    <div className="card-header bg-light">
+                      <h6 className="mb-0">
+                        <i className="fa-solid fa-comment-dots me-2"></i>
+                        Additional Information
+                      </h6>
+                    </div>
+                    <div className="card-body">
+                      {selectedRequest.message && (
+                        <div className="mb-3">
+                          <label className="text-muted small d-block mb-2">
+                            Message/Notes
+                          </label>
+                          <div className="p-3 bg-light rounded border">
+                            <i className="fa-solid fa-quote-left text-muted me-2"></i>
+                            {selectedRequest.message}
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedRequest.attachments &&
+                        selectedRequest.attachments.length > 0 && (
+                          <div>
+                            <label className="text-muted small d-block mb-2">
+                              <i className="fa-solid fa-paperclip me-1"></i>
+                              Attachments ({selectedRequest.attachments.length})
+                            </label>
+                            <div className="d-flex flex-wrap gap-2">
+                              {selectedRequest.attachments.map((file, idx) => (
+                                <span
+                                  key={idx}
+                                  className="badge bg-secondary px-3 py-2"
+                                >
+                                  <i className="fa-solid fa-file me-2"></i>
+                                  {file}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Rejection Reason */}
+                {selectedRequest.rejectionReason && (
+                  <div className="card border-danger mb-4">
+                    <div className="card-header bg-danger text-white">
+                      <h6 className="mb-0">
+                        <i className="fa-solid fa-exclamation-triangle me-2"></i>
+                        Rejection Reason
+                      </h6>
+                    </div>
+                    <div className="card-body">
+                      <p className="mb-0 text-danger fw-bold">
+                        {selectedRequest.rejectionReason}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer bg-light">
+                <button
+                  type="button"
+                  className="btn btn-secondary px-4"
+                  onClick={() => {
+                    setShowViewModal(false);
+                    setSelectedRequest(null);
+                  }}
+                >
+                  <i className="fa-solid fa-times me-2"></i>
+                  Close
                 </button>
               </div>
             </div>

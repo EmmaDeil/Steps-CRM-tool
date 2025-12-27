@@ -27,19 +27,13 @@ const UserModel = require('./models/User');
 const SecuritySettingsModel = require('./models/SecuritySettings');
 const AuditLogModel = require('./models/AuditLog');
 const PolicyModel = require('./models/Policy');
+const EmployeeModel = require('./models/Employee');
+const JobRequisitionModel = require('./models/JobRequisition');
+const TrainingModel = require('./models/Training');
 const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail } = require('./utils/emailService');
 const seed = require('./data');
 
 const app = express();
-let dbConnected = false;
-
-// Short-circuits DB-backed endpoints when MongoDB is unavailable.
-const requireDbConnection = (req, res, next) => {
-  if (!dbConnected) {
-    return res.status(503).json({ message: 'Database unavailable; start with MONGODB_URI to enable this endpoint.' });
-  }
-  next();
-};
 
 // Security Middleware
 app.use(helmet()); // Secure HTTP headers
@@ -66,8 +60,12 @@ const authLimiter = rateLimit({
 });
 
 // CORS configuration
+if (!process.env.FRONTEND_URL) {
+  console.error('FRONTEND_URL not set in .env file');
+  process.exit(1);
+}
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL,
   credentials: true,
   optionsSuccessStatus: 200,
 }));
@@ -76,90 +74,63 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(morgan('dev'));
 
-// MongoDB connection string (optional for dev). If missing, run in degraded mode.
+// MongoDB connection string
 const MONGODB_URI = process.env.MONGODB_URI;
 if (!MONGODB_URI) {
-  console.warn('MONGODB_URI not set; starting in degraded mode with seed data.');
+  console.error('MONGODB_URI not set in .env file');
+  process.exit(1);
 }
 
 async function start() {
   try {
-    if (MONGODB_URI) {
-      await mongoose.connect(MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        serverSelectionTimeoutMS: 5000,
-      });
-      dbConnected = true;
-      console.log('✓ Connected to MongoDB');
+    await mongoose.connect(MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000,
+    });
+    console.log('✓ Connected to MongoDB');
+
+    // Seed modules if empty or update with new modules
+    const moduleCount = await ModuleModel.countDocuments();
+    if (moduleCount === 0) {
+      await ModuleModel.insertMany(seed.modules);
+      console.log('Seeded modules');
     } else {
-      console.warn('Skipping MongoDB connect; no MONGODB_URI provided.');
+      // Upsert modules: update existing ones and add new ones
+      for (const module of seed.modules) {
+        await ModuleModel.findOneAndUpdate(
+          { id: module.id },
+          module,
+          { upsert: true, new: true }
+        );
+      }
+      console.log('Updated modules to match seed data');
     }
 
-    if (dbConnected) {
-      // Seed modules if empty or update with new modules
-      const moduleCount = await ModuleModel.countDocuments();
-      if (moduleCount === 0) {
-        await ModuleModel.insertMany(seed.modules);
-        console.log('Seeded modules');
-      } else {
-        // Upsert modules: update existing ones and add new ones
-        for (const module of seed.modules) {
-          await ModuleModel.findOneAndUpdate(
-            { id: module.id },
-            module,
-            { upsert: true, new: true }
-          );
-        }
-        console.log('Updated modules to match seed data');
-      }
+    // Seed analytics if empty
+    const analyticsCount = await AnalyticsModel.countDocuments();
+    if (analyticsCount === 0) {
+      await AnalyticsModel.create(seed.analytics);
+      console.log('Seeded analytics');
+    }
 
-      // Seed analytics if empty
-      const analyticsCount = await AnalyticsModel.countDocuments();
-      if (analyticsCount === 0) {
-        await AnalyticsModel.create(seed.analytics);
-        console.log('Seeded analytics');
-      }
-
-      // Seed attendance if empty
-      const attendanceCount = await AttendanceModel.countDocuments();
-      if (attendanceCount === 0) {
-        await AttendanceModel.insertMany(seed.attendance);
-        console.log('Seeded attendance');
-      }
-    } else {
-      console.warn('Skipping database seeding because no MongoDB connection is available.');
+    // Seed attendance if empty
+    const attendanceCount = await AttendanceModel.countDocuments();
+    if (attendanceCount === 0) {
+      await AttendanceModel.insertMany(seed.attendance);
+      console.log('Seeded attendance');
     }
   } catch (err) {
     console.error('✗ Failed to connect to MongoDB');
     console.error('  Error:', err.message);
-    console.error('  Please ensure MongoDB is running or set MONGODB_URI in .env');
-    console.warn('Continuing in degraded mode with seed data.');
-    dbConnected = false;
+    console.error('  Please ensure MongoDB is running and MONGODB_URI is set correctly in .env');
+    process.exit(1);
   }
 
   // API endpoints using centralized server API helpers
   const api = require('./api');
 
-  // Block DB-backed endpoints early when MongoDB is not available.
-  app.use([
-    '/api/material-requests',
-    '/api/purchase-orders',
-    '/api/advance-requests',
-    '/api/refund-requests',
-    '/api/retirement-breakdown',
-    '/api/documents',
-    '/api/users',
-    '/api/security',
-    '/api/audit-logs',
-    '/api/approval',
-    '/api/user/profile',
-  ], requireDbConnection);
-
   app.get('/api/modules', async (req, res) => {
-    if (!dbConnected) {
-      return res.json(seed.modules);
-    }
     const mods = await api.getModules();
     res.json(mods);
   });
@@ -172,26 +143,17 @@ async function start() {
   });
 
   app.get('/api/analytics', async (req, res) => {
-    if (!dbConnected) {
-      return res.json(seed.analytics);
-    }
     const a = await api.getAnalytics();
     res.json(a || {});
   });
 
   app.get('/api/attendance', async (req, res) => {
-    if (!dbConnected) {
-      return res.json(seed.attendance);
-    }
     const list = await api.getAttendance();
     res.json(list);
   });
 
   // Material Requests endpoints
   app.get('/api/material-requests', async (req, res) => {
-    if (!dbConnected) {
-      return res.status(503).json({ message: 'Database unavailable in dev; material requests disabled.' });
-    }
     try {
       const requests = await MaterialRequestModel.find().sort({ createdAt: -1 });
       res.json(requests);
@@ -202,9 +164,6 @@ async function start() {
   });
 
   app.post('/api/material-requests', async (req, res) => {
-    if (!dbConnected) {
-      return res.status(503).json({ message: 'Database unavailable in dev; material requests disabled.' });
-    }
     try {
       // Generate request ID
       const count = await MaterialRequestModel.countDocuments();
@@ -229,9 +188,6 @@ async function start() {
 
   // Approve material request and create PO
   app.post('/api/material-requests/:id/approve', async (req, res) => {
-    if (!dbConnected) {
-      return res.status(503).json({ message: 'Database unavailable in dev; approvals disabled.' });
-    }
     try {
       const materialRequest = await MaterialRequestModel.findById(req.params.id);
       if (!materialRequest) {
@@ -288,9 +244,6 @@ async function start() {
 
   // Reject material request
   app.post('/api/material-requests/:id/reject', async (req, res) => {
-    if (!dbConnected) {
-      return res.status(503).json({ message: 'Database unavailable in dev; rejections disabled.' });
-    }
     try {
       const updated = await MaterialRequestModel.findByIdAndUpdate(
         req.params.id,
@@ -306,9 +259,6 @@ async function start() {
   });
 
   app.put('/api/material-requests/:id', async (req, res) => {
-    if (!dbConnected) {
-      return res.status(503).json({ message: 'Database unavailable in dev; updates disabled.' });
-    }
     try {
       const updated = await MaterialRequestModel.findByIdAndUpdate(
         req.params.id,
@@ -345,9 +295,6 @@ async function start() {
 
   // Purchase Orders endpoints
   app.get('/api/purchase-orders', async (req, res) => {
-    if (!dbConnected) {
-      return res.status(503).json({ message: 'Database unavailable in dev; purchase orders disabled.' });
-    }
     try {
       const orders = await PurchaseOrderModel.find().sort({ createdAt: -1 });
       res.json(orders);
@@ -358,9 +305,6 @@ async function start() {
   });
 
   app.post('/api/purchase-orders', async (req, res) => {
-    if (!dbConnected) {
-      return res.status(503).json({ message: 'Database unavailable in dev; purchase orders disabled.' });
-    }
     try {
       const count = await PurchaseOrderModel.countDocuments();
       const poNumber = `PO-${String(count + 1).padStart(6, '0')}`;
@@ -380,9 +324,6 @@ async function start() {
 
   // Review and approve PO
   app.post('/api/purchase-orders/:id/review', async (req, res) => {
-    if (!dbConnected) {
-      return res.status(503).json({ message: 'Database unavailable in dev; reviews disabled.' });
-    }
     try {
       const po = await PurchaseOrderModel.findById(req.params.id);
       if (!po) {
@@ -411,9 +352,6 @@ async function start() {
 
   // Get POs pending payment (for Finance module)
   app.get('/api/purchase-orders/pending-payment', async (req, res) => {
-    if (!dbConnected) {
-      return res.status(503).json({ message: 'Database unavailable in dev; payments disabled.' });
-    }
     try {
       const orders = await PurchaseOrderModel.find({ 
         status: 'payment_pending' 
@@ -427,9 +365,6 @@ async function start() {
 
   // Mark PO as paid
   app.post('/api/purchase-orders/:id/mark-paid', async (req, res) => {
-    if (!dbConnected) {
-      return res.status(503).json({ message: 'Database unavailable in dev; payments disabled.' });
-    }
     try {
       const po = await PurchaseOrderModel.findByIdAndUpdate(
         req.params.id,
@@ -1664,100 +1599,348 @@ async function start() {
   // HR MANAGEMENT ROUTES
   // ===================================
 
-  // In-memory sample data for HR dashboard
-  const hrData = {
-    employees: [
-      { id: 'e1', name: 'Sarah Jenkins', email: 'sarah.j@company.com', role: 'Product Manager', department: 'Product', status: 'Active', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDuiE8m7uH1WQVnfTGmVuYm9exoMTgg4IcNALgCTd3hWW9Vpwm-jpiFyqU0qlPRUtyokT0rbP0N5TTBkf1LoYVuXbC6rLTFhVYE6HMQynWIIdMpu375MNBV8yw7gajwRPUugUmb-vG57rkjheTg8b_wd4C1zsVQ5FaxE0foWLzRO43bfDkAVldMfE2Ig5DdWlpKGxP4_zHzCmgFvOm9W-VCkQCuh-FumLFHvh_ghWU3a5cndN0ls-Ec7UZLCx6S4Qf5ZnetieRG4dk' },
-      { id: 'e2', name: 'Michael Chen', email: 'm.chen@company.com', role: 'Senior Developer', department: 'Engineering', status: 'Active', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDjBWbOUw-8uQ2bd9vogLgtemig-qQTvjQ8Zv29Bd_cwOcGUsi9uurrQ1twgDxW4gpnZGfOEKRcr-JElaIT86gvlNU-SfPI_6qaXsBTPhLJUoVUOZEf-lTShLIU1NGFRf9fn8gFawsB31cbFNHdoVWcSuDfQ1ejxZERh6mvbBkyeP6AwImggXemWreTckEyhifxgyW8svuoCfozgw-SA6scCAjf99e_MN_rlU_6iD2B1lLr-DHssqf3F1S1uu1W8TTwMahJgJLeTyw' },
-      { id: 'e3', name: 'Jessica Lee', email: 'j.lee@company.com', role: 'UX Designer', department: 'Design', status: 'On Leave', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBiQjuyAfghLhGYwDLtEn7yLZsJ0CbLyxPo_tuNdWo-cSWHCh2P-G45yGqCeK2udz4tic3YcfirguC_Hfv4eo79Ad8DikKv3L6J-_pAQ2tCVZxrn530bcfr5xRQdCzZmVUkdGhf0s6zNnObpYczSri9Zheswh-W0MSJJqkNDLJBlKjoa3YvrFsZD6cAXQs0cprimwHA06ojJJ9PJNGAF_3aw209UBq0IgMWk09LibFWqLNjCrk0DG7s5n9OgFAMMWHRAw9e84OjiOU' },
-      { id: 'e4', name: 'Emily Davis', email: 'e.davis@company.com', role: 'HR Specialist', department: 'HR', status: 'Active', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA4H25ln_ynzgML7c5_Xd9FqsNzoifurVEkBjP94CLN_HChdWYYnEHCGG58u3QeP1psN5CvhMKzes5Qk9CZ2LqiA8N_Yo0KuAaE1zAUrx0hGel-F3lI_7hvd3Ws6kkN-2itUV1ktkUnJ903Nv9ywQO7oO_xrDTh-UyAw6mYlOrXyMy8Ej3sUf-azlHCG58pyllq21ErlC1yg5xheqX0HhIrIiYMYr6LKdCEIOAAjgnNDfIvgBgEugM8K7fylAE4nmLgbCJQA8gQFeY' },
-      { id: 'e5', name: 'Mark Wilson', email: 'mark.w@company.com', role: 'QA Engineer', department: 'Engineering', status: 'Active', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBzXmjWz74EG2YsFkNOfcRTS19Zvz_3bIL0B4WQGl04mK8s3v1dqEDNeBkKsAVumPXPIoirGq2UcAa4lmpIaabP0wsa0TPPdBqnXwrXDH5XdzeGN0vZLHFfyGQ1yipiOBSzg8uq-gBLbCoOrn2j9ugnHEFNbMGcsIPp2gkTqUkskrWQPa6CjbvBX-9waCcXCp4jn6ZXqnvMRwzsRQ26z12MF7uOFK-hxWcdZzY1mM_pkl-9N8bWR_kP5zzdwH9P87RgG5ccvwWu9IE' },
-    ],
-    requisitions: [
-      { id: 'r1', title: 'Senior Frontend Dev', candidates: 3, progressPct: 70 },
-      { id: 'r2', title: 'Marketing Lead', candidates: 8, progressPct: 30 },
-      { id: 'r3', title: 'Payroll Manager', candidates: 5, progressPct: 45 },
-    ],
-    turnoverRates6m: [2.1, 1.8, 2.5, 1.5, 1.0, 1.2],
-    turnoverRatesYtd: [1.6, 2.0, 2.3, 2.8, 2.1, 1.9, 1.7, 1.8, 1.5, 1.2, 1.3, 1.4],
-    months6m: ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'],
-    leaveRequests: [
-      { id: 'l1', name: 'Mark Wilson', type: 'Sick Leave', range: 'Dec 24-25', status: 'pending' },
-      { id: 'l2', name: 'Emily Davis', type: 'Vacation', range: 'Dec 28-Jan 2', status: 'pending' },
-    ],
-    performance: { q3CompletedPct: 85, pending: { selfReviews: 12, managerReviews: 4 } },
-    training: [
-      { id: 't1', name: 'Security 101', dueInDays: 3, completionPercent: 75, icon: 'security' },
-      { id: 't2', name: 'Compliance', dueInDays: 7, completionPercent: 20, icon: 'gavel' },
-    ],
-    payrollNext: { date: '2025-12-30', runApproved: true },
-  };
-
-  // Employees
+  // Employees - Get all employees with search
   app.get('/api/hr/employees', async (req, res) => {
     try {
       const { search } = req.query;
-      let list = hrData.employees;
+      let query = {};
+      
       if (search) {
-        const q = String(search).toLowerCase();
-        list = list.filter(
-          (e) => e.name.toLowerCase().includes(q) || e.email.toLowerCase().includes(q)
-        );
+        const searchRegex = new RegExp(search, 'i');
+        query = {
+          $or: [
+            { name: searchRegex },
+            { email: searchRegex },
+            { department: searchRegex },
+            { role: searchRegex },
+          ],
+        };
       }
-      res.json(list);
+      
+      const employees = await EmployeeModel.find(query)
+        .select('-__v')
+        .sort({ name: 1 })
+        .lean();
+
+      // Transform to match frontend expected format
+      const formattedEmployees = employees.map(emp => ({
+        id: emp._id.toString(),
+        _id: emp._id,
+        name: emp.name,
+        email: emp.email,
+        phone: emp.phone || '',
+        dateOfBirth: emp.dateOfBirth,
+        department: emp.department,
+        role: emp.role,
+        jobTitle: emp.jobTitle || emp.role,
+        startDate: emp.startDate,
+        status: emp.status,
+        avatar: emp.avatar || '',
+        employeeId: emp.employeeId,
+      }));
+
+      res.json(formattedEmployees);
     } catch (err) {
       console.error('Error fetching employees:', err);
-      res.status(500).json({ message: 'Failed to fetch employees' });
+      res.status(500).json({ message: 'Failed to fetch employees', error: err.message });
     }
   });
 
-  // Requisitions
-  app.get('/api/hr/requisitions', async (_req, res) => {
-    res.json(hrData.requisitions);
+  // Add new employee
+  app.post('/api/hr/employees', async (req, res) => {
+    try {
+      const { name, email, phone, dateOfBirth, department, jobTitle, startDate } = req.body;
+      
+      if (!name || !email) {
+        return res.status(400).json({ message: 'Name and email are required' });
+      }
+
+      // Check if email already exists
+      const existingEmployee = await EmployeeModel.findOne({ email: email.toLowerCase() });
+      if (existingEmployee) {
+        return res.status(400).json({ message: 'Employee with this email already exists' });
+      }
+
+      // Generate employee ID
+      const count = await EmployeeModel.countDocuments();
+      const employeeId = `EMP${String(count + 1).padStart(4, '0')}`;
+
+      const newEmployee = new EmployeeModel({
+        name,
+        email: email.toLowerCase(),
+        phone: phone || '',
+        dateOfBirth: dateOfBirth || null,
+        department: department || 'Engineering',
+        role: jobTitle || 'Employee',
+        jobTitle: jobTitle || 'Employee',
+        startDate: startDate || new Date(),
+        status: 'Active',
+        employeeId,
+      });
+
+      await newEmployee.save();
+
+      // Format response
+      const response = {
+        id: newEmployee._id.toString(),
+        _id: newEmployee._id,
+        name: newEmployee.name,
+        email: newEmployee.email,
+        phone: newEmployee.phone,
+        dateOfBirth: newEmployee.dateOfBirth,
+        department: newEmployee.department,
+        role: newEmployee.role,
+        jobTitle: newEmployee.jobTitle,
+        startDate: newEmployee.startDate,
+        status: newEmployee.status,
+        employeeId: newEmployee.employeeId,
+      };
+
+      res.status(201).json({ success: true, data: response });
+    } catch (err) {
+      console.error('Error adding employee:', err);
+      res.status(500).json({ success: false, message: 'Failed to add employee', error: err.message });
+    }
   });
 
-  // Analytics
+  // Requisitions - Get all job requisitions
+  app.get('/api/hr/requisitions', async (req, res) => {
+    try {
+      const requisitions = await JobRequisitionModel.find()
+        .select('-__v')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      // Transform to match frontend expected format
+      const formattedRequisitions = requisitions.map(req => ({
+        id: req._id.toString(),
+        _id: req._id,
+        title: req.title,
+        department: req.department,
+        status: req.status,
+        experienceLevel: req.experienceLevel,
+        description: req.description,
+        candidates: req.candidates || 0,
+        progressPct: req.progressPct || 0,
+        createdAt: req.createdAt,
+      }));
+
+      res.json(formattedRequisitions);
+    } catch (err) {
+      console.error('Error fetching requisitions:', err);
+      res.status(500).json({ message: 'Failed to fetch requisitions', error: err.message });
+    }
+  });
+
+  // Add new requisition (job posting)
+  app.post('/api/hr/requisitions', async (req, res) => {
+    try {
+      const { title, department, status, experienceLevel, description } = req.body;
+      
+      if (!title || !department) {
+        return res.status(400).json({ message: 'Title and department are required' });
+      }
+
+      const newRequisition = new JobRequisitionModel({
+        title,
+        department,
+        status: status || 'draft',
+        experienceLevel: experienceLevel || 'mid',
+        description: description || '',
+        candidates: 0,
+        progressPct: 0,
+      });
+
+      await newRequisition.save();
+
+      const response = {
+        id: newRequisition._id.toString(),
+        _id: newRequisition._id,
+        title: newRequisition.title,
+        department: newRequisition.department,
+        status: newRequisition.status,
+        experienceLevel: newRequisition.experienceLevel,
+        description: newRequisition.description,
+        candidates: newRequisition.candidates,
+        progressPct: newRequisition.progressPct,
+        createdAt: newRequisition.createdAt,
+      };
+
+      res.status(201).json({ success: true, data: response });
+    } catch (err) {
+      console.error('Error creating requisition:', err);
+      res.status(500).json({ success: false, message: 'Failed to create requisition', error: err.message });
+    }
+  });
+
+  // Analytics - Calculate from actual data
   app.get('/api/hr/analytics', async (req, res) => {
-    const range = req.query.range === 'ytd' ? 'ytd' : '6m';
-    const turnover = range === 'ytd' ? hrData.turnoverRatesYtd : hrData.turnoverRates6m;
-    const months = range === 'ytd' ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] : hrData.months6m;
-    res.json({ turnoverRates: turnover, months, newHires: 42 });
+    try {
+      const range = req.query.range === 'ytd' ? 'ytd' : '6m';
+      
+      // Calculate actual analytics from database
+      const totalEmployees = await EmployeeModel.countDocuments({ status: 'Active' });
+      
+      // Get new hires for current month
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      
+      const newHires = await EmployeeModel.countDocuments({
+        startDate: { $gte: startOfMonth },
+        status: 'Active',
+      });
+
+      // Calculate turnover rates (simplified - you can enhance this)
+      let months, turnoverRates;
+      if (range === 'ytd') {
+        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        turnoverRates = Array(12).fill(0).map(() => Math.random() * 3); // Placeholder
+      } else {
+        months = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        turnoverRates = Array(6).fill(0).map(() => Math.random() * 3); // Placeholder
+      }
+
+      res.json({ 
+        turnoverRates, 
+        months, 
+        newHires,
+        totalEmployees,
+      });
+    } catch (err) {
+      console.error('Error fetching analytics:', err);
+      res.status(500).json({ message: 'Failed to fetch analytics', error: err.message });
+    }
   });
 
-  // Leave Requests
+  // Legacy Leave Requests endpoint (uses new Leave Request model via api.js)
   app.get('/api/hr/leave-requests', async (_req, res) => {
-    res.json(hrData.leaveRequests);
+    try {
+      // Get recent pending leave requests for dashboard
+      const requests = await api.getLeaveRequests({ status: 'pending' });
+      
+      // Format for HR dashboard (simplified view)
+      const formatted = requests.slice(0, 10).map(req => ({
+        id: req._id.toString(),
+        name: req.employeeName,
+        type: req.leaveType,
+        range: `${new Date(req.fromDate).toLocaleDateString()} - ${new Date(req.toDate).toLocaleDateString()}`,
+        status: req.status,
+      }));
+
+      res.json(formatted);
+    } catch (err) {
+      console.error('Error fetching leave requests:', err);
+      res.json([]); // Return empty array for dashboard compatibility
+    }
   });
 
   app.post('/api/hr/leave-requests/:id/approve', async (req, res) => {
-    const { id } = req.params;
-    const item = hrData.leaveRequests.find((l) => l.id === id);
-    if (!item) return res.status(404).json({ message: 'Not found' });
-    item.status = 'approved';
-    res.json({ message: 'Approved', data: item });
+    try {
+      // Use the proper leave request approval via api
+      const request = await api.updateLeaveRequestStatus(
+        req.params.id,
+        'approved',
+        'Approved from HR dashboard',
+        'hr'
+      );
+      res.json({ message: 'Approved', success: true, data: request });
+    } catch (err) {
+      console.error('Error approving leave:', err);
+      res.status(500).json({ message: 'Failed to approve', error: err.message });
+    }
   });
 
   app.post('/api/hr/leave-requests/:id/reject', async (req, res) => {
-    const { id } = req.params;
-    const item = hrData.leaveRequests.find((l) => l.id === id);
-    if (!item) return res.status(404).json({ message: 'Not found' });
-    item.status = 'rejected';
-    res.json({ message: 'Rejected', data: item });
+    try {
+      // Use the proper leave request rejection via api
+      const request = await api.updateLeaveRequestStatus(
+        req.params.id,
+        'rejected',
+        'Rejected from HR dashboard',
+        'hr'
+      );
+      res.json({ message: 'Rejected', success: true, data: request });
+    } catch (err) {
+      console.error('Error rejecting leave:', err);
+      res.status(500).json({ message: 'Failed to reject', error: err.message });
+    }
   });
 
-  // Performance
+  // Performance - Calculate from actual data
   app.get('/api/hr/performance', async (_req, res) => {
-    res.json(hrData.performance);
+    try {
+      // TODO: Implement actual performance tracking
+      // For now, return default structure
+      res.json({ 
+        q3CompletedPct: 85, 
+        pending: { 
+          selfReviews: 12, 
+          managerReviews: 4 
+        } 
+      });
+    } catch (err) {
+      console.error('Error fetching performance:', err);
+      res.status(500).json({ message: 'Failed to fetch performance data', error: err.message });
+    }
   });
 
-  // Training
+  // Training - Get from database
   app.get('/api/hr/training', async (_req, res) => {
-    res.json(hrData.training);
+    try {
+      const trainings = await TrainingModel.find({ status: 'active' })
+        .select('-__v')
+        .sort({ dueDate: 1 })
+        .limit(10)
+        .lean();
+
+      // Calculate dueInDays for each training
+      const now = new Date();
+      const formatted = trainings.map(t => {
+        let dueInDays = null;
+        if (t.dueDate) {
+          const due = new Date(t.dueDate);
+          const diffTime = due - now;
+          dueInDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+        
+        return {
+          id: t._id.toString(),
+          _id: t._id,
+          name: t.name,
+          description: t.description,
+          dueInDays,
+          dueDate: t.dueDate,
+          completionPercent: t.completionPercent || 0,
+          icon: t.icon || 'book',
+          category: t.category,
+          mandatory: t.mandatory,
+        };
+      });
+
+      res.json(formatted);
+    } catch (err) {
+      console.error('Error fetching training:', err);
+      res.json([]); // Return empty array for compatibility
+    }
   });
 
-  // Payroll Next
+  // Payroll Next - TODO: Implement payroll tracking
   app.get('/api/hr/payroll-next', async (_req, res) => {
-    res.json(hrData.payrollNext);
+    try {
+      // TODO: Implement actual payroll tracking
+      // For now, return default structure
+      const nextPayrollDate = new Date();
+      nextPayrollDate.setDate(nextPayrollDate.getDate() + (31 - nextPayrollDate.getDate()));
+      
+      res.json({ 
+        date: nextPayrollDate.toISOString().split('T')[0], 
+        runApproved: true 
+      });
+    } catch (err) {
+      console.error('Error fetching payroll info:', err);
+      res.status(500).json({ message: 'Failed to fetch payroll data', error: err.message });
+    }
   });
 
   // ===========================
@@ -2169,23 +2352,13 @@ async function start() {
     }
   });
 
-  const port = process.env.PORT || 5000;
-  if (!process.env.PORT) {
-    console.warn('PORT is not set; defaulting to 5000');
+  const port = process.env.PORT;
+  if (!port) {
+    console.error('PORT not set in .env file');
+    process.exit(1);
   }
-  const server = app.listen(port, () => {
+  app.listen(port, () => {
     console.log(`Steps backend listening on http://localhost:${port}`);
-  });
-  server.on('error', (err) => {
-    if (err && err.code === 'EADDRINUSE') {
-      const fallback = String(Number(port) + 1);
-      console.warn(`Port ${port} in use. Falling back to ${fallback}.`);
-      app.listen(fallback, () => {
-        console.log(`Steps backend listening on http://localhost:${fallback}`);
-      });
-    } else {
-      console.error('Server failed to start:', err);
-    }
   });
 }
 

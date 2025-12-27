@@ -1,4 +1,3 @@
-/* eslint-disable */
 // Server-side API helpers that encapsulate MongoDB operations.
 const ModuleModel = require('./models/Module');
 const AnalyticsModel = require('./models/Analytics');

@@ -4,6 +4,7 @@ import { useUser } from "@clerk/clerk-react";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
+import { formatCurrency } from "../../services/currency";
 
 const Approval = () => {
   const navigate = useNavigate();
@@ -910,7 +911,7 @@ const Approval = () => {
                             {record.purpose || record.category}
                           </td>
                           <td className="px-6 py-4 text-sm font-semibold text-[#111418]">
-                            {record.currency} {record.amount.toLocaleString()}
+                            {formatCurrency(record.amount)}
                           </td>
                           <td className="px-6 py-4 text-sm text-[#617589]">
                             {record.approver}
@@ -1474,17 +1475,18 @@ const Approval = () => {
                                 {monthName}
                               </td>
                               <td className="px-6 py-4 text-sm font-semibold text-gray-600">
-                                $
-                                {monthData.previousClosingBalance?.toLocaleString()}
+                                {formatCurrency(
+                                  monthData.previousClosingBalance || 0
+                                )}
                               </td>
                               <td className="px-6 py-4 text-sm font-semibold text-green-600">
-                                ${monthData.totalInflow?.toLocaleString()}
+                                {formatCurrency(monthData.totalInflow || 0)}
                               </td>
                               <td className="px-6 py-4 text-sm font-semibold text-red-600">
-                                ${monthData.totalExpenses?.toLocaleString()}
+                                {formatCurrency(monthData.totalExpenses || 0)}
                               </td>
                               <td className="px-6 py-4 text-sm font-semibold text-blue-600">
-                                ${monthData.latestBalance?.toLocaleString()}
+                                {formatCurrency(monthData.latestBalance || 0)}
                               </td>
                               <td className="px-6 py-4 text-sm text-[#617589]">
                                 {monthData.totalItems} items
@@ -1713,16 +1715,16 @@ const Approval = () => {
                       `Retirement Breakdown - ${monthName}`,
                       "",
                       "Financial Summary",
-                      `Opening Balance,$${openingBalance.toLocaleString()}`,
-                      `Total Inflow,$${totalInflow.toLocaleString()}`,
-                      `Total Expenses,$${totalExpenses.toLocaleString()}`,
-                      `Closing Balance,$${closingBalance.toLocaleString()}`,
+                      `Opening Balance,${formatCurrency(openingBalance)}`,
+                      `Total Inflow,${formatCurrency(totalInflow)}`,
+                      `Total Expenses,${formatCurrency(totalExpenses)}`,
+                      `Closing Balance,${formatCurrency(closingBalance)}`,
                       "",
                       "Line Items",
                       headers.join(","),
                       ...rows.map((row) => row.join(",")),
                       "",
-                      `Total,$${totalExpenses.toLocaleString()}`,
+                      `Total,${formatCurrency(totalExpenses)}`,
                     ].join("\n");
 
                     const blob = new Blob([csvContent], {
@@ -1808,7 +1810,7 @@ const Approval = () => {
                           </p>
                         </div>
                         <p className="text-2xl font-bold text-[#111418]">
-                          ${openingBalance.toLocaleString()}
+                          {formatCurrency(openingBalance)}
                         </p>
                       </div>
 
@@ -1822,7 +1824,7 @@ const Approval = () => {
                           </p>
                         </div>
                         <p className="text-2xl font-bold text-green-700">
-                          ${totalInflow.toLocaleString()}
+                          {formatCurrency(totalInflow)}
                         </p>
                       </div>
 
@@ -1836,7 +1838,7 @@ const Approval = () => {
                           </p>
                         </div>
                         <p className="text-2xl font-bold text-red-700">
-                          ${totalExpenses.toLocaleString()}
+                          {formatCurrency(totalExpenses)}
                         </p>
                       </div>
 
@@ -1850,7 +1852,7 @@ const Approval = () => {
                           </p>
                         </div>
                         <p className="text-2xl font-bold text-blue-700">
-                          ${closingBalance.toLocaleString()}
+                          {formatCurrency(closingBalance)}
                         </p>
                       </div>
                     </div>
@@ -1995,15 +1997,11 @@ const Approval = () => {
                                           min="0"
                                         />
                                       ) : (
-                                        `$${itemAmount.toLocaleString()}`
+                                        formatCurrency(itemAmount)
                                       )}
                                     </td>
                                     <td className="px-6 py-4 text-sm font-bold text-blue-600 text-right">
-                                      $
-                                      {itemTotal.toLocaleString(undefined, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                      })}
+                                      {formatCurrency(itemTotal)}
                                     </td>
                                     <td className="px-6 py-4 text-sm text-center">
                                       {isEditing ? (

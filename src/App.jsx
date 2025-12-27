@@ -47,7 +47,7 @@ function App() {
 
         {/* Profile page inside app chrome (protected) */}
         <Route
-          path="/profile"
+          path="/home/profile"
           element={
             <PrivateRoute>
               <PageWithNavbar>
@@ -59,7 +59,7 @@ function App() {
 
         {/* Retirement Management inside app chrome (protected) */}
         <Route
-          path="/retirement-management"
+          path="/home/retirement-management"
           element={
             <PrivateRoute>
               <PageWithNavbar>
@@ -67,6 +67,16 @@ function App() {
               </PageWithNavbar>
             </PrivateRoute>
           }
+        />
+
+        {/* Redirects for backward compatibility */}
+        <Route
+          path="/profile"
+          element={<Navigate to="/home/profile" replace />}
+        />
+        <Route
+          path="/retirement-management"
+          element={<Navigate to="/home/retirement-management" replace />}
         />
 
         {/* 404 fallback */}

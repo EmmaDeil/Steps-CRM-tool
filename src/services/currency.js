@@ -18,7 +18,7 @@ export function formatCurrency(value, options = {}) {
       minimumFractionDigits,
       maximumFractionDigits,
     }).format(num);
-  } catch (e) {
+  } catch {
     // Fallback if Intl or currency code fails
     return `${currency} ${num.toFixed(maximumFractionDigits)}`;
   }

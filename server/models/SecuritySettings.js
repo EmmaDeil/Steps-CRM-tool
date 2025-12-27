@@ -1,4 +1,3 @@
-/* eslint-disable */
 const mongoose = require('mongoose');
 
 const notificationRuleSchema = new mongoose.Schema({
