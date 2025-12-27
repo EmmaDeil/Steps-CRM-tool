@@ -322,7 +322,7 @@ const Signup = () => {
         {/* Footer */}
         <div className="text-center mt-6">
           <p className="text-sm text-gray-600">
-            © 2025 Your Company. All rights reserved.
+            © {new Date().getFullYear()} Netlink App. All rights reserved.
           </p>
         </div>
       </div>
