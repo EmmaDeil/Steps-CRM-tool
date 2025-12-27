@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect } from "react";
 import PropTypes from "prop-types";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth } from "./useAuth";
 
 const AppContext = createContext();
 
@@ -44,15 +44,15 @@ export const AppProvider = ({ children }) => {
     localStorage.setItem("searchHistory", JSON.stringify(newHistory));
   };
 
-  // If a user is signed in via Clerk, treat them as admin for this project
+  // If a user is signed in via custom auth, treat them as admin for this project
   // (per project requirement that the currently-signed-in user has full admin rights).
-  const { user, isLoaded } = useUser();
+  const { user, isAuthenticated, loading } = useAuth();
 
   useEffect(() => {
-    if (isLoaded && user) {
+    if (!loading && isAuthenticated && user) {
       setUserRole("admin");
     }
-  }, [isLoaded, user]);
+  }, [loading, isAuthenticated, user]);
 
   // Persist retirement header values
   useEffect(() => {

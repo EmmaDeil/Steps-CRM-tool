@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth } from "../../context/useAuth";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
@@ -10,7 +10,7 @@ import { NumericFormat } from "react-number-format";
 import { formatCurrency } from "../../services/currency";
 
 const MaterialRequests = () => {
-  const { user } = useUser();
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [requests, setRequests] = useState([]);

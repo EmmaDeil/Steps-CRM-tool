@@ -9,6 +9,8 @@ const mongoSanitize = require('express-mongo-sanitize');
 const mongoose = require('mongoose');
 const path = require('path');
 const dotenv = require('dotenv');
+const multer = require('multer');
+const fs = require('fs');
 // Ensure .env is loaded even when the server is started from the repo root
 dotenv.config({ path: path.join(__dirname, '.env') });
 
@@ -30,6 +32,7 @@ const PolicyModel = require('./models/Policy');
 const EmployeeModel = require('./models/Employee');
 const JobRequisitionModel = require('./models/JobRequisition');
 const TrainingModel = require('./models/Training');
+const VendorModel = require('./models/Vendor');
 const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail } = require('./utils/emailService');
 const seed = require('./data');
 
@@ -73,6 +76,44 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(morgan('dev'));
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'uploads', 'vendors');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  },
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit per file
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /pdf|doc|docx|jpg|jpeg|png/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only PDF, DOC, DOCX, JPG, and PNG files are allowed'));
+    }
+  },
+});
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // MongoDB connection string
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -129,6 +170,291 @@ async function start() {
 
   // API endpoints using centralized server API helpers
   const api = require('./api');
+  const { authMiddleware, generateToken } = require('./middleware/auth');
+  const crypto = require('crypto');
+
+  // ==================== AUTHENTICATION ROUTES ====================
+
+  // Signup
+  app.post('/api/auth/signup', async (req, res) => {
+    try {
+      const { firstName, lastName, email, password, role } = req.body;
+
+      // Validate input
+      if (!firstName || !lastName || !email || !password) {
+        return res.status(400).json({
+          success: false,
+          error: 'All fields are required',
+        });
+      }
+
+      // Check if user already exists
+      const existingUser = await UserModel.findOne({ email: email.toLowerCase() });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          error: 'Email already registered',
+        });
+      }
+
+      // Create new user
+      const user = new UserModel({
+        firstName,
+        lastName,
+        email: email.toLowerCase(),
+        password,
+        role: role || 'user',
+        status: 'Active',
+      });
+
+      await user.save();
+
+      // Generate token
+      const token = generateToken(user._id);
+
+      // Return user data without password
+      const userData = {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+      };
+
+      res.status(201).json({
+        success: true,
+        message: 'Account created successfully',
+        data: {
+          user: userData,
+          token,
+        },
+      });
+    } catch (error) {
+      console.error('Signup error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to create account',
+      });
+    }
+  });
+
+  // Login
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+
+      // Validate input
+      if (!email || !password) {
+        return res.status(400).json({
+          success: false,
+          error: 'Email and password are required',
+        });
+      }
+
+      // Find user with password field
+      const user = await UserModel.findOne({ email: email.toLowerCase() }).select('+password');
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid email or password',
+        });
+      }
+
+      // Check password
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid email or password',
+        });
+      }
+
+      // Check if account is active
+      if (user.status !== 'Active') {
+        return res.status(403).json({
+          success: false,
+          error: 'Account is not active',
+        });
+      }
+
+      // Update last login
+      user.lastLogin = new Date();
+      await user.save();
+
+      // Generate token
+      const token = generateToken(user._id);
+
+      // Return user data without password
+      const userData = {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        profilePicture: user.profilePicture,
+        department: user.department,
+        jobTitle: user.jobTitle,
+      };
+
+      res.json({
+        success: true,
+        message: 'Login successful',
+        data: {
+          user: userData,
+          token,
+        },
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Login failed',
+      });
+    }
+  });
+
+  // Verify token
+  app.get('/api/auth/verify', authMiddleware, async (req, res) => {
+    try {
+      const userData = {
+        _id: req.user._id,
+        firstName: req.user.firstName,
+        lastName: req.user.lastName,
+        fullName: req.user.fullName,
+        email: req.user.email,
+        role: req.user.role,
+        status: req.user.status,
+        profilePicture: req.user.profilePicture,
+        department: req.user.department,
+        jobTitle: req.user.jobTitle,
+      };
+
+      res.json({
+        success: true,
+        data: {
+          user: userData,
+        },
+      });
+    } catch (error) {
+      console.error('Verify token error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Verification failed',
+      });
+    }
+  });
+
+  // Logout
+  app.post('/api/auth/logout', authMiddleware, async (req, res) => {
+    try {
+      // In a JWT-based system, logout is handled client-side by removing the token
+      res.json({
+        success: true,
+        message: 'Logged out successfully',
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Logout failed',
+      });
+    }
+  });
+
+  // Forgot password
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          error: 'Email is required',
+        });
+      }
+
+      const user = await UserModel.findOne({ email: email.toLowerCase() });
+      if (!user) {
+        // Don't reveal that user doesn't exist
+        return res.json({
+          success: true,
+          message: 'If an account exists with this email, a password reset link has been sent',
+        });
+      }
+
+      // Generate reset token
+      const resetToken = user.generateResetToken();
+      await user.save();
+
+      // Send reset email
+      const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+      await sendPasswordResetEmail(user.email, resetUrl);
+
+      res.json({
+        success: true,
+        message: 'Password reset email sent',
+      });
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to process request',
+      });
+    }
+  });
+
+  // Reset password
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          error: 'Token and new password are required',
+        });
+      }
+
+      // Hash token
+      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+      // Find user with valid token
+      const user = await UserModel.findOne({
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { $gt: Date.now() },
+      });
+
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid or expired token',
+        });
+      }
+
+      // Update password
+      user.password = newPassword;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+
+      res.json({
+        success: true,
+        message: 'Password reset successful',
+      });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to reset password',
+      });
+    }
+  });
+
+  // ==================== END AUTHENTICATION ROUTES ====================
 
   app.get('/api/modules', async (req, res) => {
     const mods = await api.getModules();
@@ -2348,6 +2674,397 @@ async function start() {
       if (error.message === 'User not found') {
         return res.status(404).json({ success: false, error: error.message });
       }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== FINANCE RECONCILIATION ROUTES ====================
+
+  // Get reconciliation data
+  app.get('/api/finance/reconciliation', async (req, res) => {
+    try {
+      // TODO: Fetch actual data from database
+      const bankTransactions = [];
+      const ledgerTransactions = [];
+
+      res.json({
+        success: true,
+        data: {
+          bankTransactions,
+          ledgerTransactions,
+          statementStart: 0,
+          statementEnd: 0,
+          clearedBalance: 0,
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching reconciliation data:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Match transactions
+  app.post('/api/finance/reconciliation/match', async (req, res) => {
+    try {
+      const { bankTransactions, ledgerTransactions } = req.body;
+      
+      // TODO: Implement actual matching logic with database
+      // For now, just return success
+      
+      res.json({
+        success: true,
+        message: `Matched ${bankTransactions.length} bank transaction(s) with ${ledgerTransactions.length} ledger transaction(s)`,
+      });
+    } catch (error) {
+      console.error('Error matching transactions:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Complete reconciliation
+  app.post('/api/finance/reconciliation/complete', async (req, res) => {
+    try {
+      const { account, period, statementEnd, clearedBalance } = req.body;
+      
+      // TODO: Save reconciliation record to database
+      
+      res.json({
+        success: true,
+        message: 'Reconciliation completed successfully',
+        data: {
+          account,
+          period,
+          statementEnd,
+          clearedBalance,
+          completedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      console.error('Error completing reconciliation:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Save reconciliation draft
+  app.post('/api/finance/reconciliation/draft', async (req, res) => {
+    try {
+      const { account, period, bankTransactions, ledgerTransactions } = req.body;
+      
+      // TODO: Save draft to database
+      
+      res.json({
+        success: true,
+        message: 'Draft saved successfully',
+        data: {
+          account,
+          period,
+          savedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Import bank statement
+  app.post('/api/finance/reconciliation/import', async (req, res) => {
+    try {
+      const { mapping, ignoreFirstRow } = req.body;
+      
+      // TODO: Process uploaded CSV file and parse transactions
+      // For now, return success with sample data
+      
+      res.json({
+        success: true,
+        message: 'Bank statement imported successfully',
+        data: {
+          imported: 45,
+          mapped: mapping,
+          timestamp: new Date(),
+        },
+      });
+    } catch (error) {
+      console.error('Error importing bank statement:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get accounts payable invoices
+  app.get('/api/finance/accounts-payable', async (req, res) => {
+    try {
+      const { vendor, status, page = 1 } = req.query;
+      
+      // TODO: Fetch actual data from database
+      const invoices = [];
+      
+      res.json({
+        success: true,
+        data: {
+          invoices,
+          totalPages: 0,
+          currentPage: page,
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching accounts payable:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Pay selected invoices
+  app.post('/api/finance/accounts-payable/pay', async (req, res) => {
+    try {
+      const { invoiceIds } = req.body;
+      
+      if (!invoiceIds || invoiceIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'No invoices selected' });
+      }
+      
+      // TODO: Process payments through payment gateway
+      // For now, return success
+      
+      res.json({
+        success: true,
+        message: `Successfully processed payment for ${invoiceIds.length} invoice(s)`,
+        data: {
+          paidInvoices: invoiceIds,
+          timestamp: new Date(),
+        },
+      });
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get journal entries
+  app.get('/api/finance/journal-entries', async (req, res) => {
+    try {
+      const { status, journalType, page = 1 } = req.query;
+      
+      // TODO: Fetch actual data from database
+      const entries = [];
+      
+      res.json({
+        success: true,
+        data: {
+          entries,
+          totalPages: 0,
+          currentPage: page,
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching journal entries:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create journal entry
+  app.post('/api/finance/journal-entries', async (req, res) => {
+    try {
+      const { date, referenceNumber, currency, memo, lineItems, totalDebit, totalCredit } = req.body;
+      
+      if (!referenceNumber || !lineItems || lineItems.length < 2) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Invalid journal entry data. At least two line items are required.' 
+        });
+      }
+      
+      const difference = Math.abs(totalDebit - totalCredit);
+      if (difference > 0.01) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Journal entry is not balanced. Total debits must equal total credits.' 
+        });
+      }
+      
+      // TODO: Save journal entry to database
+      // For now, return success
+      
+      res.json({
+        success: true,
+        message: 'Journal entry saved successfully',
+        data: {
+          _id: 'je-' + Date.now(),
+          date,
+          referenceNumber,
+          currency,
+          memo,
+          lineItems,
+          totalDebit,
+          totalCredit,
+          status: 'Draft',
+          createdAt: new Date(),
+        },
+      });
+    } catch (error) {
+      console.error('Error creating journal entry:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ==================== VENDOR MANAGEMENT ROUTES ====================
+
+  // Get all vendors
+  app.get('/api/vendors', async (req, res) => {
+    try {
+      const { status, serviceType, search, page = 1, limit = 12 } = req.query;
+      
+      // Build query
+      const query = {};
+      if (status) query.status = status;
+      if (serviceType) query.serviceType = serviceType;
+      if (search) {
+        query.$or = [
+          { companyName: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+          { vendorId: { $regex: search, $options: 'i' } },
+        ];
+      }
+      
+      const skip = (page - 1) * limit;
+      const vendors = await VendorModel.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit));
+      
+      const total = await VendorModel.countDocuments(query);
+      const totalPages = Math.ceil(total / limit);
+      
+      res.json({
+        success: true,
+        data: {
+          vendors,
+          totalPages,
+          currentPage: parseInt(page),
+          total,
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching vendors:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create new vendor with file upload
+  app.post('/api/vendors', upload.array('documents', 5), async (req, res) => {
+    try {
+      const vendorData = req.body;
+      
+      // Process uploaded documents
+      const documents = [];
+      if (req.files && req.files.length > 0) {
+        req.files.forEach((file) => {
+          documents.push({
+            filename: file.filename,
+            originalName: file.originalname,
+            path: file.path,
+            size: file.size,
+            mimetype: file.mimetype,
+            uploadedAt: new Date(),
+          });
+        });
+      }
+      
+      // Create new vendor
+      const vendor = new VendorModel({
+        ...vendorData,
+        documents,
+        status: 'Active',
+        createdAt: new Date(),
+      });
+      
+      await vendor.save();
+      
+      res.json({
+        success: true,
+        message: 'Vendor created successfully',
+        data: vendor,
+      });
+    } catch (error) {
+      console.error('Error creating vendor:', error);
+      
+      // Clean up uploaded files if vendor creation fails
+      if (req.files && req.files.length > 0) {
+        req.files.forEach((file) => {
+          fs.unlink(file.path, (err) => {
+            if (err) console.error('Error deleting file:', err);
+          });
+        });
+      }
+      
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Update vendor
+  app.put('/api/vendors/:id', upload.array('documents', 5), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      const vendor = await VendorModel.findById(id);
+      if (!vendor) {
+        return res.status(404).json({ success: false, error: 'Vendor not found' });
+      }
+      
+      // Process new uploaded documents
+      if (req.files && req.files.length > 0) {
+        const newDocuments = req.files.map((file) => ({
+          filename: file.filename,
+          originalName: file.originalname,
+          path: file.path,
+          size: file.size,
+          mimetype: file.mimetype,
+          uploadedAt: new Date(),
+        }));
+        updates.documents = [...(vendor.documents || []), ...newDocuments];
+      }
+      
+      Object.assign(vendor, updates);
+      vendor.updatedAt = new Date();
+      await vendor.save();
+      
+      res.json({
+        success: true,
+        message: 'Vendor updated successfully',
+        data: vendor,
+      });
+    } catch (error) {
+      console.error('Error updating vendor:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Delete vendor
+  app.delete('/api/vendors/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const vendor = await VendorModel.findById(id);
+      if (!vendor) {
+        return res.status(404).json({ success: false, error: 'Vendor not found' });
+      }
+      
+      // Delete associated documents from filesystem
+      if (vendor.documents && vendor.documents.length > 0) {
+        vendor.documents.forEach((doc) => {
+          fs.unlink(doc.path, (err) => {
+            if (err) console.error('Error deleting file:', err);
+          });
+        });
+      }
+      
+      await VendorModel.findByIdAndDelete(id);
+      
+      res.json({
+        success: true,
+        message: 'Vendor deleted successfully',
+      });
+    } catch (error) {
+      console.error('Error deleting vendor:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });

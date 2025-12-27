@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect } from "react";
 import PropTypes from "prop-types";
-import { useClerk } from "@clerk/clerk-react";
+import { useAuth } from "../context/useAuth";
 import { useNavigate } from "react-router-dom";
 import stepsLogo from "../assets/steps-logo.ico";
 import NotificationCenter from "./NotificationCenter";
 import { apiService } from "../services/api";
 
 const Navbar = ({ user }) => {
-  const { signOut } = useClerk();
+  const { logout } = useAuth();
   const navigate = useNavigate();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [profilePicture, setProfilePicture] = useState(null);
@@ -146,9 +146,10 @@ const Navbar = ({ user }) => {
 
                   {/* Logout */}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setIsDropdownOpen(false);
-                      signOut({ redirectUrl: "/" });
+                      await logout();
+                      navigate("/");
                     }}
                     className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors font-medium"
                   >

@@ -24,6 +24,21 @@ const Breadcrumb = ({ items }) => {
                   </span>
                 )}
               </>
+            ) : item.onClick ? (
+              <>
+                <button
+                  onClick={item.onClick}
+                  className="text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                >
+                  <i className={`fa-solid ${item.icon} mr-1`}></i>
+                  {item.label}
+                </button>
+                {index < items.length - 1 && (
+                  <span className="text-[#617589]">
+                    <i className="fa-solid fa-chevron-right text-xs"></i>
+                  </span>
+                )}
+              </>
             ) : (
               <>
                 <span className="text-[#111418] font-medium">

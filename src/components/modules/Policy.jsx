@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth } from "../../context/useAuth";
 import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
 import Breadcrumb from "../Breadcrumb";
 import { useDepartments } from "../../context/useDepartments";
 
 const Policy = () => {
-  const { user } = useUser();
+  const { user } = useAuth();
   const [policies, setPolicies] = useState([]);
   const [policiesLoading, setPoliciesLoading] = useState(true);
   const { departments, loading: departmentsLoading } = useDepartments();

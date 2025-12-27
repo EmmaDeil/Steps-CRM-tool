@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, Suspense, lazy } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth } from "../context/useAuth";
 import { useAppContext } from "../context/useAppContext";
 import Navbar from "../components/Navbar";
 import Breadcrumb from "../components/Breadcrumb";
@@ -53,7 +53,7 @@ const iconMap = {
 
 export default function Home() {
   const navigate = useNavigate();
-  const { user } = useUser();
+  const { user } = useAuth();
   const { id } = useParams();
   const { hasModuleAccess } = useAppContext();
 

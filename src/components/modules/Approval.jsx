@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth } from "../../context/useAuth";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
@@ -8,7 +8,7 @@ import { formatCurrency } from "../../services/currency";
 
 const Approval = () => {
   const navigate = useNavigate();
-  const { user } = useUser();
+  const { user } = useAuth();
   const [advanceRequests, setAdvanceRequests] = useState([]);
   const [refundRequests, setRefundRequests] = useState([]);
   const [retirementBreakdowns, setRetirementBreakdowns] = useState([]);

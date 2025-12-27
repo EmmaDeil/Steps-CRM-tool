@@ -2,13 +2,13 @@
 import React from "react";
 import PropTypes from "prop-types";
 import { Navigate } from "react-router-dom";
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth } from "../context/useAuth";
 
 const PrivateRoute = ({ children }) => {
-  const { isSignedIn, isLoaded } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
-  // Wait for Clerk to finish loading
-  if (!isLoaded) {
+  // Wait for auth to finish loading
+  if (loading) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-50">
         <div className="flex flex-col items-center justify-center gap-4">
@@ -26,8 +26,8 @@ const PrivateRoute = ({ children }) => {
     );
   }
 
-  // If user is not signed in, redirect to auth page
-  if (!isSignedIn) {
+  // If user is not authenticated, redirect to login page
+  if (!isAuthenticated) {
     return <Navigate to="/" replace />;
   }
 

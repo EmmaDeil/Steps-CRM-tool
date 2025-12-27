@@ -1,15 +1,20 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
-  clerkId: {
+  firstName: {
     type: String,
-    sparse: true,
-    index: true,
+    required: true,
+    trim: true,
+  },
+  lastName: {
+    type: String,
+    required: true,
+    trim: true,
   },
   fullName: {
     type: String,
-    required: true,
     trim: true,
   },
   email: {
@@ -19,10 +24,15 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     trim: true,
   },
+  password: {
+    type: String,
+    required: true,
+    select: false, // Don't include password in queries by default
+  },
   role: {
     type: String,
-    enum: ['Admin', 'Editor', 'Viewer'],
-    default: 'Viewer',
+    enum: ['Admin', 'Editor', 'Viewer', 'user'],
+    default: 'user',
   },
   status: {
     type: String,
@@ -86,6 +96,26 @@ const userSchema = new mongoose.Schema({
 // Index for faster queries
 userSchema.index({ email: 1, status: 1 });
 userSchema.index({ role: 1 });
+
+// Pre-save middleware to hash password and set fullName
+userSchema.pre('save', async function(next) {
+  // Set fullName from firstName and lastName
+  if (this.firstName && this.lastName) {
+    this.fullName = `${this.firstName} ${this.lastName}`;
+  }
+
+  // Hash password if it's modified
+  if (this.isModified('password')) {
+    this.password = await bcrypt.hash(this.password, 10);
+  }
+  
+  next();
+});
+
+// Method to compare password
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
 
 // Method to generate password reset token
 userSchema.methods.generateResetToken = function() {

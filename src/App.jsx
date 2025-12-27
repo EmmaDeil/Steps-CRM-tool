@@ -1,7 +1,9 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth } from "./context/AuthContext";
 import "./App.css";
-import Auth from "./components/auth/Auth";
+import Login from "./components/auth/Login";
+import Signup from "./components/auth/Signup";
+import ForgotPassword from "./components/auth/ForgotPassword";
 import Home from "./home/Home";
 import Profile from "./components/Profile";
 import PrivateRoute from "./components/PrivateRoute";
@@ -11,7 +13,7 @@ import RetirementManagement from "./components/modules/RetirementManagement";
 import Navbar from "./components/Navbar";
 
 function App() {
-  const { user } = useUser();
+  const { user } = useAuth();
 
   const PageWithNavbar = ({ children }) => (
     <div className="min-h-screen d-flex flex-column">
@@ -24,8 +26,10 @@ function App() {
     <>
       <Toaster position="top-right" />
       <Routes>
-        {/* Auth page */}
-        <Route path="/" element={<Auth />} />
+        {/* Auth pages */}
+        <Route path="/" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
         {/* Home - module list and detail view (protected) */}
         <Route

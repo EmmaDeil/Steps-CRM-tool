@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth } from "../../context/useAuth";
 import { useAppContext } from "../../context/useAppContext";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
@@ -7,7 +7,7 @@ import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 
 const RetirementManagement = () => {
-  const { user } = useUser();
+  const { user } = useAuth();
   const [lineItems, setLineItems] = useState([]);
   const [newItem, setNewItem] = useState({
     date: "",

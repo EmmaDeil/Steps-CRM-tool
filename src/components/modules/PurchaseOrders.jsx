@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth } from "../../context/useAuth";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
@@ -7,7 +7,7 @@ import { NumericFormat } from "react-number-format";
 import { formatCurrency } from "../../services/currency";
 
 const PurchaseOrders = () => {
-  const { user } = useUser();
+  const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);

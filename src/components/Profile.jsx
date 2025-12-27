@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useUser, useClerk } from "@clerk/clerk-react";
+import { useAuth } from "../context/useAuth";
 import { apiService } from "../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "./Breadcrumb";
 
 const Profile = () => {
-  const { user: clerkUser } = useUser();
-  const { signOut } = useClerk();
+  const { user: authUser, logout } = useAuth();
   const [profileData, setProfileData] = useState({
     fullName: "",
     email: "",
@@ -25,16 +24,13 @@ const Profile = () => {
     const fetchUserProfile = async () => {
       try {
         setLoading(true);
-        const response = await apiService.user.getProfile(clerkUser?.id);
+        const response = await apiService.user.getProfile(authUser?._id);
 
         if (response.data.success) {
           const userData = response.data.data;
           setProfileData({
-            fullName: userData.fullName || clerkUser?.fullName || "",
-            email:
-              userData.email ||
-              clerkUser?.primaryEmailAddress?.emailAddress ||
-              "",
+            fullName: userData.fullName || authUser?.fullName || "",
+            email: userData.email || authUser?.email || "",
             phoneNumber: userData.phoneNumber || "",
             department: userData.department || "",
             jobTitle: userData.jobTitle || "",
@@ -46,11 +42,10 @@ const Profile = () => {
             setPicturePreview(userData.profilePicture);
           }
         } else {
-          // If profile doesn't exist, initialize with Clerk data
+          // If profile doesn't exist, initialize with auth data
           const userData = {
-            clerkId: clerkUser?.id,
-            email: clerkUser?.primaryEmailAddress?.emailAddress,
-            fullName: clerkUser?.fullName,
+            email: authUser?.email,
+            fullName: authUser?.fullName,
             phoneNumber: "",
             department: "",
             jobTitle: "",
@@ -60,8 +55,8 @@ const Profile = () => {
           // Create initial profile
           await apiService.user.createOrUpdateProfile(userData);
           setProfileData({
-            fullName: clerkUser?.fullName || "",
-            email: clerkUser?.primaryEmailAddress?.emailAddress || "",
+            fullName: authUser?.fullName || "",
+            email: authUser?.email || "",
             phoneNumber: "",
             department: "",
             jobTitle: "",
@@ -77,11 +72,11 @@ const Profile = () => {
       }
     };
 
-    if (clerkUser?.id) {
+    if (authUser?._id) {
       fetchUserProfile();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clerkUser?.id]);
+  }, [authUser?._id]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -141,11 +136,11 @@ const Profile = () => {
         bio: profileData.bio,
       };
 
-      await apiService.user.updateProfile(clerkUser?.id, updateData);
+      await apiService.user.updateProfile(authUser?._id, updateData);
 
       // Upload profile picture if changed
       if (picturePreview && profileData.profilePicture) {
-        await apiService.user.uploadProfilePicture(clerkUser?.id, {
+        await apiService.user.uploadProfilePicture(authUser?._id, {
           pictureUrl: picturePreview,
         });
       }
@@ -360,7 +355,7 @@ const Profile = () => {
                   Account
                 </h3>
                 <button
-                  onClick={() => signOut()}
+                  onClick={() => logout()}
                   className="px-4 py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition-colors"
                 >
                   <i className="fa-solid fa-sign-out mr-2"></i>

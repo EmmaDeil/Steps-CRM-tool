@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth } from "../../context/useAuth";
 
 const StatCard = ({ label, icon, value, trend, trendType }) => (
   <div className="flex flex-col gap-1 rounded-xl p-5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -43,7 +43,7 @@ const StatCard = ({ label, icon, value, trend, trendType }) => (
 );
 
 const HRManagement = () => {
-  const { user } = useUser();
+  const { user } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [employeesLoading, setEmployeesLoading] = useState(true);
   const [search, setSearch] = useState("");

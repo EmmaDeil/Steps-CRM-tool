@@ -1,28 +1,31 @@
 import React, { useState, useEffect } from "react";
-import { apiService } from "../../services/api";
-import { useNavigate } from "react-router-dom";
 import Pagination from "../Pagination";
 import Skeleton from "../Skeleton";
 import EmptyState from "../EmptyState";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth } from "../../context/useAuth";
+import Reconcile from "./Reconcile";
+import AccountsPayable from "./AccountsPayable";
+import JournalHistory from "./JournalHistory";
+import JournalEntry from "./JournalEntry";
+import VendorManagement from "./VendorManagement";
 
 const Finance = () => {
-  const { user } = useUser();
-  const navigate = useNavigate();
-  const [pendingPayments, setPendingPayments] = useState([]);
-  const [recentInvoices, setRecentInvoices] = useState([]);
+  const { user } = useAuth();
+  const [recentInvoices] = useState([]);
   const [accountBalance, setAccountBalance] = useState({
     total: 0,
     receivables: 0,
     payables: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [showPaymentList, setShowPaymentList] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [showReconcile, setShowReconcile] = useState(false);
+  const [showAccountsPayable, setShowAccountsPayable] = useState(false);
+  const [showJournalHistory, setShowJournalHistory] = useState(false);
+  const [showJournalEntry, setShowJournalEntry] = useState(false);
+  const [showVendorManagement, setShowVendorManagement] = useState(false);
 
   const displayName =
     user?.firstName || user?.fullName?.split(" ")[0] || "User";
@@ -34,32 +37,11 @@ const Finance = () => {
   const fetchFinanceData = async () => {
     try {
       setLoading(true);
-      const [paymentsRes, invoicesRes] = await Promise.allSettled([
-        apiService.get("/api/purchase-orders/pending-payment"),
-        apiService.get("/api/purchase-orders?status=approved"),
-      ]);
-
-      const payments =
-        paymentsRes.status === "fulfilled" ? paymentsRes.value.data || [] : [];
-      const invoices =
-        invoicesRes.status === "fulfilled" ? invoicesRes.value.data || [] : [];
-
-      setPendingPayments(payments);
-      setRecentInvoices(invoices.slice(0, 5));
-
-      // Calculate account balance
-      const totalPayables = payments.reduce(
-        (sum, po) => sum + (po.totalAmount || 0),
-        0
-      );
-      const totalReceivables = invoices
-        .filter((inv) => inv.status === "approved")
-        .reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
-
+      // Data will be fetched directly in each module
       setAccountBalance({
-        total: totalReceivables - totalPayables,
-        receivables: totalReceivables,
-        payables: totalPayables,
+        total: 0,
+        receivables: 0,
+        payables: 0,
       });
     } catch (err) {
       console.error("Error fetching finance data:", err);
@@ -68,147 +50,42 @@ const Finance = () => {
     }
   };
 
-  const handleMarkAsPaid = async (poId) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to mark this purchase order as paid?"
-      )
-    ) {
-      return;
-    }
+  if (showVendorManagement) {
+    return <VendorManagement onBack={() => setShowVendorManagement(false)} />;
+  }
 
-    try {
-      await apiService.post(`/api/purchase-orders/${poId}/mark-paid`);
-      toast.success("Payment recorded successfully");
-      fetchFinanceData();
-    } catch (err) {
-      console.error("Error recording payment:", err);
-      toast.error("Failed to record payment");
-    }
-  };
+  if (showReconcile) {
+    return <Reconcile onBack={() => setShowReconcile(false)} />;
+  }
 
-  if (showPaymentList) {
+  if (showAccountsPayable) {
+    return <AccountsPayable onBack={() => setShowAccountsPayable(false)} />;
+  }
+
+  if (showJournalHistory) {
     return (
-      <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display min-h-screen w-full">
-        <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
-          <div className="flex h-full grow flex-col p-2 w-full">
-            <Breadcrumb
-              items={[
-                { label: "Home", href: "/home", icon: "fa-house" },
-                {
-                  label: "Finance",
-                  icon: "fa-coins",
-                  onClick: () => setShowPaymentList(false),
-                },
-                { label: "Pending Payments", icon: "fa-clock" },
-              ]}
-            />
+      <JournalHistory
+        onBack={() => setShowJournalHistory(false)}
+        onNewEntry={() => {
+          setShowJournalHistory(false);
+          setShowJournalEntry(true);
+        }}
+      />
+    );
+  }
 
-            <div className="flex flex-col gap-4 mb-6 mt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-slate-900 dark:text-white text-3xl md:text-4xl font-black leading-tight tracking-[-0.033em]">
-                    Pending Payments
-                  </h1>
-                  <p className="text-slate-500 text-base font-normal leading-normal mt-2">
-                    Review and process pending purchase order payments
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowPaymentList(false)}
-                  className="flex items-center gap-2 rounded-lg px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700"
-                >
-                  <i className="fa-solid fa-arrow-left"></i>
-                  Back to Finance Home
-                </button>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700">
-                <Skeleton count={5} height={50} />
-              </div>
-            ) : pendingPayments.length === 0 ? (
-              <EmptyState
-                icon="💳"
-                title="No pending payments"
-                description="All payment orders have been processed. Great work!"
-              />
-            ) : (
-              <>
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase font-semibold">
-                        <tr>
-                          <th className="px-6 py-3">PO Number</th>
-                          <th className="px-6 py-3">Vendor</th>
-                          <th className="px-6 py-3">Requester</th>
-                          <th className="px-6 py-3">Order Date</th>
-                          <th className="px-6 py-3">Amount</th>
-                          <th className="px-6 py-3">Review Notes</th>
-                          <th className="px-6 py-3 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
-                        {pendingPayments
-                          .slice(
-                            (currentPage - 1) * itemsPerPage,
-                            currentPage * itemsPerPage
-                          )
-                          .map((po) => (
-                            <tr
-                              key={po._id}
-                              className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-                            >
-                              <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">
-                                {po.poNumber}
-                              </td>
-                              <td className="px-6 py-4 text-slate-700 dark:text-slate-300">
-                                {po.vendor}
-                              </td>
-                              <td className="px-6 py-4 text-slate-700 dark:text-slate-300">
-                                {po.requester}
-                              </td>
-                              <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
-                                {po.orderDate
-                                  ? new Date(po.orderDate).toLocaleDateString()
-                                  : "N/A"}
-                              </td>
-                              <td className="px-6 py-4 font-bold text-emerald-600 dark:text-emerald-400">
-                                {formatCurrency(po.totalAmount || 0)}
-                              </td>
-                              <td className="px-6 py-4 text-slate-500 dark:text-slate-400 text-xs">
-                                {po.reviewNotes || "No notes"}
-                              </td>
-                              <td className="px-6 py-4 text-right">
-                                <button
-                                  className="rounded-lg px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors"
-                                  onClick={() => handleMarkAsPaid(po._id)}
-                                >
-                                  <i className="fa-solid fa-check-circle mr-1"></i>
-                                  Mark as Paid
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <Pagination
-                    currentPage={currentPage}
-                    onPageChange={setCurrentPage}
-                    itemsPerPage={itemsPerPage}
-                    totalItems={pendingPayments.length}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+  if (showJournalEntry) {
+    return (
+      <JournalEntry
+        onBack={() => {
+          setShowJournalEntry(false);
+          setShowJournalHistory(true);
+        }}
+        onBackToFinance={() => {
+          setShowJournalEntry(false);
+          setShowJournalHistory(false);
+        }}
+      />
     );
   }
 
@@ -242,26 +119,50 @@ const Finance = () => {
           {/* Module Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
             <button
-              onClick={() => toast.info("Journal Entry module coming soon")}
+              onClick={() => setShowJournalHistory(true)}
               className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
             >
               <div className="flex size-12 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/30 text-primary group-hover:scale-110 transition-transform">
-                <i className="fa-solid fa-file-invoice text-[28px]"></i>
+                <i className="fa-solid fa-book text-[28px]"></i>
               </div>
               <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
-                Journal Entry
+                Journal
               </span>
             </button>
 
             <button
-              onClick={() => toast.info("Reconcile module coming soon")}
+              onClick={() => setShowReconcile(true)}
               className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
             >
               <div className="flex size-12 items-center justify-center rounded-full bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
-                <i className="fa-solid fa-arrows-rotate text-[28px]"></i>
+                <i className="fa-solid fa-scale-balanced text-[28px]"></i>
               </div>
               <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
                 Reconcile
+              </span>
+            </button>
+
+            <button
+              onClick={() => setShowAccountsPayable(true)}
+              className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
+            >
+              <div className="flex size-12 items-center justify-center rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-receipt text-[28px]"></i>
+              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
+                Accounts Payable
+              </span>
+            </button>
+
+            <button
+              onClick={() => setShowVendorManagement(true)}
+              className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
+            >
+              <div className="flex size-12 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-users text-[28px]"></i>
+              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
+                Vendor Management
               </span>
             </button>
 
@@ -299,23 +200,6 @@ const Finance = () => {
               <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
                 Salary Computing
               </span>
-            </button>
-
-            <button
-              onClick={() => setShowPaymentList(true)}
-              className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
-            >
-              <div className="flex size-12 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
-                <i className="fa-solid fa-credit-card text-[28px]"></i>
-              </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
-                Pending Payments
-              </span>
-              {pendingPayments.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center">
-                  {pendingPayments.length}
-                </span>
-              )}
             </button>
 
             <button
@@ -363,18 +247,6 @@ const Finance = () => {
               </div>
               <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
                 Cash Flow
-              </span>
-            </button>
-
-            <button
-              onClick={() => toast.info("Vendor Management module coming soon")}
-              className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
-            >
-              <div className="flex size-12 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
-                <i className="fa-solid fa-handshake text-[28px]"></i>
-              </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
-                Vendor Management
               </span>
             </button>
 
@@ -628,14 +500,6 @@ const Finance = () => {
                   Quick Stats
                 </h3>
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-400">
-                      Pending Payments
-                    </span>
-                    <span className="text-sm font-bold text-slate-900 dark:text-white">
-                      {pendingPayments.length}
-                    </span>
-                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-600 dark:text-slate-400">
                       Total Payables

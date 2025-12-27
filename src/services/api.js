@@ -16,12 +16,10 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     try {
-      // Get Clerk token if available
-      if (window.Clerk && window.Clerk.session) {
-        const token = await window.Clerk.session.getToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
+      // Get auth token from localStorage
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
       }
     } catch (error) {
       console.error('Error getting auth token:', error);
@@ -114,9 +112,9 @@ export const apiService = {
   },
 
   user: {
-    getProfile: (clerkId) => api.get(`/api/user/profile/${clerkId}`),
-    updateProfile: (clerkId, data) => api.put(`/api/user/profile/${clerkId}`, data),
-    uploadProfilePicture: (clerkId, formData) => api.post(`/api/user/profile/${clerkId}/upload-picture`, formData, {
+    getProfile: (userId) => api.get(`/api/user/profile/${userId}`),
+    updateProfile: (userId, data) => api.put(`/api/user/profile/${userId}`, data),
+    uploadProfilePicture: (userId, formData) => api.post(`/api/user/profile/${userId}/upload-picture`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
     createOrUpdateProfile: (data) => api.post('/api/user/profile', data),
