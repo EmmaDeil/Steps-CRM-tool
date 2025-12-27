@@ -163,15 +163,15 @@ async function updateTravelBooking(id, bookingData) {
 }
 
 // User Profile functions
-async function getUserByClerkId(clerkId) {
-  return UserModel.findOne({ clerkId }).lean();
+async function getUserById(id) {
+  return UserModel.findOne({ id }).lean();
 }
 
 async function createOrUpdateUserProfile(data) {
-  const { clerkId, email, fullName } = data;
+  const { Id, email, fullName } = data;
   
   // Check if user exists
-  let user = await UserModel.findOne({ clerkId });
+  let user = await UserModel.findOne({ id: Id });
   
   if (user) {
     // Update existing user
@@ -180,7 +180,7 @@ async function createOrUpdateUserProfile(data) {
   } else {
     // Create new user
     return UserModel.create({
-      clerkId,
+      id: Id,
       email,
       fullName,
       ...data,
@@ -188,16 +188,16 @@ async function createOrUpdateUserProfile(data) {
   }
 }
 
-async function updateUserProfile(clerkId, data) {
-  const user = await UserModel.findOne({ clerkId });
+async function updateUserProfile(id, data) {
+  const user = await UserModel.findOne({ id });
   if (!user) throw new Error('User not found');
   
   Object.assign(user, data, { updatedAt: new Date() });
   return user.save();
 }
 
-async function updateUserProfilePicture(clerkId, pictureUrl) {
-  const user = await UserModel.findOne({ clerkId });
+async function updateUserProfilePicture(id, pictureUrl) {
+  const user = await UserModel.findOne({ id });
   if (!user) throw new Error('User not found');
   
   user.profilePicture = pictureUrl;
@@ -226,7 +226,7 @@ module.exports = {
   createTravelRequest,
   updateTravelRequestStatus,
   updateTravelBooking,
-  getUserByClerkId,
+  getUserById,
   createOrUpdateUserProfile,
   updateUserProfile,
   updateUserProfilePicture,

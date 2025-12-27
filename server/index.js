@@ -2583,10 +2583,10 @@ async function start() {
   // =====================================================
   
   // Get user profile by clerk ID
-  app.get('/api/user/profile/:clerkId', async (req, res) => {
+  app.get('/api/user/profile/:id', async (req, res) => {
     try {
-      const { clerkId } = req.params;
-      const user = await api.getUserByClerkId(clerkId);
+      const { id } = req.params;
+      const user = await api.getUserById(id);
       
       if (!user) {
         return res.status(404).json({ success: false, error: 'User not found' });
@@ -2602,17 +2602,17 @@ async function start() {
   // Create or update user profile
   app.post('/api/user/profile', async (req, res) => {
     try {
-      const { clerkId, email, fullName, phoneNumber, department, jobTitle, bio } = req.body;
+      const { id, email, fullName, phoneNumber, department, jobTitle, bio } = req.body;
       
-      if (!clerkId || !email || !fullName) {
+      if (!id || !email || !fullName) {
         return res.status(400).json({ 
           success: false, 
-          error: 'Missing required fields: clerkId, email, fullName' 
+          error: 'Missing required fields: id, email, fullName' 
         });
       }
       
       const user = await api.createOrUpdateUserProfile({
-        clerkId,
+        id,
         email,
         fullName,
         phoneNumber,
@@ -2629,12 +2629,12 @@ async function start() {
   });
 
   // Update user profile
-  app.put('/api/user/profile/:clerkId', async (req, res) => {
+  app.put('/api/user/profile/:id', async (req, res) => {
     try {
-      const { clerkId } = req.params;
+      const { id } = req.params;
       const { phoneNumber, department, jobTitle, bio, fullName, email } = req.body;
       
-      const user = await api.updateUserProfile(clerkId, {
+      const user = await api.updateUserProfile(id, {
         phoneNumber,
         department,
         jobTitle,
@@ -2654,9 +2654,9 @@ async function start() {
   });
 
   // Upload profile picture
-  app.post('/api/user/profile/:clerkId/upload-picture', async (req, res) => {
+  app.post('/api/user/profile/:id/upload-picture', async (req, res) => {
     try {
-      const { clerkId } = req.params;
+      const { id } = req.params;
       const { pictureUrl } = req.body;
       
       if (!pictureUrl) {
@@ -2666,7 +2666,7 @@ async function start() {
         });
       }
       
-      const user = await api.updateUserProfilePicture(clerkId, pictureUrl);
+      const user = await api.updateUserProfilePicture(id, pictureUrl);
       
       res.json({ success: true, data: user });
     } catch (error) {
