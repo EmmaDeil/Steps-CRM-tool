@@ -10,18 +10,38 @@ const Login = () => {
     email: "",
     password: "",
   });
+  const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+    setErrors((prev) => ({ ...prev, [name]: null }));
+  };
+
+  const isLoginComplete = () => {
+    const email = (formData.email || "").toString().trim();
+    const password = (formData.password || "").toString();
+    if (!email || !password) return false;
+    if (!/^\S+@\S+\.\S+$/.test(email)) return false;
+    return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Client-side validation
+    const newErrors = {};
+    const email = (formData.email || "").toString().trim();
+    const password = (formData.password || "").toString();
+    if (!email) newErrors.email = "Email is required";
+    else if (!/^\S+@\S+\.\S+$/.test(email))
+      newErrors.email = "Enter a valid email";
+    if (!password) newErrors.password = "Password is required";
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
+
     setIsLoading(true);
 
     try {
@@ -81,6 +101,9 @@ const Login = () => {
                   placeholder="you@example.com"
                 />
               </div>
+              {errors.email && (
+                <p className="text-red-500 text-sm mt-2">{errors.email}</p>
+              )}
             </div>
 
             {/* Password Input */}
@@ -117,6 +140,9 @@ const Login = () => {
                   ></i>
                 </button>
               </div>
+              {errors.password && (
+                <p className="text-red-500 text-sm mt-2">{errors.password}</p>
+              )}
             </div>
 
             {/* Forgot Password Link */}
@@ -132,7 +158,7 @@ const Login = () => {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !isLoginComplete()}
               className="w-full flex items-center justify-center py-3 px-4 border border-transparent rounded-xl shadow-md text-base font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (

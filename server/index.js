@@ -32,6 +32,29 @@ const PolicyModel = require('./models/Policy');
 const EmployeeModel = require('./models/Employee');
 const JobRequisitionModel = require('./models/JobRequisition');
 const TrainingModel = require('./models/Training');
+const DepartmentModel = require('./models/Department');
+const JobTitleModel = require('./models/JobTitle');
+
+// Static lists used to seed the DB when empty
+const DEFAULT_DEPARTMENTS = [
+  { name: 'IT Security', code: 'ITS', icon: 'fa-shield-halved', color: 'blue' },
+  { name: 'HR', code: 'HR', icon: 'fa-users', color: 'purple' },
+  { name: 'Finance', code: 'FIN', icon: 'fa-dollar-sign', color: 'green' },
+  { name: 'Legal', code: 'LEG', icon: 'fa-gavel', color: 'red' },
+  { name: 'Marketing', code: 'MKT', icon: 'fa-bullhorn', color: 'orange' },
+  { name: 'Operations', code: 'OPS', icon: 'fa-cogs', color: 'gray' },
+];
+
+const DEFAULT_JOB_TITLES = [
+  'Software Engineer',
+  'HR Manager',
+  'Finance Manager',
+  'Legal Counsel',
+  'Marketing Specialist',
+  'Operations Manager',
+  'Accountant',
+  'Product Manager',
+];
 const VendorModel = require('./models/Vendor');
 const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail } = require('./utils/emailService');
 const seed = require('./data');
@@ -178,14 +201,67 @@ async function start() {
   // Signup
   app.post('/api/auth/signup', async (req, res) => {
     try {
-      const { firstName, lastName, email, password, role } = req.body;
+      console.log('Signup payload:', req.body);
+
+      // Sanitize inputs
+      const firstName = (req.body.firstName || '').toString().trim();
+      const lastName = (req.body.lastName || '').toString().trim();
+      const email = (req.body.email || '').toString().trim().toLowerCase();
+      const password = (req.body.password || '').toString();
+      const role = (req.body.role || 'user').toString().trim();
+      const department = (req.body.department || '').toString().trim() || null;
+      const jobTitle = (req.body.jobTitle || '').toString().trim() || null;
 
       // Validate input
       if (!firstName || !lastName || !email || !password) {
+        console.warn('Signup validation failed. Missing fields. Payload:', { firstName, lastName, email: req.body.email ? '[REDACTED]' : '', password: password ? '[PROVIDED]' : '' });
         return res.status(400).json({
           success: false,
           error: 'All fields are required',
         });
+      }
+
+      // Basic email format check
+      if (!/^\S+@\S+\.\S+$/.test(email)) {
+        console.warn('Signup validation failed. Invalid email:', email);
+        return res.status(400).json({ success: false, error: 'Invalid email address' });
+      }
+
+      // Password length check
+      if (password.length < 8) {
+        console.warn('Signup validation failed. Password too short');
+        return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+      }
+
+      // Helper to escape user input for regex
+      const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+      // Validate department if provided (check DB)
+      if (department) {
+        const q = {
+          $or: [
+            { name: new RegExp(`^${escapeRegex(department)}$`, 'i') },
+            { code: new RegExp(`^${escapeRegex(department)}$`, 'i') },
+          ],
+        };
+        // also try to match by id if looks like an ObjectId
+        if (/^[0-9a-fA-F]{24}$/.test(department)) q.$or.push({ _id: department });
+        const foundDept = await DepartmentModel.findOne(q).lean();
+        if (!foundDept) {
+          console.warn('Signup validation failed. Invalid department:', department);
+          return res.status(400).json({ success: false, error: 'Invalid department' });
+        }
+      }
+
+      // Validate job title (required) against DB
+      if (!jobTitle) {
+        console.warn('Signup validation failed. Missing job title');
+        return res.status(400).json({ success: false, error: 'Job title is required' });
+      }
+      const foundJT = await JobTitleModel.findOne({ title: new RegExp(`^${escapeRegex(jobTitle)}$`, 'i') }).lean();
+      if (!foundJT) {
+        console.warn('Signup validation failed. Invalid job title:', jobTitle);
+        return res.status(400).json({ success: false, error: 'Invalid job title' });
       }
 
       // Check if user already exists
@@ -205,6 +281,8 @@ async function start() {
         password,
         role: role || 'user',
         status: 'Active',
+        department: (typeof foundDept !== 'undefined' && foundDept) ? foundDept.name : (department || null),
+        jobTitle: (typeof foundJT !== 'undefined' && foundJT) ? foundJT.title : (jobTitle || null),
       });
 
       await user.save();
@@ -221,6 +299,8 @@ async function start() {
         email: user.email,
         role: user.role,
         status: user.status,
+        department: user.department || null,
+        jobTitle: user.jobTitle || null,
       };
 
       res.status(201).json({
@@ -243,14 +323,25 @@ async function start() {
   // Login
   app.post('/api/auth/login', async (req, res) => {
     try {
-      const { email, password } = req.body;
+      console.log('Login payload:', req.body);
+
+      // Sanitize inputs
+      const email = (req.body.email || '').toString().trim().toLowerCase();
+      const password = (req.body.password || '').toString();
 
       // Validate input
       if (!email || !password) {
+        console.warn('Login validation failed. Missing fields. Payload:', { email: req.body.email ? '[REDACTED]' : '', password: password ? '[PROVIDED]' : '' });
         return res.status(400).json({
           success: false,
           error: 'Email and password are required',
         });
+      }
+
+      // Basic email format check
+      if (!/^\S+@\S+\.\S+$/.test(email)) {
+        console.warn('Login validation failed. Invalid email:', email);
+        return res.status(400).json({ success: false, error: 'Invalid email address' });
       }
 
       // Find user with password field
@@ -1571,21 +1662,35 @@ async function start() {
   // POLICY MANAGEMENT ROUTES
   // ===================================
 
-  // Get departments list
+  // Get departments list (DB-driven, seed when empty)
   app.get('/api/departments', async (req, res) => {
     try {
-      const departments = [
-        { id: 1, name: 'IT Security', code: 'ITS', icon: 'fa-shield-halved', color: 'blue' },
-        { id: 2, name: 'HR', code: 'HR', icon: 'fa-users', color: 'purple' },
-        { id: 3, name: 'Finance', code: 'FIN', icon: 'fa-dollar-sign', color: 'green' },
-        { id: 4, name: 'Legal', code: 'LEG', icon: 'fa-gavel', color: 'red' },
-        { id: 5, name: 'Marketing', code: 'MKT', icon: 'fa-bullhorn', color: 'orange' },
-        { id: 6, name: 'Operations', code: 'OPS', icon: 'fa-cogs', color: 'gray' },
-      ];
+      let departments = await DepartmentModel.find().lean();
+      if (!departments || departments.length === 0) {
+        // Seed defaults
+        await DepartmentModel.insertMany(DEFAULT_DEPARTMENTS);
+        departments = await DepartmentModel.find().lean();
+      }
       res.json({ departments });
     } catch (err) {
       console.error('Error fetching departments:', err);
       res.status(500).json({ message: 'Failed to fetch departments' });
+    }
+  });
+
+  // Get job titles list (DB-driven, seed when empty)
+  app.get('/api/job-titles', async (req, res) => {
+    try {
+      let jobTitles = await JobTitleModel.find().lean();
+      if (!jobTitles || jobTitles.length === 0) {
+        await JobTitleModel.insertMany(DEFAULT_JOB_TITLES.map(t => ({ title: t })));
+        jobTitles = await JobTitleModel.find().lean();
+      }
+      // return simple array of titles for the client
+      res.json({ jobTitles: jobTitles.map(j => j.title) });
+    } catch (err) {
+      console.error('Error fetching job titles:', err);
+      res.status(500).json({ message: 'Failed to fetch job titles' });
     }
   });
 

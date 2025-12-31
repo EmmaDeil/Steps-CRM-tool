@@ -31,9 +31,9 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor - Handle errors
+// Response interceptor - Return response body and handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => response.data,
   (error) => {
     if (error.response?.status === 401) {
       toast.error('Session expired. Please login again.');
@@ -45,7 +45,12 @@ api.interceptors.response.use(
     } else if (error.response?.status >= 500) {
       toast.error('Server error. Please try again later.');
     }
-    
+
+    // Attach server error body to the thrown error for downstream handlers
+    if (error.response?.data) {
+      error.serverData = error.response.data;
+    }
+
     return Promise.reject(error);
   }
 );

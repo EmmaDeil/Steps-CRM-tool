@@ -46,32 +46,42 @@ export const AuthProvider = ({ children }) => {
         email,
         password,
       });
-      if (response.success) {
+      if (response && response.success) {
         localStorage.setItem("authToken", response.data.token);
         setUser(response.data.user);
         setIsAuthenticated(true);
         return { success: true };
       }
-      return { success: false, error: response.error || "Login failed" };
+      return { success: false, error: response?.error || "Login failed" };
     } catch (error) {
       console.error("Login error:", error);
-      return { success: false, error: error.message || "Login failed" };
+      const serverMsg = error.serverData?.error || error.serverData?.message;
+      return {
+        success: false,
+        error: serverMsg || error.message || "Login failed",
+      };
     }
   };
 
   const signup = async (userData) => {
     try {
       const response = await apiService.post("/api/auth/signup", userData);
-      if (response.success) {
+      // response is now the response body (thanks to interceptor)
+      if (response && response.success) {
         localStorage.setItem("authToken", response.data.token);
         setUser(response.data.user);
         setIsAuthenticated(true);
         return { success: true };
       }
-      return { success: false, error: response.error || "Signup failed" };
+      return { success: false, error: response?.error || "Signup failed" };
     } catch (error) {
       console.error("Signup error:", error);
-      return { success: false, error: error.message || "Signup failed" };
+      // Prefer server-sent error messages when available
+      const serverMsg = error.serverData?.error || error.serverData?.message;
+      return {
+        success: false,
+        error: serverMsg || error.message || "Signup failed",
+      };
     }
   };
 
