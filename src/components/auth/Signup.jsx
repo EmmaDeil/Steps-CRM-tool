@@ -27,7 +27,7 @@ const Signup = () => {
     const { name, value, type, checked } = e.target;
     setFormData({
       ...formData,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: type === "checkbox" ? checked : value,
     });
 
     // Clear inline error for that field when user changes it
@@ -93,20 +93,32 @@ const Signup = () => {
     if (!firstName) newErrors.firstName = "First name is required";
     if (!lastName) newErrors.lastName = "Last name is required";
     if (!email) newErrors.email = "Email is required";
-    else if (!/^\S+@\S+\.\S+$/.test(email)) newErrors.email = "Please provide a valid email address";
+    else if (!/^\S+@\S+\.\S+$/.test(email))
+      newErrors.email = "Please provide a valid email address";
 
-    if (!password || password.trim().length === 0) newErrors.password = "Password is required";
-    else if (password.length < 8) newErrors.password = "Password must be at least 8 characters";
-    if (password !== confirmPassword) newErrors.confirmPassword = "Passwords do not match";
+    if (!password || password.trim().length === 0)
+      newErrors.password = "Password is required";
+    else if (password.length < 8)
+      newErrors.password = "Password must be at least 8 characters";
+    if (password !== confirmPassword)
+      newErrors.confirmPassword = "Passwords do not match";
 
     if (!department) newErrors.department = "Please select a department";
     if (!jobTitle) newErrors.jobTitle = "Please select a job title";
 
-    if (!terms) newErrors.terms = "You must agree to the Terms of Service and Privacy Policy";
+    if (!terms)
+      newErrors.terms =
+        "You must agree to the Terms of Service and Privacy Policy";
 
     // Validate against loaded lists if available
-    if (jobTitles.length > 0 && jobTitle && !jobTitles.includes(jobTitle)) newErrors.jobTitle = "Please select a valid job title";
-    if (departments.length > 0 && department && !departments.find(d => d.name === department || d.code === department)) newErrors.department = "Please select a valid department";
+    if (jobTitles.length > 0 && jobTitle && !jobTitles.includes(jobTitle))
+      newErrors.jobTitle = "Please select a valid job title";
+    if (
+      departments.length > 0 &&
+      department &&
+      !departments.find((d) => d.name === department || d.code === department)
+    )
+      newErrors.department = "Please select a valid department";
 
     setErrors(newErrors);
 
@@ -216,7 +228,9 @@ const Signup = () => {
                   />
                 </div>
                 {errors.firstName && (
-                  <p className="text-red-500 text-sm mt-2">{errors.firstName}</p>
+                  <p className="text-red-500 text-sm mt-2">
+                    {errors.firstName}
+                  </p>
                 )}
               </div>
 
@@ -276,54 +290,23 @@ const Signup = () => {
               )}
             </div>
 
-            {/* Confirm Password */}
+            {/* Department Field */}
             <div>
               <label
-                htmlFor="confirmPassword"
+                htmlFor="department"
                 className="block text-sm font-semibold text-gray-700 mb-2"
               >
-                Confirm Password
+                Department
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <i className="fa-solid fa-lock text-gray-400"></i>
-                </div>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"}
-                  required
-                  value={formData.confirmPassword}
+                <select
+                  id="department"
+                  name="department"
+                  value={formData.department}
                   onChange={handleChange}
-                  className="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 text-gray-900 placeholder-gray-400"
-                  placeholder="Confirm your password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                  disabled={departmentsLoading}
+                  className="block w-full pl-3 pr-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 text-gray-900 disabled:opacity-60"
                 >
-                  <i
-                    className={`fa-solid ${showConfirmPassword ? "fa-eye-slash" : "fa-eye"}`}
-                  ></i>
-                </button>
-              </div>
-              {errors.confirmPassword && (
-                <p className="text-red-500 text-sm mt-2">{errors.confirmPassword}</p>
-              )}
-            </div>
-            <label htmlFor="department" className="block text-sm font-semibold text-gray-700 mb-2">
-              Department
-            </label>
-            <div className="relative">
-              <select
-                id="department"
-                name="department"
-                value={formData.department}
-                onChange={handleChange}
-                disabled={departmentsLoading}
-                className="block w-full pl-3 pr-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 text-gray-900 disabled:opacity-60"
-              >
                   <option value="">
                     {departmentsLoading
                       ? "Loading departments..."
