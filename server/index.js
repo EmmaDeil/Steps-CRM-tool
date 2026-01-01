@@ -2072,10 +2072,10 @@ async function start() {
         employeeId: emp.employeeId,
       }));
 
-      res.json(formattedEmployees);
+      res.json({ success: true, data: formattedEmployees });
     } catch (err) {
       console.error('Error fetching employees:', err);
-      res.status(500).json({ message: 'Failed to fetch employees', error: err.message });
+      res.status(500).json({ success: false, message: 'Failed to fetch employees', error: err.message });
     }
   });
 

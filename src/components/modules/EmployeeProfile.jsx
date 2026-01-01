@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 
-const EmployeeProfile = ({ onBack }) => {
+const EmployeeProfile = ({ onBack, fromProfile = false }) => {
   const [activeTab, setActiveTab] = useState("overview");
   const [showCompensation, setShowCompensation] = useState(false);
 
@@ -72,11 +72,21 @@ const EmployeeProfile = ({ onBack }) => {
     ],
   };
 
-  const breadcrumbItems = [
-    { label: "Home", icon: "fa-home", onClick: onBack },
-    { label: "Employees", icon: "fa-users", onClick: onBack },
-    { label: "Profile", icon: "fa-user" },
-  ];
+  // Different breadcrumb configurations based on context
+  const breadcrumbItems = fromProfile
+    ? [
+        {
+          label: "Home",
+          icon: "fa-home",
+          onClick: () => (window.location.href = "/"),
+        },
+        { label: "My Profile", icon: "fa-user-circle" },
+      ]
+    : [
+        { label: "Home", icon: "fa-home", onClick: onBack },
+        { label: "HR Management", icon: "fa-users-gear", onClick: onBack },
+        { label: employee.name, icon: "fa-id-card" },
+      ];
 
   const tabs = [
     { id: "overview", label: "Overview" },

@@ -43,6 +43,37 @@ const Payroll = ({ onBack }) => {
     overtimeRate: 60,
   });
 
+  // Load saved draft on component mount
+  useEffect(() => {
+    const loadDraft = () => {
+      try {
+        const savedDraft = localStorage.getItem("payrollDraft");
+        if (savedDraft) {
+          const draft = JSON.parse(savedDraft);
+          const shouldLoad = window.confirm(
+            `Found a saved draft from ${new Date(
+              draft.savedAt
+            ).toLocaleString()}. Would you like to load it?`
+          );
+
+          if (shouldLoad) {
+            setSelectedPeriod(draft.period || selectedPeriod);
+            setEmployees(draft.employees || []);
+            setDeductions(draft.deductions || deductions);
+            setPayRates(draft.payRates || payRates);
+            setCurrentStep(draft.currentStep || 1);
+            toast.success("Draft loaded successfully!");
+          }
+        }
+      } catch (error) {
+        console.error("Error loading draft:", error);
+      }
+    };
+
+    loadDraft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Fetch employees when period is selected
   useEffect(() => {
     if (currentStep === 2 && !employees.length) {
@@ -285,6 +316,33 @@ const Payroll = ({ onBack }) => {
     }
   };
 
+  const handleSaveDraft = async () => {
+    try {
+      setLoading(true);
+      const draftData = {
+        period: selectedPeriod,
+        employees: employees,
+        deductions: deductions,
+        payRates: payRates,
+        currentStep: currentStep,
+        savedAt: new Date().toISOString(),
+      };
+
+      // Save to localStorage as draft
+      localStorage.setItem("payrollDraft", JSON.stringify(draftData));
+
+      // Optionally save to server
+      // await apiService.post("/api/payroll/draft", draftData);
+
+      toast.success("Payroll draft saved successfully!");
+    } catch (error) {
+      console.error("Error saving draft:", error);
+      toast.error("Failed to save draft");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmitPayroll = async () => {
     try {
       setLoading(true);
@@ -407,16 +465,12 @@ const Payroll = ({ onBack }) => {
                 </span>
               </button>
               <button
-                onClick={() => toast.info("Save draft feature coming soon")}
-                className="flex h-10 items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 text-sm font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                onClick={handleSaveDraft}
+                disabled={loading}
+                className="flex h-10 items-center gap-2 justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 text-sm font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Save Draft
-              </button>
-              <button
-                disabled
-                className="flex h-10 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800 px-4 text-sm font-bold text-gray-500 cursor-not-allowed"
-              >
-                Process Payroll
+                <i className="fa-solid fa-save"></i>
+                {loading ? "Saving..." : "Save Draft"}
               </button>
             </div>
           </div>

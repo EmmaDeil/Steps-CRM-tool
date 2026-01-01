@@ -3,8 +3,15 @@ import { useAuth } from "../context/useAuth";
 import { apiService } from "../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "./Breadcrumb";
+import EmployeeProfile from "./modules/EmployeeProfile";
 
 const Profile = () => {
+  // Render EmployeeProfile component with fromProfile flag
+  return <EmployeeProfile fromProfile={true} />;
+};
+
+// Keep old profile for reference if needed
+const OldProfile = () => {
   const { user: authUser, logout } = useAuth();
   const [profileData, setProfileData] = useState({
     fullName: "",

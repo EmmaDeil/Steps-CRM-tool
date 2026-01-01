@@ -176,10 +176,15 @@ const HRM = () => {
       ]);
 
       setEmployees(
-        empRes.status === "fulfilled" && empRes.value.data
-          ? Array.isArray(empRes.value.data)
-            ? empRes.value.data
-            : empRes.value.data.data || []
+        empRes.status === "fulfilled" && empRes.value
+          ? empRes.value.data || []
+          : []
+      );
+
+      console.log(
+        "Fetched employees:",
+        empRes.status === "fulfilled" && empRes.value
+          ? empRes.value.data || []
           : []
       );
       setRequisitions(
@@ -791,19 +796,22 @@ const HRM = () => {
                       try {
                         const fullName =
                           `${employeeForm.firstName} ${employeeForm.lastName}`.trim();
-                        const response = await apiService.post("/api/hr/employees", {
-                          name: fullName,
-                          email: employeeForm.email,
-                          phone: employeeForm.phone,
-                          dateOfBirth: employeeForm.dateOfBirth,
-                          department: employeeForm.department,
-                          jobTitle: employeeForm.jobTitle,
-                          startDate: employeeForm.startDate,
-                        });
-                        
+                        const response = await apiService.post(
+                          "/api/hr/employees",
+                          {
+                            name: fullName,
+                            email: employeeForm.email,
+                            phone: employeeForm.phone,
+                            dateOfBirth: employeeForm.dateOfBirth,
+                            department: employeeForm.department,
+                            jobTitle: employeeForm.jobTitle,
+                            startDate: employeeForm.startDate,
+                          }
+                        );
+
                         console.log("Employee creation response:", response);
                         toast.success("Employee added successfully");
-                        
+
                         setShowAddEmployeeModal(false);
                         setEmployeeForm({
                           firstName: "",
@@ -815,7 +823,7 @@ const HRM = () => {
                           jobTitle: "",
                           startDate: "",
                         });
-                        
+
                         // Refresh employee list
                         await fetchAll();
                       } catch (error) {
