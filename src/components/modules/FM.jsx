@@ -1,7 +1,7 @@
 import React from "react";
 import Breadcrumb from "../Breadcrumb";
 
-const FacilityMaintenance = () => {
+const FM = () => {
   return (
     <div className="w-full">
       <Breadcrumb
@@ -82,4 +82,4 @@ const FacilityMaintenance = () => {
   );
 };
 
-export default FacilityMaintenance;
+export default FM;

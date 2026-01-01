@@ -191,18 +191,6 @@ const Finance = () => {
             </button>
 
             <button
-              onClick={() => toast.info("Salary Computing module coming soon")}
-              className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
-            >
-              <div className="flex size-12 items-center justify-center rounded-full bg-pink-50 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 group-hover:scale-110 transition-transform">
-                <i className="fa-solid fa-calculator text-[28px]"></i>
-              </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
-                Salary Computing
-              </span>
-            </button>
-
-            <button
               onClick={() => toast.info("Budget module coming soon")}
               className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
             >

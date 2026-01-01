@@ -1,0 +1,638 @@
+import { useState, useEffect } from "react";
+import Breadcrumb from "../Breadcrumb";
+import { formatCurrency } from "../../services/currency";
+import toast from "react-hot-toast";
+import { apiService } from "../../services/api";
+
+const Payroll = ({ onBack }) => {
+  const [currentStep, setCurrentStep] = useState(1);
+  const [hideAmounts, setHideAmounts] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const totalSteps = 5;
+
+  // Step 1: Period Selection
+  const [selectedPeriod, setSelectedPeriod] = useState({
+    month: new Date().getMonth(),
+    year: new Date().getFullYear(),
+    startDate: "",
+    endDate: "",
+  });
+
+  // Step 2: Employee Earnings
+  const [employees, setEmployees] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedDepartment, setSelectedDepartment] =
+    useState("All Departments");
+
+  // Step 3: Deductions
+  const [deductions, setDeductions] = useState({
+    taxRate: 10,
+    pensionRate: 8,
+    healthInsurance: 0,
+    otherDeductions: 0,
+  });
+
+  // Step 4: Final Review
+  const [reviewData, setReviewData] = useState(null);
+
+  // Step 5: Payment
+  const [paymentStatus, setPaymentStatus] = useState("pending");
+
+  // Fetch employees when period is selected
+  useEffect(() => {
+    if (currentStep === 2 && !employees.length) {
+      fetchEmployees();
+    }
+  }, [currentStep]);
+
+  const fetchEmployees = async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.get("/api/hr/employees");
+      const employeeData = Array.isArray(response)
+        ? response
+        : response.data || [];
+
+      // Transform employee data for payroll
+      const payrollEmployees = employeeData.map((emp) => ({
+        id: emp._id || emp.id,
+        name:
+          `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.email,
+        initials: getInitials(emp.firstName, emp.lastName),
+        color: getRandomColor(),
+        regularHours: 80.0,
+        overtime: 0.0,
+        commission: 0.0,
+        grossPay: 0.0,
+        status: "Ready",
+        statusColor: "green",
+        department: emp.department,
+      }));
+
+      setEmployees(payrollEmployees);
+    } catch (error) {
+      console.error("Error fetching employees:", error);
+      toast.error("Failed to load employees");
+      // Fallback to sample data
+      setEmployees(sampleEmployees);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getInitials = (firstName, lastName) => {
+    const first = firstName ? firstName.charAt(0) : "";
+    const last = lastName ? lastName.charAt(0) : "";
+    return (first + last).toUpperCase() || "??";
+  };
+
+  const getRandomColor = () => {
+    const colors = ["blue", "purple", "teal", "orange", "pink", "indigo"];
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
+
+  const sampleEmployees = [
+    {
+      id: "EMP-001",
+      name: "Sarah Jenkins",
+      initials: "SJ",
+      color: "blue",
+      regularHours: 80.0,
+      overtime: 2.5,
+      commission: 500.0,
+      grossPay: 3200.0,
+      status: "Ready",
+      statusColor: "green",
+    },
+    {
+      id: "EMP-007",
+      name: "David Kim",
+      initials: "DK",
+      color: "purple",
+      regularHours: 75.0,
+      overtime: 0.0,
+      commission: 1200.0,
+      grossPay: 4100.0,
+      status: "Review",
+      statusColor: "amber",
+      warning: true,
+    },
+    {
+      id: "EMP-012",
+      name: "Elena Rodriguez",
+      initials: "ER",
+      color: "teal",
+      regularHours: 80.0,
+      overtime: 5.0,
+      commission: 0.0,
+      grossPay: 2950.0,
+      status: "Ready",
+      statusColor: "green",
+    },
+    {
+      id: "EMP-004",
+      name: "Michael Ross",
+      initials: "MR",
+      color: "orange",
+      regularHours: 80.0,
+      overtime: 0.0,
+      commission: 0.0,
+      grossPay: 2800.0,
+      status: "Ready",
+      statusColor: "green",
+    },
+  ];
+
+  const handleNextStep = () => {
+    if (currentStep < totalSteps) {
+      if (currentStep === 1 && !selectedPeriod.startDate) {
+        toast.error("Please select a payroll period");
+        return;
+      }
+      setCurrentStep(currentStep + 1);
+      toast.success(`Moving to step ${currentStep + 1}`);
+    }
+  };
+
+  const handlePreviousStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleSubmitPayroll = async () => {
+    try {
+      setLoading(true);
+      // API call to submit payroll
+      // const response = await apiService.post("/api/payroll/submit", {
+      //   period: selectedPeriod,
+      //   employees: employees,
+      //   deductions: deductions,
+      // });
+      toast.success("Payroll submitted for approval!");
+      setPaymentStatus("submitted");
+      setCurrentStep(5);
+    } catch (error) {
+      console.error("Error submitting payroll:", error);
+      toast.error("Failed to submit payroll");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const steps = [
+    { number: 1, label: "Select Period", completed: currentStep > 1 },
+    {
+      number: 2,
+      label: "Review Earnings",
+      active: currentStep === 2,
+      completed: currentStep > 2,
+    },
+    {
+      number: 3,
+      label: "Deductions",
+      active: currentStep === 3,
+      completed: currentStep > 3,
+    },
+    {
+      number: 4,
+      label: "Final Review",
+      active: currentStep === 4,
+      completed: currentStep > 4,
+    },
+    {
+      number: 5,
+      label: "Payments",
+      active: currentStep === 5,
+      completed: false,
+    },
+  ];
+
+  const totalGrossPay = employees.reduce((sum, emp) => sum + emp.grossPay, 0);
+  const progressPercentage = (currentStep / totalSteps) * 100;
+
+  const getColorClasses = (color) => {
+    const colors = {
+      blue: "bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300",
+      purple:
+        "bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300",
+      teal: "bg-teal-100 text-teal-600 dark:bg-teal-900 dark:text-teal-300",
+      orange:
+        "bg-orange-100 text-orange-600 dark:bg-orange-900 dark:text-orange-300",
+      pink: "bg-pink-100 text-pink-600 dark:bg-pink-900 dark:text-pink-300",
+      indigo:
+        "bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300",
+    };
+    return colors[color] || colors.blue;
+  };
+
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  const years = Array.from(
+    { length: 5 },
+    (_, i) => new Date().getFullYear() - i
+  );
+
+  return (
+    <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-background-dark">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "HR Management", icon: "fa-user-tie", onClick: onBack },
+          { label: "Payroll Processing", icon: "fa-money-bill-wave" },
+        ]}
+      />
+
+      <main className="flex-1 p-3">
+        <div className="flex flex-col w-full gap-6">
+          {/* Page Heading & Actions */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-2">
+            <div>
+              <h1 className="text-3xl font-black leading-tight tracking-tight text-slate-900 dark:text-white">
+                Payroll Processing
+              </h1>
+              <p className="text-gray-500 dark:text-gray-400 mt-1">
+                Review and approve employee payments for the current period.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setHideAmounts(!hideAmounts)}
+                className="flex items-center gap-2 h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                <i
+                  className={`fa-solid ${
+                    hideAmounts ? "fa-eye" : "fa-eye-slash"
+                  }`}
+                ></i>
+                <span className="hidden sm:inline">
+                  {hideAmounts ? "Show" : "Hide"} Amounts
+                </span>
+              </button>
+              <button
+                onClick={() => toast.info("Save draft feature coming soon")}
+                className="flex h-10 items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 text-sm font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Save Draft
+              </button>
+              <button
+                disabled
+                className="flex h-10 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800 px-4 text-sm font-bold text-gray-500 cursor-not-allowed"
+              >
+                Process Payroll
+              </button>
+            </div>
+          </div>
+
+          {/* Progress Stepper */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between items-center text-sm font-medium text-gray-900 dark:text-white mb-2">
+                <span>
+                  Progress: Step {currentStep} of {totalSteps}
+                </span>
+                <span className="text-blue-600 dark:text-blue-400 font-bold">
+                  {Math.round(progressPercentage)}% Completed
+                </span>
+              </div>
+
+              {/* Steps Visual */}
+              <div className="relative flex items-center justify-between w-full">
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                <div
+                  className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-blue-600 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%`,
+                  }}
+                ></div>
+
+                {steps.map((step) => (
+                  <div
+                    key={step.number}
+                    className="flex flex-col items-center gap-2 z-10"
+                  >
+                    <div
+                      className={`size-8 rounded-full flex items-center justify-center font-bold ring-4 ring-white dark:ring-slate-800 ${
+                        step.completed
+                          ? "bg-blue-600 text-white"
+                          : step.active
+                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
+                          : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                      }`}
+                    >
+                      {step.completed ? (
+                        <i className="fa-solid fa-check text-sm"></i>
+                      ) : (
+                        step.number
+                      )}
+                    </div>
+                    <span
+                      className={`text-xs font-${
+                        step.active ? "bold" : "medium"
+                      } hidden sm:block ${
+                        step.active
+                          ? "text-slate-900 dark:text-white"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Period Summary Sidebar */}
+            <div className="lg:col-span-1 flex flex-col gap-4">
+              <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm sticky top-24">
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">
+                  Current Period
+                </h3>
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Pay Schedule</p>
+                    <p className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                      <i className="fa-solid fa-calendar-days text-gray-400 text-base"></i>
+                      Bi-weekly
+                    </p>
+                  </div>
+                  <div className="h-px bg-gray-100 dark:bg-gray-700"></div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Period Start</p>
+                    <p className="font-medium text-slate-900 dark:text-white">
+                      Oct 1, 2023
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Period End</p>
+                    <p className="font-medium text-slate-900 dark:text-white">
+                      Oct 15, 2023
+                    </p>
+                  </div>
+                  <div className="h-px bg-gray-100 dark:bg-gray-700"></div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Check Date</p>
+                    <p className="font-bold text-blue-600 dark:text-blue-400">
+                      Oct 20, 2023
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => toast.info("Edit period feature coming soon")}
+                  className="w-full mt-6 py-2 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <i className="fa-solid fa-edit text-sm"></i>
+                  Edit Period
+                </button>
+              </div>
+
+              {/* Alerts */}
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800 p-4">
+                <div className="flex items-start gap-3">
+                  <i className="fa-solid fa-triangle-exclamation text-amber-600 dark:text-amber-400 shrink-0"></i>
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                      Missing Hours
+                    </h4>
+                    <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                      2 employees have incomplete time logs. Please review
+                      flagged items.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Main Table */}
+            <div className="lg:col-span-3 flex flex-col gap-4">
+              {/* Filters & Search */}
+              <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                  <div className="relative flex-1">
+                    <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input
+                      className="w-full h-10 pl-10 pr-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-slate-900 dark:text-white"
+                      placeholder="Search employee name or ID..."
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <select
+                    className="h-10 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-sm text-gray-700 dark:text-gray-200 focus:ring-blue-500 focus:border-blue-500"
+                    value={selectedDepartment}
+                    onChange={(e) => setSelectedDepartment(e.target.value)}
+                  >
+                    <option>All Departments</option>
+                    <option>Engineering</option>
+                    <option>Sales</option>
+                    <option>Marketing</option>
+                    <option>Finance</option>
+                    <option>HR</option>
+                  </select>
+                  <div className="h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
+                  <button
+                    onClick={() => toast.info("Filter feature coming soon")}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium transition-colors"
+                  >
+                    <i className="fa-solid fa-filter text-sm"></i>
+                    <span>Filter</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Earnings Table */}
+              <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-[240px]">
+                          Employee
+                        </th>
+                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          Reg. Hours
+                        </th>
+                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          Overtime
+                        </th>
+                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          Commission
+                        </th>
+                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          Gross Pay
+                        </th>
+                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {employees.map((employee) => (
+                        <tr
+                          key={employee.id}
+                          className={`hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors ${
+                            employee.warning
+                              ? "bg-amber-50/50 dark:bg-amber-900/10"
+                              : ""
+                          }`}
+                        >
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`size-8 rounded-full ${getColorClasses(
+                                  employee.color
+                                )} flex items-center justify-center text-xs font-bold`}
+                              >
+                                {employee.initials}
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-slate-900 dark:text-white">
+                                  {employee.name}
+                                </p>
+                                <p className="text-xs text-gray-500 font-mono">
+                                  ID: {employee.id}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 font-mono text-sm text-gray-700 dark:text-gray-300">
+                            {employee.warning ? (
+                              <>
+                                <span className="text-amber-600 font-bold">
+                                  {employee.regularHours.toFixed(2)}
+                                </span>
+                                <span className="text-xs text-gray-400 ml-1">
+                                  /80
+                                </span>
+                              </>
+                            ) : (
+                              employee.regularHours.toFixed(2)
+                            )}
+                          </td>
+                          <td className="px-6 py-4 font-mono text-sm text-gray-700 dark:text-gray-300">
+                            {employee.overtime.toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 font-mono text-sm text-gray-700 dark:text-gray-300">
+                            {hideAmounts
+                              ? "****"
+                              : formatCurrency(employee.commission)}
+                          </td>
+                          <td className="px-6 py-4 font-mono text-sm font-bold text-slate-900 dark:text-white">
+                            {hideAmounts
+                              ? "****"
+                              : formatCurrency(employee.grossPay)}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                employee.statusColor === "green"
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                              }`}
+                            >
+                              {employee.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() =>
+                                toast.info(
+                                  `Edit employee ${employee.name} details`
+                                )
+                              }
+                              className={`p-1 rounded transition-colors ${
+                                employee.warning
+                                  ? "text-blue-600 hover:text-blue-700 bg-blue-100/50"
+                                  : "text-gray-400 hover:text-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                              }`}
+                            >
+                              <i className="fa-solid fa-pen-to-square text-lg"></i>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                  <p className="text-sm text-gray-500">
+                    Showing 1-{employees.length} of 24 employees
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      disabled
+                      className="px-3 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    <button className="px-3 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky Footer Action Bar */}
+          <div className="sticky bottom-0 z-40 mt-6">
+            <div className="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-gray-700 shadow-xl shadow-gray-200/50 dark:shadow-black/50 p-3 flex justify-between items-center w-full">
+              <div className="flex items-center gap-6">
+                <div className="flex flex-col">
+                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                    Total Gross Pay
+                  </span>
+                  <span className="text-lg font-bold text-slate-900 dark:text-white font-mono">
+                    {hideAmounts ? "****" : formatCurrency(totalGrossPay)}
+                  </span>
+                </div>
+                <div className="h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                    Employees
+                  </span>
+                  <span className="text-lg font-bold text-slate-900 dark:text-white font-mono">
+                    24
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => toast.success("Moving to deductions step")}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-lg shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02]"
+              >
+                Next: Manage Deductions
+                <i className="fa-solid fa-arrow-right"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default Payroll;

@@ -3,6 +3,8 @@ import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/useAuth";
+import Payroll from "./Payroll";
+import EmployeeProfile from "./EmployeeProfile";
 
 const StatCard = ({ label, icon, value, trend, trendType }) => (
   <div className="flex flex-col gap-1 rounded-xl p-5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -42,7 +44,7 @@ const StatCard = ({ label, icon, value, trend, trendType }) => (
   </div>
 );
 
-const HRManagement = () => {
+const HRM = () => {
   const { user } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [employeesLoading, setEmployeesLoading] = useState(true);
@@ -75,6 +77,8 @@ const HRManagement = () => {
   const [showLeaveAllocationModal, setShowLeaveAllocationModal] =
     useState(false);
   const [leaveAllocationLoading, setLeaveAllocationLoading] = useState(false);
+  const [showPayroll, setShowPayroll] = useState(false);
+  const [showEmployeeProfile, setShowEmployeeProfile] = useState(false);
 
   // Leave allocations state
   const [leaveAllocations, setLeaveAllocations] = useState([]);
@@ -288,6 +292,14 @@ const HRManagement = () => {
     }
   };
 
+  if (showPayroll) {
+    return <Payroll onBack={() => setShowPayroll(false)} />;
+  }
+
+  if (showEmployeeProfile) {
+    return <EmployeeProfile onBack={() => setShowEmployeeProfile(false)} />;
+  }
+
   return (
     <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display min-h-screen w-full">
       <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
@@ -312,6 +324,13 @@ const HRManagement = () => {
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setShowPayroll(true)}
+                className="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-md shadow-emerald-600/20 transition-colors"
+              >
+                <i className="fa-solid fa-money-bill-wave text-[16px]"></i>
+                <span className="truncate">Payroll Processing</span>
+              </button>
               <button
                 onClick={() => setShowCreateJobModal(true)}
                 className="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-white border border-slate-200 text-slate-700 text-sm font-bold shadow-sm hover:bg-slate-50 transition-colors"
@@ -394,7 +413,8 @@ const HRManagement = () => {
                       {employees.map((e) => (
                         <tr
                           key={e.id}
-                          className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                          onClick={() => setShowEmployeeProfile(true)}
+                          className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer"
                         >
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-3">
@@ -438,7 +458,10 @@ const HRManagement = () => {
                               {e.status}
                             </span>
                           </td>
-                          <td className="px-5 py-3 text-right">
+                          <td
+                            className="px-5 py-3 text-right"
+                            onClick={(event) => event.stopPropagation()}
+                          >
                             <button className="text-slate-400 hover:text-primary transition-colors">
                               <i className="fa-solid fa-ellipsis-v text-[16px]"></i>
                             </button>
@@ -768,7 +791,7 @@ const HRManagement = () => {
                       try {
                         const fullName =
                           `${employeeForm.firstName} ${employeeForm.lastName}`.trim();
-                        await apiService.post("/api/hr/employees", {
+                        const response = await apiService.post("/api/hr/employees", {
                           name: fullName,
                           email: employeeForm.email,
                           phone: employeeForm.phone,
@@ -777,7 +800,10 @@ const HRManagement = () => {
                           jobTitle: employeeForm.jobTitle,
                           startDate: employeeForm.startDate,
                         });
+                        
+                        console.log("Employee creation response:", response);
                         toast.success("Employee added successfully");
+                        
                         setShowAddEmployeeModal(false);
                         setEmployeeForm({
                           firstName: "",
@@ -789,8 +815,11 @@ const HRManagement = () => {
                           jobTitle: "",
                           startDate: "",
                         });
-                        fetchAll();
+                        
+                        // Refresh employee list
+                        await fetchAll();
                       } catch (error) {
+                        console.error("Error adding employee:", error);
                         toast.error(error.message || "Failed to add employee");
                       } finally {
                         setEmployeeFormLoading(false);
@@ -1393,4 +1422,4 @@ const HRManagement = () => {
   );
 };
 
-export default HRManagement;
+export default HRM;

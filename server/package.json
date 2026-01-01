@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "seed": "node seed.js",
+    "seed:clear": "node seed.js --clear",
+    "seed:users": "node seed.js --users",
     "vercel-build": "echo 'No build step required for Express API'"
   },
   "dependencies": {

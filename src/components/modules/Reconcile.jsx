@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import apiService from "../../services/api";
 import BankStatementImportModal from "./BankStatementImportModal";
+import { formatCurrency } from "../../services/currency";
 
 const Reconcile = ({ onBack }) => {
   const [loading, setLoading] = useState(true);
@@ -101,7 +102,9 @@ const Reconcile = ({ onBack }) => {
     const difference = Math.abs(clearedBalance - statementEnd);
     if (difference > 0.01) {
       toast.error(
-        `Cannot complete reconciliation. Difference: $${difference.toFixed(2)}`
+        `Cannot complete reconciliation. Difference: ${formatCurrency(
+          difference
+        )}`
       );
       return;
     }
@@ -255,7 +258,7 @@ const Reconcile = ({ onBack }) => {
                     Statement Start
                   </span>
                   <span className="text-sm font-bold text-slate-900 tabular-nums">
-                    ${statementStart.toFixed(2)}
+                    {formatCurrency(statementStart)}
                   </span>
                 </div>
                 <div className="flex flex-col px-4 py-2 bg-slate-50 rounded-lg border border-transparent">
@@ -263,7 +266,7 @@ const Reconcile = ({ onBack }) => {
                     Statement End
                   </span>
                   <span className="text-sm font-bold text-slate-900 tabular-nums">
-                    ${statementEnd.toFixed(2)}
+                    {formatCurrency(statementEnd)}
                   </span>
                 </div>
                 <div className="flex flex-col px-4 py-2 bg-slate-50 rounded-lg border border-transparent">
@@ -271,7 +274,7 @@ const Reconcile = ({ onBack }) => {
                     Cleared Balance
                   </span>
                   <span className="text-sm font-bold text-primary tabular-nums">
-                    ${clearedBalance.toFixed(2)}
+                    {formatCurrency(clearedBalance)}
                   </span>
                 </div>
                 <div
@@ -294,7 +297,7 @@ const Reconcile = ({ onBack }) => {
                         difference < 0.01 ? "text-green-700" : "text-amber-700"
                       }`}
                     >
-                      ${difference.toFixed(2)}
+                      {formatCurrency(difference)}
                     </span>
                     {difference < 0.01 && (
                       <i className="fa-solid fa-circle-check text-green-600 text-sm"></i>
@@ -414,8 +417,8 @@ const Reconcile = ({ onBack }) => {
                               : "text-slate-900"
                           }`}
                         >
-                          {transaction.amount > 0 ? "+" : ""}$
-                          {Math.abs(transaction.amount).toFixed(2)}
+                          {transaction.amount > 0 ? "+" : ""}
+                          {formatCurrency(Math.abs(transaction.amount))}
                         </td>
                       </tr>
                     ))
@@ -547,8 +550,8 @@ const Reconcile = ({ onBack }) => {
                               : "text-slate-900"
                           }`}
                         >
-                          {transaction.amount > 0 ? "+" : ""}$
-                          {Math.abs(transaction.amount).toFixed(2)}
+                          {transaction.amount > 0 ? "+" : ""}
+                          {formatCurrency(Math.abs(transaction.amount))}
                         </td>
                       </tr>
                     ))

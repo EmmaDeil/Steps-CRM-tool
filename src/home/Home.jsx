@@ -70,7 +70,8 @@ export default function Home() {
       try {
         const modsRes = await apiService.get("/api/modules");
         if (!mounted) return;
-        const mods = modsRes?.data || [];
+        // apiService interceptor already returns response body, not { data: ... }
+        const mods = modsRes || [];
         setModules(mods);
       } catch (err) {
         if (mounted) setError(err);

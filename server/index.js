@@ -57,7 +57,6 @@ const DEFAULT_JOB_TITLES = [
 ];
 const VendorModel = require('./models/Vendor');
 const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail } = require('./utils/emailService');
-const seed = require('./data');
 
 const app = express();
 
@@ -154,14 +153,31 @@ async function start() {
     });
     console.log('✓ Connected to MongoDB');
 
+    // Basic seed data for modules (minimal auto-seeding)
+    const seedModules = [
+      { id: 1, name: "Approval", componentName: "Approval" },
+      { id: 2, name: "Inventory", componentName: "Inventory" },
+      { id: 3, name: "HRM", componentName: "HRM" },
+      { id: 4, name: "FM", componentName: "FM" },
+      { id: 5, name: "Finance", componentName: "Finance" },
+      { id: 6, name: "Security", componentName: "Security" },
+      { id: 7, name: "Admin", componentName: "Admin" },
+      { id: 8, name: "Attendance", componentName: "Attendance" },
+      { id: 9, name: "DocSign", componentName: "DocSign" },
+      { id: 10, name: "Material Requests", componentName: "MaterialRequests" },
+      { id: 11, name: "Purchase Orders", componentName: "PurchaseOrders" },
+      { id: 12, name: "Analytics", componentName: "Analytics" },
+      { id: 13, name: "Policy", componentName: "Policy" },
+    ];
+
     // Seed modules if empty or update with new modules
     const moduleCount = await ModuleModel.countDocuments();
     if (moduleCount === 0) {
-      await ModuleModel.insertMany(seed.modules);
+      await ModuleModel.insertMany(seedModules);
       console.log('Seeded modules');
     } else {
       // Upsert modules: update existing ones and add new ones
-      for (const module of seed.modules) {
+      for (const module of seedModules) {
         await ModuleModel.findOneAndUpdate(
           { id: module.id },
           module,
@@ -169,20 +185,6 @@ async function start() {
         );
       }
       console.log('Updated modules to match seed data');
-    }
-
-    // Seed analytics if empty
-    const analyticsCount = await AnalyticsModel.countDocuments();
-    if (analyticsCount === 0) {
-      await AnalyticsModel.create(seed.analytics);
-      console.log('Seeded analytics');
-    }
-
-    // Seed attendance if empty
-    const attendanceCount = await AttendanceModel.countDocuments();
-    if (attendanceCount === 0) {
-      await AttendanceModel.insertMany(seed.attendance);
-      console.log('Seeded attendance');
     }
   } catch (err) {
     console.error('✗ Failed to connect to MongoDB');
