@@ -37,18 +37,19 @@ const loadModuleComponent = (componentName) => {
 const iconMap = {
   Finance: { icon: "fa-university", color: "purple" },
   Accounting: { icon: "fa-receipt", color: "purple" },
-  "Facility Maintenance": { icon: "fa-building", color: "blue" },
+  FM: { icon: "fa-building", color: "blue" },
   Approval: { icon: "fa-check-circle", color: "orange" },
   "Material Requests": { icon: "fa-boxes", color: "green" },
   "Purchase Orders": { icon: "fa-cart-shopping", color: "indigo" },
   Inventory: { icon: "fa-warehouse", color: "teal" },
   Analytics: { icon: "fa-chart-line", color: "cyan" },
   Attendance: { icon: "fa-id-badge", color: "emerald" },
-  "HR Management": { icon: "fa-people-group", color: "rose" },
-  "Security Logs": { icon: "fa-lock", color: "red" },
+  "HRM": { icon: "fa-people-group", color: "rose" },
+  Security: { icon: "fa-lock", color: "red" },
   DocSign: { icon: "fa-pen-fancy", color: "pink" },
-  "Signature Management": { icon: "fa-pen-fancy", color: "pink" },
+  // "": { icon: "fa-pen-fancy", color: "pink" },
   Admin: { icon: "fa-sliders", color: "gray" },
+  "Policy": { icon: "fa-file-shield", color: "gray" },
 };
 
 export default function Home() {
@@ -296,7 +297,7 @@ export default function Home() {
                   <div
                     className={`size-24 rounded-2xl bg-gradient-to-br ${colorClass} flex items-center justify-center mb-6 shadow-sm border`}
                   >
-                    <i className={`fa-solid ${icon.icon} text-5xl`}></i>
+                    <i className={`fa-solid ${icon.icon} text-5xl p-3`}></i>
                   </div>
                   <h3 className="text-xl font-bold text-[#111418] mb-2">
                     {m.name}
@@ -304,7 +305,7 @@ export default function Home() {
                   <p className="text-sm text-[#617589] text-center">
                     Click to access this module
                   </p>
-                  <div className="mt-3 py-1 px-3 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full">
+                  <div className="mt-2 py-1 px-3 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full">
                     Explore
                   </div>
                 </button>

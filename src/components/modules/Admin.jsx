@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
@@ -44,6 +44,8 @@ const Admin = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [availableModules, setAvailableModules] = useState([]);
+  const errorToastShownRef = useRef({});
+  const resetToastTimerRef = useRef(null);
 
   const [newUser, setNewUser] = useState({
     fullName: "",
@@ -80,9 +82,22 @@ const Admin = () => {
 
       const response = await apiService.get(`/api/users?${params.toString()}`);
       setUsers(response.data || []);
+      // Reset error flag on success
+      if (errorToastShownRef.current["users"]) {
+        errorToastShownRef.current["users"] = false;
+      }
     } catch (error) {
       console.error("Error fetching users:", error);
-      toast.error("Failed to load users");
+      if (!errorToastShownRef.current["users"]) {
+        toast.error("Failed to load users");
+        errorToastShownRef.current["users"] = true;
+        // Reset after 3 seconds
+        if (resetToastTimerRef.current)
+          clearTimeout(resetToastTimerRef.current);
+        resetToastTimerRef.current = setTimeout(() => {
+          errorToastShownRef.current["users"] = false;
+        }, 3000);
+      }
     } finally {
       setUsersLoading(false);
     }
@@ -140,19 +155,32 @@ const Admin = () => {
           (advanceRes.data?.length || 0) + (refundRes.data?.length || 0),
         totalRevenue: 0, // Would need to be calculated from financial data
         revenueGrowth: 0, // Would need historical data
-        systemLoad: Math.floor(Math.random() * 30 + 30), // Simulated for now
+        systemLoad: 0,
         loadTrend: "stable",
-        uptime: 99.9, // Would come from monitoring service
+        uptime: 0,
         totalAdvanceRequests: advanceRes.data?.length || 0,
         totalRefundRequests: refundRes.data?.length || 0,
         totalRetirementBreakdowns: retirementRes.data?.length || 0,
       });
 
-      // Fetch service status
-      fetchServiceStatus();
+      // Fetch system stats and service status
+      await Promise.all([fetchSystemStats(), fetchServiceStatus()]);
+      // Reset error flag on success
+      if (errorToastShownRef.current["adminData"]) {
+        errorToastShownRef.current["adminData"] = false;
+      }
     } catch (error) {
       console.error("Error fetching admin data:", error);
-      toast.error("Failed to load admin data");
+      if (!errorToastShownRef.current["adminData"]) {
+        toast.error("Failed to load admin data");
+        errorToastShownRef.current["adminData"] = true;
+        // Reset after 3 seconds
+        if (resetToastTimerRef.current)
+          clearTimeout(resetToastTimerRef.current);
+        resetToastTimerRef.current = setTimeout(() => {
+          errorToastShownRef.current["adminData"] = false;
+        }, 3000);
+      }
     } finally {
       setStatsLoading(false);
     }
@@ -161,41 +189,38 @@ const Admin = () => {
   const fetchServiceStatus = async () => {
     setServicesLoading(true);
     try {
-      // Set default service status (this could be fetched from a monitoring API)
+      const response = await apiService.get("/api/admin/service-status");
+      setServiceStatus(response.data || []);
+    } catch (error) {
+      console.error("Error fetching service status:", error);
+      // Set offline status as fallback
       setServiceStatus([
         {
           id: 1,
-          name: "Database Cluster",
-          status: "online",
-          uptime: "99.9%",
-          color: "green",
-        },
-        {
-          id: 2,
-          name: "API Gateway",
-          status: "online",
-          uptime: "99.8%",
-          color: "green",
-        },
-        {
-          id: 3,
-          name: "Email Service",
-          status: "online",
-          uptime: "99.5%",
-          color: "green",
-        },
-        {
-          id: 4,
-          name: "Storage Buckets",
-          status: "online",
-          uptime: "100%",
-          color: "green",
+          name: "Services",
+          status: "error",
+          uptime: "N/A",
+          color: "red",
         },
       ]);
-    } catch (error) {
-      console.error("Error fetching service status:", error);
     } finally {
       setServicesLoading(false);
+    }
+  };
+
+  const fetchSystemStats = async () => {
+    try {
+      const response = await apiService.get("/api/admin/system-stats");
+      if (response.data) {
+        setSystemStats((prev) => ({
+          ...prev,
+          systemLoad: response.data.systemLoad || 0,
+          loadTrend: response.data.loadTrend || "stable",
+          uptime: response.data.uptime || 0,
+        }));
+      }
+    } catch (error) {
+      console.error("Error fetching system stats:", error);
     }
   };
 

@@ -9,6 +9,7 @@ const Login = () => {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
+    rememberMe: false,
   });
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
@@ -45,7 +46,11 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const result = await login(formData.email, formData.password);
+      const result = await login(
+        formData.email,
+        formData.password,
+        formData.rememberMe
+      );
       if (result.success) {
         toast.success("Welcome back!");
         navigate("/home");
@@ -145,8 +150,26 @@ const Login = () => {
               )}
             </div>
 
-            {/* Forgot Password Link */}
-            <div className="flex items-center justify-end">
+            {/* Remember Me & Forgot Password */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <input
+                  id="rememberMe"
+                  name="rememberMe"
+                  type="checkbox"
+                  checked={formData.rememberMe}
+                  onChange={(e) =>
+                    setFormData({ ...formData, rememberMe: e.target.checked })
+                  }
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                />
+                <label
+                  htmlFor="rememberMe"
+                  className="ml-2 block text-sm text-gray-700 cursor-pointer select-none"
+                >
+                  Remember me
+                </label>
+              </div>
               <Link
                 to="/forgot-password"
                 className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors"

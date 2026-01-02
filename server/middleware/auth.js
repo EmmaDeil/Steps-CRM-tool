@@ -2,6 +2,34 @@ const jwt = require('jsonwebtoken');
 const UserModel = require('../models/User');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'refresh-secret-key-change-in-production';
+
+// Enhanced token generation with additional claims
+const generateToken = (userId, userRole, expiresIn = '7d') => {
+  return jwt.sign(
+    { 
+      userId,
+      role: userRole,
+      type: 'access',
+      iat: Math.floor(Date.now() / 1000),
+    },
+    JWT_SECRET,
+    { expiresIn }
+  );
+};
+
+// Generate refresh token (longer expiry)
+const generateRefreshToken = (userId) => {
+  return jwt.sign(
+    { 
+      userId,
+      type: 'refresh',
+      iat: Math.floor(Date.now() / 1000),
+    },
+    JWT_REFRESH_SECRET,
+    { expiresIn: '30d' }
+  );
+};
 
 // Middleware to verify JWT token
 const authMiddleware = async (req, res, next) => {
@@ -17,6 +45,14 @@ const authMiddleware = async (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, JWT_SECRET);
+
+    // Verify token type
+    if (decoded.type !== 'access') {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid token type',
+      });
+    }
 
     // Get user from database
     const user = await UserModel.findById(decoded.userId).select('-password');
@@ -35,8 +71,17 @@ const authMiddleware = async (req, res, next) => {
       });
     }
 
+    // Verify role matches token
+    if (decoded.role && user.role !== decoded.role) {
+      return res.status(401).json({
+        success: false,
+        error: 'Token role mismatch',
+      });
+    }
+
     // Attach user to request
     req.user = user;
+    req.tokenPayload = decoded;
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
@@ -49,6 +94,7 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         error: 'Token expired',
+        expired: true, // Flag for frontend to handle
       });
     }
     return res.status(500).json({
@@ -79,16 +125,25 @@ const requireRole = (...roles) => {
   };
 };
 
-// Generate JWT token
-const generateToken = (userId) => {
-  return jwt.sign({ userId }, JWT_SECRET, {
-    expiresIn: '7d', // Token expires in 7 days
-  });
+// Verify refresh token
+const verifyRefreshToken = (token) => {
+  try {
+    const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
+    if (decoded.type !== 'refresh') {
+      throw new Error('Invalid token type');
+    }
+    return { valid: true, userId: decoded.userId };
+  } catch (error) {
+    return { valid: false, error: error.message };
+  }
 };
 
 module.exports = {
   authMiddleware,
   requireRole,
   generateToken,
+  generateRefreshToken,
+  verifyRefreshToken,
   JWT_SECRET,
+  JWT_REFRESH_SECRET,
 };

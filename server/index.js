@@ -99,10 +99,25 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(morgan('dev'));
 
-// Create uploads directory if it doesn't exist
+// Request timeout middleware - prevent hanging requests
+app.use((req, res, next) => {
+  req.setTimeout(60000, () => {
+    res.status(408).json({ success: false, error: 'Request timeout' });
+  });
+  res.setTimeout(60000, () => {
+    res.status(408).json({ success: false, error: 'Response timeout' });
+  });
+  next();
+});
+
+// Create uploads directories if they don't exist
 const uploadsDir = path.join(__dirname, 'uploads', 'vendors');
+const avatarsDir = path.join(__dirname, 'uploads', 'avatars');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+if (!fs.existsSync(avatarsDir)) {
+  fs.mkdirSync(avatarsDir, { recursive: true });
 }
 
 // Configure multer for file uploads
@@ -134,6 +149,35 @@ const upload = multer({
   },
 });
 
+// Avatar upload configuration
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, avatarsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, 'avatar-' + uniqueSuffix + path.extname(file.originalname));
+  },
+});
+
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2MB limit for avatars
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpg|jpeg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only JPG, JPEG, PNG, GIF, and WEBP images are allowed for avatars'));
+    }
+  },
+});
+
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -150,8 +194,24 @@ async function start() {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
     });
     console.log('✓ Connected to MongoDB');
+
+    // Handle MongoDB connection events
+    mongoose.connection.on('error', (err) => {
+      console.error('MongoDB connection error:', err);
+    });
+
+    mongoose.connection.on('disconnected', () => {
+      console.warn('MongoDB disconnected. Attempting to reconnect...');
+    });
+
+    mongoose.connection.on('reconnected', () => {
+      console.log('✓ MongoDB reconnected');
+    });
 
     // Basic seed data for modules (minimal auto-seeding)
     const seedModules = [
@@ -197,6 +257,38 @@ async function start() {
   const api = require('./api');
   const { authMiddleware, generateToken } = require('./middleware/auth');
   const crypto = require('crypto');
+
+  // ==================== HEALTH CHECK ROUTE ====================
+
+  // Health check endpoint
+  app.get('/api/health', async (req, res) => {
+    try {
+      const dbStatus = mongoose.connection.readyState === 1;
+      const uptime = process.uptime();
+      const memoryUsage = process.memoryUsage();
+      
+      const health = {
+        status: dbStatus ? 'healthy' : 'unhealthy',
+        timestamp: new Date().toISOString(),
+        uptime: Math.floor(uptime),
+        database: {
+          connected: dbStatus,
+          state: mongoose.connection.readyState // 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
+        },
+        memory: {
+          heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024), // MB
+          heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024), // MB
+          rss: Math.round(memoryUsage.rss / 1024 / 1024) // MB
+        }
+      };
+
+      const statusCode = dbStatus ? 200 : 503;
+      res.status(statusCode).json({ success: true, data: health });
+    } catch (error) {
+      console.error('Health check error:', error);
+      res.status(503).json({ success: false, error: 'Health check failed' });
+    }
+  });
 
   // ==================== AUTHENTICATION ROUTES ====================
 
@@ -289,8 +381,8 @@ async function start() {
 
       await user.save();
 
-      // Generate token
-      const token = generateToken(user._id);
+      // Generate token with role
+      const token = generateToken(user._id, user.role);
 
       // Return user data without password
       const userData = {
@@ -376,8 +468,8 @@ async function start() {
       user.lastLogin = new Date();
       await user.save();
 
-      // Generate token
-      const token = generateToken(user._id);
+      // Generate token with role for enhanced security
+      const token = generateToken(user._id, user.role);
 
       // Return user data without password
       const userData = {
@@ -1110,30 +1202,82 @@ async function start() {
   app.get('/api/users', async (req, res) => {
     try {
       const { role, status, search } = req.query;
-      let query = {};
+      
+      // Fetch both users and employees, then merge them
+      let userQuery = {};
+      let employeeQuery = {};
 
       if (role) {
-        query.role = role;
+        userQuery.role = role;
+        employeeQuery.role = role;
       }
       if (status) {
-        query.status = status;
+        userQuery.status = status;
+        employeeQuery.status = status;
       }
       if (search) {
-        query.$or = [
+        userQuery.$or = [
           { fullName: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+        ];
+        employeeQuery.$or = [
+          { name: { $regex: search, $options: 'i' } },
           { email: { $regex: search, $options: 'i' } },
         ];
       }
 
-      const users = await UserModel.find(query)
+      // Fetch users from UserModel
+      const users = await UserModel.find(userQuery)
         .select('-resetPasswordToken -resetPasswordExpires')
         .sort({ createdAt: -1 })
-        .populate('invitedBy', 'fullName email');
+        .populate('invitedBy', 'fullName email')
+        .lean();
 
-      res.json(users);
+      // Fetch employees from EmployeeModel (wrap in try-catch in case model has issues)
+      let employees = [];
+      try {
+        employees = await EmployeeModel.find(employeeQuery)
+          .sort({ createdAt: -1 })
+          .lean();
+      } catch (empErr) {
+        console.error('Error fetching employees for user list:', empErr);
+        // Continue with just users if employees fetch fails
+      }
+
+      // Map employees to user format and merge with users
+      const employeesAsUsers = employees.map(emp => ({
+        _id: emp._id,
+        id: emp.employeeId || emp._id?.toString(),
+        fullName: emp.name || '',
+        email: emp.email || '',
+        role: emp.role || 'Employee',
+        status: emp.status || 'Active',
+        department: emp.department || '',
+        jobTitle: emp.jobTitle || '',
+        phone: emp.phone || '',
+        avatar: emp.avatar || '',
+        createdAt: emp.createdAt || new Date(),
+        source: 'employee' // Mark as employee source
+      }));
+
+      // Merge users and employees, removing duplicates by email
+      const emailSet = new Set();
+      const mergedUsers = [];
+
+      [...users, ...employeesAsUsers].forEach(user => {
+        if (user.email && !emailSet.has(user.email)) {
+          emailSet.add(user.email);
+          mergedUsers.push(user);
+        }
+      });
+
+      // Sort by creation date
+      mergedUsers.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      res.json(mergedUsers);
     } catch (err) {
       console.error('Error fetching users:', err);
-      res.status(500).json({ message: 'Failed to fetch users' });
+      res.status(500).json({ message: 'Failed to fetch users', error: err.message });
     }
   });
 
@@ -2133,6 +2277,281 @@ async function start() {
     } catch (err) {
       console.error('Error adding employee:', err);
       res.status(500).json({ success: false, message: 'Failed to add employee', error: err.message });
+    }
+  });
+
+  // Get single employee by ID
+  app.get('/api/hr/employees/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const ObjectId = require('mongoose').Types.ObjectId;
+      
+      // Check if ID is valid MongoDB ObjectId
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid employee ID' });
+      }
+
+      const employee = await EmployeeModel.findById(id).select('-__v').lean();
+
+      if (!employee) {
+        return res.status(404).json({ success: false, message: 'Employee not found' });
+      }
+
+      // Format response
+      const response = {
+        id: employee._id.toString(),
+        _id: employee._id,
+        name: employee.name,
+        email: employee.email,
+        phone: employee.phone || '',
+        dateOfBirth: employee.dateOfBirth,
+        department: employee.department,
+        role: employee.role,
+        jobTitle: employee.jobTitle || employee.role,
+        startDate: employee.startDate,
+        status: employee.status || 'Active',
+        avatar: employee.avatar || '',
+        salary: employee.salary || 0,
+        address: employee.address || '',
+        emergencyContact: employee.emergencyContact || { name: '', relationship: '', phone: '' },
+        employeeId: employee.employeeId,
+        managerId: employee.managerId,
+      };
+
+      res.json({ success: true, data: response });
+    } catch (err) {
+      console.error('Error fetching employee:', err);
+      res.status(500).json({ success: false, message: 'Failed to fetch employee', error: err.message });
+    }
+  });
+
+  // Update employee by ID with avatar upload
+  app.put('/api/hr/employees/:id', avatarUpload.single('avatar'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, email, phone, dateOfBirth, department, jobTitle, status, salary, address, emergencyContact, updatedBy } = req.body;
+      const ObjectId = require('mongoose').Types.ObjectId;
+      
+      // Check if ID is valid MongoDB ObjectId
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid employee ID' });
+      }
+
+      // Get old employee data for audit log
+      const oldEmployee = await EmployeeModel.findById(id).lean();
+      if (!oldEmployee) {
+        return res.status(404).json({ success: false, message: 'Employee not found' });
+      }
+
+      // Find and update employee
+      const updateData = {};
+      const changes = [];
+      
+      // Always allow these fields to be updated
+      if (name !== undefined && name !== oldEmployee.name) {
+        updateData.name = name;
+        changes.push({ field: 'name', oldValue: oldEmployee.name, newValue: name });
+      }
+      if (email !== undefined && email.toLowerCase() !== oldEmployee.email) {
+        updateData.email = email.toLowerCase();
+        changes.push({ field: 'email', oldValue: oldEmployee.email, newValue: email.toLowerCase() });
+      }
+      if (phone !== undefined && phone !== oldEmployee.phone) {
+        updateData.phone = phone;
+        changes.push({ field: 'phone', oldValue: oldEmployee.phone, newValue: phone });
+      }
+      if (dateOfBirth !== undefined && dateOfBirth !== oldEmployee.dateOfBirth) {
+        updateData.dateOfBirth = dateOfBirth;
+        changes.push({ field: 'dateOfBirth', oldValue: oldEmployee.dateOfBirth, newValue: dateOfBirth });
+      }
+      if (address !== undefined && address !== oldEmployee.address) {
+        updateData.address = address;
+        changes.push({ field: 'address', oldValue: oldEmployee.address, newValue: address });
+      }
+      if (emergencyContact !== undefined) {
+        const parsedContact = typeof emergencyContact === 'string' ? JSON.parse(emergencyContact) : emergencyContact;
+        updateData.emergencyContact = parsedContact;
+        changes.push({ field: 'emergencyContact', oldValue: oldEmployee.emergencyContact, newValue: parsedContact });
+      }
+
+      // Handle avatar file upload
+      if (req.file) {
+        const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+        updateData.avatar = avatarUrl;
+        changes.push({ field: 'avatar', oldValue: oldEmployee.avatar, newValue: avatarUrl });
+        
+        // Delete old avatar file if it exists (async)
+        if (oldEmployee.avatar && oldEmployee.avatar.startsWith('/uploads/avatars/')) {
+          const oldFilePath = path.join(__dirname, oldEmployee.avatar);
+          try {
+            await fs.promises.access(oldFilePath);
+            await fs.promises.unlink(oldFilePath);
+          } catch (err) {
+            // File doesn't exist or can't be deleted, ignore
+            console.log('Could not delete old avatar:', err.message);
+          }
+        }
+      }
+
+      // Check if current user is HR to allow these updates
+      // (In a real app, you'd verify the current user's role from the JWT token)
+      if (department !== undefined && department !== oldEmployee.department) {
+        updateData.department = department;
+        changes.push({ field: 'department', oldValue: oldEmployee.department, newValue: department });
+      }
+      if (jobTitle !== undefined && jobTitle !== oldEmployee.jobTitle) {
+        updateData.jobTitle = jobTitle;
+        changes.push({ field: 'jobTitle', oldValue: oldEmployee.jobTitle, newValue: jobTitle });
+      }
+      if (status !== undefined && status !== oldEmployee.status) {
+        updateData.status = status;
+        changes.push({ field: 'status', oldValue: oldEmployee.status, newValue: status });
+      }
+      if (salary !== undefined && parseFloat(salary) !== oldEmployee.salary) {
+        updateData.salary = parseFloat(salary);
+        changes.push({ field: 'salary', oldValue: oldEmployee.salary, newValue: parseFloat(salary) });
+      }
+
+      const employee = await EmployeeModel.findByIdAndUpdate(
+        id,
+        updateData,
+        { new: true }
+      ).select('-__v').lean();
+
+      if (!employee) {
+        return res.status(404).json({ success: false, message: 'Employee not found' });
+      }
+
+      // Create audit log entry
+      if (changes.length > 0) {
+        await AuditLogModel.create({
+          userId: updatedBy || 'system',
+          action: 'UPDATE_EMPLOYEE',
+          resource: 'Employee',
+          resourceId: id,
+          details: {
+            employeeName: employee.name,
+            changes: changes,
+          },
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        });
+      }
+
+      // Format response
+      const response = {
+        id: employee._id.toString(),
+        _id: employee._id,
+        name: employee.name,
+        email: employee.email,
+        phone: employee.phone || '',
+        dateOfBirth: employee.dateOfBirth,
+        department: employee.department,
+        role: employee.role,
+        jobTitle: employee.jobTitle || employee.role,
+        startDate: employee.startDate,
+        status: employee.status || 'Active',
+        avatar: employee.avatar || '',
+        salary: employee.salary || 0,
+        address: employee.address || '',
+        emergencyContact: employee.emergencyContact || { name: '', relationship: '', phone: '' },
+        employeeId: employee.employeeId,
+        managerId: employee.managerId,
+      };
+
+      res.json({ success: true, data: response, message: 'Employee updated successfully' });
+    } catch (err) {
+      console.error('Error updating employee:', err);
+      res.status(500).json({ success: false, message: 'Failed to update employee', error: err.message });
+    }
+  });
+
+  // Bulk update employees (HR only)
+  app.put('/api/hr/employees/bulk-update', async (req, res) => {
+    try {
+      const { employeeIds, updates, updatedBy } = req.body;
+      const ObjectId = require('mongoose').Types.ObjectId;
+      
+      if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
+        return res.status(400).json({ success: false, message: 'Employee IDs array is required' });
+      }
+
+      if (!updates || Object.keys(updates).length === 0) {
+        return res.status(400).json({ success: false, message: 'Updates object is required' });
+      }
+
+      // Validate all IDs
+      const validIds = employeeIds.filter(id => ObjectId.isValid(id));
+      if (validIds.length !== employeeIds.length) {
+        return res.status(400).json({ success: false, message: 'Some employee IDs are invalid' });
+      }
+
+      // Build update object (only allow HR fields)
+      const updateData = {};
+      if (updates.department !== undefined) updateData.department = updates.department;
+      if (updates.status !== undefined) updateData.status = updates.status;
+      if (updates.jobTitle !== undefined) updateData.jobTitle = updates.jobTitle;
+
+      // Update multiple employees
+      const result = await EmployeeModel.updateMany(
+        { _id: { $in: validIds } },
+        { $set: updateData }
+      );
+
+      // Create audit log for bulk update
+      await AuditLogModel.create({
+        userId: updatedBy || 'system',
+        action: 'BULK_UPDATE_EMPLOYEES',
+        resource: 'Employee',
+        resourceId: validIds.join(','),
+        details: {
+          employeeCount: validIds.length,
+          updates: updateData,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      res.json({ 
+        success: true, 
+        message: `${result.modifiedCount} employees updated successfully`,
+        modifiedCount: result.modifiedCount 
+      });
+    } catch (err) {
+      console.error('Error bulk updating employees:', err);
+      res.status(500).json({ success: false, message: 'Failed to bulk update employees', error: err.message });
+    }
+  });
+
+  // Get activity log for an employee
+  app.get('/api/hr/employees/:id/activity', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { limit = 50 } = req.query;
+
+      const activities = await AuditLogModel.find({
+        $or: [
+          { resourceId: id },
+          { 'details.employeeId': id }
+        ]
+      })
+        .sort({ timestamp: -1 })
+        .limit(parseInt(limit))
+        .lean();
+
+      const formattedActivities = activities.map(activity => ({
+        id: activity._id.toString(),
+        action: activity.action,
+        userId: activity.userId,
+        timestamp: activity.timestamp,
+        details: activity.details,
+        ipAddress: activity.ipAddress,
+      }));
+
+      res.json({ success: true, data: formattedActivities });
+    } catch (err) {
+      console.error('Error fetching activity log:', err);
+      res.status(500).json({ success: false, message: 'Failed to fetch activity log', error: err.message });
     }
   });
 
@@ -3176,16 +3595,164 @@ async function start() {
     }
   });
 
+  // =====================================================
+  // SYSTEM ADMIN ENDPOINTS
+  // =====================================================
+
+  // Get system statistics
+  app.get('/api/admin/system-stats', async (req, res) => {
+    try {
+      const [users, employees] = await Promise.all([
+        UserModel.countDocuments(),
+        EmployeeModel.countDocuments()
+      ]);
+
+      // Calculate system load based on recent activity
+      const recentActivity = await AuditLogModel.countDocuments({
+        timestamp: { $gte: new Date(Date.now() - 60 * 60 * 1000) } // Last hour
+      });
+      
+      // System load as percentage (scale based on activity)
+      const systemLoad = Math.min(Math.round((recentActivity / 100) * 100), 100);
+      
+      // Calculate uptime (mock for now - would need actual server start time)
+      const uptime = 99.9;
+
+      res.json({
+        success: true,
+        data: {
+          systemLoad,
+          loadTrend: systemLoad > 80 ? 'high' : systemLoad > 50 ? 'moderate' : 'low',
+          uptime,
+          totalUsers: users + employees,
+          timestamp: new Date()
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching system stats:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get service status
+  app.get('/api/admin/service-status', async (req, res) => {
+    try {
+      const services = [];
+
+      // Check database connection
+      const dbStatus = mongoose.connection.readyState === 1 ? 'online' : 'offline';
+      services.push({
+        id: 1,
+        name: 'Database Cluster',
+        status: dbStatus,
+        uptime: dbStatus === 'online' ? '99.9%' : '0%',
+        color: dbStatus === 'online' ? 'green' : 'red'
+      });
+
+      // Check API (always online if we're responding)
+      services.push({
+        id: 2,
+        name: 'API Gateway',
+        status: 'online',
+        uptime: '99.8%',
+        color: 'green'
+      });
+
+      // Check file storage (async)
+      const uploadsDir = path.join(__dirname, 'uploads');
+      let storageStatus = 'offline';
+      try {
+        await fs.promises.access(uploadsDir);
+        storageStatus = 'online';
+      } catch (err) {
+        console.log('Storage directory not accessible:', err.message);
+      }
+      services.push({
+        id: 3,
+        name: 'Storage Service',
+        status: storageStatus,
+        uptime: storageStatus === 'online' ? '100%' : '0%',
+        color: storageStatus === 'online' ? 'green' : 'red'
+      });
+
+      // Email service status (check if email config exists)
+      const emailStatus = process.env.EMAIL_USER ? 'online' : 'offline';
+      services.push({
+        id: 4,
+        name: 'Email Service',
+        status: emailStatus,
+        uptime: emailStatus === 'online' ? '99.5%' : '0%',
+        color: emailStatus === 'online' ? 'green' : 'orange'
+      });
+
+      res.json({
+        success: true,
+        data: services
+      });
+    } catch (error) {
+      console.error('Error fetching service status:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   const port = process.env.PORT;
   if (!port) {
     console.error('PORT not set in .env file');
     process.exit(1);
   }
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`Steps backend listening on http://localhost:${port}`);
   });
+
+  // Graceful shutdown
+  const shutdown = async (signal) => {
+    console.log(`\n${signal} received. Starting graceful shutdown...`);
+    server.close(async () => {
+      console.log('HTTP server closed');
+      try {
+        await mongoose.connection.close();
+        console.log('MongoDB connection closed');
+        process.exit(0);
+      } catch (err) {
+        console.error('Error during shutdown:', err);
+        process.exit(1);
+      }
+    });
+
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+      console.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
+
+// Global error handlers
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  console.error('Stack:', err.stack);
+  // Don't exit immediately, log and continue
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+  // Don't exit immediately, log and continue
+});
+
+// Monitor memory usage
+setInterval(() => {
+  const used = process.memoryUsage();
+  const mb = (bytes) => Math.round(bytes / 1024 / 1024);
+  if (mb(used.heapUsed) > 500) { // Alert if heap exceeds 500MB
+    console.warn(`⚠️ High memory usage: ${mb(used.heapUsed)}MB heap / ${mb(used.rss)}MB RSS`);
+  }
+}, 60000); // Check every minute
 
 start().catch((err) => {
   console.error('Failed to start server:', err);
+  process.exit(1);
 });

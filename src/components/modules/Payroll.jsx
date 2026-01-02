@@ -3,6 +3,7 @@ import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
+import { useDepartments } from "../../context/useDepartments";
 
 const Payroll = ({ onBack }) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -42,6 +43,13 @@ const Payroll = ({ onBack }) => {
     regularRate: 40,
     overtimeRate: 60,
   });
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+
+  // Fetch departments from database
+  const { departments, loading: departmentsLoading } = useDepartments();
 
   // Load saved draft on component mount
   useEffect(() => {
@@ -120,8 +128,7 @@ const Payroll = ({ onBack }) => {
     } catch (error) {
       console.error("Error fetching employees:", error);
       toast.error("Failed to load employees");
-      // Fallback to sample data
-      setEmployees(sampleEmployees);
+      setEmployees([]);
     } finally {
       setLoading(false);
     }
@@ -245,60 +252,6 @@ const Payroll = ({ onBack }) => {
     setEditingEmployee(null);
   };
 
-  const sampleEmployees = [
-    {
-      id: "EMP-001",
-      name: "Sarah Jenkins",
-      initials: "SJ",
-      color: "blue",
-      regularHours: 80.0,
-      overtime: 2.5,
-      commission: 500.0,
-      grossPay:
-        80.0 * payRates.regularRate + 2.5 * payRates.overtimeRate + 500.0,
-      status: "Ready",
-      statusColor: "green",
-    },
-    {
-      id: "EMP-007",
-      name: "David Kim",
-      initials: "DK",
-      color: "purple",
-      regularHours: 75.0,
-      overtime: 0.0,
-      commission: 1200.0,
-      grossPay:
-        75.0 * payRates.regularRate + 0.0 * payRates.overtimeRate + 1200.0,
-      status: "Review",
-      statusColor: "amber",
-      warning: true,
-    },
-    {
-      id: "EMP-012",
-      name: "Elena Rodriguez",
-      initials: "ER",
-      color: "teal",
-      regularHours: 80.0,
-      overtime: 5.0,
-      commission: 0.0,
-      grossPay: 80.0 * payRates.regularRate + 5.0 * payRates.overtimeRate + 0.0,
-      status: "Ready",
-      statusColor: "green",
-    },
-    {
-      id: "EMP-004",
-      name: "Michael Ross",
-      initials: "MR",
-      color: "orange",
-      regularHours: 80.0,
-      overtime: 0.0,
-      commission: 0.0,
-      grossPay: 80.0 * payRates.regularRate + 0.0 * payRates.overtimeRate + 0.0,
-      status: "Ready",
-      statusColor: "green",
-    },
-  ];
-
   const handleNextStep = () => {
     if (currentStep < totalSteps) {
       if (currentStep === 1 && !selectedPeriod.startDate) {
@@ -359,6 +312,24 @@ const Payroll = ({ onBack }) => {
       toast.error("Failed to submit payroll");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Pagination calculations
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentEmployees = employees.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(employees.length / itemsPerPage);
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
     }
   };
 
@@ -652,7 +623,7 @@ const Payroll = ({ onBack }) => {
                     </span>
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.0"
                       min="0"
                       value={payRates.regularRate}
                       onChange={(e) =>
@@ -678,7 +649,7 @@ const Payroll = ({ onBack }) => {
                     </span>
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.0"
                       min="0"
                       value={payRates.overtimeRate}
                       onChange={(e) =>
@@ -811,11 +782,15 @@ const Payroll = ({ onBack }) => {
                       onChange={(e) => setSelectedDepartment(e.target.value)}
                     >
                       <option>All Departments</option>
-                      <option>Engineering</option>
-                      <option>Sales</option>
-                      <option>Marketing</option>
-                      <option>Finance</option>
-                      <option>HR</option>
+                      {departmentsLoading ? (
+                        <option disabled>Loading departments...</option>
+                      ) : (
+                        departments.map((dept) => (
+                          <option key={dept._id || dept.id} value={dept.name}>
+                            {dept.name}
+                          </option>
+                        ))
+                      )}
                     </select>
                     <div className="h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
                     <button
@@ -858,7 +833,7 @@ const Payroll = ({ onBack }) => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                        {employees.map((employee) => (
+                        {currentEmployees.map((employee) => (
                           <tr
                             key={employee.id}
                             className={`hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors ${
@@ -950,16 +925,24 @@ const Payroll = ({ onBack }) => {
                   {/* Pagination */}
                   <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
                     <p className="text-sm text-gray-500">
-                      Showing 1-{employees.length} of 24 employees
+                      Showing {employees.length === 0 ? 0 : indexOfFirstItem + 1}-{Math.min(indexOfLastItem, employees.length)} of {employees.length} employees
                     </p>
                     <div className="flex gap-2">
                       <button
-                        disabled
-                        className="px-3 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={handlePreviousPage}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         Previous
                       </button>
-                      <button className="px-3 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <span className="px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Page {currentPage} of {totalPages || 1}
+                      </span>
+                      <button
+                        onClick={handleNextPage}
+                        disabled={currentPage === totalPages || employees.length === 0}
+                        className="px-3 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
                         Next
                       </button>
                     </div>

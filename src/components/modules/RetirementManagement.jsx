@@ -171,20 +171,19 @@ const RetirementManagement = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4">
-      <div className="w-full">
-        <Breadcrumb
-          items={[
-            { label: "Home", href: "/home", icon: "fa-house" },
-            {
-              label: "Accounting",
-              href: "/home/1",
-              icon: "fa-calculator",
-            },
-            { label: "Retirement Management", icon: "fa-umbrella-beach" },
-          ]}
-        />
-
+    <div className="min-h-screen bg-slate-100">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          {
+            label: "Accounting",
+            href: "/home/1",
+            icon: "fa-calculator",
+          },
+          { label: "Retirement Management", icon: "fa-umbrella-beach" },
+        ]}
+      />
+      <div className="p-4">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>

@@ -35,15 +35,34 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
+    // Handle different error types
     if (error.response?.status === 401) {
-      toast.error('Session expired. Please login again.');
+      const isLoginOrSignup = error.config?.url?.includes('/auth/login') || 
+                              error.config?.url?.includes('/auth/signup');
+      
+      if (!isLoginOrSignup) {
+        // Only show session error for authenticated routes
+        toast.error('Your session has expired or is invalid. Please login again.', {
+          duration: 5000,
+          id: 'session-expired', // Prevent duplicate toasts
+        });
+      }
+      // Don't auto-logout - let user manually logout or navigate to login
     } else if (error.response?.status === 403) {
       toast.error('You do not have permission to perform this action.');
     } else if (error.response?.status === 404) {
       // Don't show toast for 404s - handle in component
       console.warn('Resource not found:', error.config.url);
+    } else if (error.response?.status === 429) {
+      toast.error('Too many requests. Please wait a moment before trying again.');
     } else if (error.response?.status >= 500) {
       toast.error('Server error. Please try again later.');
+    } else if (error.code === 'ECONNABORTED') {
+      toast.error('Request timeout. Please check your connection.');
+    } else if (!error.response) {
+      // Network error
+      console.error('Network error:', error.message);
+      // Don't show toast for network errors - app might be offline
     }
 
     // Attach server error body to the thrown error for downstream handlers
