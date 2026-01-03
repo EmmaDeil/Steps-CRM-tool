@@ -17,6 +17,9 @@ const MaterialRequests = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState("last30");
+  const [sortBy, setSortBy] = useState("newest");
   const [showForm, setShowForm] = useState(false);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -32,6 +35,11 @@ const MaterialRequests = () => {
     requestType: "",
     approver: "",
     department: "",
+    requestTitle: "",
+    requiredByDate: "",
+    budgetCode: "",
+    reason: "",
+    preferredVendor: "",
   });
 
   // Line items state
@@ -82,7 +90,8 @@ const MaterialRequests = () => {
   ];
 
   // API integrations
-  const { departments, loading: departmentsLoading } = useDepartments();
+  const { departments: _departments, loading: _departmentsLoading } =
+    useDepartments();
 
   const previousStateRef = useRef(null);
 
@@ -298,14 +307,14 @@ const MaterialRequests = () => {
     }
   };
 
-  const handleKeyDown = (e) => {
+  const _handleKeyDown = (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       addLineItem();
     }
   };
 
-  const handleFileChange = (e) => {
+  const _handleFileChange = (e) => {
     const files = Array.from(e.target.files);
     setAttachments([...attachments, ...files]);
     e.target.value = null; // Reset input
@@ -460,10 +469,6 @@ const MaterialRequests = () => {
     setActiveDropdown(null);
   };
 
-  const toggleDropdown = (requestId) => {
-    setActiveDropdown(activeDropdown === requestId ? null : requestId);
-  };
-
   const isUserApprover = (request) => {
     return (
       user?.fullName === request.approver ||
@@ -498,131 +503,777 @@ const MaterialRequests = () => {
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
-          { label: "Material Requests", icon: "fa-clipboard-list" },
+          {
+            label: "Material Requests",
+            icon: "fa-box",
+            ...(showForm && {
+              onClick: (e) => {
+                e.preventDefault();
+                setShowForm(false);
+                setIsEditMode(false);
+                setSelectedRequest(null);
+              },
+            }),
+          },
+          ...(showForm
+            ? [
+                {
+                  label: isEditMode ? "Edit Request" : "Create New",
+                  icon: isEditMode ? "fa-pen-to-square" : "fa-plus",
+                },
+              ]
+            : []),
         ]}
       />
-      <div className="container-fluid p-4">
-        <div className="d-flex justify-content-between align-items-center mb-4 mt-2">
-          <h2></h2>
-          <div className="d-flex gap-2">
-            {/* Filter Dropdown - only show when viewing list */}
-            {!showForm && (
-              <div className="dropdown">
-                <button
-                  className="btn btn-outline-secondary dropdown-toggle px-4"
-                  type="button"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <i className="fa-solid fa-filter me-2"></i>
-                  Filter:{" "}
-                  {filterStatus === "all"
-                    ? "All"
-                    : filterStatus.charAt(0).toUpperCase() +
-                      filterStatus.slice(1)}
-                </button>
-                <ul className="dropdown-menu">
-                  <li>
-                    <button
-                      className={`dropdown-item ${
-                        filterStatus === "all" ? "active" : ""
-                      }`}
-                      onClick={() => setFilterStatus("all")}
-                    >
-                      All Requests
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      className={`dropdown-item ${
-                        filterStatus === "pending" ? "active" : ""
-                      }`}
-                      onClick={() => setFilterStatus("pending")}
-                    >
-                      <span className="badge bg-warning me-2">●</span>Pending
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      className={`dropdown-item ${
-                        filterStatus === "approved" ? "active" : ""
-                      }`}
-                      onClick={() => setFilterStatus("approved")}
-                    >
-                      <span className="badge bg-success me-2">●</span>Approved
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      className={`dropdown-item ${
-                        filterStatus === "rejected" ? "active" : ""
-                      }`}
-                      onClick={() => setFilterStatus("rejected")}
-                    >
-                      <span className="badge bg-danger me-2">●</span>Rejected
-                    </button>
-                  </li>
-                </ul>
-              </div>
-            )}
 
-            {/* New Request Button */}
-            {!showForm && (
-              <button
-                className="btn btn-primary"
-                onClick={() => setShowForm(true)}
-              >
-                <i className="fa-solid fa-plus-circle me-2"></i>
-                New Request
-              </button>
+      {!showForm && !showApprovalModal && !showViewModal && (
+        <div className="max-w-[1400px] mx-auto px-6 py-6">
+          {/* Page Header */}
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-[#111418] mb-1">
+                Material Requests
+              </h1>
+              <p className="text-[#617589] text-sm">
+                Manage and track all material procurement requests
+              </p>
+            </div>
+            <button
+              onClick={() => setShowForm(true)}
+              className="px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-[#0d6efd] transition-colors flex items-center gap-2 font-medium"
+            >
+              <i className="fa-solid fa-plus"></i>
+              Create New Request
+            </button>
+          </div>
+
+          {/* Search & Filters Bar */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Search Input */}
+              <div className="flex-1 min-w-[280px]">
+                <div className="relative">
+                  <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#617589]"></i>
+                  <input
+                    type="text"
+                    placeholder="Search by request ID, title, requester..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] focus:border-transparent text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Status Filter */}
+              <div className="relative">
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[140px]"
+                >
+                  <option value="all">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="fulfilled">Fulfilled</option>
+                </select>
+                <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
+              </div>
+
+              {/* Date Filter */}
+              <div className="relative">
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[150px]"
+                >
+                  <option value="last7">Last 7 days</option>
+                  <option value="last30">Last 30 days</option>
+                  <option value="last90">Last 90 days</option>
+                  <option value="all">All time</option>
+                </select>
+                <i className="fa-solid fa-calendar absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
+                <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
+              </div>
+
+              {/* Sort By */}
+              <div className="relative">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[150px]"
+                >
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="requester">Requester A-Z</option>
+                  <option value="status">Status</option>
+                </select>
+                <i className="fa-solid fa-sort absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
+                <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
+              </div>
+
+              {/* Clear Filters */}
+              {(searchQuery ||
+                filterStatus !== "all" ||
+                dateFilter !== "last30" ||
+                sortBy !== "newest") && (
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    setFilterStatus("all");
+                    setDateFilter("last30");
+                    setSortBy("newest");
+                  }}
+                  className="px-3 py-2 text-[#617589] hover:text-[#111418] hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2 text-sm"
+                >
+                  <i className="fa-solid fa-filter-circle-xmark"></i>
+                  Clear filters
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Material Requests Table */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                      Request ID
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                      Title & Description
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                      Requester
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                      Submitted
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                      Required By
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                      Approver
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="px-4 py-12 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <i className="fa-solid fa-box-open text-4xl text-gray-300 mb-2"></i>
+                          <p className="text-[#617589] font-medium">
+                            No material requests found
+                          </p>
+                          <p className="text-sm text-[#617589]">
+                            {searchQuery || filterStatus !== "all"
+                              ? "Try adjusting your filters"
+                              : "Create a new request to get started"}
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRequests
+                      .filter(
+                        (req) =>
+                          searchQuery === "" ||
+                          req.requestId
+                            ?.toLowerCase()
+                            .includes(searchQuery.toLowerCase()) ||
+                          req.requestedBy
+                            ?.toLowerCase()
+                            .includes(searchQuery.toLowerCase()) ||
+                          req.lineItems?.some((item) =>
+                            item.itemName
+                              ?.toLowerCase()
+                              .includes(searchQuery.toLowerCase())
+                          )
+                      )
+                      .map((req) => (
+                        <tr
+                          key={req._id}
+                          className="hover:bg-gray-50 transition-colors cursor-pointer"
+                          onClick={() => handleViewRequest(req)}
+                        >
+                          <td className="px-4 py-4">
+                            <span className="text-sm font-semibold text-[#137fec]">
+                              #{req.requestId}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-sm font-medium text-[#111418]">
+                                {req.lineItems && req.lineItems.length > 0
+                                  ? req.lineItems[0].itemName
+                                  : req.requestType || "Material Request"}
+                              </span>
+                              <span className="text-xs text-[#617589]">
+                                {req.lineItems &&
+                                  req.lineItems.length > 1 &&
+                                  `+${req.lineItems.length - 1} more items`}
+                                {req.department && ` • ${req.department}`}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full bg-[#137fec] text-white flex items-center justify-center text-xs font-semibold">
+                                {req.requestedBy?.charAt(0)?.toUpperCase() ||
+                                  "?"}
+                              </div>
+                              <span className="text-sm text-[#111418]">
+                                {req.requestedBy}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <span className="text-sm text-[#617589]">
+                              {new Date(
+                                req.date || req.createdAt
+                              ).toLocaleDateString()}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4">
+                            <span className="text-sm text-[#617589]">
+                              {req.requiredBy
+                                ? new Date(req.requiredBy).toLocaleDateString()
+                                : "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4">
+                            <span className="text-sm text-[#617589]">
+                              {req.approver || "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4">
+                            <span
+                              className={`inline-flex px-2 py-1 text-xs font-medium rounded ${
+                                req.status === "approved"
+                                  ? "bg-green-100 text-green-800"
+                                  : req.status === "pending"
+                                  ? "bg-yellow-100 text-yellow-800"
+                                  : req.status === "rejected"
+                                  ? "bg-red-100 text-red-800"
+                                  : req.status === "fulfilled"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-gray-100 text-gray-800"
+                              }`}
+                            >
+                              {req.status?.charAt(0).toUpperCase() +
+                                req.status?.slice(1)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            <div
+                              className="flex items-center justify-end gap-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewRequest(req);
+                                }}
+                                className="p-1 text-[#617589] hover:text-[#137fec] transition-colors"
+                                title="View details"
+                              >
+                                <i className="fa-solid fa-eye"></i>
+                              </button>
+                              {canUserEdit(req) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditRequest(req);
+                                  }}
+                                  className="p-1 text-[#617589] hover:text-[#137fec] transition-colors"
+                                  title="Edit request"
+                                >
+                                  <i className="fa-solid fa-pen-to-square"></i>
+                                </button>
+                              )}
+                              {isUserApprover(req) &&
+                                req.status === "pending" && (
+                                  <>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleApproveClick(req);
+                                      }}
+                                      className="p-1 text-[#617589] hover:text-green-600 transition-colors"
+                                      title="Approve request"
+                                    >
+                                      <i className="fa-solid fa-check"></i>
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRejectClick(req);
+                                      }}
+                                      className="p-1 text-[#617589] hover:text-red-600 transition-colors"
+                                      title="Reject request"
+                                    >
+                                      <i className="fa-solid fa-times"></i>
+                                    </button>
+                                  </>
+                                )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {filteredRequests.length > 0 && (
+              <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+                <div className="text-sm text-[#617589]">
+                  Showing <span className="font-medium text-[#111418]">1</span>{" "}
+                  to{" "}
+                  <span className="font-medium text-[#111418]">
+                    {Math.min(10, filteredRequests.length)}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-medium text-[#111418]">
+                    {filteredRequests.length}
+                  </span>{" "}
+                  requests
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    className="px-3 py-1 text-sm text-[#617589] hover:bg-gray-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled
+                  >
+                    <i className="fa-solid fa-chevron-left"></i>
+                  </button>
+                  <button className="px-3 py-1 text-sm bg-[#137fec] text-white rounded">
+                    1
+                  </button>
+                  <button className="px-3 py-1 text-sm text-[#617589] hover:bg-gray-100 rounded transition-colors">
+                    2
+                  </button>
+                  <button className="px-3 py-1 text-sm text-[#617589] hover:bg-gray-100 rounded transition-colors">
+                    3
+                  </button>
+                  <button className="px-3 py-1 text-sm text-[#617589] hover:bg-gray-100 rounded transition-colors">
+                    <i className="fa-solid fa-chevron-right"></i>
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
+      )}
 
-        {/* Request Form */}
-        {showForm && (
-          <div
-            className="card mb-4 mx-auto"
-            style={{ maxWidth: "1000px", width: "100%" }}
-          >
-            <div className="card-header">
-              <h5 className="mb-0">
-                <i className="fa-solid fa-file-lines me-2"></i>
-                {isEditMode ? "Edit Material Request" : "New Material Request"}
-              </h5>
+      {/* Request Form - New Consolidated Design */}
+      {showForm && (
+        <div className="flex-1 w-full max-w-[1400px] mx-auto px-4 sm:px-6 py-8">
+          {/* Page Heading */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-[#111418]">
+                {isEditMode
+                  ? "Edit Material Request"
+                  : "Create Material Request"}
+              </h1>
+              <p className="text-[#617589] mt-1">
+                {isEditMode
+                  ? "Update the details below to modify your request."
+                  : "Fill in the details below to submit a new procurement request."}
+              </p>
             </div>
-            <div className="card-body">
-              <form onSubmit={handleSubmit}>
-                <div className="row mb-4">
-                  {/* First Row: Requested By and Approver */}
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">
-                      Requested By <span className="text-muted"></span>
-                    </label>
+            <div className="flex items-center gap-3">
+              <span className="hidden sm:inline-block px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold uppercase tracking-wider">
+                Draft
+              </span>
+            </div>
+          </div>
+
+          {/* Main Form */}
+          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+            {/* SECTION 1: General Info & Requester */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left: Request Details (2 cols wide) */}
+              <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                  <h3 className="text-base font-bold text-[#111418]">
+                    General Information
+                  </h3>
+                </div>
+                <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <label className="flex flex-col gap-2">
+                    <span className="text-sm font-medium text-[#111418]">
+                      Request Title <span className="text-red-500">*</span>
+                    </span>
                     <input
                       type="text"
-                      className="form-control"
-                      value={
-                        user?.fullName ||
-                        user?.primaryEmailAddress?.emailAddress ||
-                        "Loading..."
-                      }
-                      disabled
+                      name="requestTitle"
+                      value={formData.requestTitle || ""}
+                      onChange={handleFormChange}
+                      className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-4 py-2.5"
+                      placeholder="e.g. Q4 Office Supplies Restock"
+                      required
                     />
+                  </label>
+
+                  <label className="flex flex-col gap-2">
+                    <span className="text-sm font-medium text-[#111418]">
+                      Required By Date <span className="text-red-500">*</span>
+                    </span>
+                    <input
+                      type="date"
+                      name="requiredByDate"
+                      value={formData.requiredByDate || ""}
+                      onChange={handleFormChange}
+                      className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-4 py-2.5"
+                      required
+                    />
+                  </label>
+
+                  <label className="flex flex-col gap-2 sm:col-span-2">
+                    <span className="text-sm font-medium text-[#111418]">
+                      Budget Code / Project
+                    </span>
+                    <input
+                      type="text"
+                      name="budgetCode"
+                      value={formData.budgetCode || ""}
+                      onChange={handleFormChange}
+                      className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-4 py-2.5"
+                      placeholder="e.g. P-2023-MARKETING-001"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Right: Requester Info (Read Only) (1 col wide) */}
+              <div className="lg:col-span-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden h-fit">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                  <h3 className="text-base font-bold text-[#111418]">
+                    Requester Details
+                  </h3>
+                </div>
+                <div className="p-6 flex flex-col gap-4">
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="w-12 h-12 rounded-full bg-[#137fec] flex items-center justify-center text-white text-lg font-bold border border-gray-200">
+                      {user?.fullName?.charAt(0)?.toUpperCase() || "U"}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-[#111418]">
+                        {user?.fullName ||
+                          user?.primaryEmailAddress?.emailAddress ||
+                          "Loading..."}
+                      </p>
+                      <p className="text-xs text-[#617589]">
+                        {user?.jobTitle || "Staff Member"}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">
-                      Approver <span className="text-danger">*</span>
-                    </label>
+                  <label className="flex flex-col gap-1.5 opacity-70">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[#617589]">
+                      Department
+                    </span>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg border-transparent bg-gray-100 text-[#111418] px-3 py-2 text-sm cursor-not-allowed"
+                      value={
+                        formData.department ||
+                        user?.department ||
+                        "Not specified"
+                      }
+                      readOnly
+                    />
+                  </label>
+
+                  <label className="flex flex-col gap-1.5 opacity-70">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[#617589]">
+                      Email
+                    </span>
+                    <input
+                      type="email"
+                      className="w-full rounded-lg border-transparent bg-gray-100 text-[#111418] px-3 py-2 text-sm cursor-not-allowed"
+                      value={
+                        user?.primaryEmailAddress?.emailAddress ||
+                        user?.email ||
+                        ""
+                      }
+                      readOnly
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 2: Material Details Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <h3 className="text-base font-bold text-[#111418]">
+                  Material Details
+                </h3>
+                <span className="text-xs font-medium text-[#617589]">
+                  Currency: USD ($)
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[5%]">
+                        S/N
+                      </th>
+                      <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[20%]">
+                        Item Name / SKU
+                      </th>
+                      <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[25%]">
+                        Description
+                      </th>
+                      <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[10%]">
+                        Qty
+                      </th>
+                      <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[12%]">
+                        UoM
+                      </th>
+                      <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[12%]">
+                        Unit Cost
+                      </th>
+                      <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[12%] text-right">
+                        Total
+                      </th>
+                      <th className="py-3 px-4 w-[5%]"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 text-sm">
+                    {lineItems.map((item, index) => (
+                      <tr
+                        key={index}
+                        className="group hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="p-3 text-center font-medium text-[#617589]">
+                          {index + 1}
+                        </td>
+                        <td className="p-3">
+                          <select
+                            className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] px-3 py-2 text-sm"
+                            value={item.itemName}
+                            onChange={(e) =>
+                              handleLineItemChange(
+                                index,
+                                "itemName",
+                                e.target.value
+                              )
+                            }
+                            required
+                          >
+                            <option value="">-- Select Item --</option>
+                            {itemOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-3">
+                          <input
+                            type="text"
+                            className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] px-3 py-2 text-sm"
+                            placeholder="Description"
+                            value={item.description}
+                            onChange={(e) =>
+                              handleLineItemChange(
+                                index,
+                                "description",
+                                e.target.value
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="p-3">
+                          <input
+                            type="number"
+                            className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] px-3 py-2 text-sm text-center"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) =>
+                              handleLineItemChange(
+                                index,
+                                "quantity",
+                                e.target.value
+                              )
+                            }
+                            required
+                          />
+                        </td>
+                        <td className="p-3">
+                          <select
+                            className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] px-2 py-2 text-sm"
+                            value={item.quantityType}
+                            onChange={(e) =>
+                              handleLineItemChange(
+                                index,
+                                "quantityType",
+                                e.target.value
+                              )
+                            }
+                            required
+                          >
+                            <option value="">-- Unit --</option>
+                            {quantityTypeOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-3">
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#617589]">
+                              $
+                            </span>
+                            <NumericFormat
+                              className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] pl-6 pr-2 py-2 text-sm text-right"
+                              value={item.amount}
+                              thousandSeparator
+                              allowNegative={false}
+                              decimalScale={2}
+                              fixedDecimalScale
+                              placeholder="0.00"
+                              onValueChange={(values) => {
+                                handleLineItemChange(
+                                  index,
+                                  "amount",
+                                  values.value
+                                );
+                              }}
+                            />
+                          </div>
+                        </td>
+                        <td className="p-3 text-right font-medium text-[#111418]">
+                          {formatCurrency(
+                            (parseFloat(item.quantity) || 0) *
+                              (parseFloat(item.amount) || 0)
+                          )}
+                        </td>
+                        <td className="p-3 text-center">
+                          {lineItems.length > 1 && (
+                            <button
+                              type="button"
+                              className="text-[#617589] hover:text-red-500 transition-colors p-1 rounded"
+                              onClick={() => removeLineItem(index)}
+                            >
+                              <i className="fa-solid fa-trash text-base"></i>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Table Footer */}
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <button
+                  type="button"
+                  onClick={addLineItem}
+                  className="flex items-center gap-2 text-[#137fec] hover:text-[#0d6efd] font-semibold text-sm px-2 py-1 rounded hover:bg-[#137fec]/10 transition-colors"
+                >
+                  <i className="fa-solid fa-circle-plus text-lg"></i>
+                  Add Item
+                </button>
+                <div className="flex items-center gap-4 text-base">
+                  <span className="text-[#617589] font-medium">
+                    Grand Total:
+                  </span>
+                  <span className="text-2xl font-bold text-[#111418]">
+                    {formatCurrency(
+                      lineItems.reduce(
+                        (sum, item) =>
+                          sum +
+                          (parseFloat(item.quantity) || 0) *
+                            (parseFloat(item.amount) || 0),
+                        0
+                      )
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 3: Reason & Approval */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <h3 className="text-base font-bold text-[#111418]">
+                  Reason & Approval
+                </h3>
+              </div>
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <label className="flex flex-col gap-2 md:col-span-2">
+                  <span className="text-sm font-medium text-[#111418]">
+                    Reason for Request <span className="text-red-500">*</span>
+                  </span>
+                  <textarea
+                    name="reason"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-4 py-3 min-h-[100px]"
+                    placeholder="Please provide a detailed justification for this request..."
+                    required
+                  />
+                </label>
+
+                <label className="flex flex-col gap-2">
+                  <span className="text-sm font-medium text-[#111418]">
+                    Preferred Vendor (Optional)
+                  </span>
+                  <div className="relative">
+                    <i className="fa-solid fa-store absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
                     <select
-                      className="form-select underline-select"
+                      name="preferredVendor"
+                      value={selectedVendor}
+                      onChange={(e) => setSelectedVendor(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
+                    >
+                      <option value="">Select a vendor...</option>
+                      {vendors.map((vendor) => (
+                        <option
+                          key={vendor.id || vendor._id}
+                          value={vendor.name}
+                        >
+                          {vendor.name}{" "}
+                          {vendor.category && `- ${vendor.category}`}
+                        </option>
+                      ))}
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
+                  </div>
+                </label>
+
+                <label className="flex flex-col gap-2">
+                  <span className="text-sm font-medium text-[#111418]">
+                    Assign Approver <span className="text-red-500">*</span>
+                  </span>
+                  <div className="relative">
+                    <i className="fa-solid fa-user-check absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
+                    <select
                       name="approver"
                       value={formData.approver}
                       onChange={handleFormChange}
+                      className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
                       required
                     >
-                      <option value="">Select approver</option>
+                      <option value="">Select Manager</option>
                       {usersLoading ? (
                         <option disabled>Loading users...</option>
                       ) : (
@@ -633,1070 +1284,608 @@ const MaterialRequests = () => {
                         ))
                       )}
                     </select>
+                    <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
                   </div>
+                </label>
+              </div>
+            </div>
 
-                  {/* Second Row: Date and Request Type */}
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">
-                      Date <span className="text-muted"></span>
-                    </label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={new Date().toLocaleDateString()}
-                      disabled
-                    />
-                  </div>
+            {/* SECTION 4: Comments & Activity */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+              <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                <h3 className="text-base font-bold text-[#111418]">
+                  Comments & Activity
+                </h3>
+                <span className="bg-blue-100 text-blue-700 text-xs px-2.5 py-0.5 rounded-full font-medium">
+                  {selectedRequest?.comments?.length || 0} Comments
+                </span>
+              </div>
 
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">
-                      Request Type <span className="text-danger">*</span>
-                    </label>
-                    <select
-                      className="form-select underline-select"
-                      name="requestType"
-                      value={formData.requestType}
-                      onChange={handleFormChange}
-                      required
-                    >
-                      <option value="">Select type</option>
-                      <option value="rfq">RFQ</option>
-                      <option value="po">Purchase Order</option>
-                      <option value="material-request">Material Request</option>
-                      {/* <option value="bulk-order">Bulk Order</option>
-                    <option value="replacement">Replacement</option> */}
-                    </select>
+              <div className="max-h-[400px] overflow-y-auto p-5 flex flex-col gap-5">
+                {selectedRequest?.comments &&
+                selectedRequest.comments.length > 0 ? (
+                  selectedRequest.comments.map((comment, idx) => (
+                    <div key={idx} className="flex gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#137fec] flex items-center justify-center text-white text-xs font-bold shrink-0">
+                        {comment.author?.charAt(0)?.toUpperCase() || "U"}
+                      </div>
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#111418]">
+                            {comment.author}
+                          </span>
+                          <span className="text-[10px] text-[#617589]">
+                            {comment.timestamp}
+                          </span>
+                        </div>
+                        <div className="bg-gray-100 p-3 rounded-lg rounded-tl-none border border-gray-200">
+                          <p className="text-sm text-[#111418]">
+                            {comment.text}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-[#617589]">
+                    <i className="fa-regular fa-comments text-4xl mb-2 opacity-30"></i>
+                    <p className="text-sm">No comments yet. Add one below.</p>
                   </div>
-                  {/* Third Row: Department (narrower width) */}
-                  <div className="col-md-6 col-lg-4 mb-3">
-                    <label className="form-label">Department</label>
-                    <select
-                      className="form-select underline-select"
-                      name="department"
-                      value={formData.department}
-                      onChange={handleFormChange}
-                    >
-                      <option value="">Select department</option>
-                      {departmentsLoading ? (
-                        <option disabled>Loading departments...</option>
-                      ) : (
-                        departments.map((dept) => (
-                          <option key={dept.id} value={dept.name}>
-                            {dept.name}
-                          </option>
+                )}
+              </div>
+
+              <div className="p-4 border-t border-gray-200 bg-gray-50">
+                <label className="block mb-2 text-xs font-medium text-[#617589]">
+                  Add a comment
+                </label>
+                <div className="relative group">
+                  <textarea
+                    className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-4 pr-4 pb-12 pt-3 text-sm min-h-[120px] resize-none transition-all"
+                    placeholder="Type your comment here..."
+                    value={message}
+                    onChange={handleMessageChange}
+                  />
+
+                  {/* @Mention Dropdown */}
+                  {showMentionDropdown && (
+                    <div className="absolute z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto w-[300px]">
+                      {usersLoading ? (
+                        <div className="px-4 py-3 text-center text-[#617589]">
+                          <span className="inline-block animate-spin mr-2">
+                            ⏳
+                          </span>
+                          Loading users...
+                        </div>
+                      ) : filteredUsers.length > 0 ? (
+                        filteredUsers.map((user) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                            onClick={() => selectMention(user.name)}
+                          >
+                            <strong className="text-[#111418]">
+                              {user.name}
+                            </strong>
+                            <br />
+                            <small className="text-[#617589]">
+                              {user.role}
+                            </small>
+                          </button>
                         ))
+                      ) : (
+                        <div className="px-4 py-3 text-center text-[#617589]">
+                          No users found
+                        </div>
                       )}
-                    </select>
-                  </div>
-                </div>
+                    </div>
+                  )}
 
-                {/* Line Items Table */}
-                <div className="mb-4">
-                  <div
-                    className="table-responsive"
-                    style={{ border: "1px solid #dee2e6", borderRadius: "4px" }}
-                  >
-                    <table
-                      className="table table-hover mb-0"
-                      style={{ borderCollapse: "separate", borderSpacing: 0 }}
-                    >
-                      <thead
-                        style={{
-                          backgroundColor: "#f8f9fa",
-                          borderBottom: "2px solid #dee2e6",
-                        }}
-                      >
-                        <tr>
-                          <th
-                            style={{
-                              width: "2%",
-                              padding: "12px 8px",
-                              fontWeight: 600,
-                            }}
-                          >
-                            S/N
-                          </th>
-                          <th
-                            style={{
-                              width: "23%",
-                              padding: "12px 8px",
-                              fontWeight: 600,
-                            }}
-                          >
-                            Name *
-                          </th>
-                          <th
-                            style={{
-                              width: "27%",
-                              padding: "12px 8px",
-                              fontWeight: 600,
-                            }}
-                          >
-                            Description
-                          </th>
-                          <th
-                            style={{
-                              width: "8%",
-                              padding: "12px 8px",
-                              fontWeight: 600,
-                              textAlign: "center",
-                            }}
-                          >
-                            Qty *
-                          </th>
-                          <th
-                            style={{
-                              width: "12%",
-                              padding: "12px 8px",
-                              fontWeight: 600,
-                            }}
-                          >
-                            Unit *
-                          </th>
-                          <th
-                            style={{
-                              width: "15%",
-                              padding: "12px 8px",
-                              fontWeight: 600,
-                              textAlign: "right",
-                            }}
-                          >
-                            Price
-                          </th>
-                          <th
-                            style={{
-                              width: "12%",
-                              padding: "12px 8px",
-                              fontWeight: 600,
-                              textAlign: "right",
-                            }}
-                          >
-                            Total
-                          </th>
-                          <th
-                            style={{
-                              width: "5%",
-                              padding: "12px 8px",
-                              fontWeight: 600,
-                              textAlign: "center",
-                            }}
-                          >
-                            Action
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lineItems.map((item, index) => (
-                          <tr
-                            key={index}
-                            style={{ borderBottom: "1px solid #dee2e6" }}
-                          >
-                            <td
-                              style={{
-                                padding: "10px 8px",
-                                verticalAlign: "middle",
-                                textAlign: "center",
-                                fontWeight: 500,
-                                color: "#6c757d",
-                              }}
-                            >
-                              {index + 1}
-                            </td>
-                            <td style={{ padding: "10px 8px" }}>
-                              <select
-                                className="form-select form-select-sm underline-select"
-                                value={item.itemName}
-                                onChange={(e) =>
-                                  handleLineItemChange(
-                                    index,
-                                    "itemName",
-                                    e.target.value
-                                  )
-                                }
-                                onKeyDown={(e) => handleKeyDown(e, index)}
-                                required
-                                style={{ fontSize: "0.9rem" }}
-                              >
-                                <option value="">-- Select Item --</option>
-                                {itemOptions.map((option) => (
-                                  <option key={option} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td style={{ padding: "10px 8px" }}>
-                              <input
-                                type="text"
-                                className="form-control form-control-sm underline-input"
-                                value={item.description}
-                                onChange={(e) =>
-                                  handleLineItemChange(
-                                    index,
-                                    "description",
-                                    e.target.value
-                                  )
-                                }
-                                onKeyDown={(e) => handleKeyDown(e, index)}
-                                placeholder="Enter item details..."
-                                style={{ fontSize: "0.9rem" }}
-                              />
-                            </td>
-                            <td style={{ padding: "10px 8px" }}>
-                              <input
-                                type="number"
-                                className="form-control form-control-sm text-center underline-input"
-                                value={item.quantity}
-                                onChange={(e) =>
-                                  handleLineItemChange(
-                                    index,
-                                    "quantity",
-                                    e.target.value
-                                  )
-                                }
-                                onKeyDown={(e) => handleKeyDown(e, index)}
-                                placeholder="0"
-                                min="1"
-                                required
-                                style={{ fontSize: "0.9rem" }}
-                              />
-                            </td>
-                            <td style={{ padding: "10px 8px" }}>
-                              <select
-                                className="form-select form-select-sm underline-select"
-                                value={item.quantityType}
-                                onChange={(e) =>
-                                  handleLineItemChange(
-                                    index,
-                                    "quantityType",
-                                    e.target.value
-                                  )
-                                }
-                                onKeyDown={(e) => handleKeyDown(e, index)}
-                                required
-                                style={{ fontSize: "0.9rem" }}
-                              >
-                                <option value="">-- Unit --</option>
-                                {quantityTypeOptions.map((option) => (
-                                  <option key={option} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td style={{ padding: "10px 8px" }}>
-                              <div className="input-group input-group-sm">
-                                <NumericFormat
-                                  className="form-control form-control-sm text-end underline-input"
-                                  value={item.amount}
-                                  thousandSeparator
-                                  allowNegative={false}
-                                  decimalScale={2}
-                                  fixedDecimalScale
-                                  placeholder="0.00"
-                                  onValueChange={(values) => {
-                                    const { value } = values; // numeric string without separators
-                                    handleLineItemChange(
-                                      index,
-                                      "amount",
-                                      value
-                                    );
-                                  }}
-                                />
-                              </div>
-                            </td>
-                            <td
-                              style={{
-                                padding: "10px 8px",
-                                textAlign: "right",
-                                fontWeight: 600,
-                                fontSize: "0.95rem",
-                                backgroundColor: "#f8f9fa",
-                              }}
-                            >
-                              {formatCurrency(
-                                (parseFloat(item.quantity) || 0) *
-                                  (parseFloat(item.amount) || 0)
-                              )}
-                            </td>
-                            <td
-                              style={{
-                                padding: "10px 8px",
-                                textAlign: "center",
-                              }}
-                            >
-                              {lineItems.length > 1 && (
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-danger"
-                                  onClick={() => removeLineItem(index)}
-                                  title="Remove line"
-                                  style={{ padding: "4px 8px" }}
-                                >
-                                  <i className="fa-solid fa-trash"></i>
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                        {/* Total Row */}
-                        <tr
-                          style={{
-                            backgroundColor: "#e9ecef",
-                            fontWeight: 600,
-                            borderTop: "2px solid #dee2e6",
-                          }}
-                        >
-                          <td
-                            colSpan="6"
-                            style={{ padding: "12px 8px", textAlign: "right" }}
-                          >
-                            Total Amount:
-                          </td>
-                          <td
-                            style={{
-                              padding: "12px 8px",
-                              textAlign: "right",
-                              fontSize: "1.1rem",
-                              color: "#0d6efd",
-                            }}
-                          >
-                            {formatCurrency(
-                              lineItems.reduce(
-                                (sum, item) =>
-                                  sum +
-                                  (parseFloat(item.quantity) || 0) *
-                                    (parseFloat(item.amount) || 0),
-                                0
-                              )
-                            )}
-                          </td>
-                          <td></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Message & Attachments Section */}
-                <div className="mb-4">
-                  <h6 className="mb-3">
-                    <i className="fa-solid fa-comment-dots me-2"></i>
-                    Comment
-                  </h6>
-                  <div
-                    className="border rounded p-3"
-                    style={{ backgroundColor: "#f8f9fa" }}
-                  >
-                    <div
-                      className="position-relative"
-                      style={{ display: "inline-block", width: "100%" }}
-                    >
-                      <textarea
-                        className="form-control underline-textarea"
-                        rows="4"
-                        placeholder="Add a message or note... Type @ to mention someone"
-                        value={message}
-                        onChange={handleMessageChange}
-                        style={{ paddingRight: "50px", paddingBottom: "40px" }}
-                      />
-                      {/* Attachment Icon Inside Textarea */}
+                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between pt-2 border-t border-gray-200">
+                    <div className="flex items-center gap-1">
                       <button
                         type="button"
                         onClick={() =>
                           document.getElementById("attachmentInput").click()
                         }
-                        className="btn btn-link position-absolute"
-                        style={{
-                          bottom: "10px",
-                          right: "10px",
-                          padding: "0",
-                          color: "#0d6efd",
-                          textDecoration: "none",
-                          cursor: "pointer",
-                          zIndex: "10",
-                          fontSize: "1.25rem",
-                          lineHeight: "1",
-                        }}
-                        title="Attach files"
+                        className="p-1.5 text-[#617589] hover:text-[#137fec] hover:bg-gray-100 rounded-lg transition-colors"
+                        title="Attach File"
                       >
-                        <i className="fa-solid fa-paperclip"></i>
+                        <i className="fa-solid fa-paperclip text-lg"></i>
                       </button>
-                      <input
-                        type="file"
-                        id="attachmentInput"
-                        multiple
-                        onChange={handleFileChange}
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.txt,.csv,.zip"
-                        style={{ display: "none" }}
-                      />
-                    </div>
-
-                    {/* File Count Info */}
-                    {attachments.length > 0 && (
-                      <small className="text-muted d-block mt-2">
-                        <i className="fa-solid fa-file me-1"></i>
-                        {attachments.length} file(s) attached
-                      </small>
-                    )}
-
-                    {/* @Mention Dropdown */}
-                    {showMentionDropdown && (
-                      <div
-                        className="dropdown-menu show position-absolute mt-1"
-                        style={{
-                          maxHeight: "200px",
-                          overflowY: "auto",
-                          zIndex: 1000,
-                          width: "300px",
-                        }}
+                      <button
+                        type="button"
+                        className="p-1.5 text-[#617589] hover:text-[#137fec] hover:bg-gray-100 rounded-lg transition-colors"
+                        title="Tag User (@)"
                       >
-                        {usersLoading ? (
-                          <div className="dropdown-item text-center">
-                            <span className="spinner-border spinner-border-sm me-2"></span>
-                            Loading users...
-                          </div>
-                        ) : filteredUsers.length > 0 ? (
-                          filteredUsers.map((user) => (
-                            <button
-                              key={user.id}
-                              type="button"
-                              className="dropdown-item"
-                              onClick={() => selectMention(user.name)}
-                            >
-                              <strong>{user.name}</strong>
-                              <br />
-                              <small className="text-muted">{user.role}</small>
-                            </button>
-                          ))
-                        ) : (
-                          <div className="dropdown-item text-muted">
-                            No users found
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Attached Files List */}
-                    {attachments.length > 0 && (
-                      <div className="mt-3">
-                        <strong className="d-block mb-2">
-                          <i className="fa-solid fa-file me-1"></i>
-                          Attached Files ({attachments.length}):
-                        </strong>
-                        <ul className="list-group">
-                          {attachments.map((file, index) => (
-                            <li
-                              key={index}
-                              className="list-group-item d-flex justify-content-between align-items-center"
-                            >
-                              <div>
-                                <i className="fa-solid fa-file me-2"></i>
-                                {file.name}
-                                <small className="text-muted ms-2">
-                                  ({(file.size / 1024).toFixed(2)} KB)
-                                </small>
-                              </div>
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-danger"
-                                onClick={() => removeAttachment(index)}
-                              >
-                                <i className="fa-solid fa-xmark"></i>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="col-12">
-                  <button type="submit" className="btn btn-primary me-2">
-                    <i className="fa-solid fa-circle-check me-2"></i>
-                    {isEditMode ? "Update Request" : "Submit Request"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => {
-                      setShowForm(false);
-                      setIsEditMode(false);
-                      setSelectedRequest(null);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Material Requests List - only show when form is hidden */}
-        {!showForm && (
-          <div className="card">
-            <div className="card-body">
-              <div className="table-responsive" style={{ overflow: "visible" }}>
-                <table className="table table-hover">
-                  <thead>
-                    <tr>
-                      <th>Request ID</th>
-                      <th>Material</th>
-                      <th>Quantity</th>
-                      <th>Requested By</th>
-                      <th>Department</th>
-                      <th>Status</th>
-                      <th>Date</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredRequests.length === 0 ? (
-                      <tr>
-                        <td colSpan="8" className="text-center text-muted py-4">
-                          No material requests found. Create a new request to
-                          get started.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredRequests.map((req) => (
-                        <tr key={req._id}>
-                          <td>
-                            <strong>#{req.requestId}</strong>
-                          </td>
-                          <td>
-                            {req.lineItems && req.lineItems.length > 0
-                              ? req.lineItems[0].itemName
-                              : "N/A"}
-                            {req.lineItems && req.lineItems.length > 1 && (
-                              <small className="text-muted">
-                                {" "}
-                                (+{req.lineItems.length - 1} more)
-                              </small>
-                            )}
-                          </td>
-                          <td>
-                            {req.lineItems && req.lineItems.length > 0
-                              ? `${req.lineItems[0].quantity} ${req.lineItems[0].quantityType}`
-                              : "N/A"}
-                          </td>
-                          <td>{req.requestedBy}</td>
-                          <td>{req.department}</td>
-                          <td>
-                            <span
-                              className={`badge ${
-                                req.status === "approved"
-                                  ? "bg-success"
-                                  : req.status === "pending"
-                                  ? "bg-warning"
-                                  : req.status === "rejected"
-                                  ? "bg-danger"
-                                  : "bg-secondary"
-                              }`}
-                            >
-                              {req.status}
-                            </span>
-                          </td>
-                          <td>{new Date(req.date).toLocaleDateString()}</td>
-                          <td style={{ position: "relative" }}>
-                            <div
-                              className="dropdown"
-                              style={{ position: "static" }}
-                            >
-                              <button
-                                className="btn btn-sm btn-link text-secondary p-0"
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleDropdown(req._id);
-                                }}
-                                style={{ border: "none", background: "none" }}
-                              >
-                                <i className="fa-solid fa-ellipsis-vertical"></i>
-                              </button>
-                              {activeDropdown === req._id && (
-                                <div
-                                  className="dropdown-menu dropdown-menu-end show"
-                                  style={{
-                                    position: "absolute",
-                                    right: 0,
-                                    top: "100%",
-                                    zIndex: 1050,
-                                    minWidth: "160px",
-                                  }}
-                                >
-                                  <button
-                                    className="dropdown-item"
-                                    onClick={() => handleViewRequest(req)}
-                                  >
-                                    <i className="fa-solid fa-eye me-2"></i>
-                                    View
-                                  </button>
-                                  {canUserEdit(req) && (
-                                    <button
-                                      className="dropdown-item"
-                                      onClick={() => handleEditRequest(req)}
-                                    >
-                                      <i className="fa-solid fa-pen-to-square me-2"></i>
-                                      Edit
-                                    </button>
-                                  )}
-                                  {isUserApprover(req) &&
-                                    req.status === "pending" && (
-                                      <>
-                                        <div className="dropdown-divider"></div>
-                                        <button
-                                          className="dropdown-item text-success"
-                                          onClick={() =>
-                                            handleApproveClick(req)
-                                          }
-                                        >
-                                          <i className="fa-solid fa-check me-2"></i>
-                                          Approve
-                                        </button>
-                                        <button
-                                          className="dropdown-item text-danger"
-                                          onClick={() => handleRejectClick(req)}
-                                        >
-                                          <i className="fa-solid fa-times me-2"></i>
-                                          Reject
-                                        </button>
-                                      </>
-                                    )}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Approval Modal */}
-        {showApprovalModal && selectedRequest && (
-          <div
-            className="modal show d-block"
-            style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-          >
-            <div className="modal-dialog modal-lg modal-dialog-scrollable">
-              <div className="modal-content">
-                <div className="modal-header bg-primary text-white">
-                  <h5 className="modal-title">
-                    <i className="fa-solid fa-clipboard-check me-2"></i>
-                    Approve Material Request
-                  </h5>
-                  <button
-                    type="button"
-                    className="btn-close btn-close-white"
-                    onClick={() => {
-                      setShowApprovalModal(false);
-                      setSelectedRequest(null);
-                      setSelectedVendor("");
-                      setRejectionReason("");
-                      navigate("/dashboard/material-requests");
-                    }}
-                  ></button>
-                </div>
-                <div className="modal-body">
-                  <div className="row mb-3">
-                    <div className="col-md-6">
-                      <strong>Request ID:</strong>{" "}
-                      {selectedRequest._id || selectedRequest.requestId}
+                        <i className="fa-solid fa-at text-lg"></i>
+                      </button>
                     </div>
-                    <div className="col-md-6">
-                      <strong>Request Type:</strong>{" "}
-                      <span className="badge bg-info">
-                        {selectedRequest.requestType}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="row mb-3">
-                    <div className="col-md-6">
-                      <strong>Requested By:</strong>{" "}
-                      {selectedRequest.requestedBy}
-                    </div>
-                    <div className="col-md-6">
-                      <strong>Department:</strong> {selectedRequest.department}
-                    </div>
-                  </div>
-                  <div className="row mb-3">
-                    <div className="col-md-6">
-                      <strong>Date:</strong>{" "}
-                      {selectedRequest.requestDate
-                        ? new Date(
-                            selectedRequest.requestDate
-                          ).toLocaleDateString()
-                        : new Date(
-                            selectedRequest.createdAt
-                          ).toLocaleDateString()}
-                    </div>
-                    <div className="col-md-6">
-                      <strong>Approver:</strong> {selectedRequest.approver}
-                    </div>
-                  </div>
-
-                  <hr />
-
-                  <h6 className="mb-3">
-                    <i className="fa-solid fa-list-ul me-2"></i>Line Items
-                  </h6>
-                  <div className="table-responsive mb-4">
-                    <table className="table table-sm table-bordered">
-                      <thead className="table-light">
-                        <tr>
-                          <th>Item</th>
-                          <th>Quantity</th>
-                          <th>Unit</th>
-                          <th>Amount</th>
-                          <th>Description</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedRequest.lineItems?.map((item, idx) => (
-                          <tr key={idx}>
-                            <td>{item.itemName}</td>
-                            <td>{item.quantity}</td>
-                            <td>{item.quantityType}</td>
-                            <td>{formatCurrency(item.amount)}</td>
-                            <td>{item.description || "-"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {selectedRequest.message && (
-                    <div className="mb-3">
-                      <strong>Message:</strong>
-                      <div className="p-2 bg-light rounded mt-2">
-                        {selectedRequest.message}
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedRequest.attachments &&
-                    selectedRequest.attachments.length > 0 && (
-                      <div className="mb-4">
-                        <strong>Attachments:</strong>
-                        <div className="mt-2">
-                          {selectedRequest.attachments.map((file, idx) => (
-                            <span key={idx} className="badge bg-secondary me-2">
-                              <i className="fa-solid fa-file me-1"></i>
-                              {file}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                  <hr />
-
-                  <h6 className="mb-3 text-success">
-                    <i className="fa-solid fa-circle-check me-2"></i>
-                    Approval Action
-                  </h6>
-
-                  <div className="mb-3">
-                    <label className="form-label">
-                      Select Vendor <span className="text-danger">*</span>
-                    </label>
-                    <select
-                      className="form-select"
-                      value={selectedVendor}
-                      onChange={(e) => setSelectedVendor(e.target.value)}
-                      required
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 px-3 py-1.5 bg-[#137fec] hover:bg-[#0d6efd] text-white rounded-lg transition-colors shadow-sm text-xs font-bold uppercase tracking-wide"
                     >
-                      <option value="">Choose vendor...</option>
-                      {vendors.map((vendor) => (
-                        <option key={vendor.id} value={vendor.name}>
-                          {vendor.name} - {vendor.category}
-                        </option>
-                      ))}
-                    </select>
-                    <small className="text-muted">
-                      A Purchase Order will be created with this vendor upon
-                      approval
-                    </small>
+                      Send
+                      <i className="fa-solid fa-paper-plane text-xs"></i>
+                    </button>
                   </div>
+                </div>
 
-                  <div className="mb-3">
-                    <label className="form-label">
-                      Rejection Reason (if rejecting)
-                    </label>
-                    <textarea
-                      className="form-control"
-                      rows="3"
-                      value={rejectionReason}
-                      onChange={(e) => setRejectionReason(e.target.value)}
-                      placeholder="Enter reason for rejection..."
-                    ></textarea>
+                {/* File attachments section */}
+                {attachments.length > 0 && (
+                  <div className="mt-3">
+                    <strong className="text-sm text-[#111418] block mb-2">
+                      <i className="fa-solid fa-file mr-1"></i>
+                      Attached Files ({attachments.length}):
+                    </strong>
+                    <div className="flex flex-wrap gap-2">
+                      {attachments.map((file, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-sm"
+                        >
+                          <i className="fa-solid fa-file text-[#617589]"></i>
+                          <span className="text-[#111418]">{file.name}</span>
+                          <button
+                            type="button"
+                            className="text-red-500 hover:text-red-700 ml-1"
+                            onClick={() => removeAttachment(index)}
+                          >
+                            <i className="fa-solid fa-times text-xs"></i>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="sticky bottom-0 z-10 -mx-4 sm:-mx-6 bg-white border-t border-gray-200 p-4 sm:px-6 sm:py-4 flex flex-col-reverse sm:flex-row items-center justify-end gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] rounded-t-lg">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false);
+                  setIsEditMode(false);
+                  setSelectedRequest(null);
+                }}
+                className="w-full sm:w-auto px-6 py-2.5 rounded-lg text-sm font-bold text-[#617589] hover:bg-gray-100 hover:text-[#111418] transition-colors"
+              >
+                Cancel
+              </button>
+              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg border border-gray-300 bg-white text-[#111418] text-sm font-bold hover:bg-gray-50 transition-colors"
+                >
+                  <i className="fa-solid fa-floppy-disk text-base"></i>
+                  Save Draft
+                </button>
+                <button
+                  type="submit"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-2.5 rounded-lg bg-[#137fec] hover:bg-[#0d6efd] text-white text-sm font-bold shadow-md hover:shadow-lg transition-all"
+                >
+                  <i className="fa-solid fa-paper-plane text-base"></i>
+                  {isEditMode ? "Update Request" : "Submit Request"}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Approval Modal */}
+      {showApprovalModal && selectedRequest && (
+        <div
+          className="modal show d-block"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
+          <div className="modal-dialog modal-lg modal-dialog-scrollable">
+            <div className="modal-content">
+              <div className="modal-header bg-primary text-white">
+                <h5 className="modal-title">
+                  <i className="fa-solid fa-clipboard-check me-2"></i>
+                  Approve Material Request
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => {
+                    setShowApprovalModal(false);
+                    setSelectedRequest(null);
+                    setSelectedVendor("");
+                    setRejectionReason("");
+                    navigate("/dashboard/material-requests");
+                  }}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <strong>Request ID:</strong>{" "}
+                    {selectedRequest._id || selectedRequest.requestId}
+                  </div>
+                  <div className="col-md-6">
+                    <strong>Request Type:</strong>{" "}
+                    <span className="badge bg-info">
+                      {selectedRequest.requestType}
+                    </span>
                   </div>
                 </div>
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => {
-                      setShowApprovalModal(false);
-                      setSelectedRequest(null);
-                      setSelectedVendor("");
-                      setRejectionReason("");
-                      navigate("/dashboard/material-requests");
-                    }}
-                  >
-                    <i className="fa-solid fa-circle-xmark me-2"></i>
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={handleRejectRequest}
-                    disabled={!rejectionReason.trim()}
-                  >
-                    <i className="fa-solid fa-xmark me-2"></i>
-                    Reject Request
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-success"
-                    onClick={handleApproveRequest}
-                    disabled={!selectedVendor}
-                  >
-                    <i className="fa-solid fa-check me-2"></i>
-                    Approve & Create PO
-                  </button>
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <strong>Requested By:</strong> {selectedRequest.requestedBy}
+                  </div>
+                  <div className="col-md-6">
+                    <strong>Department:</strong> {selectedRequest.department}
+                  </div>
                 </div>
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <strong>Date:</strong>{" "}
+                    {selectedRequest.requestDate
+                      ? new Date(
+                          selectedRequest.requestDate
+                        ).toLocaleDateString()
+                      : new Date(
+                          selectedRequest.createdAt
+                        ).toLocaleDateString()}
+                  </div>
+                  <div className="col-md-6">
+                    <strong>Approver:</strong> {selectedRequest.approver}
+                  </div>
+                </div>
+
+                <hr />
+
+                <h6 className="mb-3">
+                  <i className="fa-solid fa-list-ul me-2"></i>Line Items
+                </h6>
+                <div className="table-responsive mb-4">
+                  <table className="table table-sm table-bordered">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Item</th>
+                        <th>Quantity</th>
+                        <th>Unit</th>
+                        <th>Amount</th>
+                        <th>Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedRequest.lineItems?.map((item, idx) => (
+                        <tr key={idx}>
+                          <td>{item.itemName}</td>
+                          <td>{item.quantity}</td>
+                          <td>{item.quantityType}</td>
+                          <td>{formatCurrency(item.amount)}</td>
+                          <td>{item.description || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {selectedRequest.message && (
+                  <div className="mb-3">
+                    <strong>Message:</strong>
+                    <div className="p-2 bg-light rounded mt-2">
+                      {selectedRequest.message}
+                    </div>
+                  </div>
+                )}
+
+                {selectedRequest.attachments &&
+                  selectedRequest.attachments.length > 0 && (
+                    <div className="mb-4">
+                      <strong>Attachments:</strong>
+                      <div className="mt-2">
+                        {selectedRequest.attachments.map((file, idx) => (
+                          <span key={idx} className="badge bg-secondary me-2">
+                            <i className="fa-solid fa-file me-1"></i>
+                            {file}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                <hr />
+
+                <h6 className="mb-3 text-success">
+                  <i className="fa-solid fa-circle-check me-2"></i>
+                  Approval Action
+                </h6>
+
+                <div className="mb-3">
+                  <label className="form-label">
+                    Select Vendor <span className="text-danger">*</span>
+                  </label>
+                  <select
+                    className="form-select"
+                    value={selectedVendor}
+                    onChange={(e) => setSelectedVendor(e.target.value)}
+                    required
+                  >
+                    <option value="">Choose vendor...</option>
+                    {vendors.map((vendor) => (
+                      <option key={vendor.id} value={vendor.name}>
+                        {vendor.name} - {vendor.category}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="text-muted">
+                    A Purchase Order will be created with this vendor upon
+                    approval
+                  </small>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label">
+                    Rejection Reason (if rejecting)
+                  </label>
+                  <textarea
+                    className="form-control"
+                    rows="3"
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="Enter reason for rejection..."
+                  ></textarea>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setShowApprovalModal(false);
+                    setSelectedRequest(null);
+                    setSelectedVendor("");
+                    setRejectionReason("");
+                    navigate("/dashboard/material-requests");
+                  }}
+                >
+                  <i className="fa-solid fa-circle-xmark me-2"></i>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleRejectRequest}
+                  disabled={!rejectionReason.trim()}
+                >
+                  <i className="fa-solid fa-xmark me-2"></i>
+                  Reject Request
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-success"
+                  onClick={handleApproveRequest}
+                  disabled={!selectedVendor}
+                >
+                  <i className="fa-solid fa-check me-2"></i>
+                  Approve & Create PO
+                </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* View Modal */}
-        {showViewModal && selectedRequest && (
-          <div
-            className="modal show d-block"
-            style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-          >
-            <div className="modal-dialog modal-xl modal-dialog-scrollable">
-              <div className="modal-content">
-                <div className="modal-header bg-info text-white">
-                  <h5 className="modal-title">
-                    <i className="fa-solid fa-eye me-2"></i>
-                    Material Request Details - #{selectedRequest.requestId}
-                  </h5>
-                  <button
-                    type="button"
-                    className="btn-close btn-close-white"
-                    onClick={() => {
-                      setShowViewModal(false);
-                      setSelectedRequest(null);
-                    }}
-                  ></button>
+      {/* View Modal */}
+      {showViewModal && selectedRequest && (
+        <div
+          className="modal show d-block"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
+          <div className="modal-dialog modal-xl modal-dialog-scrollable">
+            <div className="modal-content">
+              <div className="modal-header bg-info text-white">
+                <h5 className="modal-title">
+                  <i className="fa-solid fa-eye me-2"></i>
+                  Material Request Details - #{selectedRequest.requestId}
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => {
+                    setShowViewModal(false);
+                    setSelectedRequest(null);
+                  }}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <strong>Request ID:</strong>{" "}
+                    {selectedRequest.requestId || selectedRequest._id}
+                  </div>
+                  <div className="col-md-6">
+                    <strong>Request Type:</strong>{" "}
+                    <span className="badge bg-info">
+                      {selectedRequest.requestType}
+                    </span>
+                  </div>
                 </div>
-                <div className="modal-body">
-                  <div className="row mb-3">
-                    <div className="col-md-6">
-                      <strong>Request ID:</strong>{" "}
-                      {selectedRequest.requestId || selectedRequest._id}
-                    </div>
-                    <div className="col-md-6">
-                      <strong>Request Type:</strong>{" "}
-                      <span className="badge bg-info">
-                        {selectedRequest.requestType}
-                      </span>
-                    </div>
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <strong>Requested By:</strong> {selectedRequest.requestedBy}
                   </div>
-                  <div className="row mb-3">
-                    <div className="col-md-6">
-                      <strong>Requested By:</strong>{" "}
-                      {selectedRequest.requestedBy}
-                    </div>
-                    <div className="col-md-6">
-                      <strong>Department:</strong> {selectedRequest.department}
-                    </div>
+                  <div className="col-md-6">
+                    <strong>Department:</strong> {selectedRequest.department}
                   </div>
-                  <div className="row mb-3">
-                    <div className="col-md-6">
-                      <strong>Date:</strong>{" "}
-                      {new Date(
-                        selectedRequest.date || selectedRequest.createdAt
-                      ).toLocaleDateString()}
-                    </div>
-                    <div className="col-md-6">
-                      <strong>Status:</strong>{" "}
-                      <span
-                        className={`badge ${
-                          selectedRequest.status === "approved"
-                            ? "bg-success"
-                            : selectedRequest.status === "pending"
-                            ? "bg-warning"
-                            : selectedRequest.status === "rejected"
-                            ? "bg-danger"
-                            : "bg-secondary"
-                        }`}
-                      >
-                        {selectedRequest.status}
-                      </span>
-                    </div>
+                </div>
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <strong>Date:</strong>{" "}
+                    {new Date(
+                      selectedRequest.date || selectedRequest.createdAt
+                    ).toLocaleDateString()}
                   </div>
+                  <div className="col-md-6">
+                    <strong>Status:</strong>{" "}
+                    <span
+                      className={`badge ${
+                        selectedRequest.status === "approved"
+                          ? "bg-success"
+                          : selectedRequest.status === "pending"
+                          ? "bg-warning"
+                          : selectedRequest.status === "rejected"
+                          ? "bg-danger"
+                          : "bg-secondary"
+                      }`}
+                    >
+                      {selectedRequest.status}
+                    </span>
+                  </div>
+                </div>
 
-                  <h6 className="mb-3 mt-4">
-                    <i className="fa-solid fa-list me-2"></i>
-                    Line Items
-                  </h6>
-                  <div className="table-responsive">
-                    <table className="table table-hover table-striped mb-0">
-                      <thead className="table-primary">
-                        <tr>
-                          <th width="5%" className="text-center">
-                            #
-                          </th>
-                          <th width="25%">Item Name</th>
-                          <th width="10%" className="text-center">
-                            Quantity
-                          </th>
-                          <th width="10%">Unit</th>
-                          <th width="15%" className="text-end">
-                            Unit Price
-                          </th>
-                          <th width="15%" className="text-end">
-                            Total
-                          </th>
-                          <th width="20%">Description</th>
+                <h6 className="mb-3 mt-4">
+                  <i className="fa-solid fa-list me-2"></i>
+                  Line Items
+                </h6>
+                <div className="table-responsive">
+                  <table className="table table-hover table-striped mb-0">
+                    <thead className="table-primary">
+                      <tr>
+                        <th width="5%" className="text-center">
+                          #
+                        </th>
+                        <th width="25%">Item Name</th>
+                        <th width="10%" className="text-center">
+                          Quantity
+                        </th>
+                        <th width="10%">Unit</th>
+                        <th width="15%" className="text-end">
+                          Unit Price
+                        </th>
+                        <th width="15%" className="text-end">
+                          Total
+                        </th>
+                        <th width="20%">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(selectedRequest.lineItems || []).map((item, idx) => (
+                        <tr key={idx}>
+                          <td className="text-center fw-bold">{idx + 1}</td>
+                          <td className="fw-bold">{item.itemName}</td>
+                          <td className="text-center">{item.quantity}</td>
+                          <td>{item.quantityType}</td>
+                          <td className="text-end">
+                            {formatCurrency(item.amount)}
+                          </td>
+                          <td className="text-end fw-bold text-primary">
+                            {formatCurrency(item.quantity * item.amount)}
+                          </td>
+                          <td>
+                            <small>{item.description || "-"}</small>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {(selectedRequest.lineItems || []).map((item, idx) => (
-                          <tr key={idx}>
-                            <td className="text-center fw-bold">{idx + 1}</td>
-                            <td className="fw-bold">{item.itemName}</td>
-                            <td className="text-center">{item.quantity}</td>
-                            <td>{item.quantityType}</td>
-                            <td className="text-end">
-                              {formatCurrency(item.amount)}
-                            </td>
-                            <td className="text-end fw-bold text-primary">
-                              {formatCurrency(item.quantity * item.amount)}
-                            </td>
-                            <td>
-                              <small>{item.description || "-"}</small>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="table-success">
-                        <tr>
-                          <th colSpan="5" className="text-end fs-6">
-                            Grand Total:
-                          </th>
-                          <th className="text-end fs-5 text-success">
-                            {formatCurrency(
-                              (selectedRequest.lineItems || []).reduce(
-                                (sum, item) =>
-                                  sum + item.quantity * item.amount,
-                                0
-                              )
-                            )}
-                          </th>
-                          <th></th>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                    <tfoot className="table-success">
+                      <tr>
+                        <th colSpan="5" className="text-end fs-6">
+                          Grand Total:
+                        </th>
+                        <th className="text-end fs-5 text-success">
+                          {formatCurrency(
+                            (selectedRequest.lineItems || []).reduce(
+                              (sum, item) => sum + item.quantity * item.amount,
+                              0
+                            )
+                          )}
+                        </th>
+                        <th></th>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
 
-                  {/* Additional Information */}
-                  {(selectedRequest.message ||
-                    (selectedRequest.attachments &&
-                      selectedRequest.attachments.length > 0)) && (
-                    <div className="card mb-4">
-                      <div className="card-header bg-light">
-                        <h6 className="mb-0">
-                          <i className="fa-solid fa-comment-dots me-2"></i>
-                          Additional Information
-                        </h6>
-                      </div>
-                      <div className="card-body">
-                        {selectedRequest.message && (
-                          <div className="mb-3">
+                {/* Additional Information */}
+                {(selectedRequest.message ||
+                  (selectedRequest.attachments &&
+                    selectedRequest.attachments.length > 0)) && (
+                  <div className="card mb-4">
+                    <div className="card-header bg-light">
+                      <h6 className="mb-0">
+                        <i className="fa-solid fa-comment-dots me-2"></i>
+                        Additional Information
+                      </h6>
+                    </div>
+                    <div className="card-body">
+                      {selectedRequest.message && (
+                        <div className="mb-3">
+                          <label className="text-muted small d-block mb-2">
+                            Message/Notes
+                          </label>
+                          <div className="p-3 bg-light rounded border">
+                            <i className="fa-solid fa-quote-left text-muted me-2"></i>
+                            {selectedRequest.message}
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedRequest.attachments &&
+                        selectedRequest.attachments.length > 0 && (
+                          <div>
                             <label className="text-muted small d-block mb-2">
-                              Message/Notes
+                              <i className="fa-solid fa-paperclip me-1"></i>
+                              Attachments ({selectedRequest.attachments.length})
                             </label>
-                            <div className="p-3 bg-light rounded border">
-                              <i className="fa-solid fa-quote-left text-muted me-2"></i>
-                              {selectedRequest.message}
+                            <div className="d-flex flex-wrap gap-2">
+                              {selectedRequest.attachments.map((file, idx) => (
+                                <span
+                                  key={idx}
+                                  className="badge bg-secondary px-3 py-2"
+                                >
+                                  <i className="fa-solid fa-file me-2"></i>
+                                  {file}
+                                </span>
+                              ))}
                             </div>
                           </div>
                         )}
-
-                        {selectedRequest.attachments &&
-                          selectedRequest.attachments.length > 0 && (
-                            <div>
-                              <label className="text-muted small d-block mb-2">
-                                <i className="fa-solid fa-paperclip me-1"></i>
-                                Attachments (
-                                {selectedRequest.attachments.length})
-                              </label>
-                              <div className="d-flex flex-wrap gap-2">
-                                {selectedRequest.attachments.map(
-                                  (file, idx) => (
-                                    <span
-                                      key={idx}
-                                      className="badge bg-secondary px-3 py-2"
-                                    >
-                                      <i className="fa-solid fa-file me-2"></i>
-                                      {file}
-                                    </span>
-                                  )
-                                )}
-                              </div>
-                            </div>
-                          )}
-                      </div>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {/* Rejection Reason */}
-                  {selectedRequest.rejectionReason && (
-                    <div className="card border-danger mb-4">
-                      <div className="card-header bg-danger text-white">
-                        <h6 className="mb-0">
-                          <i className="fa-solid fa-exclamation-triangle me-2"></i>
-                          Rejection Reason
-                        </h6>
-                      </div>
-                      <div className="card-body">
-                        <p className="mb-0 text-danger fw-bold">
-                          {selectedRequest.rejectionReason}
-                        </p>
-                      </div>
+                {/* Rejection Reason */}
+                {selectedRequest.rejectionReason && (
+                  <div className="card border-danger mb-4">
+                    <div className="card-header bg-danger text-white">
+                      <h6 className="mb-0">
+                        <i className="fa-solid fa-exclamation-triangle me-2"></i>
+                        Rejection Reason
+                      </h6>
                     </div>
-                  )}
-                </div>
-                <div className="modal-footer bg-light">
-                  <button
-                    type="button"
-                    className="btn btn-secondary px-4"
-                    onClick={() => {
-                      setShowViewModal(false);
-                      setSelectedRequest(null);
-                    }}
-                  >
-                    <i className="fa-solid fa-times me-2"></i>
-                    Close
-                  </button>
-                </div>
+                    <div className="card-body">
+                      <p className="mb-0 text-danger fw-bold">
+                        {selectedRequest.rejectionReason}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer bg-light">
+                <button
+                  type="button"
+                  className="btn btn-secondary px-4"
+                  onClick={() => {
+                    setShowViewModal(false);
+                    setSelectedRequest(null);
+                  }}
+                >
+                  <i className="fa-solid fa-times me-2"></i>
+                  Close
+                </button>
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
