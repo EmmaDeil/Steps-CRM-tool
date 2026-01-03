@@ -41,6 +41,16 @@ const securitySettingsSchema = new mongoose.Schema({
     concurrentSessions: { type: Number, default: 3 },
     rememberMeDuration: { type: Number, default: 30 }, // days
   },
+  logRetentionPolicy: {
+    enabled: { type: Boolean, default: true },
+    retentionPeriod: { type: Number, default: 90 }, // days
+    archiveBeforeDelete: { type: Boolean, default: true },
+    autoArchive: { type: Boolean, default: true },
+    archivePath: { type: String, default: 'archives' },
+    compressionEnabled: { type: Boolean, default: true },
+    lastArchiveDate: { type: Date, default: null },
+    totalArchived: { type: Number, default: 0 },
+  },
   notificationRules: [notificationRuleSchema],
   settingsHistory: [settingsHistorySchema],
   // Singleton pattern - only one settings document

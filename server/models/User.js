@@ -31,7 +31,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['Admin', 'Editor', 'Viewer', 'user'],
+    enum: ['Admin', 'Security Admin', 'Security Analyst', 'Editor', 'Viewer', 'user'],
     default: 'user',
   },
   status: {
@@ -59,6 +59,15 @@ const userSchema = new mongoose.Schema({
     },
     systemSettings: {
       globalConfiguration: { type: Boolean, default: false },
+    },
+    security: {
+      viewLogs: { type: Boolean, default: false },
+      exportLogs: { type: Boolean, default: false },
+      manageSettings: { type: Boolean, default: false },
+      manageNotifications: { type: Boolean, default: false },
+      viewAnalytics: { type: Boolean, default: false },
+      manageSessions: { type: Boolean, default: false },
+      generateReports: { type: Boolean, default: false },
     },
   },
   resetPasswordToken: String,

@@ -34,6 +34,31 @@ const recipientSchema = new mongoose.Schema({
   signatureId: mongoose.Schema.Types.ObjectId,
 });
 
+const fieldSchema = new mongoose.Schema({
+  id: String,
+  type: {
+    type: String,
+    enum: ['signature', 'initials', 'dateSigned', 'textbox', 'checkbox', 'fullName'],
+    required: true,
+  },
+  label: String,
+  page: Number,
+  position: {
+    x: Number,
+    y: Number,
+  },
+  size: {
+    width: Number,
+    height: Number,
+  },
+  required: {
+    type: Boolean,
+    default: false,
+  },
+  assignedTo: Number, // Recipient ID
+  value: mongoose.Schema.Types.Mixed, // Filled value after signing
+});
+
 const documentSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -56,6 +81,7 @@ const documentSchema = new mongoose.Schema({
   },
   signatures: [signatureSchema],
   recipients: [recipientSchema],
+  fields: [fieldSchema], // Form fields placed on the document
   involvedParties: [{
     name: String,
     role: String,

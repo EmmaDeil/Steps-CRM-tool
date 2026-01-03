@@ -44,12 +44,12 @@ const iconMap = {
   Inventory: { icon: "fa-warehouse", color: "teal" },
   Analytics: { icon: "fa-chart-line", color: "cyan" },
   Attendance: { icon: "fa-id-badge", color: "emerald" },
-  "HRM": { icon: "fa-people-group", color: "rose" },
+  HRM: { icon: "fa-people-group", color: "rose" },
   Security: { icon: "fa-lock", color: "red" },
   DocSign: { icon: "fa-pen-fancy", color: "pink" },
   // "": { icon: "fa-pen-fancy", color: "pink" },
   Admin: { icon: "fa-sliders", color: "gray" },
-  "Policy": { icon: "fa-file-shield", color: "gray" },
+  Policy: { icon: "fa-file-shield", color: "gray" },
 };
 
 export default function Home() {
@@ -91,7 +91,18 @@ export default function Home() {
     return modules.filter((m) => m.name.toLowerCase().includes(q));
   }, [modules, search]);
 
-  const handleOpenModule = (moduleId) => navigate(`/home/${moduleId}`);
+  const handleOpenModule = (moduleId) => {
+    // Special handling for DocSign module - navigate to dashboard
+    const module = modules.find((m) => String(m.id) === String(moduleId));
+    if (
+      module &&
+      (module.componentName === "DocSign" || module.name === "DocSign")
+    ) {
+      navigate("/modules/docsign-dashboard");
+    } else {
+      navigate(`/home/${moduleId}`);
+    }
+  };
 
   // Memoize module component to prevent remount on parent re-render
   const mid = id ? parseInt(id, 10) : null;

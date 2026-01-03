@@ -10,6 +10,9 @@ import PrivateRoute from "./components/PrivateRoute";
 import NotFound from "./components/NotFound";
 import { Toaster } from "react-hot-toast";
 import RetirementManagement from "./components/modules/RetirementManagement";
+import DocSignDashboard from "./components/modules/DocSignDashboard";
+import DocSign from "./components/modules/DocSign";
+import DocSignRequest from "./components/modules/DocSignRequest";
 import Navbar from "./components/Navbar";
 
 function App() {
@@ -26,12 +29,10 @@ function App() {
     <>
       <Toaster position="top-right" />
       <Routes>
-        {/* Auth pages */}
         <Route path="/" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        {/* Home - module list and detail view (protected) */}
         <Route
           path="/home"
           element={
@@ -49,7 +50,6 @@ function App() {
           }
         />
 
-        {/* Profile page inside app chrome (protected) */}
         <Route
           path="/home/profile"
           element={
@@ -61,7 +61,6 @@ function App() {
           }
         />
 
-        {/* Retirement Management inside app chrome (protected) */}
         <Route
           path="/home/retirement-management"
           element={
@@ -73,7 +72,33 @@ function App() {
           }
         />
 
-        {/* Redirects for backward compatibility */}
+        <Route
+          path="/modules/docsign-dashboard"
+          element={
+            <PrivateRoute>
+              <DocSignDashboard />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/modules/docsign"
+          element={
+            <PrivateRoute>
+              <DocSign />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/modules/docsign-request"
+          element={
+            <PrivateRoute>
+              <DocSignRequest />
+            </PrivateRoute>
+          }
+        />
+
         <Route
           path="/profile"
           element={<Navigate to="/home/profile" replace />}
@@ -83,7 +108,6 @@ function App() {
           element={<Navigate to="/home/retirement-management" replace />}
         />
 
-        {/* 404 fallback */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </>

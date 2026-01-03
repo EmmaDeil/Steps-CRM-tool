@@ -135,6 +135,33 @@ export const apiService = {
     getSystemStats: () => api.get('/api/admin/system/stats'),
   },
 
+  purchaseOrders: {
+    getAll: (params) => api.get('/api/purchase-orders', { params }),
+    getById: (id) => api.get(`/api/purchase-orders/${id}`),
+    create: (data) => api.post('/api/purchase-orders', data),
+    update: (id, data) => api.put(`/api/purchase-orders/${id}`, data),
+    review: (id, data) => api.post(`/api/purchase-orders/${id}/review`, data),
+    markPaid: (id) => api.post(`/api/purchase-orders/${id}/mark-paid`),
+    getPendingPayment: () => api.get('/api/purchase-orders/pending-payment'),
+  },
+
+  vendors: {
+    getAll: (params) => api.get('/api/vendors', { params }),
+    getById: (id) => api.get(`/api/vendors/${id}`),
+    create: (data) => api.post('/api/vendors', data),
+    update: (id, data) => api.put(`/api/vendors/${id}`, data),
+    delete: (id) => api.delete(`/api/vendors/${id}`),
+  },
+
+  documents: {
+    getAll: (params) => api.get('/api/documents', { params }),
+    getById: (id) => api.get(`/api/documents/${id}`),
+    create: (data) => api.post('/api/documents', data),
+    update: (id, data) => api.patch(`/api/documents/${id}`, data),
+    sign: (id, data) => api.post(`/api/documents/${id}/sign`, data),
+    delete: (id) => api.delete(`/api/documents/${id}`),
+  },
+
   user: {
     getProfile: (userId) => api.get(`/api/user/profile/${userId}`),
     updateProfile: (userId, data) => api.put(`/api/user/profile/${userId}`, data),
