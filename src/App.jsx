@@ -8,8 +8,6 @@ import Profile from "./components/Profile";
 import PrivateRoute from "./components/PrivateRoute";
 import NotFound from "./components/NotFound";
 import { Toaster } from "react-hot-toast";
-import RetirementManagement from "./components/modules/RetirementManagement";
-import DocSign from "./components/modules/DocSign";
 import Navbar from "./components/Navbar";
 
 function App() {
@@ -59,32 +57,8 @@ function App() {
         />
 
         <Route
-          path="/home/retirement-management"
-          element={
-            <PrivateRoute>
-              <PageWithNavbar>
-                <RetirementManagement />
-              </PageWithNavbar>
-            </PrivateRoute>
-          }
-        />
-
-        <Route
-          path="/modules/docsign"
-          element={
-            <PrivateRoute>
-              <DocSign />
-            </PrivateRoute>
-          }
-        />
-
-        <Route
           path="/profile"
           element={<Navigate to="/home/profile" replace />}
-        />
-        <Route
-          path="/retirement-management"
-          element={<Navigate to="/home/retirement-management" replace />}
         />
 
         <Route path="*" element={<NotFound />} />

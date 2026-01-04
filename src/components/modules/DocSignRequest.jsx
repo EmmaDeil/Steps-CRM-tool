@@ -256,7 +256,7 @@ const DocSignRequest = ({ onBack }) => {
       if (onBack) {
         onBack();
       } else {
-        navigate("/modules/docsign");
+        navigate("/home/9");
       }
     } catch (error) {
       console.error("Error sending request:", error);
@@ -409,7 +409,7 @@ const DocSignRequest = ({ onBack }) => {
           { label: "Home", href: "/home", icon: "fa-house" },
           {
             label: "DocSign",
-            href: "/modules/docsign",
+            href: "/home/9",
             icon: "fa-pen-fancy",
           },
           { label: "Send Request", icon: "fa-paper-plane" },
@@ -446,7 +446,7 @@ const DocSignRequest = ({ onBack }) => {
             </div>
           </div>
           <button
-            onClick={() => (onBack ? onBack() : navigate("/modules/docsign"))}
+            onClick={() => (onBack ? onBack() : navigate("/home/9"))}
             className="flex min-w-[70px] cursor-pointer items-center justify-center rounded-lg h-9 px-3 text-[#617589] hover:text-red-600 hover:bg-red-50 text-sm font-semibold transition-colors"
           >
             Cancel

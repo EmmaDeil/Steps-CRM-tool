@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback } from "react";
-import Navbar from "../Navbar";
 import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../../context/useAuth";
 import DocSignRequest from "./DocSignRequest";
+import DocSignTemplateCreate from "./DocSignTemplateCreate";
 
 const DocSign = () => {
   const { user } = useAuth();
   const [showRequestForm, setShowRequestForm] = useState(false);
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedTimeRange, setSelectedTimeRange] = useState("Any Time");
@@ -229,9 +230,15 @@ const DocSign = () => {
     return <DocSignRequest onBack={() => setShowRequestForm(false)} />;
   }
 
+  // Show create template form if user clicks "New Template"
+  if (showCreateTemplate) {
+    return (
+      <DocSignTemplateCreate onBack={() => setShowCreateTemplate(false)} />
+    );
+  }
+
   return (
     <div className="w-full min-h-screen bg-[#f6f7f8] flex flex-col">
-      <Navbar />
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -240,18 +247,19 @@ const DocSign = () => {
       />
 
       {/* Page Header */}
-      <header className="w-full bg-white border-b border-[#e5e7eb] py-3 shadow-sm">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <header className="w-full bg-white border-b border-[#e5e7eb] py-3 shadow-sm px-4">
+        <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1">
           <div>
-            <h2 className="text-2xl font-bold text-[#111418]">
-            
-            </h2>
+            <h2 className="text-2xl font-bold text-[#111418]"></h2>
             <p className="text-sm text-[#617589] mt-1">
               Manage your pending actions and template library.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-[#111418] border border-[#dbe0e6] px-2 py-2.5 rounded-lg font-semibold shadow-sm transition-all active:scale-95">
+            <button
+              onClick={() => setShowCreateTemplate(true)}
+              className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-[#111418] border border-[#dbe0e6] px-2 py-2.5 rounded-lg font-semibold shadow-sm transition-all active:scale-95"
+            >
               <i className="fa-solid fa-plus-circle text-[18px]"></i>
               New Template
             </button>
@@ -267,8 +275,8 @@ const DocSign = () => {
       </header>
 
       {/* Main Content */}
-      <main className="w-full flex-1 overflow-y-auto p-2 scroll-smooth">
-        <div className="max-w-7xl mx-auto space-y-10">
+      <main className="w-full flex-1 overflow-y-auto px-4 py-0 scroll-smooth">
+        <div className="max-w-[1400px] mx-auto space-y-10">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#137fec]"></div>
@@ -291,7 +299,7 @@ const DocSign = () => {
             <>
               {/* Pending Requests Section */}
               <section className="w-full space-y-4 p-2">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 mt-2">
                   <i className="fa-solid fa-clock text-orange-500 text-[20px]"></i>
                   <h3 className="text-lg font-bold text-[#111418]">
                     Pending Requests

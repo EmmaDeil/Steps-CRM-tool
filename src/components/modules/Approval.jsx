@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
+import RetirementManagement from "./RetirementManagement";
 
 const Approval = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [advanceRequests, setAdvanceRequests] = useState([]);
   const [refundRequests, setRefundRequests] = useState([]);
@@ -17,6 +16,8 @@ const Approval = () => {
   const [loading, setLoading] = useState(true);
   const [showAdvanceForm, setShowAdvanceForm] = useState(false);
   const [showRefundForm, setShowRefundForm] = useState(false);
+  const [showRetirementManagement, setShowRetirementManagement] =
+    useState(false);
   const [showRetirementHistory, setShowRetirementHistory] = useState(false);
   const [showMonthDetails, setShowMonthDetails] = useState(false);
   const [showLeaveHistory, setShowLeaveHistory] = useState(false);
@@ -58,38 +59,7 @@ const Approval = () => {
   });
   const [travelFormLoading, setTravelFormLoading] = useState(false);
 
-  const [staffList] = useState([
-    {
-      id: 1,
-      name: "Alice Brown",
-      email: "alice.brown@company.com",
-      role: "Finance Manager",
-    },
-    {
-      id: 2,
-      name: "Bob Davis",
-      email: "bob.davis@company.com",
-      role: "HR Manager",
-    },
-    {
-      id: 3,
-      name: "Carol Smith",
-      email: "carol.smith@company.com",
-      role: "Operations Manager",
-    },
-    {
-      id: 4,
-      name: "David Wilson",
-      email: "david.wilson@company.com",
-      role: "Department Head",
-    },
-    {
-      id: 5,
-      name: "Emma Johnson",
-      email: "emma.johnson@company.com",
-      role: "Supervisor",
-    },
-  ]);
+  const [staffList, setStaffList] = useState([]);
   const [approverSuggestions, setApproverSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [advanceFormData, setAdvanceFormData] = useState({
@@ -117,6 +87,27 @@ const Approval = () => {
   const currentEmployeeId = user?.publicMetadata?.employeeId || "EMP999";
   const currentDepartment = user?.publicMetadata?.department || "General";
 
+  // Fetch staff list for approver selection
+  useEffect(() => {
+    const fetchStaffList = async () => {
+      try {
+        const response = await apiService.get("/api/employees");
+        if (response && Array.isArray(response)) {
+          setStaffList(response.map(emp => ({
+            id: emp._id || emp.id,
+            name: emp.fullName || emp.name,
+            email: emp.email,
+            role: emp.role || emp.department || "Employee"
+          })));
+        }
+      } catch (error) {
+        console.error("Error fetching staff list:", error);
+      }
+    };
+
+    fetchStaffList();
+  }, []);
+
   // Fetch leave allocation for current user
   useEffect(() => {
     const fetchLeaveAllocation = async () => {
@@ -124,14 +115,14 @@ const Approval = () => {
         const response = await apiService.get(
           `/api/hr/leave-allocations?employeeId=${currentEmployeeId}&year=${new Date().getFullYear()}`
         );
-        if (response?.data && response.data.length > 0) {
-          setLeaveAllocation(response.data[0]);
+        if (response && Array.isArray(response) && response.length > 0) {
+          setLeaveAllocation(response[0]);
           // Set manager info if available for both leave and travel forms
-          if (response.data[0].managerId) {
+          if (response[0].managerId) {
             const managerInfo = {
-              managerId: response.data[0].managerId,
-              managerName: response.data[0].managerName,
-              managerEmail: response.data[0].managerEmail || "",
+              managerId: response[0].managerId,
+              managerName: response[0].managerName,
+              managerEmail: response[0].managerEmail || "",
             };
 
             setLeaveFormData((prev) => ({
@@ -252,9 +243,11 @@ const Approval = () => {
         apiService.get(`/api/refund-requests?userId=${currentUserId}`),
         apiService.get(`/api/retirement-breakdown?userId=${currentUserId}`),
       ]);
-      setAdvanceRequests(advanceRes?.data || []);
-      setRefundRequests(refundRes?.data || []);
-      setRetirementBreakdowns(retirementRes?.data || []);
+      setAdvanceRequests(Array.isArray(advanceRes) ? advanceRes : []);
+      setRefundRequests(Array.isArray(refundRes) ? refundRes : []);
+      setRetirementBreakdowns(
+        Array.isArray(retirementRes) ? retirementRes : []
+      );
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load requests");
@@ -306,7 +299,7 @@ const Approval = () => {
         newRequest
       );
 
-      if (!response || !response.data) {
+      if (!response) {
         throw new Error("Failed to save request to database");
       }
 
@@ -392,7 +385,7 @@ const Approval = () => {
         newRequest
       );
 
-      if (!response || !response.data) {
+      if (!response) {
         throw new Error("Failed to save refund request to database");
       }
 
@@ -468,7 +461,7 @@ const Approval = () => {
         newRequest
       );
 
-      if (!response || !response.data) {
+      if (!response) {
         throw new Error("Failed to save leave request");
       }
 
@@ -577,7 +570,7 @@ const Approval = () => {
         newRequest
       );
 
-      if (!response || !response.data) {
+      if (!response) {
         throw new Error("Failed to save travel request");
       }
 
@@ -628,6 +621,13 @@ const Approval = () => {
       setTravelFormLoading(false);
     }
   };
+
+  // Show retirement management view if user clicks "Retire" button
+  if (showRetirementManagement) {
+    return (
+      <RetirementManagement onBack={() => setShowRetirementManagement(false)} />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 w-full">
@@ -748,7 +748,7 @@ const Approval = () => {
                   View History
                 </button>
                 <button
-                  onClick={() => navigate("/retirement-management")}
+                  onClick={() => setShowRetirementManagement(true)}
                   className="px-6 py-2 border-2 border-purple-600 text-purple-600 rounded-lg hover:bg-purple-50 transition-all font-semibold flex items-center gap-2 mx-auto"
                 >
                   <i className="fa-solid fa-plus text-sm"></i>
@@ -1376,7 +1376,7 @@ const Approval = () => {
                     <button
                       onClick={() => {
                         setShowRetirementHistory(false);
-                        navigate("/retirement-management");
+                        setShowRetirementManagement(true);
                       }}
                       className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold inline-flex items-center gap-2"
                     >

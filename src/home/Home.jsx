@@ -98,7 +98,7 @@ export default function Home() {
       module &&
       (module.componentName === "DocSign" || module.name === "DocSign")
     ) {
-      navigate("/modules/docsign");
+      navigate("/home/9");
     } else {
       navigate(`/home/${moduleId}`);
     }

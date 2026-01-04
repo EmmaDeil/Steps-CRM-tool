@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 
-const RetirementManagement = () => {
+const RetirementManagement = ({ onBack }) => {
   const { user } = useAuth();
   const [lineItems, setLineItems] = useState([]);
   const [newItem, setNewItem] = useState({
@@ -176,11 +176,11 @@ const RetirementManagement = () => {
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
           {
-            label: "Accounting",
-            href: "/home/1",
+            label: "Aprovals",
+            onClick: onBack,
             icon: "fa-calculator",
           },
-          { label: "Retirement Management", icon: "fa-umbrella-beach" },
+          { label: "Retire", icon: "fa-umbrella" },
         ]}
       />
       <div className="p-4">

@@ -6,7 +6,7 @@ const advanceRequestSchema = new mongoose.Schema({
   department: { type: String, required: true },
   userId: { type: String, required: true },
   amount: { type: Number, required: true },
-  currency: { type: String, default: 'USD' },
+  currency: { type: String, default: 'NGN' },
   reason: { type: String, required: true },
   purpose: { type: String, required: true },
   approver: { type: String, required: true },
