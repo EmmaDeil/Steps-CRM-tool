@@ -13,11 +13,8 @@ const DocSignTemplateCreate = ({ onBack }) => {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [fields, setFields] = useState([]);
   const [roles, setRoles] = useState([
-    { id: 1, name: "Role 1", color: "blue", permission: "Can Sign" },
+    { id: 1, name: "User 1", color: "blue", permission: "Can Sign" },
   ]);
-  const [autoReminders, setAutoReminders] = useState(true);
-  const [expiration, setExpiration] = useState(true);
-  const [customBranding, setCustomBranding] = useState(false);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -132,14 +129,6 @@ const DocSignTemplateCreate = ({ onBack }) => {
       formData.append("document", uploadedFile);
       formData.append("roles", JSON.stringify(roles));
       formData.append("fields", JSON.stringify(fields));
-      formData.append(
-        "settings",
-        JSON.stringify({
-          autoReminders,
-          expiration,
-          customBranding,
-        })
-      );
 
       await apiService.post("/api/documents/templates", formData, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -190,7 +179,7 @@ const DocSignTemplateCreate = ({ onBack }) => {
           { label: "Home", href: "/home", icon: "fa-house" },
           {
             label: "DocSign",
-            href: "/home/9",
+            onClick: onBack,
             icon: "fa-pen-fancy",
           },
           { label: "Create Template", icon: "fa-plus" },
@@ -201,17 +190,6 @@ const DocSignTemplateCreate = ({ onBack }) => {
       <div className="px-6 py-4 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <div className="flex items-center gap-2 text-sm mb-1">
-              <button
-                onClick={onBack}
-                className="text-gray-600 font-medium hover:text-blue-600 flex items-center gap-1 transition-colors cursor-pointer"
-              >
-                <i className="fa-solid fa-arrow-left text-xs"></i>
-                Manage Templates
-              </button>
-              <span className="text-gray-400">/</span>
-              <span className="text-gray-900 font-medium">Create New</span>
-            </div>
             <h1 className="text-gray-900 text-2xl font-black leading-tight tracking-tight">
               Create Signature Template
             </h1>
@@ -399,68 +377,6 @@ const DocSignTemplateCreate = ({ onBack }) => {
                     </div>
                   );
                 })}
-              </div>
-            </div>
-
-            {/* 4. Settings Card */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-gray-600 mb-4">
-                Settings
-              </h3>
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-900">
-                    Auto-Reminders
-                  </span>
-                  <span className="text-xs text-gray-600">Every 3 days</span>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    checked={autoReminders}
-                    onChange={(e) => setAutoReminders(e.target.checked)}
-                  />
-                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b border-gray-100 mt-2">
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-900">
-                    Expiration
-                  </span>
-                  <span className="text-xs text-gray-600">
-                    30 days after sent
-                  </span>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    checked={expiration}
-                    onChange={(e) => setExpiration(e.target.checked)}
-                  />
-                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-              <div className="flex items-center justify-between py-2 mt-2">
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-900">
-                    Custom Branding
-                  </span>
-                  <span className="text-xs text-gray-600">
-                    Use company logo
-                  </span>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    checked={customBranding}
-                    onChange={(e) => setCustomBranding(e.target.checked)}
-                  />
-                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
               </div>
             </div>
           </aside>

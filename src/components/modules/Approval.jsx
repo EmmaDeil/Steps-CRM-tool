@@ -93,12 +93,14 @@ const Approval = () => {
       try {
         const response = await apiService.get("/api/employees");
         if (response && Array.isArray(response)) {
-          setStaffList(response.map(emp => ({
-            id: emp._id || emp.id,
-            name: emp.fullName || emp.name,
-            email: emp.email,
-            role: emp.role || emp.department || "Employee"
-          })));
+          setStaffList(
+            response.map((emp) => ({
+              id: emp._id || emp.id,
+              name: emp.fullName || emp.name,
+              email: emp.email,
+              role: emp.role || emp.department || "Employee",
+            }))
+          );
         }
       } catch (error) {
         console.error("Error fetching staff list:", error);
