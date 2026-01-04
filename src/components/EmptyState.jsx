@@ -1,6 +1,5 @@
 import React from "react";
 import PropTypes from "prop-types";
-import "./EmptyState.css";
 
 /**
  * Empty State Component
@@ -13,12 +12,42 @@ const EmptyState = ({
   action = null,
   variant = "default",
 }) => {
+  const variantClasses = {
+    default: "bg-gray-50 text-gray-600",
+    search: "bg-yellow-50 text-yellow-800",
+    error: "bg-red-50 text-red-800",
+  };
+
+  const titleClasses = {
+    default: "text-gray-900",
+    search: "text-yellow-800",
+    error: "text-red-900",
+  };
+
+  const descClasses = {
+    default: "text-gray-600",
+    search: "text-yellow-700",
+    error: "text-red-700",
+  };
+
   return (
-    <div className={`empty-state empty-state-${variant}`}>
-      <div className="empty-state-icon">{icon}</div>
-      <h4 className="empty-state-title">{title}</h4>
-      <p className="empty-state-description">{description}</p>
-      {action && <div className="empty-state-action">{action}</div>}
+    <div
+      className={`flex flex-col items-center justify-center p-8 sm:p-12 text-center rounded-lg my-8 min-h-[300px] ${variantClasses[variant]}`}
+    >
+      <div className="text-5xl sm:text-6xl leading-none mb-4 opacity-60">
+        {icon}
+      </div>
+      <h4
+        className={`text-xl sm:text-2xl font-semibold mb-2 ${titleClasses[variant]}`}
+      >
+        {title}
+      </h4>
+      <p
+        className={`text-sm sm:text-base mb-6 max-w-md ${descClasses[variant]}`}
+      >
+        {description}
+      </p>
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 };

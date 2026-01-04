@@ -1,6 +1,5 @@
 import React from "react";
 import PropTypes from "prop-types";
-import "./Pagination.css";
 
 /**
  * Pagination Component
@@ -70,30 +69,35 @@ const Pagination = ({
   }
 
   return (
-    <div className="pagination-container">
-      <div className="pagination-info">
+    <div className="flex flex-col gap-4 py-4 border-t border-gray-300 mt-4">
+      <div className="text-sm text-gray-600 text-center">
         Showing {startItem} to {endItem} of {totalItems} items
       </div>
-      <nav className="pagination-nav">
+      <nav className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-2 flex-wrap">
         <button
-          className="pagination-btn pagination-prev"
+          className="px-3 py-2 border border-gray-300 bg-white text-blue-600 cursor-pointer rounded text-sm transition-all hover:bg-blue-600 hover:text-white hover:border-blue-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:text-gray-500 w-full sm:w-auto"
           onClick={handlePrevious}
           disabled={currentPage === 1}
         >
           ← Previous
         </button>
 
-        <div className="pagination-pages">
+        <div className="flex gap-1 flex-wrap justify-center w-full sm:w-auto">
           {getPageNumbers().map((page, index) =>
             page === "..." ? (
-              <span key={`ellipsis-${index}`} className="pagination-ellipsis">
+              <span
+                key={`ellipsis-${index}`}
+                className="px-2 py-2 text-gray-600 font-medium"
+              >
                 {page}
               </span>
             ) : (
               <button
                 key={page}
-                className={`pagination-page ${
-                  currentPage === page ? "active" : ""
+                className={`min-w-[36px] px-3 py-2 border text-center text-sm rounded transition-all ${
+                  currentPage === page
+                    ? "bg-blue-600 text-white border-blue-600 font-semibold hover:bg-blue-700 hover:border-blue-700"
+                    : "border-gray-300 bg-white text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600"
                 }`}
                 onClick={() => handlePageClick(page)}
               >
@@ -104,7 +108,7 @@ const Pagination = ({
         </div>
 
         <button
-          className="pagination-btn pagination-next"
+          className="px-3 py-2 border border-gray-300 bg-white text-blue-600 cursor-pointer rounded text-sm transition-all hover:bg-blue-600 hover:text-white hover:border-blue-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:text-gray-500 w-full sm:w-auto"
           onClick={handleNext}
           disabled={currentPage === totalPages}
         >

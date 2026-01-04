@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/useAuth";
-import "./App.css";
 import Login from "./components/auth/Login";
 import Signup from "./components/auth/Signup";
 import ForgotPassword from "./components/auth/ForgotPassword";
@@ -10,9 +9,7 @@ import PrivateRoute from "./components/PrivateRoute";
 import NotFound from "./components/NotFound";
 import { Toaster } from "react-hot-toast";
 import RetirementManagement from "./components/modules/RetirementManagement";
-import DocSignDashboard from "./components/modules/DocSignDashboard";
 import DocSign from "./components/modules/DocSign";
-import DocSignRequest from "./components/modules/DocSignRequest";
 import Navbar from "./components/Navbar";
 
 function App() {
@@ -73,28 +70,10 @@ function App() {
         />
 
         <Route
-          path="/modules/docsign-dashboard"
-          element={
-            <PrivateRoute>
-              <DocSignDashboard />
-            </PrivateRoute>
-          }
-        />
-
-        <Route
           path="/modules/docsign"
           element={
             <PrivateRoute>
               <DocSign />
-            </PrivateRoute>
-          }
-        />
-
-        <Route
-          path="/modules/docsign-request"
-          element={
-            <PrivateRoute>
-              <DocSignRequest />
             </PrivateRoute>
           }
         />

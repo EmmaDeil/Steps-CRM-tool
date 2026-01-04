@@ -1160,6 +1160,35 @@ async function start() {
     try {
       const document = new DocumentModel(req.body);
       const saved = await document.save();
+      
+      // Send email to all recipients
+      if (saved.recipients && saved.recipients.length > 0) {
+        const { sendSignatureRequestEmail } = require('./utils/emailService');
+        
+        for (const recipient of saved.recipients) {
+          if (recipient.email) {
+            try {
+              await sendSignatureRequestEmail(
+                {
+                  _id: saved._id,
+                  name: saved.name,
+                  uploadedBy: saved.uploadedBy,
+                  subject: saved.metadata?.subject,
+                  message: saved.metadata?.message,
+                  dueDate: saved.dueDate,
+                },
+                recipient.email,
+                recipient.name
+              );
+              console.log(`✅ Signature request email sent to ${recipient.email}`);
+            } catch (emailError) {
+              console.error(`❌ Failed to send email to ${recipient.email}:`, emailError);
+              // Continue even if email fails - don't block document creation
+            }
+          }
+        }
+      }
+      
       res.status(201).json(saved);
     } catch (err) {
       console.error('Error creating document:', err);

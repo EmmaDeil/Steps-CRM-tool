@@ -5,7 +5,6 @@ import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { useDepartments } from "../../context/useDepartments";
-import "../../assets/components/MaterialRequests.css";
 import { NumericFormat } from "react-number-format";
 import { formatCurrency } from "../../services/currency";
 
@@ -484,7 +483,7 @@ const MaterialRequests = () => {
 
   if (loading) {
     return (
-      <div className="container-fluid p-4">
+      <div className="w-full p-4">
         <div className="text-center">Loading material requests...</div>
       </div>
     );
@@ -492,8 +491,10 @@ const MaterialRequests = () => {
 
   if (error) {
     return (
-      <div className="container-fluid p-4">
-        <div className="alert alert-danger">{error}</div>
+      <div className="w-full p-4">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+          {error}
+        </div>
       </div>
     );
   }
@@ -1481,53 +1482,60 @@ const MaterialRequests = () => {
 
       {/* Approval Modal */}
       {showApprovalModal && selectedRequest && (
-        <div
-          className="modal show d-block"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        >
-          <div className="modal-dialog modal-lg modal-dialog-scrollable">
-            <div className="modal-content">
-              <div className="modal-header bg-primary text-white">
-                <h5 className="modal-title">
-                  <i className="fa-solid fa-clipboard-check me-2"></i>
-                  Approve Material Request
-                </h5>
-                <button
-                  type="button"
-                  className="btn-close btn-close-white"
-                  onClick={() => {
-                    setShowApprovalModal(false);
-                    setSelectedRequest(null);
-                    setSelectedVendor("");
-                    setRejectionReason("");
-                    navigate("/dashboard/material-requests");
-                  }}
-                ></button>
-              </div>
-              <div className="modal-body">
-                <div className="row mb-3">
-                  <div className="col-md-6">
-                    <strong>Request ID:</strong>{" "}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
+              <h5 className="text-xl font-semibold flex items-center gap-2">
+                <i className="fa-solid fa-clipboard-check"></i>
+                Approve Material Request
+              </h5>
+              <button
+                type="button"
+                className="text-white hover:text-gray-200 transition-colors"
+                onClick={() => {
+                  setShowApprovalModal(false);
+                  setSelectedRequest(null);
+                  setSelectedVendor("");
+                  setRejectionReason("");
+                  navigate("/dashboard/material-requests");
+                }}
+              >
+                <i className="fa-solid fa-times text-xl"></i>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <strong className="text-gray-700">Request ID:</strong>{" "}
+                  <span className="text-gray-900">
                     {selectedRequest._id || selectedRequest.requestId}
-                  </div>
-                  <div className="col-md-6">
-                    <strong>Request Type:</strong>{" "}
-                    <span className="badge bg-info">
-                      {selectedRequest.requestType}
-                    </span>
-                  </div>
+                  </span>
                 </div>
-                <div className="row mb-3">
-                  <div className="col-md-6">
-                    <strong>Requested By:</strong> {selectedRequest.requestedBy}
-                  </div>
-                  <div className="col-md-6">
-                    <strong>Department:</strong> {selectedRequest.department}
-                  </div>
+                <div>
+                  <strong className="text-gray-700">Request Type:</strong>{" "}
+                  <span className="inline-flex items-center px-2 py-1 rounded text-sm font-medium bg-blue-100 text-blue-800">
+                    {selectedRequest.requestType}
+                  </span>
                 </div>
-                <div className="row mb-3">
-                  <div className="col-md-6">
-                    <strong>Date:</strong>{" "}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <strong className="text-gray-700">Requested By:</strong>{" "}
+                  <span className="text-gray-900">
+                    {selectedRequest.requestedBy}
+                  </span>
+                </div>
+                <div>
+                  <strong className="text-gray-700">Department:</strong>{" "}
+                  <span className="text-gray-900">
+                    {selectedRequest.department}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <strong className="text-gray-700">Date:</strong>{" "}
+                  <span className="text-gray-900">
                     {selectedRequest.requestDate
                       ? new Date(
                           selectedRequest.requestDate
@@ -1535,143 +1543,169 @@ const MaterialRequests = () => {
                       : new Date(
                           selectedRequest.createdAt
                         ).toLocaleDateString()}
-                  </div>
-                  <div className="col-md-6">
-                    <strong>Approver:</strong> {selectedRequest.approver}
-                  </div>
+                  </span>
                 </div>
+                <div>
+                  <strong className="text-gray-700">Approver:</strong>{" "}
+                  <span className="text-gray-900">
+                    {selectedRequest.approver}
+                  </span>
+                </div>
+              </div>
 
-                <hr />
+              <hr className="my-4 border-gray-200" />
 
-                <h6 className="mb-3">
-                  <i className="fa-solid fa-list-ul me-2"></i>Line Items
-                </h6>
-                <div className="table-responsive mb-4">
-                  <table className="table table-sm table-bordered">
-                    <thead className="table-light">
-                      <tr>
-                        <th>Item</th>
-                        <th>Quantity</th>
-                        <th>Unit</th>
-                        <th>Amount</th>
-                        <th>Description</th>
+              <h6 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                <i className="fa-solid fa-list-ul"></i>Line Items
+              </h6>
+              <div className="overflow-x-auto mb-4">
+                <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Item
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Quantity
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Unit
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Amount
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Description
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {selectedRequest.lineItems?.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {item.itemName}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {item.quantity}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {item.quantityType}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {formatCurrency(item.amount)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {item.description || "-"}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {selectedRequest.lineItems?.map((item, idx) => (
-                        <tr key={idx}>
-                          <td>{item.itemName}</td>
-                          <td>{item.quantity}</td>
-                          <td>{item.quantityType}</td>
-                          <td>{formatCurrency(item.amount)}</td>
-                          <td>{item.description || "-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-                {selectedRequest.message && (
-                  <div className="mb-3">
-                    <strong>Message:</strong>
-                    <div className="p-2 bg-light rounded mt-2">
-                      {selectedRequest.message}
+              {selectedRequest.message && (
+                <div className="mb-4">
+                  <strong className="text-gray-700">Message:</strong>
+                  <div className="p-3 bg-gray-100 rounded mt-2 text-gray-900">
+                    {selectedRequest.message}
+                  </div>
+                </div>
+              )}
+
+              {selectedRequest.attachments &&
+                selectedRequest.attachments.length > 0 && (
+                  <div className="mb-4">
+                    <strong className="text-gray-700">Attachments:</strong>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {selectedRequest.attachments.map((file, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center px-3 py-1 rounded text-sm font-medium bg-gray-600 text-white"
+                        >
+                          <i className="fa-solid fa-file mr-1"></i>
+                          {file}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 )}
 
-                {selectedRequest.attachments &&
-                  selectedRequest.attachments.length > 0 && (
-                    <div className="mb-4">
-                      <strong>Attachments:</strong>
-                      <div className="mt-2">
-                        {selectedRequest.attachments.map((file, idx) => (
-                          <span key={idx} className="badge bg-secondary me-2">
-                            <i className="fa-solid fa-file me-1"></i>
-                            {file}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+              <hr className="my-4 border-gray-200" />
 
-                <hr />
+              <h6 className="text-lg font-semibold mb-3 text-green-600 flex items-center gap-2">
+                <i className="fa-solid fa-circle-check"></i>
+                Approval Action
+              </h6>
 
-                <h6 className="mb-3 text-success">
-                  <i className="fa-solid fa-circle-check me-2"></i>
-                  Approval Action
-                </h6>
-
-                <div className="mb-3">
-                  <label className="form-label">
-                    Select Vendor <span className="text-danger">*</span>
-                  </label>
-                  <select
-                    className="form-select"
-                    value={selectedVendor}
-                    onChange={(e) => setSelectedVendor(e.target.value)}
-                    required
-                  >
-                    <option value="">Choose vendor...</option>
-                    {vendors.map((vendor) => (
-                      <option key={vendor.id} value={vendor.name}>
-                        {vendor.name} - {vendor.category}
-                      </option>
-                    ))}
-                  </select>
-                  <small className="text-muted">
-                    A Purchase Order will be created with this vendor upon
-                    approval
-                  </small>
-                </div>
-
-                <div className="mb-3">
-                  <label className="form-label">
-                    Rejection Reason (if rejecting)
-                  </label>
-                  <textarea
-                    className="form-control"
-                    rows="3"
-                    value={rejectionReason}
-                    onChange={(e) => setRejectionReason(e.target.value)}
-                    placeholder="Enter reason for rejection..."
-                  ></textarea>
-                </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Vendor <span className="text-red-500">*</span>
+                </label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={selectedVendor}
+                  onChange={(e) => setSelectedVendor(e.target.value)}
+                  required
+                >
+                  <option value="">Choose vendor...</option>
+                  {vendors.map((vendor) => (
+                    <option key={vendor.id} value={vendor.name}>
+                      {vendor.name} - {vendor.category}
+                    </option>
+                  ))}
+                </select>
+                <small className="text-gray-500 text-sm mt-1 block">
+                  A Purchase Order will be created with this vendor upon
+                  approval
+                </small>
               </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setShowApprovalModal(false);
-                    setSelectedRequest(null);
-                    setSelectedVendor("");
-                    setRejectionReason("");
-                    navigate("/dashboard/material-requests");
-                  }}
-                >
-                  <i className="fa-solid fa-circle-xmark me-2"></i>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  onClick={handleRejectRequest}
-                  disabled={!rejectionReason.trim()}
-                >
-                  <i className="fa-solid fa-xmark me-2"></i>
-                  Reject Request
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-success"
-                  onClick={handleApproveRequest}
-                  disabled={!selectedVendor}
-                >
-                  <i className="fa-solid fa-check me-2"></i>
-                  Approve & Create PO
-                </button>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Rejection Reason (if rejecting)
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows="3"
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Enter reason for rejection..."
+                ></textarea>
               </div>
+            </div>
+            <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex flex-col-reverse sm:flex-row justify-end gap-3">
+              <button
+                type="button"
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium flex items-center justify-center gap-2"
+                onClick={() => {
+                  setShowApprovalModal(false);
+                  setSelectedRequest(null);
+                  setSelectedVendor("");
+                  setRejectionReason("");
+                  navigate("/dashboard/material-requests");
+                }}
+              >
+                <i className="fa-solid fa-circle-xmark"></i>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleRejectRequest}
+                disabled={!rejectionReason.trim()}
+              >
+                <i className="fa-solid fa-xmark"></i>
+                Reject Request
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleApproveRequest}
+                disabled={!selectedVendor}
+              >
+                <i className="fa-solid fa-check"></i>
+                Approve & Create PO
+              </button>
             </div>
           </div>
         </div>

@@ -92,13 +92,13 @@ export default function Home() {
   }, [modules, search]);
 
   const handleOpenModule = (moduleId) => {
-    // Special handling for DocSign module - navigate to dashboard
+    // Special handling for DocSign module - navigate to main module
     const module = modules.find((m) => String(m.id) === String(moduleId));
     if (
       module &&
       (module.componentName === "DocSign" || module.name === "DocSign")
     ) {
-      navigate("/modules/docsign-dashboard");
+      navigate("/modules/docsign");
     } else {
       navigate(`/home/${moduleId}`);
     }

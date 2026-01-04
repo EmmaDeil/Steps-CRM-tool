@@ -5,7 +5,6 @@ import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/useAuth";
 import { validateEmployeeProfile, validateFile } from "../../utils/validation";
-import "../ProfileAnimations.css";
 
 const EmployeeProfile = ({
   onBack,

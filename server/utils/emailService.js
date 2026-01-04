@@ -372,11 +372,86 @@ async function sendNotificationRuleEmail(rule, logData, recipientEmails) {
   }
 }
 
+// Send signature request email
+async function sendSignatureRequestEmail(documentData, recipientEmail, recipientName) {
+  if (!recipientEmail) {
+    throw new Error('recipientEmail is required to send signature request email');
+  }
+
+  const signLink = `${frontendUrl}/docsign/sign/${documentData._id}`;
+  
+  const mailOptions = {
+    from: emailUser,
+    to: recipientEmail,
+    subject: documentData.subject || 'You have a document to sign',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #137fec; padding: 20px; border-radius: 8px 8px 0 0;">
+          <h2 style="color: white; margin: 0;">📝 Document Signature Request</h2>
+        </div>
+        
+        <div style="padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+          <p style="font-size: 16px; color: #111418;">Hello ${recipientName || 'there'},</p>
+          
+          <p style="color: #617589; line-height: 1.6;">
+            You have been requested to review and sign a document. Please click the button below to view and sign the document.
+          </p>
+
+          ${documentData.message ? `
+          <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #137fec; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; color: #111418;"><strong>Message from sender:</strong></p>
+            <p style="margin: 10px 0 0 0; color: #617589;">${documentData.message}</p>
+          </div>
+          ` : ''}
+
+          <div style="background-color: #f0f2f4; padding: 20px; border-radius: 8px; margin: 25px 0;">
+            <p style="margin: 0 0 8px 0; color: #617589; font-size: 14px;"><strong>Document:</strong> ${documentData.name}</p>
+            <p style="margin: 0 0 8px 0; color: #617589; font-size: 14px;"><strong>From:</strong> ${documentData.uploadedBy}</p>
+            ${documentData.dueDate ? `<p style="margin: 0; color: #617589; font-size: 14px;"><strong>Due Date:</strong> ${new Date(documentData.dueDate).toLocaleDateString()}</p>` : ''}
+          </div>
+
+          <div style="text-align: center; margin: 35px 0;">
+            <a href="${signLink}" style="background-color: #137fec; color: white; padding: 14px 40px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600; font-size: 16px;">
+              Review & Sign Document
+            </a>
+          </div>
+
+          <p style="color: #617589; font-size: 14px; margin-top: 30px;">
+            If you have any questions about this document, please contact the sender directly.
+          </p>
+
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 25px 0;">
+
+          <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+            This is an automated email. Please do not reply to this message.<br>
+            If you were not expecting this email, you can safely ignore it.
+          </p>
+        </div>
+      </div>
+    `,
+  };
+
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📧 Signature request email would be sent to:', recipientEmail);
+      console.log('Document:', documentData.name);
+      return { success: true, message: 'Email logged (dev mode)' };
+    }
+    
+    await transporter.sendMail(mailOptions);
+    return { success: true, message: 'Signature request email sent successfully' };
+  } catch (error) {
+    console.error('Error sending signature request email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendApprovalEmail,
   sendPOReviewEmail,
   sendPasswordResetEmail,
   sendSecurityAlertEmail,
   sendNotificationRuleEmail,
+  sendSignatureRequestEmail,
   transporter,
 };

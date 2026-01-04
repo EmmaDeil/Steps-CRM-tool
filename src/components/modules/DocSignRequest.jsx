@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../Navbar";
 import Breadcrumb from "../Breadcrumb";
@@ -6,7 +6,7 @@ import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../../context/useAuth";
 
-const DocSignRequest = () => {
+const DocSignRequest = ({ onBack }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -36,6 +36,51 @@ const DocSignRequest = () => {
   const [draggedField, setDraggedField] = useState(null);
   const [selectedFieldId, setSelectedFieldId] = useState(null);
   const [draggedPlacedFieldId, setDraggedPlacedFieldId] = useState(null);
+
+  // Search for employee by name with debouncing
+  const searchEmployee = useCallback(async (recipientId, searchName) => {
+    if (!searchName || searchName.length < 2) {
+      return;
+    }
+
+    try {
+      const response = await apiService.hr.getEmployees({ search: searchName });
+      const employees = response.data || [];
+
+      // Find exact or close match
+      const matchedEmployee = employees.find((emp) =>
+        emp.name?.toLowerCase().includes(searchName.toLowerCase())
+      );
+
+      if (matchedEmployee && matchedEmployee.email) {
+        // Auto-populate email
+        setRecipients((recipients) =>
+          recipients.map((r) =>
+            r.id === recipientId ? { ...r, email: matchedEmployee.email } : r
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error searching employees:", error);
+    }
+  }, []);
+
+  // Debounce employee search
+  useEffect(() => {
+    const timers = {};
+
+    recipients.forEach((recipient) => {
+      if (recipient.name && recipient.name.length >= 2) {
+        timers[recipient.id] = setTimeout(() => {
+          searchEmployee(recipient.id, recipient.name);
+        }, 500); // 500ms debounce
+      }
+    });
+
+    return () => {
+      Object.values(timers).forEach((timer) => clearTimeout(timer));
+    };
+  }, [recipients, searchEmployee]);
 
   const addRecipient = () => {
     const colors = ["blue", "purple", "green", "orange", "teal"];
@@ -208,7 +253,11 @@ const DocSignRequest = () => {
       await apiService.documents.create(documentData);
 
       toast.success("Signature request sent successfully!");
-      navigate("/modules/docsign-dashboard");
+      if (onBack) {
+        onBack();
+      } else {
+        navigate("/modules/docsign");
+      }
     } catch (error) {
       console.error("Error sending request:", error);
       toast.error("Failed to send signature request");
@@ -359,8 +408,8 @@ const DocSignRequest = () => {
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
           {
-            label: "Document Signing",
-            href: "/modules/docsign-dashboard",
+            label: "DocSign",
+            href: "/modules/docsign",
             icon: "fa-pen-fancy",
           },
           { label: "Send Request", icon: "fa-paper-plane" },
@@ -397,7 +446,7 @@ const DocSignRequest = () => {
             </div>
           </div>
           <button
-            onClick={() => navigate("/modules/docsign-dashboard")}
+            onClick={() => (onBack ? onBack() : navigate("/modules/docsign"))}
             className="flex min-w-[70px] cursor-pointer items-center justify-center rounded-lg h-9 px-3 text-[#617589] hover:text-red-600 hover:bg-red-50 text-sm font-semibold transition-colors"
           >
             Cancel
@@ -491,40 +540,22 @@ const DocSignRequest = () => {
                       </button>
                     )}
                   </div>
-                  <div className="space-y-3">
-                    <div className="relative">
-                      <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-[14px]"></i>
-                      <input
-                        type="text"
-                        className={`w-full h-10 pl-10 pr-9 rounded-lg border border-[#dbe0e6] bg-white text-sm focus:ring-1 ${
-                          getColorClasses(recipient.color).ring
-                        } ${
-                          getColorClasses(recipient.color).border
-                        } outline-none text-[#111418] placeholder:text-gray-400`}
-                        placeholder="Search name or directory..."
-                        value={recipient.name}
-                        onChange={(e) =>
-                          updateRecipient(recipient.id, "name", e.target.value)
-                        }
-                      />
-                      <i className="fa-solid fa-address-book absolute right-3 top-1/2 -translate-y-1/2 text-[#137fec] cursor-pointer hover:bg-blue-50 p-1 rounded text-[14px]"></i>
-                    </div>
-                    <div className="relative">
-                      <i className="fa-solid fa-envelope absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-[14px]"></i>
-                      <input
-                        type="email"
-                        className={`w-full h-10 pl-10 pr-3 rounded-lg border border-[#dbe0e6] bg-white text-sm focus:ring-1 ${
-                          getColorClasses(recipient.color).ring
-                        } ${
-                          getColorClasses(recipient.color).border
-                        } outline-none text-[#111418]`}
-                        placeholder="Email Address"
-                        value={recipient.email}
-                        onChange={(e) =>
-                          updateRecipient(recipient.id, "email", e.target.value)
-                        }
-                      />
-                    </div>
+                  <div className="relative">
+                    <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-[14px]"></i>
+                    <input
+                      type="text"
+                      className={`w-full h-10 pl-10 pr-9 rounded-lg border border-[#dbe0e6] bg-white text-sm focus:ring-1 ${
+                        getColorClasses(recipient.color).ring
+                      } ${
+                        getColorClasses(recipient.color).border
+                      } outline-none text-[#111418] placeholder:text-gray-400`}
+                      placeholder="Search name or directory..."
+                      value={recipient.name}
+                      onChange={(e) =>
+                        updateRecipient(recipient.id, "name", e.target.value)
+                      }
+                    />
+                    <i className="fa-solid fa-address-book absolute right-3 top-1/2 -translate-y-1/2 text-[#137fec] cursor-pointer hover:bg-blue-50 p-1 rounded text-[14px]"></i>
                   </div>
                 </div>
               ))}
@@ -740,7 +771,11 @@ const DocSignRequest = () => {
                       <iframe
                         src={fileURL}
                         className="bg-white shadow-2xl rounded-sm border border-gray-200"
-                        style={{ width: "620px", height: "877px" }}
+                        style={{
+                          width: "620px",
+                          height: "877px",
+                          pointerEvents: "none",
+                        }}
                         title="PDF Preview"
                       />
 
@@ -750,6 +785,45 @@ const DocSignRequest = () => {
                           .filter((field) => field.page === currentPage)
                           .map((field) => {
                             const isSelected = selectedFieldId === field.id;
+                            const isSignatureField =
+                              field.type === "signature" ||
+                              field.type === "initials" ||
+                              field.type === "dateSigned";
+
+                            // Define colors based on field type
+                            let bgColor,
+                              borderColor,
+                              borderStyle,
+                              iconColor,
+                              labelBgColor,
+                              labelTextColor;
+
+                            if (isSelected) {
+                              // Selected state - yellow for all types
+                              bgColor = "rgba(254, 243, 199, 0.95)";
+                              borderColor = "#fbbf24";
+                              borderStyle = "solid";
+                              iconColor = "#b45309";
+                              labelBgColor = "bg-yellow-200";
+                              labelTextColor = "text-yellow-800";
+                            } else if (isSignatureField) {
+                              // Signature fields - blue
+                              bgColor = "rgba(219, 234, 254, 0.95)";
+                              borderColor = "#3b82f6";
+                              borderStyle = "solid";
+                              iconColor = "#3b82f6";
+                              labelBgColor = "bg-blue-100";
+                              labelTextColor = "text-blue-700";
+                            } else {
+                              // Data fields - gray
+                              bgColor = "rgba(243, 244, 246, 0.95)";
+                              borderColor = "#6b7280";
+                              borderStyle = "dashed";
+                              iconColor = "#6b7280";
+                              labelBgColor = "bg-gray-100";
+                              labelTextColor = "text-gray-700";
+                            }
+
                             return (
                               <div
                                 key={field.id}
@@ -769,42 +843,24 @@ const DocSignRequest = () => {
                                   top: `${field.position.y}%`,
                                   width: `${field.size.width}px`,
                                   height: `${field.size.height}px`,
-                                  backgroundColor: isSelected
-                                    ? "rgba(254, 243, 199, 0.95)"
-                                    : "rgba(255, 255, 255, 0.9)",
-                                  border: `2px solid ${
-                                    isSelected ? "#fbbf24" : "#3b82f6"
-                                  }`,
-                                  borderStyle:
-                                    field.type === "signature" ||
-                                    field.type === "initials"
-                                      ? "solid"
-                                      : "dashed",
+                                  backgroundColor: bgColor,
+                                  border: `3px ${borderStyle} ${borderColor}`,
+                                  borderStyle: borderStyle ? "solid" : "dashed",
                                 }}
                               >
                                 <div
-                                  className={`absolute -top-6 left-0 text-[10px] font-bold px-2 py-0.5 rounded ${
-                                    isSelected
-                                      ? "bg-yellow-200 text-yellow-800"
-                                      : "bg-blue-100 text-blue-700"
-                                  }`}
+                                  className={`absolute -top-6 left-0 text-[10px] font-bold px-2 py-0.5 rounded ${labelBgColor} ${labelTextColor}`}
                                 >
                                   {field.label}
                                   {field.required && " *"}
                                 </div>
                                 <i
-                                  className={`${field.icon} ${
-                                    isSelected
-                                      ? "text-yellow-700"
-                                      : "text-blue-600"
-                                  }`}
+                                  className={`${field.icon}`}
+                                  style={{ color: iconColor }}
                                 ></i>
                                 <span
-                                  className={`text-xs font-bold ${
-                                    isSelected
-                                      ? "text-yellow-800"
-                                      : "text-blue-700"
-                                  }`}
+                                  className={`text-xs font-bold`}
+                                  style={{ color: iconColor }}
                                 >
                                   {field.assignedName}
                                 </span>

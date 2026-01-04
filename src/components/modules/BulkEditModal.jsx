@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
 import { validateBulkUpdate } from "../../utils/validation";
-import "../ProfileAnimations.css";
 
 const BulkEditModal = ({ selectedEmployees, onClose, onSuccess }) => {
   const [bulkUpdates, setBulkUpdates] = useState({
