@@ -31,7 +31,13 @@ const auditLogSchema = new mongoose.Schema({
       'MFA Enabled',
       'MFA Disabled',
       'Session Terminated',
-      'Other'
+      'Other',
+      'Backup',
+      'Restore',
+      'Import',
+      'Export',
+      'Approval Flow',
+      'Approval',
     ],
   },
   actionColor: {

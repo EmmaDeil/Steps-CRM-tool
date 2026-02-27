@@ -69,10 +69,21 @@ const httpServer = http.createServer(app);
 app.use(helmet()); // Secure HTTP headers
 app.use(mongoSanitize()); // Sanitize MongoDB queries
 
+// CORS configuration (MUST BE BEFORE RATE LIMITER OR CORS WILL FAIL ON 429)
+if (!process.env.FRONTEND_URL) {
+  console.error('FRONTEND_URL not set in .env file');
+  process.exit(1);
+}
+app.use(cors({
+  origin: process.env.FRONTEND_URL,
+  credentials: true,
+  optionsSuccessStatus: 200,
+}));
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 1000, // limit each IP to 1000 requests per windowMs
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
@@ -84,21 +95,10 @@ app.use(limiter);
 // More strict rate limiter for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 20, // increased for developement convenience
   skipSuccessfulRequests: true,
   message: 'Too many failed requests, please try again later.',
 });
-
-// CORS configuration
-if (!process.env.FRONTEND_URL) {
-  console.error('FRONTEND_URL not set in .env file');
-  process.exit(1);
-}
-app.use(cors({
-  origin: process.env.FRONTEND_URL,
-  credentials: true,
-  optionsSuccessStatus: 200,
-}));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));

@@ -12,9 +12,16 @@ const SESSION_CONFIG = {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const storedUser = localStorage.getItem("authUser");
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem("authToken"));
   const [sessionConfig, setSessionConfig] = useState(SESSION_CONFIG);
 
   // Update last activity timestamp
@@ -72,6 +79,8 @@ export const AuthProvider = ({ children }) => {
           console.warn("Token verification failed:", response.error);
           setUser(null);
           setIsAuthenticated(false);
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("authUser");
         }
       }
     } catch (error) {
@@ -80,6 +89,8 @@ export const AuthProvider = ({ children }) => {
         console.error("Auth check failed - unauthorized:", error);
         setUser(null);
         setIsAuthenticated(false);
+        localStorage.removeItem("authToken");
+        localStorage.removeItem("authUser");
       } else {
         // Network error or other issue - keep user logged in
         console.warn("Auth check failed (network issue):", error.message);
@@ -98,6 +109,7 @@ export const AuthProvider = ({ children }) => {
       if (response && response.success) {
         // Store token securely
         localStorage.setItem("authToken", response.data.token);
+        localStorage.setItem("authUser", JSON.stringify(response.data.user));
         localStorage.setItem("rememberMe", rememberMe.toString());
 
         setUser(response.data.user);
@@ -124,6 +136,7 @@ export const AuthProvider = ({ children }) => {
       // response is now the response body (thanks to interceptor)
       if (response && response.success) {
         localStorage.setItem("authToken", response.data.token);
+        localStorage.setItem("authUser", JSON.stringify(response.data.user));
         setUser(response.data.user);
         setIsAuthenticated(true);
         return { success: true };
@@ -160,6 +173,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       // Clear all auth data
       localStorage.removeItem("authToken");
+      localStorage.removeItem("authUser");
       localStorage.removeItem("rememberMe");
       localStorage.removeItem("lastActivity");
       setUser(null);
