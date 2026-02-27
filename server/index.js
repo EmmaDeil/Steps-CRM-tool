@@ -794,20 +794,6 @@ async function start() {
     res.json([]);
   });
 
-  // Vendors endpoint
-  app.get('/api/vendors', async (req, res) => {
-    const vendors = [
-      { id: 1, name: 'ABC Office Supplies Ltd.', category: 'Office Supplies', email: 'contact@abcoffice.com' },
-      { id: 2, name: 'Tech Solutions Inc.', category: 'Technology', email: 'sales@techsolutions.com' },
-      { id: 3, name: 'Global Furniture Co.', category: 'Furniture', email: 'info@globalfurniture.com' },
-      { id: 4, name: 'Premier Cleaning Services', category: 'Services', email: 'hello@premiercleaning.com' },
-      { id: 5, name: 'Industrial Equipment Corp.', category: 'Equipment', email: 'orders@indequip.com' },
-      { id: 6, name: 'Green Energy Solutions', category: 'Energy', email: 'info@greenenergy.com' },
-      { id: 7, name: 'Prime Construction Materials', category: 'Construction', email: 'sales@primeconst.com' },
-      { id: 8, name: 'Fast Delivery Logistics', category: 'Logistics', email: 'support@fastdelivery.com' },
-    ];
-    res.json(vendors);
-  });
 
   // Purchase Orders endpoints
   app.get('/api/purchase-orders', async (req, res) => {

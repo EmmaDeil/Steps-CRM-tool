@@ -18,7 +18,7 @@ const Attendance = () => {
         // Try multiple possible endpoints
         const endpoints = [
           `${API_BASE_URL}/api/attendance`,
-          `${API_BASE_URL}/api/employees`,
+          `${API_BASE_URL}/api/hr/employees`,
           `${API_BASE_URL}/attendance`,
           `${API_BASE_URL}/`,
         ];

@@ -1750,7 +1750,7 @@ const Admin = () => {
 
             {/* Approval Flow */}
             <div
-              onClick={() => navigate("/home?view=approval")}
+              onClick={() => navigate("/home/1")}
               className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-lg transition-all cursor-pointer hover:border-blue-400"
             >
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">

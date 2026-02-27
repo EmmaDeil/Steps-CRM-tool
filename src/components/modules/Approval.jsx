@@ -91,7 +91,7 @@ const Approval = () => {
   useEffect(() => {
     const fetchStaffList = async () => {
       try {
-        const response = await apiService.get("/api/employees");
+        const response = await apiService.get("/api/hr/employees");
         if (response && Array.isArray(response)) {
           setStaffList(
             response.map((emp) => ({
