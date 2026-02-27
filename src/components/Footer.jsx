@@ -2,7 +2,7 @@ import React from "react";
 
 const Footer = ({
   variant = "default",
-  company = "Acme Corp Business Suite",
+  company = "Steps Project",
 }) => {
   const currentYear = new Date().getFullYear();
 

@@ -6,6 +6,262 @@ import Footer from "../Footer";
 import Breadcrumb from "../Breadcrumb";
 import SecuritySettings from "./SecuritySettings";
 
+// ─── Approval Flow View ───────────────────────────────────────────────────────
+const ApprovalFlowView = ({ setSearchParams }) => {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("all");
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [rejectingId, setRejectingId] = useState(null);
+  const [vendors, setVendors] = useState([]);
+  const [selectedVendors, setSelectedVendors] = useState({});
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [mrRes, arRes, rrRes, vendorRes] = await Promise.all([
+        apiService.get("/api/material-requests"),
+        apiService.get("/api/advance-requests"),
+        apiService.get("/api/refund-requests"),
+        apiService.get("/api/vendors"),
+      ]);
+      const mr = (mrRes.data || []).map((r) => ({ ...r, _module: "Material Request" }));
+      const ar = (arRes.data || []).map((r) => ({ ...r, _module: "Advance Request" }));
+      const rr = (rrRes.data || []).map((r) => ({ ...r, _module: "Refund Request" }));
+      setRequests([...mr, ...ar, ...rr]);
+      setVendors(vendorRes.data || []);
+    } catch {
+      toast.error("Failed to load approval requests");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const handleApprove = async (req) => {
+    try {
+      if (req._module === "Material Request") {
+        const vendor = selectedVendors[req._id] || "To be assigned";
+        await apiService.post(`/api/material-requests/${req._id}/approve`, { vendor });
+      } else if (req._module === "Advance Request") {
+        await apiService.patch(`/api/advance-requests/${req._id}`, { status: "approved" });
+      } else if (req._module === "Refund Request") {
+        await apiService.patch(`/api/refund-requests/${req._id}`, { status: "approved" });
+      }
+      toast.success("Request approved!");
+      fetchAll();
+    } catch {
+      toast.error("Failed to approve request");
+    }
+  };
+
+  const handleReject = async (req) => {
+    if (!rejectionReason.trim()) { toast.error("Please enter a rejection reason"); return; }
+    try {
+      if (req._module === "Material Request") {
+        await apiService.post(`/api/material-requests/${req._id}/reject`, { reason: rejectionReason });
+      } else {
+        const endpoint = req._module === "Advance Request" ? "advance-requests" : "refund-requests";
+        await apiService.patch(`/api/${endpoint}/${req._id}`, { status: "rejected", rejectionReason });
+      }
+      toast.success("Request rejected");
+      setRejectingId(null);
+      setRejectionReason("");
+      fetchAll();
+    } catch {
+      toast.error("Failed to reject request");
+    }
+  };
+
+  const tabs = [
+    { key: "all", label: "All Requests" },
+    { key: "pending", label: "Pending" },
+    { key: "approved", label: "Approved" },
+    { key: "rejected", label: "Rejected" },
+  ];
+
+  const filtered = activeTab === "all" ? requests : requests.filter((r) => r.status === activeTab);
+
+  const stats = {
+    total: requests.length,
+    pending: requests.filter((r) => r.status === "pending").length,
+    approved: requests.filter((r) => r.status === "approved").length,
+    rejected: requests.filter((r) => r.status === "rejected").length,
+  };
+
+  const moduleColors = {
+    "Material Request": "bg-blue-100 text-blue-700",
+    "Advance Request": "bg-purple-100 text-purple-700",
+    "Refund Request": "bg-orange-100 text-orange-700",
+  };
+
+  const statusColors = {
+    pending: "bg-yellow-100 text-yellow-800",
+    approved: "bg-green-100 text-green-800",
+    rejected: "bg-red-100 text-red-800",
+    fulfilled: "bg-blue-100 text-blue-800",
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "Admin Controls", href: "/home/7", icon: "fa-user-shield", onClick: (e) => { e.preventDefault(); setSearchParams({}); } },
+          { label: "Approval Flow", icon: "fa-diagram-project" },
+        ]}
+      />
+      <div className="max-w-[1400px] mx-auto px-6 py-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-[#111418] mb-1">Approval Flow</h1>
+            <p className="text-[#617589] text-sm">Review and manage all pending approval requests across modules.</p>
+          </div>
+          <button onClick={fetchAll} className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-2 transition-colors">
+            <i className="fa-solid fa-rotate-right"></i> Refresh
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {[
+            { label: "Total", value: stats.total, icon: "fa-layer-group", color: "bg-gray-100 text-gray-600" },
+            { label: "Pending", value: stats.pending, icon: "fa-clock", color: "bg-yellow-100 text-yellow-700" },
+            { label: "Approved", value: stats.approved, icon: "fa-circle-check", color: "bg-green-100 text-green-700" },
+            { label: "Rejected", value: stats.rejected, icon: "fa-circle-xmark", color: "bg-red-100 text-red-700" },
+          ].map((s) => (
+            <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4">
+              <div className={`w-11 h-11 rounded-lg flex items-center justify-center ${s.color}`}>
+                <i className={`fa-solid ${s.icon} text-lg`}></i>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-[#111418]">{s.value}</p>
+                <p className="text-xs text-[#617589]">{s.label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex border-b border-gray-200">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className={`px-5 py-3 text-sm font-medium transition-colors ${
+                  activeTab === t.key
+                    ? "text-[#137fec] border-b-2 border-[#137fec] bg-blue-50/50"
+                    : "text-[#617589] hover:text-[#111418] hover:bg-gray-50"
+                }`}
+              >
+                {t.label}
+                {t.key === "pending" && stats.pending > 0 && (
+                  <span className="ml-2 px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full font-semibold">
+                    {stats.pending}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Table */}
+          {loading ? (
+            <div className="p-12 text-center text-gray-400">
+              <div className="w-8 h-8 border-2 border-[#137fec] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+              Loading requests...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="p-12 text-center text-gray-400">
+              <i className="fa-solid fa-inbox text-4xl mb-3 opacity-30"></i>
+              <p className="font-medium">No requests found</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {filtered.map((req) => (
+                <div key={req._id} className="p-5 hover:bg-gray-50 transition-colors">
+                  <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                    {/* Left side */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${moduleColors[req._module] || "bg-gray-100 text-gray-600"}`}>
+                          {req._module}
+                        </span>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${statusColors[req.status] || "bg-gray-100 text-gray-600"}`}>
+                          {req.status}
+                        </span>
+                        {req.requestId && <span className="text-xs text-[#617589]">#{req.requestId}</span>}
+                      </div>
+                      <p className="font-semibold text-[#111418] truncate">
+                        {req.requestTitle || req.purpose || req.reason || req.lineItems?.[0]?.itemName || "Untitled Request"}
+                      </p>
+                      <div className="flex flex-wrap gap-3 mt-1 text-xs text-[#617589]">
+                        <span><i className="fa-solid fa-user mr-1"></i>{req.requestedBy || req.employeeName || "—"}</span>
+                        {req.approver && <span><i className="fa-solid fa-user-check mr-1"></i>{req.approver}</span>}
+                        {req.department && <span><i className="fa-solid fa-building mr-1"></i>{req.department}</span>}
+                        <span><i className="fa-solid fa-calendar mr-1"></i>{new Date(req.createdAt || req.date).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+
+                    {/* Right side: actions */}
+                    {req.status === "pending" && (
+                      <div className="flex flex-col gap-2 shrink-0">
+                        {req._module === "Material Request" && (
+                          <select
+                            value={selectedVendors[req._id] || ""}
+                            onChange={(e) => setSelectedVendors((v) => ({ ...v, [req._id]: e.target.value }))}
+                            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec]"
+                          >
+                            <option value="">Select vendor (optional)</option>
+                            {vendors.map((v) => <option key={v._id || v.id} value={v.name}>{v.name}</option>)}
+                          </select>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleApprove(req)}
+                            className="flex-1 px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <i className="fa-solid fa-check"></i> Approve
+                          </button>
+                          <button
+                            onClick={() => setRejectingId(req._id)}
+                            className="flex-1 px-4 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <i className="fa-solid fa-xmark"></i> Reject
+                          </button>
+                        </div>
+                        {/* Inline reject reason */}
+                        {rejectingId === req._id && (
+                          <div className="flex gap-2 mt-1">
+                            <input
+                              autoFocus
+                              type="text"
+                              placeholder="Reason for rejection..."
+                              value={rejectionReason}
+                              onChange={(e) => setRejectionReason(e.target.value)}
+                              className="flex-1 text-xs border border-red-300 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-red-400"
+                              onKeyDown={(e) => e.key === "Enter" && handleReject(req)}
+                            />
+                            <button onClick={() => handleReject(req)} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg font-semibold">Send</button>
+                            <button onClick={() => { setRejectingId(null); setRejectionReason(""); }} className="px-3 py-1.5 text-gray-500 hover:text-gray-700 text-xs">Cancel</button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 const Admin = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -517,7 +773,7 @@ const Admin = () => {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-[#111418] mb-1">
-                  User Role & Access Management
+                  User Role &amp; Access Management
                 </h1>
                 <p className="text-gray-600">
                   Manage system users, assign roles, and configure granular
@@ -1481,6 +1737,13 @@ const Admin = () => {
           >
             <i className="fa-solid fa-database"></i>
             Backup Data
+          </button>
+          <button
+            onClick={() => setSearchParams({ view: "approval-flow" })}
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+          >
+            <i className="fa-solid fa-diagram-project"></i>
+            Approval Flow
           </button>
         </div>
 

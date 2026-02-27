@@ -60,6 +60,8 @@ const MaterialRequests = () => {
   const [cursorPosition, setCursorPosition] = useState(0);
   const [userList, setUserList] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const messageTextareaRef = useRef(null);
+  const attachmentInputRef = useRef(null);
 
   // Item and quantity type options
   const itemOptions = [
@@ -313,10 +315,10 @@ const MaterialRequests = () => {
     }
   };
 
-  const _handleFileChange = (e) => {
+  const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
-    setAttachments([...attachments, ...files]);
-    e.target.value = null; // Reset input
+    setAttachments((prev) => [...prev, ...files]);
+    e.target.value = null; // Reset input so same file can be re-selected
   };
 
   const removeAttachment = (index) => {
@@ -932,16 +934,26 @@ const MaterialRequests = () => {
 
                     <label className="flex flex-col gap-2">
                       <span className="text-sm font-medium text-[#111418]">
-                        Required By Date <span className="text-red-500">*</span>
+                        Department <span className="text-red-500">*</span>
                       </span>
-                      <input
-                        type="date"
-                        name="requiredByDate"
-                        value={formData.requiredByDate || ""}
-                        onChange={handleFormChange}
-                        className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-4 py-2.5"
-                        required
-                      />
+                      <div className="relative">
+                        <i className="fa-solid fa-building absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
+                        <select
+                          name="department"
+                          value={formData.department || user?.department || ""}
+                          onChange={handleFormChange}
+                          className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
+                          required
+                        >
+                          <option value="">Select Department</option>
+                          {(_departments || []).map((dept) => (
+                            <option key={dept._id || dept.name} value={dept.name}>
+                              {dept.name}
+                            </option>
+                          ))}
+                        </select>
+                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
+                      </div>
                     </label>
 
                     <label className="flex flex-col gap-2 sm:col-span-2">
@@ -956,6 +968,34 @@ const MaterialRequests = () => {
                         className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-4 py-2.5"
                         placeholder="e.g. P-2023-MARKETING-001"
                       />
+                    </label>
+
+                    <label className="flex flex-col gap-2 sm:col-span-2">
+                      <span className="text-sm font-medium text-[#111418]">
+                        Assign Approver <span className="text-red-500">*</span>
+                      </span>
+                      <div className="relative">
+                        <i className="fa-solid fa-user-check absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
+                        <select
+                          name="approver"
+                          value={formData.approver}
+                          onChange={handleFormChange}
+                          className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
+                          required
+                        >
+                          <option value="">Select Manager</option>
+                          {usersLoading ? (
+                            <option disabled>Loading users...</option>
+                          ) : (
+                            userList.map((u) => (
+                              <option key={u.id} value={u.name}>
+                                {u.name} - {u.role}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
+                      </div>
                     </label>
                   </div>
                 </div>
@@ -1034,9 +1074,6 @@ const MaterialRequests = () => {
                   <table className="w-full min-w-[900px] text-left border-collapse">
                     <thead>
                       <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[5%]">
-                          S/N
-                        </th>
                         <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[20%]">
                           Item Name / SKU
                         </th>
@@ -1064,9 +1101,6 @@ const MaterialRequests = () => {
                           key={index}
                           className="group hover:bg-gray-50 transition-colors"
                         >
-                          <td className="p-3 text-center font-medium text-[#617589]">
-                            {index + 1}
-                          </td>
                           <td className="p-3">
                             <select
                               className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] px-3 py-2 text-sm"
@@ -1219,7 +1253,7 @@ const MaterialRequests = () => {
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                   <h3 className="text-base font-bold text-[#111418]">
-                    Reason & Approval
+                    Reason for Request
                   </h3>
                 </div>
                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1264,33 +1298,6 @@ const MaterialRequests = () => {
                     </div>
                   </label>
 
-                  <label className="flex flex-col gap-2">
-                    <span className="text-sm font-medium text-[#111418]">
-                      Assign Approver <span className="text-red-500">*</span>
-                    </span>
-                    <div className="relative">
-                      <i className="fa-solid fa-user-check absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
-                      <select
-                        name="approver"
-                        value={formData.approver}
-                        onChange={handleFormChange}
-                        className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
-                        required
-                      >
-                        <option value="">Select Manager</option>
-                        {usersLoading ? (
-                          <option disabled>Loading users...</option>
-                        ) : (
-                          userList.map((user) => (
-                            <option key={user.id} value={user.name}>
-                              {user.name} - {user.role}
-                            </option>
-                          ))
-                        )}
-                      </select>
-                      <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
-                    </div>
-                  </label>
                 </div>
               </div>
 
@@ -1343,9 +1350,19 @@ const MaterialRequests = () => {
                     Add a comment
                   </label>
                   <div className="relative group">
+                    {/* Hidden file input for attachments */}
+                    <input
+                      ref={attachmentInputRef}
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
                     <textarea
+                      ref={messageTextareaRef}
                       className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-4 pr-4 pb-12 pt-3 text-sm min-h-[120px] resize-none transition-all"
-                      placeholder="Type your comment here..."
+                      placeholder="Type your comment here... Use @ to mention someone"
                       value={message}
                       onChange={handleMessageChange}
                     />
@@ -1389,9 +1406,7 @@ const MaterialRequests = () => {
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() =>
-                            document.getElementById("attachmentInput").click()
-                          }
+                          onClick={() => attachmentInputRef.current?.click()}
                           className="p-1.5 text-[#617589] hover:text-[#137fec] hover:bg-gray-100 rounded-lg transition-colors"
                           title="Attach File"
                         >
@@ -1399,6 +1414,22 @@ const MaterialRequests = () => {
                         </button>
                         <button
                           type="button"
+                          onClick={() => {
+                            const textarea = messageTextareaRef.current;
+                            if (!textarea) return;
+                            const pos = textarea.selectionStart;
+                            const before = message.substring(0, pos);
+                            const after = message.substring(pos);
+                            const newMsg = before + "@" + after;
+                            setMessage(newMsg);
+                            setCursorPosition(pos + 1);
+                            setMentionSearchTerm("");
+                            setShowMentionDropdown(true);
+                            setTimeout(() => {
+                              textarea.focus();
+                              textarea.setSelectionRange(pos + 1, pos + 1);
+                            }, 0);
+                          }}
                           className="p-1.5 text-[#617589] hover:text-[#137fec] hover:bg-gray-100 rounded-lg transition-colors"
                           title="Tag User (@)"
                         >
