@@ -58,6 +58,7 @@ const DEFAULT_JOB_TITLES = [
   'Product Manager',
 ];
 const VendorModel = require('./models/Vendor');
+const approvalRuleRoutes = require('./routes/approvalRule.routes');
 const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail } = require('./utils/emailService');
 const { Server } = require('socket.io');
 const http = require('http');
@@ -657,6 +658,9 @@ async function start() {
     if (!mod) return res.status(404).json({ message: 'Not found' });
     res.json(mod);
   });
+
+  // ============ APPROVAL SETTINGS ROUTES ============
+  app.use("/api/approval-settings", checkSecurityRole(['Admin']), approvalRuleRoutes);
 
   app.get('/api/analytics', async (req, res) => {
     const a = await api.getAnalytics();
@@ -2323,7 +2327,7 @@ async function start() {
   });
 
   // ============ LOG RETENTION POLICY ENDPOINTS (Phase 2 Enhancement) ============
-
+  
   // Get log retention policy settings
   app.get('/api/security/retention-policy', checkSecurityPermission('viewLogs'), async (req, res) => {
     try {

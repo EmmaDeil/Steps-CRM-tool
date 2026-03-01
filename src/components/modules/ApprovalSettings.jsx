@@ -1,38 +1,73 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
+import apiService from "../../services/api";
 
 const ApprovalSettings = () => {
-  const [rules, setRules] = useState([
-    {
-      id: 1,
-      moduleType: "Advance Requests",
-      condition: "Amount > $1,000",
-      levels: [
-        { level: 1, approverRole: "Direct Manager" },
-        { level: 2, approverRole: "Finance Head" },
-      ],
-      status: "Active",
-    },
-    {
-      id: 2,
-      moduleType: "Leave Requests",
-      condition: "Duration > 3 Days",
-      levels: [
-        { level: 1, approverRole: "Direct Manager" },
-        { level: 2, approverRole: "HR Manager" },
-      ],
-      status: "Active",
-    },
-    {
-      id: 3,
-      moduleType: "Refund Requests",
-      condition: "All",
-      levels: [{ level: 1, approverRole: "Finance Administrator" }],
-      status: "Inactive",
-    },
-  ]);
-
+  const [rules, setRules] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Form State
+  const [moduleType, setModuleType] = useState("Advance Requests");
+  const [conditions, setConditions] = useState(["All Requests"]);
+  const [levels, setLevels] = useState([{ level: 1, approverRole: "Direct Manager" }]);
+
+  const fetchRules = async () => {
+    try {
+      const response = await apiService.get("/api/approval-settings");
+      setRules(response.data || []);
+    } catch (error) {
+      console.error("Error fetching approval rules:", error);
+      toast.error("Failed to load approval rules");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRules();
+  }, []);
+
+  const handleSaveRule = async () => {
+    if (levels.length === 0) {
+      return toast.error("Please add at least one approval level.");
+    }
+    
+    setIsSaving(true);
+    try {
+      const newRule = { moduleType, condition: conditions, levels, status: "Active" };
+      await apiService.post("/api/approval-settings", newRule);
+      
+      toast.success("Rule saved successfully!");
+      setShowAddModal(false);
+      fetchRules(); // Reload list
+      
+      // Reset form
+      setModuleType("Advance Requests");
+      setConditions(["All Requests"]);
+      setLevels([{ level: 1, approverRole: "Direct Manager" }]);
+      
+    } catch (error) {
+      console.error("Error saving rule:", error);
+      toast.error("Failed to save rule");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteRule = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this rule?")) return;
+    
+    try {
+      await apiService.delete(`/api/approval-settings/${id}`);
+      toast.success("Rule deleted");
+      fetchRules();
+    } catch (error) {
+      console.error("Error deleting rule:", error);
+      toast.error("Failed to delete rule");
+    }
+  };
 
   return (
     <div className="w-full">
@@ -78,56 +113,83 @@ const ApprovalSettings = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {rules.map((rule) => (
-                <tr key={rule.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-[#111418]">
-                      {rule.moduleType}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="bg-gray-100 text-gray-700 text-xs font-medium px-2 py-1 rounded">
-                      {rule.condition}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      {rule.levels.map((level, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <span
-                            className="bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium px-2.5 py-1 rounded-full cursor-help whitespace-nowrap"
-                            title={`Level ${level.level}: ${level.approverRole}`}
-                          >
-                            {level.level}. {level.approverRole}
-                          </span>
-                          {idx < rule.levels.length - 1 && (
-                            <i className="fa-solid fa-arrow-right text-gray-400 text-[10px]"></i>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        rule.status === "Active"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {rule.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
-                      <i className="fa-solid fa-pen"></i>
-                    </button>
-                    <button className="p-2 text-gray-400 hover:text-red-600 transition-colors ml-1">
-                      <i className="fa-solid fa-trash"></i>
-                    </button>
+              {loading ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                    <i className="fa-solid fa-spinner fa-spin mr-2"></i> Loading rules...
                   </td>
                 </tr>
-              ))}
+              ) : rules.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                    No approval rules defined yet.
+                  </td>
+                </tr>
+              ) : (
+                rules.map((rule) => (
+                  <tr key={rule._id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-[#111418]">
+                        {rule.moduleType}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {Array.isArray(rule.condition) ? (
+                        <div className="flex flex-wrap gap-1">
+                          {rule.condition.map((cond, i) => (
+                            <span key={i} className="bg-gray-100 text-gray-700 text-[10px] font-medium px-2 py-0.5 rounded">
+                              {cond}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="bg-gray-100 text-gray-700 text-[10px] font-medium px-2 py-0.5 rounded">
+                          {rule.condition}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        {rule.levels.map((level, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span
+                              className="bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium px-2.5 py-1 rounded-full cursor-help whitespace-nowrap"
+                              title={`Level ${level.level}: ${level.approverRole}`}
+                            >
+                              {level.level}. {level.approverRole}
+                            </span>
+                            {idx < rule.levels.length - 1 && (
+                              <i className="fa-solid fa-arrow-right text-gray-400 text-[10px]"></i>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          rule.status === "Active"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {rule.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
+                        <i className="fa-solid fa-pen"></i>
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteRule(rule._id)}
+                        className="p-2 text-gray-400 hover:text-red-600 transition-colors ml-1"
+                      >
+                        <i className="fa-solid fa-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -153,35 +215,44 @@ const ApprovalSettings = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Target Module
                 </label>
-                <select className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500">
-                  <option>Advance Requests</option>
-                  <option>Leave Requests</option>
-                  <option>Refund Requests</option>
-                  <option>Purchase Orders</option>
-                  <option>Material Requests</option>
+                <select 
+                  value={moduleType}
+                  onChange={(e) => setModuleType(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="Advance Requests">Advance Requests</option>
+                  <option value="Leave Requests">Leave Requests</option>
+                  <option value="Refund Requests">Refund Requests</option>
+                  <option value="Purchase Orders">Purchase Orders</option>
+                  <option value="Material Requests">Material Requests</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Trigger Condition (Optional)
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Trigger Conditions <span className="text-red-500">*</span>
                 </label>
-                <div className="flex gap-2">
-                  <select className="w-1/3 h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500">
-                    <option>Amount</option>
-                    <option>Duration (Days)</option>
-                    <option>Quantity</option>
-                  </select>
-                  <select className="w-1/4 h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500">
-                    <option>Is Greater Than</option>
-                    <option>Is Less Than</option>
-                    <option>Equals</option>
-                  </select>
-                  <input
-                    type="number"
-                    placeholder="Value..."
-                    className="flex-1 h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500"
-                  />
+                <div className="grid grid-cols-2 gap-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  {['All Requests', 'Amount > 1000', 'Amount > 5000', 'Duration > 2 Days', 'Duration > 5 Days', 'Out of Policy'].map((option) => (
+                    <label key={option} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={conditions.includes(option)}
+                        onChange={(e) => {
+                          if (option === 'All Requests') {
+                            setConditions(['All Requests']);
+                          } else {
+                            const newConds = e.target.checked
+                              ? [...conditions.filter(c => c !== 'All Requests'), option]
+                              : conditions.filter(c => c !== option);
+                            setConditions(newConds.length ? newConds : ['All Requests']);
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-gray-300 text-[#137fec] focus:ring-[#137fec] cursor-pointer"
+                      />
+                      {option}
+                    </label>
+                  ))}
                 </div>
               </div>
 
@@ -190,36 +261,54 @@ const ApprovalSettings = () => {
                   <h4 className="text-sm font-bold text-gray-800">
                     Approval Sequence
                   </h4>
-                  <button className="text-sm text-blue-600 font-medium hover:text-blue-800 flex items-center gap-1">
+                  <button 
+                    onClick={() => setLevels([...levels, { level: levels.length + 1, approverRole: "Direct Manager" }])}
+                    className="text-sm text-blue-600 font-medium hover:text-blue-800 flex items-center gap-1"
+                  >
                     <i className="fa-solid fa-plus"></i>
                     Add Level
                   </button>
                 </div>
 
-                {/* Level 1 */}
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-3 relative">
-                  <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-xs ring-4 ring-white">
-                    1
-                  </div>
-                  <div className="ml-4 flex gap-3 items-center">
-                    <div className="flex-1">
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                        Approver Role / Group
-                      </label>
-                      <select className="w-full h-9 px-3 rounded border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500">
-                        <option>Direct Manager</option>
-                        <option>Department Head</option>
-                        <option>Finance Manager</option>
-                        <option>HR Director</option>
-                        <option>Specific User...</option>
-                      </select>
+                {/* Levels list */}
+                {levels.map((level, idx) => (
+                  <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-3 relative">
+                    <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-xs ring-4 ring-white">
+                      {level.level}
                     </div>
-                    <button className="mt-5 text-gray-400 hover:text-red-500 p-2">
-                      <i className="fa-solid fa-trash"></i>
-                    </button>
+                    <div className="ml-4 flex gap-3 items-center">
+                      <div className="flex-1">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                          Approver Role / Group
+                        </label>
+                        <select 
+                          value={level.approverRole}
+                          onChange={(e) => {
+                            const newLevels = [...levels];
+                            newLevels[idx].approverRole = e.target.value;
+                            setLevels(newLevels);
+                          }}
+                          className="w-full h-9 px-3 rounded border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="Direct Manager">Direct Manager</option>
+                          <option value="Department Head">Department Head</option>
+                          <option value="Finance Manager">Finance Manager</option>
+                          <option value="HR Director">HR Director</option>
+                          <option value="Admin">Admin</option>
+                        </select>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          const newLevels = levels.filter((_, i) => i !== idx).map((l, i) => ({ ...l, level: i + 1 }));
+                          setLevels(newLevels);
+                        }}
+                        className="mt-5 text-gray-400 hover:text-red-500 p-2"
+                      >
+                        <i className="fa-solid fa-trash"></i>
+                      </button>
+                    </div>
                   </div>
-                </div>
-
+                ))}
               </div>
             </div>
 
@@ -231,13 +320,11 @@ const ApprovalSettings = () => {
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  toast.success("Rule saved successfully!");
-                  setShowAddModal(false);
-                }}
-                className="px-4 py-2 bg-[#137fec] text-white font-medium rounded-lg hover:bg-blue-600 transition-colors"
+                disabled={isSaving}
+                onClick={handleSaveRule}
+                className="px-4 py-2 bg-[#137fec] text-white font-medium rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
               >
-                Save Rule
+                {isSaving ? "Saving..." : "Save Rule"}
               </button>
             </div>
           </div>

@@ -19,6 +19,7 @@ const loadModuleComponent = (componentName) => {
     AdminControls: "Admin",
     AdminControl: "Admin",
     SignatureManagement: "DocSign",
+    Security: "SecuritySettings",
   };
 
   const finalComponentName = componentMapping[componentName] || componentName;
@@ -326,7 +327,7 @@ export default function Home() {
         </div>
       </main>
 
-      <Footer variant="default" company="Acme Corp Business Suite" />
+      <Footer variant="default" company="Ladeil Innovataion Ltd" />
     </div>
   );
 }

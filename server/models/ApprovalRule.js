@@ -32,8 +32,8 @@ const approvalRuleSchema = new mongoose.Schema(
       ],
     },
     condition: {
-      type: String,
-      default: "All", // E.g., "Amount > 1000", "Duration > 3 Days", "All"
+      type: [String],
+      default: ["All Requests"],
     },
     levels: {
       type: [approvalLevelSchema],
