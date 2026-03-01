@@ -11,6 +11,7 @@ import AccountsPayable from "./AccountsPayable";
 import JournalHistory from "./JournalHistory";
 import JournalEntry from "./JournalEntry";
 import VendorManagement from "./VendorManagement";
+import Budget from "./Budget";
 
 const Finance = () => {
   const { user } = useAuth();
@@ -26,6 +27,8 @@ const Finance = () => {
   const [showJournalHistory, setShowJournalHistory] = useState(false);
   const [showJournalEntry, setShowJournalEntry] = useState(false);
   const [showVendorManagement, setShowVendorManagement] = useState(false);
+  const [showBudget, setShowBudget] = useState(false);
+  const [showQuickAction, setShowQuickAction] = useState(false);
 
   const displayName =
     user?.firstName || user?.fullName?.split(" ")[0] || "User";
@@ -49,6 +52,10 @@ const Finance = () => {
       setLoading(false);
     }
   };
+
+  if (showBudget) {
+    return <Budget onBack={() => setShowBudget(false)} parentModule="Finance" />;
+  }
 
   if (showVendorManagement) {
     return <VendorManagement onBack={() => setShowVendorManagement(false)} />;
@@ -110,10 +117,46 @@ const Finance = () => {
                   Welcome back, {displayName}. Select a module to get started.
                 </p>
               </div>
-              <button className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-primary">
-                <i className="fa-solid fa-plus mr-2"></i>
-                Quick Action
-              </button>
+              {/* Quick Action dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowQuickAction((v) => !v)}
+                  className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-primary gap-2"
+                >
+                  <i className="fa-solid fa-bolt"></i>
+                  Quick Action
+                  <i className="fa-solid fa-chevron-down text-xs"></i>
+                </button>
+
+                {showQuickAction && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowQuickAction(false)} />
+                    <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-20 overflow-hidden">
+                      <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700">
+                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Finance Actions</p>
+                      </div>
+                      {[
+                        { icon: "fa-book",            color: "text-blue-600",    bg: "bg-blue-50 dark:bg-blue-900/30",    label: "New Journal Entry",    action: () => { setShowJournalEntry(true); setShowQuickAction(false); } },
+                        { icon: "fa-receipt",         color: "text-red-600",     bg: "bg-red-50 dark:bg-red-900/30",      label: "Accounts Payable",     action: () => { setShowAccountsPayable(true); setShowQuickAction(false); } },
+                        { icon: "fa-wallet",          color: "text-teal-600",    bg: "bg-teal-50 dark:bg-teal-900/30",    label: "Budget Overview",      action: () => { setShowBudget(true); setShowQuickAction(false); } },
+                        { icon: "fa-scale-balanced",  color: "text-purple-600",  bg: "bg-purple-50 dark:bg-purple-900/30",label: "Reconcile Accounts",  action: () => { setShowReconcile(true); setShowQuickAction(false); } },
+                        { icon: "fa-users",           color: "text-indigo-600",  bg: "bg-indigo-50 dark:bg-indigo-900/30",label: "Vendor Management",   action: () => { setShowVendorManagement(true); setShowQuickAction(false); } },
+                      ].map(({ icon, color, bg, label, action }) => (
+                        <button
+                          key={label}
+                          onClick={action}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                        >
+                          <span className={`flex size-7 items-center justify-center rounded-lg ${bg}`}>
+                            <i className={`fa-solid ${icon} ${color} text-xs`}></i>
+                          </span>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Module Grid */}
@@ -191,11 +234,11 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => toast.info("Budget module coming soon")}
+                onClick={() => setShowBudget(true)}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform">
-                  <i className="fa-solid fa-chart-pie text-[28px]"></i>
+                  <i className="fa-solid fa-wallet text-[28px]"></i>
                 </div>
                 <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
                   Budget

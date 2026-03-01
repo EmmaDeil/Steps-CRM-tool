@@ -250,6 +250,9 @@ async function start() {
           { upsert: true, new: true }
         );
       }
+      // Remove any stale modules not in the current seed list
+      const validIds = seedModules.map((m) => m.id);
+      await ModuleModel.deleteMany({ id: { $nin: validIds } });
       console.log('Updated modules to match seed data');
     }
   } catch (err) {
@@ -661,6 +664,18 @@ async function start() {
 
   // ============ APPROVAL SETTINGS ROUTES ============
   app.use("/api/approval-settings", checkSecurityRole(['Admin']), approvalRuleRoutes);
+
+  // ============ PHYSICAL SECURITY ROUTES ============
+  const physicalSecurityRoutes = require('./routes/physicalSecurity.routes');
+  app.use('/api/physical-security', physicalSecurityRoutes);
+
+  // ============ ADMIN ROUTES (logs + backup) ============
+  const adminRoutes = require('./routes/admin.routes');
+  app.use('/api/admin', adminRoutes);
+
+  // ============ BUDGET ROUTES ============
+  const budgetRoutes = require('./routes/budget.routes');
+  app.use('/api/budget', budgetRoutes);
 
   app.get('/api/analytics', async (req, res) => {
     const a = await api.getAnalytics();

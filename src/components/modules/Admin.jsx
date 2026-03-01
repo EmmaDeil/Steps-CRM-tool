@@ -48,6 +48,14 @@ const Admin = () => {
   const errorToastShownRef = useRef({});
   const resetToastTimerRef = useRef(null);
 
+  // Audit Logs State
+  const [logs, setLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logFilterAction, setLogFilterAction] = useState("");
+  const [logFilterStatus, setLogFilterStatus] = useState("");
+  const [logPage, setLogPage] = useState(1);
+  const [logPagination, setLogPagination] = useState({ total: 0, pages: 1 });
+
   const [newUser, setNewUser] = useState({
     fullName: "",
     email: "",
@@ -113,14 +121,34 @@ const Admin = () => {
     }
   }, []);
 
+  const fetchLogs = useCallback(async () => {
+    setLogsLoading(true);
+    try {
+      const params = new URLSearchParams({ page: logPage, limit: 50 });
+      if (logFilterAction) params.append("action", logFilterAction);
+      if (logFilterStatus) params.append("status", logFilterStatus);
+      const res = await apiService.get(`/api/admin/logs?${params}`);
+      setLogs(res.data?.logs || []);
+      setLogPagination(res.data?.pagination || { total: 0, pages: 1 });
+    } catch (err) {
+      console.error("Error fetching logs:", err);
+      toast.error("Failed to load audit logs");
+    } finally {
+      setLogsLoading(false);
+    }
+  }, [logPage, logFilterAction, logFilterStatus]);
+
   useEffect(() => {
     fetchAdminData();
     fetchModules();
     if (activeView === "users") {
       fetchUsers();
     }
+    if (activeView === "logs") {
+      fetchLogs();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeView, fetchUsers, fetchModules]);
+  }, [activeView, fetchUsers, fetchModules, fetchLogs]);
 
   const fetchAdminData = async () => {
     setStatsLoading(true);
@@ -543,6 +571,153 @@ const Admin = () => {
         />
         <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
           <SystemSettings />
+        </div>
+        <Footer variant="admin" />
+      </div>
+    );
+  }
+
+  if (activeView === "logs") {
+    const actionTypes = ['Login','Logout','Failed Login','Config Update','User Created','User Updated','User Deleted','Role Changed','Access Denied','Export','API Key','Password Reset','MFA Enabled','MFA Disabled','Session Terminated','Backup','Restore','Import','Approval Flow','Approval','Other'];
+    const statusTypes = ['Success','Failed','Warning'];
+    const actionColors = { Login:'blue', Logout:'gray', 'Failed Login':'red', 'Config Update':'orange', 'User Created':'green', 'User Updated':'blue', 'User Deleted':'red', 'Role Changed':'purple', 'Access Denied':'red', Export:'blue', 'API Key':'purple', 'Password Reset':'orange', 'MFA Enabled':'green', 'MFA Disabled':'red', 'Session Terminated':'red', Backup:'blue', Restore:'green', Import:'blue', 'Approval Flow':'purple', Approval:'green', Other:'gray' };
+    const badgeClasses = { blue: 'bg-blue-100 text-blue-700', green: 'bg-green-100 text-green-700', red: 'bg-red-100 text-red-700', orange: 'bg-orange-100 text-orange-700', purple: 'bg-purple-100 text-purple-700', gray: 'bg-gray-100 text-gray-600' };
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <Breadcrumb items={[
+          { label: "Home", href: "/home", icon: "fa-house" },
+          { label: "Admin Controls", onClick: () => setSearchParams({ view: "dashboard" }), icon: "fa-user-shield" },
+          { label: "Audit Logs", icon: "fa-file-lines" },
+        ]} />
+        <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Audit Logs</h1>
+              <p className="text-sm text-gray-500 mt-1">{logPagination.total} total events recorded</p>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 mb-6 flex flex-wrap gap-3 items-center">
+            <select
+              value={logFilterAction}
+              onChange={e => { setLogFilterAction(e.target.value); setLogPage(1); }}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+            >
+              <option value="">All Actions</option>
+              {actionTypes.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <select
+              value={logFilterStatus}
+              onChange={e => { setLogFilterStatus(e.target.value); setLogPage(1); }}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none w-40"
+            >
+              <option value="">All Statuses</option>
+              {statusTypes.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button
+              onClick={() => fetchLogs()}
+              className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              <i className="fa-solid fa-magnifying-glass"></i> Filter
+            </button>
+            <button
+              onClick={() => { setLogFilterAction(""); setLogFilterStatus(""); setLogPage(1); }}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition-colors text-gray-600"
+            >
+              Clear
+            </button>
+          </div>
+
+          {/* Logs Table */}
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+            {logsLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <i className="fa-solid fa-circle-notch fa-spin text-3xl text-blue-500"></i>
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                <i className="fa-solid fa-file-lines text-5xl mb-4"></i>
+                <p className="font-medium">No audit logs found</p>
+                <p className="text-sm">Logs will appear here as users interact with the system</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Timestamp</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actor</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Description</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">IP</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {logs.map((log, i) => (
+                      <tr key={log._id || i} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 text-gray-500 font-mono text-xs whitespace-nowrap">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold shrink-0">
+                              {log.actor?.initials || '?'}
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-800 text-xs">{log.actor?.userName || 'System'}</p>
+                              <p className="text-gray-400 text-[10px]">{log.actor?.userEmail}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClasses[actionColors[log.action] || 'gray']}`}>
+                            {log.action}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 max-w-xs truncate">{log.description}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            log.status === 'Success' ? 'bg-green-100 text-green-700' :
+                            log.status === 'Failed' ? 'bg-red-100 text-red-700' :
+                            'bg-amber-100 text-amber-700'
+                          }`}>
+                            {log.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 font-mono text-xs">{log.ipAddress}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {logPagination.pages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-gray-500">Page {logPage} of {logPagination.pages}</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setLogPage(p => Math.max(1, p - 1))}
+                  disabled={logPage === 1}
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                >
+                  <i className="fa-solid fa-chevron-left"></i>
+                </button>
+                <button
+                  onClick={() => setLogPage(p => Math.min(logPagination.pages, p + 1))}
+                  disabled={logPage === logPagination.pages}
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                >
+                  <i className="fa-solid fa-chevron-right"></i>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <Footer variant="admin" />
       </div>
@@ -1508,7 +1683,7 @@ const Admin = () => {
             Manage Users
           </button>
           <button
-            onClick={() => navigate("/admin?tab=logs")}
+            onClick={() => setSearchParams({ view: "logs" })}
             className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-[#111418] rounded-lg font-medium flex items-center gap-2 transition-colors"
           >
             <i className="fa-solid fa-file-lines"></i>
@@ -1522,13 +1697,23 @@ const Admin = () => {
             System Settings
           </button>
           <button
-            onClick={() =>
-              toast.promise(Promise.resolve(), {
-                loading: "Starting backup...",
-                success: "Backup completed",
-                error: "Backup failed",
-              })
-            }
+            onClick={async () => {
+              const toastId = toast.loading("Starting backup...");
+              try {
+                const response = await apiService.get('/api/admin/backup', { responseType: 'blob' });
+                const blob = new Blob([response.data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                toast.success("Backup downloaded!", { id: toastId });
+              } catch (e) {
+                console.error(e);
+                toast.error("Backup failed", { id: toastId });
+              }
+            }}
             className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-[#111418] rounded-lg font-medium flex items-center gap-2 transition-colors"
           >
             <i className="fa-solid fa-database"></i>

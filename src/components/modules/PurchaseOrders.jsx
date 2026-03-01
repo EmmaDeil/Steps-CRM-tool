@@ -257,7 +257,7 @@ const PurchaseOrders = () => {
       />
 
       {/* Main Content */}
-      <main className="flex-1 py-3 max-w-[1440px] mx-auto w-full">
+      <main className="flex-1 py-3 px-4 max-w-[1440px] mx-auto w-full">
         {/* Page Heading */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>

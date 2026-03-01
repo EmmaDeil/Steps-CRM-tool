@@ -26,6 +26,8 @@ const MaterialRequests = () => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [selectedVendor, setSelectedVendor] = useState("");
   const [vendors, setVendors] = useState([]);
+  const [budgetCategories, setBudgetCategories] = useState([]);
+  const [budgetLoading, setBudgetLoading] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
 
@@ -102,6 +104,18 @@ const MaterialRequests = () => {
       setVendors(response.data || []);
     } catch {
       // Silently fail - vendors are optional
+    }
+  };
+
+  const fetchBudgetCategories = async () => {
+    setBudgetLoading(true);
+    try {
+      const response = await apiService.get("/api/budget/categories");
+      setBudgetCategories(response.data || []);
+    } catch {
+      // Fall back silently — dropdown will show empty
+    } finally {
+      setBudgetLoading(false);
     }
   };
 
@@ -207,6 +221,7 @@ const MaterialRequests = () => {
   useEffect(() => {
     fetchRequests();
     fetchUsers();
+    fetchBudgetCategories();
 
     // Restore state from localStorage on mount
     const savedState = localStorage.getItem("materialRequestsState");
@@ -461,6 +476,7 @@ const MaterialRequests = () => {
     setSelectedRequest(request);
     setShowApprovalModal(true);
     fetchVendors();
+    fetchBudgetCategories();
     setActiveDropdown(null);
   };
 
@@ -573,7 +589,7 @@ const MaterialRequests = () => {
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[140px]"
+                    className="pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[140px]"
                   >
                     <option value="all">All Status</option>
                     <option value="pending">Pending</option>
@@ -581,7 +597,7 @@ const MaterialRequests = () => {
                     <option value="rejected">Rejected</option>
                     <option value="fulfilled">Fulfilled</option>
                   </select>
-                  <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
+                  <i className="fa-solid absolute right-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
                 </div>
 
                 {/* Date Filter */}
@@ -589,15 +605,14 @@ const MaterialRequests = () => {
                   <select
                     value={dateFilter}
                     onChange={(e) => setDateFilter(e.target.value)}
-                    className="pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[150px]"
+                    className="pl-5 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[150px]"
                   >
+                    <option value="all">All time</option>
                     <option value="last7">Last 7 days</option>
                     <option value="last30">Last 30 days</option>
                     <option value="last90">Last 90 days</option>
-                    <option value="all">All time</option>
                   </select>
-                  <i className="fa-solid fa-calendar absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
-                  <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
+                  <i className="fa-solid fa-calendar absolute left-1 pl-0 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
                 </div>
 
                 {/* Sort By */}
@@ -605,15 +620,14 @@ const MaterialRequests = () => {
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[150px]"
+                    className="pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[150px]"
                   >
                     <option value="newest">Newest First</option>
                     <option value="oldest">Oldest First</option>
                     <option value="requester">Requester A-Z</option>
                     <option value="status">Status</option>
                   </select>
-                  <i className="fa-solid fa-sort absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
-                  <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
+                <i className="fa-solid absolute left-1 pl-0 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
                 </div>
 
                 {/* Clear Filters */}
@@ -958,16 +972,29 @@ const MaterialRequests = () => {
 
                     <label className="flex flex-col gap-2 sm:col-span-2">
                       <span className="text-sm font-medium text-[#111418]">
-                        Budget Code / Project
+                        Budget Code / Category
                       </span>
-                      <input
-                        type="text"
-                        name="budgetCode"
-                        value={formData.budgetCode || ""}
-                        onChange={handleFormChange}
-                        className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-4 py-2.5"
-                        placeholder="e.g. P-2023-MARKETING-001"
-                      />
+                      <div className="relative">
+                        <i className="fa-solid fa-wallet absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
+                        <select
+                          name="budgetCode"
+                          value={formData.budgetCode || ""}
+                          onChange={handleFormChange}
+                          className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
+                        >
+                          <option value="">-- Select Budget Category --</option>
+                          {budgetLoading ? (
+                            <option disabled>Loading categories...</option>
+                          ) : (
+                            budgetCategories.map((cat) => (
+                              <option key={cat.id} value={cat.name}>
+                                {cat.name}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
+                      </div>
                     </label>
 
                     <label className="flex flex-col gap-2 sm:col-span-2">

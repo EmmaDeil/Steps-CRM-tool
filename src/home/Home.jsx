@@ -19,7 +19,8 @@ const loadModuleComponent = (componentName) => {
     AdminControls: "Admin",
     AdminControl: "Admin",
     SignatureManagement: "DocSign",
-    Security: "SecuritySettings",
+    Security: "PhysicalSecurity",
+    Budget: "Budget",
   };
 
   const finalComponentName = componentMapping[componentName] || componentName;
@@ -51,6 +52,7 @@ const iconMap = {
   // "": { icon: "fa-pen-fancy", color: "pink" },
   Admin: { icon: "fa-sliders", color: "gray" },
   Policy: { icon: "fa-file-shield", color: "gray" },
+  Budget: { icon: "fa-wallet", color: "blue" },
 };
 
 export default function Home() {
