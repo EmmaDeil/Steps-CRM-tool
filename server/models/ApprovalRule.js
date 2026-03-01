@@ -1,0 +1,60 @@
+const mongoose = require("mongoose");
+
+const approvalLevelSchema = new mongoose.Schema({
+  level: {
+    type: Number,
+    required: true,
+  },
+  approverRole: {
+    type: String,
+    required: true,
+    enum: [
+      "Direct Manager",
+      "Department Head",
+      "Finance Manager",
+      "HR Director",
+      "Admin", // Can be expanded based on role system
+    ],
+  },
+});
+
+const approvalRuleSchema = new mongoose.Schema(
+  {
+    moduleType: {
+      type: String,
+      required: true,
+      enum: [
+        "Advance Requests",
+        "Leave Requests",
+        "Refund Requests",
+        "Purchase Orders",
+        "Material Requests",
+      ],
+    },
+    condition: {
+      type: String,
+      default: "All", // E.g., "Amount > 1000", "Duration > 3 Days", "All"
+    },
+    levels: {
+      type: [approvalLevelSchema],
+      required: true,
+      validate: [
+        (val) => val.length > 0,
+        "Approval rule must have at least one level.",
+      ],
+    },
+    status: {
+      type: String,
+      enum: ["Active", "Inactive"],
+      default: "Active",
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("ApprovalRule", approvalRuleSchema);

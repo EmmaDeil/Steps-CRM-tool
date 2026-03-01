@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import Footer from "../Footer";
 import Breadcrumb from "../Breadcrumb";
 import SecuritySettings from "./SecuritySettings";
+import ApprovalSettings from "./ApprovalSettings";
 const Admin = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -113,9 +114,9 @@ const Admin = () => {
 
   useEffect(() => {
     fetchAdminData();
+    fetchModules();
     if (activeView === "users") {
       fetchUsers();
-      fetchModules();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, fetchUsers, fetchModules]);
@@ -492,8 +493,37 @@ const Admin = () => {
     return descriptions[role] || "";
   };
 
+  const getModuleUrl = (moduleName) => {
+    const module = availableModules.find(
+      (m) => m.componentName === moduleName || m.name === moduleName
+    );
+    return module ? `/home/${module.id}` : "/home";
+  };
+
   if (activeView === "security") {
     return <SecuritySettings />;
+  }
+
+  if (activeView === "approval-settings") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <Breadcrumb
+          items={[
+            { label: "Home", href: "/home", icon: "fa-house" },
+            {
+              label: "Admin Controls",
+              href: getModuleUrl("Admin"),
+              icon: "fa-user-shield",
+            },
+            { label: "Approval Flow Settings", icon: "fa-clipboard-check" },
+          ]}
+        />
+        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
+          <ApprovalSettings />
+        </div>
+        <Footer variant="admin" />
+      </div>
+    );
   }
 
   if (activeView === "users") {
@@ -504,7 +534,7 @@ const Admin = () => {
             { label: "Home", href: "/home", icon: "fa-house" },
             {
               label: "Admin Controls",
-              href: "/home/7",
+              href: getModuleUrl("Admin"),
               icon: "fa-user-shield",
             },
             { label: "User Management", icon: "fa-users" },
@@ -1750,7 +1780,7 @@ const Admin = () => {
 
             {/* Approval Flow */}
             <div
-              onClick={() => navigate("/home/1")}
+              onClick={() => setSearchParams({ view: "approval-settings" })}
               className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-lg transition-all cursor-pointer hover:border-blue-400"
             >
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">

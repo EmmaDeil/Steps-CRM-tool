@@ -176,6 +176,7 @@ export default function Home() {
           <Navbar user={user} />
           <div className="flex-1">
             <Suspense
+              key={id}
               fallback={
                 <div className="p-4 text-center">Loading module...</div>
               }
