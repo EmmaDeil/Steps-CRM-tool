@@ -547,7 +547,7 @@ const Admin = () => {
             { label: "Approval Flow Settings", icon: "fa-clipboard-check" },
           ]}
         />
-        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
+        <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1">
           <ApprovalSettings />
         </div>
         <Footer variant="admin" />
@@ -569,7 +569,7 @@ const Admin = () => {
             { label: "System Settings", icon: "fa-gear" },
           ]}
         />
-        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
+        <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1">
           <SystemSettings />
         </div>
         <Footer variant="admin" />
