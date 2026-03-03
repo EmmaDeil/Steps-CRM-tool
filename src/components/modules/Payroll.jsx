@@ -794,7 +794,7 @@ const Payroll = ({ onBack }) => {
                     </select>
                     <div className="h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
                     <button
-                      onClick={() => toast.info("Filter feature coming soon")}
+                      onClick={() => toast("Filter feature coming soon")}
                       className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium transition-colors"
                     >
                       <i className="fa-solid fa-filter text-sm"></i>

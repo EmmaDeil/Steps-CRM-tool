@@ -682,9 +682,79 @@ async function start() {
     res.json(a || {});
   });
 
+  const SystemSettingsModel = require('./models/SystemSettings');
+  const axios = require('axios');
+  
+  let localAttendanceRecords = [];
+
+  app.post('/api/attendance', async (req, res) => {
+    try {
+      const { name, employeeId, status } = req.body;
+      const newRecord = {
+        name: name || 'Demo User',
+        employeeId: employeeId || 'EMP-1337',
+        status: status || 'present',
+        checkInTime: new Date()
+      };
+      // Keep only most recent 50 records to prevent memory leak
+      localAttendanceRecords.unshift(newRecord);
+      if (localAttendanceRecords.length > 50) localAttendanceRecords.pop();
+
+      res.status(201).json({ message: 'Attendance marked', record: newRecord });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: 'Failed to mark attendance' });
+    }
+  });
+
   app.get('/api/attendance', async (req, res) => {
-    const list = await api.getAttendance();
-    res.json(list);
+    try {
+      const settings = await SystemSettingsModel.findOne();
+      const apiKey = settings?.attendanceApiKey;
+
+      if (apiKey) {
+        const endpoints = [
+          'https://attendance-app-swart-iota.vercel.app/api/attendance',
+          'https://attendance-app-swart-iota.vercel.app/api/hr/employees',
+          'https://attendance-app-swart-iota.vercel.app/attendance',
+          'https://attendance-app-swart-iota.vercel.app/'
+        ];
+
+        for (const url of endpoints) {
+          try {
+            const response = await axios.get(url, {
+              headers: { 'x-api-key': apiKey },
+              timeout: 5000 // 5 seconds timeout
+            });
+            if (response.data) {
+              return res.json(response.data);
+            }
+          } catch (err) {
+            // Ignore errors for individual endpoints, move to next
+            console.log(`Endpoint ${url} failed: ${err.message}`);
+          }
+        }
+        
+        console.error('All external attendance endpoints failed.');
+      }
+    } catch (error) {
+      console.error('Error in external attendance proxy:', error.message);
+    }
+    
+    // Remote fetch failed or no API key. Fall back to local volatile session records.
+    const presentCount = localAttendanceRecords.filter(r => r.status === 'present' || r.status === 'on-time').length;
+    const leaveCount = localAttendanceRecords.filter(r => r.status === 'leave' || r.status === 'on-leave').length;
+    const absentCount = localAttendanceRecords.filter(r => r.status === 'absent').length;
+    const lateCount = localAttendanceRecords.filter(r => r.status === 'late').length;
+
+    res.json({ 
+      records: localAttendanceRecords, 
+      totalEmployees: localAttendanceRecords.length,
+      presentCount,
+      leaveCount,
+      absentCount,
+      lateCount
+    });
   });
 
   // Material Requests endpoints

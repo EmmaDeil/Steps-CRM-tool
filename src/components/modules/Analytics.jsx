@@ -1,16 +1,27 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { useDepartments } from "../../context/useDepartments";
 
 const Analytics = () => {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [reportType, setReportType] = useState("Facility Usage Report");
+  const location = useLocation();
+  const [searchQuery, setSearchQuery] = useState(location.state?.defaultSearch || "");
+  const [reportType, setReportType] = useState(location.state?.defaultReport || "Facility Usage Report");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [department, setDepartment] = useState("All Departments");
   const { departments, loading: departmentsLoading } = useDepartments();
   const [includeDrafts, setIncludeDrafts] = useState(false);
+
+  useEffect(() => {
+    if (location.state?.defaultSearch) {
+      setSearchQuery(location.state.defaultSearch);
+    }
+    if (location.state?.defaultReport) {
+      setReportType(location.state.defaultReport);
+    }
+  }, [location.state]);
 
   const stats = {
     totalReports: 1248,

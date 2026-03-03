@@ -1419,7 +1419,7 @@ const Policy = () => {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() =>
-                          toast.info("Opening document in full screen...")
+                          toast("Opening document in full screen...")
                         }
                         className="px-3 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
                       >

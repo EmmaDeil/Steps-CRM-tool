@@ -210,7 +210,7 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => toast.info("Audit Log module coming soon")}
+                onClick={() => toast("Audit Log module coming soon")}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform">
@@ -222,7 +222,7 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => toast.info("Reports module coming soon")}
+                onClick={() => toast("Reports module coming soon")}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform">
@@ -246,7 +246,7 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => toast.info("Invoicing module coming soon")}
+                onClick={() => toast("Invoicing module coming soon")}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
@@ -258,7 +258,7 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => toast.info("Expense Claims module coming soon")}
+                onClick={() => toast("Expense Claims module coming soon")}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform">
@@ -270,7 +270,7 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => toast.info("Cash Flow module coming soon")}
+                onClick={() => toast("Cash Flow module coming soon")}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 group-hover:scale-110 transition-transform">
@@ -282,7 +282,7 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => toast.info("Forecasting module coming soon")}
+                onClick={() => toast("Forecasting module coming soon")}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 group-hover:scale-110 transition-transform">
@@ -294,7 +294,7 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => toast.info("Treasury module coming soon")}
+                onClick={() => toast("Treasury module coming soon")}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 group-hover:scale-110 transition-transform">
@@ -306,7 +306,7 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => toast.info("Compliance module coming soon")}
+                onClick={() => toast("Compliance module coming soon")}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 group-hover:scale-110 transition-transform">
@@ -494,7 +494,7 @@ const Finance = () => {
                   </div>
                   <div className="space-y-3">
                     <button
-                      onClick={() => toast.info("Tax Filings coming soon")}
+                      onClick={() => toast("Tax Filings coming soon")}
                       className="w-full flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer transition-colors"
                     >
                       <div className="flex items-center gap-3">
@@ -508,7 +508,7 @@ const Finance = () => {
                       <i className="fa-solid fa-chevron-right text-slate-400 text-[14px]"></i>
                     </button>
                     <button
-                      onClick={() => toast.info("Compliance Check coming soon")}
+                      onClick={() => toast("Compliance Check coming soon")}
                       className="w-full flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer transition-colors"
                     >
                       <div className="flex items-center gap-3">

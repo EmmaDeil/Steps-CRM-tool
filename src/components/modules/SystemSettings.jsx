@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
+import { apiService } from "../../services/api";
 
 const SystemSettings = () => {
   const [generalSettings, setGeneralSettings] = useState({
@@ -17,10 +18,43 @@ const SystemSettings = () => {
   const [integrations, setIntegrations] = useState({
     slackEnabled: false,
     emailSmtp: "smtp.mailtrap.io",
+    attendanceApiKey: "",
   });
 
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await apiService.get('/api/admin/system-settings');
+        if (response.data) {
+          setGeneralSettings({
+            companyName: response.data.companyName || "Acme Corp",
+            contactEmail: response.data.contactEmail || "admin@acmecorp.com",
+            timezone: response.data.timezone || "UTC",
+            dateFormat: response.data.dateFormat || "MM/DD/YYYY",
+          });
+          setThemeSettings({
+            primaryColor: response.data.primaryColor || "#137fec",
+            logoUrl: response.data.logoUrl || "",
+          });
+          setIntegrations({
+            slackEnabled: response.data.slackEnabled || false,
+            emailSmtp: response.data.emailSmtp || "smtp.mailtrap.io",
+            attendanceApiKey: response.data.attendanceApiKey || "",
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching system settings:", error);
+        toast.error("Failed to load settings");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   // Handlers
   const handleGeneralChange = (e) => {
@@ -43,12 +77,29 @@ const SystemSettings = () => {
 
   const handleSaveAll = async () => {
     setIsSaving(true);
-    // Simulate an API call
-    setTimeout(() => {
+    try {
+      const payload = {
+        ...generalSettings,
+        ...themeSettings,
+        ...integrations,
+      };
+      await apiService.patch('/api/admin/system-settings', payload);
       toast.success("System settings updated successfully!");
+    } catch (error) {
+      console.error("Error saving system settings:", error);
+      toast.error("Failed to save settings");
+    } finally {
       setIsSaving(false);
-    }, 800);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-full pt-10">
+        <i className="fa-solid fa-spinner fa-spin text-3xl text-blue-500"></i>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 h-[calc(100vh-140px)] flex flex-col overflow-hidden">
@@ -233,6 +284,20 @@ const SystemSettings = () => {
                   value={integrations.emailSmtp}
                   onChange={handleIntegrationChange}
                   placeholder="e.g. smtp.gmail.com"
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500 transition-shadow"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Attendance App API Key
+                </label>
+                <input
+                  type="password"
+                  name="attendanceApiKey"
+                  value={integrations.attendanceApiKey}
+                  onChange={handleIntegrationChange}
+                  placeholder="Enter token for module 8"
                   className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500 transition-shadow"
                 />
               </div>

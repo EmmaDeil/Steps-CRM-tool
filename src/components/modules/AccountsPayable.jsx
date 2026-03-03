@@ -84,7 +84,7 @@ const AccountsPayable = ({ onBack }) => {
   };
 
   const handleExportCSV = () => {
-    toast.info("CSV export feature coming soon");
+    toast("CSV export feature coming soon");
   };
 
   const handleClearFilters = () => {
@@ -153,7 +153,7 @@ const AccountsPayable = ({ onBack }) => {
               </div>
               <span className="text-slate-300 text-xl font-light">|</span>
               <button
-                onClick={() => toast.info("Save view feature coming soon")}
+                onClick={() => toast("Save view feature coming soon")}
                 className="text-xs font-medium text-primary hover:text-blue-700 flex items-center gap-1"
               >
                 <i className="fa-solid fa-save text-xs"></i>
@@ -162,7 +162,7 @@ const AccountsPayable = ({ onBack }) => {
             </div>
             <div className="flex items-center gap-3 w-full md:w-auto">
               <button
-                onClick={() => toast.info("Column customization coming soon")}
+                onClick={() => toast("Column customization coming soon")}
                 className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 hover:border-primary/50 text-slate-700 rounded-lg text-xs font-semibold transition-all shadow-sm"
               >
                 <i className="fa-solid fa-columns text-sm"></i>
@@ -468,7 +468,7 @@ const AccountsPayable = ({ onBack }) => {
               Export CSV
             </button>
             <button
-              onClick={() => toast.info("Hold payment feature coming soon")}
+              onClick={() => toast("Hold payment feature coming soon")}
               disabled={selectedInvoices.length === 0}
               className="flex-1 md:flex-none px-4 py-2.5 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm font-bold hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >

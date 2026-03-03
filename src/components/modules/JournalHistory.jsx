@@ -59,11 +59,11 @@ const JournalHistory = ({ onBack, onNewEntry }) => {
   };
 
   const handleExportCSV = () => {
-    toast.info("CSV export feature coming soon");
+    toast("CSV export feature coming soon");
   };
 
   const handlePrintBatch = () => {
-    toast.info("Print batch feature coming soon");
+    toast("Print batch feature coming soon");
   };
 
   const handleReverseEntry = () => {
@@ -71,7 +71,7 @@ const JournalHistory = ({ onBack, onNewEntry }) => {
       toast.error("Please select entries to reverse");
       return;
     }
-    toast.info("Reverse entry feature coming soon");
+    toast("Reverse entry feature coming soon");
   };
 
   const handleClearFilters = () => {
@@ -139,7 +139,7 @@ const JournalHistory = ({ onBack, onNewEntry }) => {
               </div>
               <span className="text-slate-300 text-xl font-light">|</span>
               <button
-                onClick={() => toast.info("Save view feature coming soon")}
+                onClick={() => toast("Save view feature coming soon")}
                 className="text-xs font-medium text-primary hover:text-blue-700 flex items-center gap-1"
               >
                 <i className="fa-solid fa-save text-xs"></i>
@@ -151,7 +151,7 @@ const JournalHistory = ({ onBack, onNewEntry }) => {
                 onClick={() =>
                   onNewEntry
                     ? onNewEntry()
-                    : toast.info("New entry feature coming soon")
+                    : toast("New entry feature coming soon")
                 }
                 className="flex items-center gap-2 px-3 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-all shadow-sm shadow-blue-500/20"
               >
@@ -159,7 +159,7 @@ const JournalHistory = ({ onBack, onNewEntry }) => {
                 New Journal Entry
               </button>
               <button
-                onClick={() => toast.info("Column customization coming soon")}
+                onClick={() => toast("Column customization coming soon")}
                 className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 hover:border-primary/50 text-slate-700 rounded-lg text-xs font-semibold transition-all shadow-sm"
               >
                 <i className="fa-solid fa-columns text-sm"></i>
@@ -328,7 +328,7 @@ const JournalHistory = ({ onBack, onNewEntry }) => {
                             onClick={() =>
                               onNewEntry
                                 ? onNewEntry()
-                                : toast.info("New entry feature coming soon")
+                                : toast("New entry feature coming soon")
                             }
                             className="mt-2 px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-sm font-bold transition-all shadow-sm"
                           >

@@ -177,7 +177,7 @@ const DocSign = () => {
 
   const handleReviewAndSign = (_requestId) => {
     // TODO: Implement signing view
-    toast.info("Signing interface coming soon");
+    toast("Signing interface coming soon");
   };
 
   const handleDeleteTemplate = async (templateId) => {

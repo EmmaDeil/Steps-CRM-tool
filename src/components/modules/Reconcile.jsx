@@ -457,7 +457,7 @@ const Reconcile = ({ onBack }) => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() =>
-                    toast.info("Add missing entry feature coming soon")
+                    toast("Add missing entry feature coming soon")
                   }
                   className="text-xs font-medium text-primary hover:text-blue-700 flex items-center gap-1"
                 >

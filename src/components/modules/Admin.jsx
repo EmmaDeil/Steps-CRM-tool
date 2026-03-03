@@ -1690,7 +1690,7 @@ const Admin = () => {
             View Logs
           </button>
           <button
-            onClick={() => navigate("/admin?tab=system")}
+            onClick={() => setSearchParams({ view: "system-settings" })}
             className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-[#111418] rounded-lg font-medium flex items-center gap-2 transition-colors"
           >
             <i className="fa-solid fa-gear"></i>

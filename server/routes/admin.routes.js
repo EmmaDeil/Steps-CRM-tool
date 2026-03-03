@@ -132,4 +132,60 @@ router.get('/categories', async (req, res) => {
     }
 });
 
+// ============================================================
+// GET /api/admin/system-settings
+// Fetch system settings
+// ============================================================
+const SystemSettings = require('../models/SystemSettings');
+
+router.get('/system-settings', async (req, res) => {
+    try {
+        let settings = await SystemSettings.findOne();
+        if (!settings) {
+            settings = await SystemSettings.create({});
+        }
+        res.json(settings);
+    } catch (error) {
+        console.error('Error fetching system settings:', error);
+        res.status(500).json({ message: 'Failed to fetch system settings' });
+    }
+});
+
+// ============================================================
+// PATCH /api/admin/system-settings
+// Update system settings
+// ============================================================
+router.patch('/system-settings', async (req, res) => {
+    try {
+        let settings = await SystemSettings.findOne();
+        if (!settings) {
+            settings = new SystemSettings(req.body);
+        } else {
+            Object.assign(settings, req.body);
+        }
+        await settings.save();
+        
+        // Audit log for setting update
+        await AuditLog.create({
+            actor: {
+                userId: req.user._id.toString(),
+                userName: req.user.fullName || req.user.email,
+                userEmail: req.user.email,
+                initials: (req.user.fullName || req.user.email).substring(0, 2).toUpperCase(),
+            },
+            action: 'Config Update',
+            actionColor: 'orange',
+            ipAddress: req.ip || req.connection?.remoteAddress || '127.0.0.1',
+            userAgent: req.headers['user-agent'],
+            description: `System settings updated by ${req.user.email}`,
+            status: 'Success',
+        });
+
+        res.json({ message: 'Settings updated successfully', settings });
+    } catch (error) {
+        console.error('Error updating system settings:', error);
+        res.status(500).json({ message: 'Failed to update system settings' });
+    }
+});
+
 module.exports = router;

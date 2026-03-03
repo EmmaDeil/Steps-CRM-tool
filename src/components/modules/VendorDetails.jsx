@@ -4,7 +4,7 @@ import Breadcrumb from "../Breadcrumb";
 const VendorDetails = ({ vendor, onBack }) => {
   const handleDeactivate = () => {
     if (window.confirm("Are you sure you want to deactivate this vendor?")) {
-      toast.info("Deactivate vendor feature coming soon");
+      toast("Deactivate vendor feature coming soon");
     }
   };
 
@@ -13,7 +13,7 @@ const VendorDetails = ({ vendor, onBack }) => {
   };
 
   const handleEdit = () => {
-    toast.info("Edit vendor feature coming soon");
+    toast("Edit vendor feature coming soon");
   };
 
   const getStatusBadge = (status) => {
@@ -259,7 +259,7 @@ const VendorDetails = ({ vendor, onBack }) => {
                   </h3>
                   <button
                     onClick={() =>
-                      toast.info("View all transactions coming soon")
+                      toast("View all transactions coming soon")
                     }
                     className="text-sm font-bold text-primary hover:text-blue-600"
                   >
@@ -385,7 +385,7 @@ const VendorDetails = ({ vendor, onBack }) => {
                   </h3>
                   <button
                     onClick={() =>
-                      toast.info("Upload contract feature coming soon")
+                      toast("Upload contract feature coming soon")
                     }
                     className="text-primary hover:text-blue-600 transition-colors"
                     title="Upload New Contract"
@@ -428,7 +428,7 @@ const VendorDetails = ({ vendor, onBack }) => {
                       </div>
                       <button
                         onClick={() =>
-                          toast.info("Download feature coming soon")
+                          toast("Download feature coming soon")
                         }
                         className="size-8 flex items-center justify-center rounded-full text-slate-500 hover:bg-white hover:text-primary transition-colors"
                       >
@@ -439,7 +439,7 @@ const VendorDetails = ({ vendor, onBack }) => {
                 </div>
                 <div className="p-3 bg-slate-50/50 border-t border-slate-200 text-center">
                   <button
-                    onClick={() => toast.info("View all documents coming soon")}
+                    onClick={() => toast("View all documents coming soon")}
                     className="text-xs font-semibold text-primary hover:underline"
                   >
                     View All Documents

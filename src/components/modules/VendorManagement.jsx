@@ -70,7 +70,7 @@ const VendorManagement = ({ onBack }) => {
   };
 
   const handleEditVendor = (_vendorId) => {
-    toast.info("Edit vendor feature coming soon");
+    toast("Edit vendor feature coming soon");
   };
 
   const handleVendorAdded = (newVendor) => {
