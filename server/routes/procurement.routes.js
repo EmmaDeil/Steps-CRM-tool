@@ -177,6 +177,19 @@ router.get('/purchase-orders', async (req, res) => {
   }
 });
 
+// GET POs pending payment (for Finance module) - MUST be before /:id route
+router.get('/purchase-orders/pending-payment', async (req, res) => {
+  try {
+    const orders = await PurchaseOrder.find({ 
+      status: 'payment_pending' 
+    }).sort({ createdAt: -1 });
+    res.json(orders);
+  } catch (err) {
+    console.error('Error fetching pending payment orders:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch orders' });
+  }
+});
+
 // GET Single Purchase Order
 router.get('/purchase-orders/:id', async (req, res) => {
   try {
@@ -204,6 +217,52 @@ router.post('/purchase-orders', async (req, res) => {
   } catch (err) {
     console.error('Error creating purchase order:', err);
     res.status(400).json({ success: false, message: 'Error creating order', error: err.message });
+  }
+});
+
+// POST Review and approve PO (Finance workflow) - Specific action route before generic update
+router.post('/purchase-orders/:id/review', async (req, res) => {
+  try {
+    const po = await PurchaseOrder.findById(req.params.id);
+    if (!po) {
+      return res.status(404).json({ success: false, message: 'Purchase order not found' });
+    }
+
+    // Update PO with review changes
+    if (req.body.lineItems) po.lineItems = req.body.lineItems;
+    if (req.body.vendor) po.vendor = req.body.vendor;
+    if (req.body.expectedDelivery) po.expectedDelivery = req.body.expectedDelivery;
+    if (req.body.reviewNotes) po.reviewNotes = req.body.reviewNotes;
+    
+    // Calculate new total from line items
+    if (po.lineItems && po.lineItems.length > 0) {
+      po.totalAmount = po.lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+    }
+    
+    // Update status to reviewed (ready for payment)
+    po.status = 'payment_pending';
+    await po.save();
+
+    res.json({ success: true, message: 'Purchase order reviewed and sent to finance', data: po });
+  } catch (err) {
+    console.error('Error reviewing purchase order:', err);
+    res.status(500).json({ success: false, message: 'Failed to review purchase order', error: err.message });
+  }
+});
+
+// POST Mark PO as paid - Specific action route
+router.post('/purchase-orders/:id/mark-paid', async (req, res) => {
+  try {
+    const po = await PurchaseOrder.findByIdAndUpdate(
+      req.params.id,
+      { status: 'paid', paidDate: new Date() },
+      { new: true }
+    );
+    if (!po) return res.status(404).json({ success: false, message: 'Purchase order not found' });
+    res.json({ success: true, message: 'Payment recorded', data: po });
+  } catch (err) {
+    console.error('Error marking PO as paid:', err);
+    res.status(500).json({ success: false, message: 'Failed to update payment status', error: err.message });
   }
 });
 

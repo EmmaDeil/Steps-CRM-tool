@@ -46,17 +46,20 @@ const PurchaseOrders = () => {
 
       const response = await apiService.get("/api/purchase-orders", { params });
 
-      // Handle response structure
-      if (response.data) {
-        setPurchaseOrders(response.data.orders || response.data);
-        setTotal(response.data.total || response.data.length);
-        setTotalPages(
-          response.data.totalPages || Math.ceil(response.data.total / limit)
-        );
-      } else {
-        setPurchaseOrders(response || []);
+      // Handle response structure (apiService interceptor already unwraps response.data)
+      if (response.orders) {
+        setPurchaseOrders(response.orders);
+        setTotal(response.total || 0);
+        setTotalPages(response.totalPages || 1);
+      } else if (Array.isArray(response)) {
+        // Fallback for direct array response
+        setPurchaseOrders(response);
         setTotal(response.length || 0);
         setTotalPages(Math.ceil(response.length / limit));
+      } else {
+        setPurchaseOrders([]);
+        setTotal(0);
+        setTotalPages(1);
       }
     } catch (err) {
       console.error("Error fetching purchase orders:", err);
@@ -186,9 +189,15 @@ const PurchaseOrders = () => {
 
   const statusCounts = {
     all: total,
-    draft: purchaseOrders?.filter((po) => po.status?.toLowerCase() === "draft")?.length || 0,
-    issued: purchaseOrders?.filter((po) => po.status?.toLowerCase() === "issued")?.length || 0,
-    received: purchaseOrders?.filter((po) => po.status?.toLowerCase() === "received")?.length || 0,
+    draft:
+      purchaseOrders?.filter((po) => po.status?.toLowerCase() === "draft")
+        ?.length || 0,
+    issued:
+      purchaseOrders?.filter((po) => po.status?.toLowerCase() === "issued")
+        ?.length || 0,
+    received:
+      purchaseOrders?.filter((po) => po.status?.toLowerCase() === "received")
+        ?.length || 0,
   };
 
   // Pagination handlers
@@ -265,14 +274,18 @@ const PurchaseOrders = () => {
     {
       header: (
         <div className="flex items-center gap-1 group cursor-pointer hover:text-[#137fec]">
-          PO Number <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
+          PO Number{" "}
+          <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
         </div>
       ),
       accessorKey: "poNumber",
       className: "px-4 py-3",
       cellClassName: "px-4 py-3",
       cell: (po) => (
-        <a href={`#${po._id || po.id}`} className="text-sm font-medium text-[#137fec] hover:underline">
+        <a
+          href={`#${po._id || po.id}`}
+          className="text-sm font-medium text-[#137fec] hover:underline"
+        >
           {po.poNumber || "N/A"}
         </a>
       ),
@@ -280,7 +293,8 @@ const PurchaseOrders = () => {
     {
       header: (
         <div className="flex items-center gap-1 group cursor-pointer hover:text-[#137fec]">
-          Vendor <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
+          Vendor{" "}
+          <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
         </div>
       ),
       accessorKey: "vendor",
@@ -292,10 +306,14 @@ const PurchaseOrders = () => {
         const vendorColor = getRandomVendorColor(index);
         return (
           <div className="flex items-center gap-3">
-            <div className={`size-8 rounded-full ${getVendorBgColor(vendorColor)} flex items-center justify-center text-xs font-bold`}>
+            <div
+              className={`size-8 rounded-full ${getVendorBgColor(vendorColor)} flex items-center justify-center text-xs font-bold`}
+            >
               {vendorInitials}
             </div>
-            <span className="text-sm text-[#111418] font-medium">{vendorName}</span>
+            <span className="text-sm text-[#111418] font-medium">
+              {vendorName}
+            </span>
           </div>
         );
       },
@@ -303,7 +321,8 @@ const PurchaseOrders = () => {
     {
       header: (
         <div className="flex items-center gap-1 group cursor-pointer hover:text-[#137fec]">
-          Order Date <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
+          Order Date{" "}
+          <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
         </div>
       ),
       accessorKey: "orderDate",
@@ -319,8 +338,12 @@ const PurchaseOrders = () => {
       cell: (po) => {
         const statusInfo = getStatusInfo(po.status);
         return (
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColorClasses(statusInfo.color)}`}>
-            <span className={`size-1.5 rounded-full ${getStatusDotColor(statusInfo.color)}`}></span>{" "}
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColorClasses(statusInfo.color)}`}
+          >
+            <span
+              className={`size-1.5 rounded-full ${getStatusDotColor(statusInfo.color)}`}
+            ></span>{" "}
             {statusInfo.label}
           </span>
         );
@@ -329,13 +352,16 @@ const PurchaseOrders = () => {
     {
       header: (
         <div className="flex items-center justify-end gap-1 group cursor-pointer hover:text-[#137fec]">
-          Total Amount <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
+          Total Amount{" "}
+          <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
         </div>
       ),
       accessorKey: "totalAmount",
       className: "px-4 py-3 text-right",
-      cellClassName: "px-4 py-3 text-sm font-medium text-[#111418] text-right font-mono",
-      cell: (po) => `$${(po.totalAmount || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+      cellClassName:
+        "px-4 py-3 text-sm font-medium text-[#111418] text-right font-mono",
+      cell: (po) =>
+        `$${(po.totalAmount || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
     },
     {
       header: "Actions",
@@ -371,9 +397,14 @@ const PurchaseOrders = () => {
               Manage, track, and create new purchase orders.
             </p>
           </div>
-          <button 
+          <button
             className="flex items-center justify-center gap-2 overflow-hidden rounded-lg h-10 px-5 bg-[#137fec] hover:bg-blue-600 transition-colors text-white text-sm font-bold leading-normal tracking-[0.015em] shadow-sm"
-            onClick={() => toast("Purchase Orders are automatically created when Material Requests are approved. Head over to Material Requests to start the process.", { icon: 'ℹ️', duration: 5000 })}
+            onClick={() =>
+              toast(
+                "Purchase Orders are automatically created when Material Requests are approved. Head over to Material Requests to start the process.",
+                { icon: "ℹ️", duration: 5000 },
+              )
+            }
           >
             <i className="fa-solid fa-plus text-[16px]"></i>
             <span className="truncate">Create Purchase Order</span>
@@ -542,11 +573,13 @@ const PurchaseOrders = () => {
             data={purchaseOrders}
             isLoading={loading}
             emptyMessage={
-              error ? error : "No purchase orders found. Try adjusting your filters or create a new purchase order."
+              error
+                ? error
+                : "No purchase orders found. Try adjusting your filters or create a new purchase order."
             }
             keyExtractor={(po) => po._id || po.id}
           />
-          
+
           {/* Pagination */}
           <div className="flex items-center justify-between px-4 py-3 border-t border-[#dbe0e6] bg-white">
             <div className="flex items-center gap-2">
