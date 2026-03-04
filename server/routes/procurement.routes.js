@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const MaterialRequest = require('../models/MaterialRequest');
 const PurchaseOrder = require('../models/PurchaseOrder');
+const InventoryItem = require('../models/InventoryItem');
 
 // ==========================================
 // MATERIAL REQUESTS API
@@ -57,7 +58,7 @@ router.put('/material-requests/:id', async (req, res) => {
   }
 });
 
-// POST Approve Material Request -> Auto Generate Purchase Order
+// POST Approve Material Request -> Auto Generate Purchase Order OR Fulfill from Inventory
 router.post('/material-requests/:id/approve', async (req, res) => {
   try {
     const { vendor } = req.body; // Frontend passes selected vendor
@@ -73,8 +74,52 @@ router.post('/material-requests/:id/approve', async (req, res) => {
     request.status = 'approved';
     const updatedRequest = await request.save();
 
-    // 2. Generate corresponding Purchase Order
-    // Calculate total amount from line items if they have amounts
+    // 2. Check if this is an Internal Transfer - pull from inventory
+    if (request.requestType === 'Internal Transfer') {
+      const inventoryIssues = [];
+      const insufficientItems = [];
+      
+      // Check inventory availability for each line item
+      for (const item of request.lineItems) {
+        const inventoryItem = await InventoryItem.findOne({ 
+          name: { $regex: new RegExp('^' + item.itemName + '$', 'i') } 
+        });
+        
+        if (!inventoryItem) {
+          insufficientItems.push({ item: item.itemName, reason: 'Not found in inventory' });
+        } else if (inventoryItem.quantity < item.quantity) {
+          insufficientItems.push({ 
+            item: item.itemName, 
+            reason: `Insufficient stock (Available: ${inventoryItem.quantity}, Requested: ${item.quantity})` 
+          });
+        } else {
+          // Deduct from inventory
+          inventoryItem.quantity -= item.quantity;
+          inventoryItem.lastUpdated = new Date();
+          await inventoryItem.save();
+          inventoryIssues.push({ item: item.itemName, quantityIssued: item.quantity });
+        }
+      }
+      
+      // Mark as fulfilled if all items were issued
+      if (insufficientItems.length === 0) {
+        request.status = 'fulfilled';
+        await request.save();
+      }
+      
+      return res.json({ 
+        success: true, 
+        message: insufficientItems.length === 0 
+          ? 'Internal transfer approved and items issued from inventory' 
+          : 'Partial fulfillment - some items unavailable',
+        request,
+        inventoryIssues,
+        insufficientItems,
+        type: 'internal_transfer'
+      });
+    }
+
+    // 3. For other request types, generate corresponding Purchase Order
     const totalAmount = request.lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
     
     // Map line items to PO line items
@@ -100,7 +145,8 @@ router.post('/material-requests/:id/approve', async (req, res) => {
         success: true, 
         message: 'Request approved and PO generated', 
         request: updatedRequest,
-        purchaseOrder: newPO
+        purchaseOrder: newPO,
+        type: 'purchase_order'
     });
   } catch (err) {
     console.error('Error approving request:', err);

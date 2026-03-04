@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/useAuth";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
@@ -12,7 +12,6 @@ import DataTable from "../common/DataTable";
 const MaterialRequests = () => {
   const { user } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -181,25 +180,61 @@ const MaterialRequests = () => {
   }, [location.search, fetchRequestForApproval]);
 
   const handleApproveRequest = async () => {
-    if (!selectedVendor) {
+    // Only validate vendor for non-Internal Transfer requests
+    if (
+      selectedRequest.requestType !== "Internal Transfer" &&
+      !selectedVendor
+    ) {
       toast.error("Please select a vendor");
       return;
     }
 
     try {
-      await apiService.post(
+      const response = await apiService.post(
         `/api/material-requests/${selectedRequest._id}/approve`,
         {
           vendor: selectedVendor,
-        }
+        },
       );
-      toast.success("Request approved! Purchase order created.");
+
+      // Handle different response types
+      if (response.type === "internal_transfer") {
+        if (
+          response.insufficientItems &&
+          response.insufficientItems.length > 0
+        ) {
+          // Partial fulfillment
+          const itemsList = response.insufficientItems
+            .map((item) => `${item.item}: ${item.reason}`)
+            .join(", ");
+          toast.error(`Partial fulfillment - Unavailable items: ${itemsList}`, {
+            duration: 6000,
+          });
+        } else {
+          // Full fulfillment
+          toast.success("Request approved! Items issued from inventory.", {
+            duration: 5000,
+          });
+        }
+
+        // Show issued items summary
+        if (response.inventoryIssues && response.inventoryIssues.length > 0) {
+          const issuedSummary = response.inventoryIssues
+            .map((i) => `${i.item} (${i.quantityIssued})`)
+            .join(", ");
+          toast.success(`Issued: ${issuedSummary}`, { duration: 4000 });
+        }
+      } else {
+        // Purchase order created
+        toast.success("Request approved! Purchase order created.");
+      }
+
       setShowApprovalModal(false);
       setSelectedRequest(null);
       setSelectedVendor("");
       fetchRequests();
-    } catch {
-      toast.error("Failed to approve request");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to approve request");
     }
   };
 
@@ -214,7 +249,7 @@ const MaterialRequests = () => {
         `/api/material-requests/${selectedRequest._id}/reject`,
         {
           reason: rejectionReason,
-        }
+        },
       );
       toast.success("Request rejected");
       setShowApprovalModal(false);
@@ -380,7 +415,7 @@ const MaterialRequests = () => {
   };
 
   const filteredUsers = userList.filter((user) =>
-    user.name.toLowerCase().includes(mentionSearchTerm)
+    user.name.toLowerCase().includes(mentionSearchTerm),
   );
 
   const handleSubmit = async (e) => {
@@ -388,12 +423,12 @@ const MaterialRequests = () => {
 
     // Validate that at least one line item has required fields
     const validLineItems = lineItems.filter(
-      (item) => item.itemName && item.quantity && item.quantityType
+      (item) => item.itemName && item.quantity && item.quantityType,
     );
 
     if (validLineItems.length === 0) {
       toast.error(
-        "Please add at least one line item with name, quantity, and type"
+        "Please add at least one line item with name, quantity, and type",
       );
       return;
     }
@@ -421,7 +456,7 @@ const MaterialRequests = () => {
         // Update existing request
         await apiService.put(
           `/api/material-requests/${selectedRequest._id}`,
-          requestData
+          requestData,
         );
         toast.success("Material request updated successfully!");
       } else {
@@ -540,11 +575,25 @@ const MaterialRequests = () => {
       accessorKey: "title",
       cell: (req) => (
         <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-[#111418]">
-            {req.lineItems && req.lineItems.length > 0
-              ? req.lineItems[0].itemName
-              : req.requestType || "Material Request"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-[#111418]">
+              {req.lineItems && req.lineItems.length > 0
+                ? req.lineItems[0].itemName
+                : req.requestTitle || "Material Request"}
+            </span>
+            {req.requestType === "Internal Transfer" && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                <i className="fa-solid fa-warehouse text-[10px] mr-1"></i>
+                Internal
+              </span>
+            )}
+            {req.requestType === "RFQ" && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                <i className="fa-solid fa-file-invoice text-[10px] mr-1"></i>
+                RFQ
+              </span>
+            )}
+          </div>
           <span className="text-xs text-[#617589]">
             {req.lineItems &&
               req.lineItems.length > 1 &&
@@ -600,12 +649,12 @@ const MaterialRequests = () => {
             req.status === "approved"
               ? "bg-green-100 text-green-800"
               : req.status === "pending"
-              ? "bg-yellow-100 text-yellow-800"
-              : req.status === "rejected"
-              ? "bg-red-100 text-red-800"
-              : req.status === "fulfilled"
-              ? "bg-blue-100 text-blue-800"
-              : "bg-gray-100 text-gray-800"
+                ? "bg-yellow-100 text-yellow-800"
+                : req.status === "rejected"
+                  ? "bg-red-100 text-red-800"
+                  : req.status === "fulfilled"
+                    ? "bg-blue-100 text-blue-800"
+                    : "bg-gray-100 text-gray-800"
           }`}
         >
           {req.status?.charAt(0).toUpperCase() + req.status?.slice(1)}
@@ -783,7 +832,7 @@ const MaterialRequests = () => {
                     <option value="requester">Requester A-Z</option>
                     <option value="status">Status</option>
                   </select>
-                <i className="fa-solid absolute left-1 pl-0 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
+                  <i className="fa-solid absolute left-1 pl-0 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-xs"></i>
                 </div>
 
                 {/* Clear Filters */}
@@ -822,17 +871,17 @@ const MaterialRequests = () => {
                     req.lineItems?.some((item) =>
                       item.itemName
                         ?.toLowerCase()
-                        .includes(searchQuery.toLowerCase())
-                    )
+                        .includes(searchQuery.toLowerCase()),
+                    ),
                 )}
                 isLoading={loading}
-                emptyMessage={searchQuery || filterStatus !== "all" 
-                  ? "No material requests found. Try adjusting your filters." 
-                  : "Create a new request to get started."}
+                emptyMessage={
+                  searchQuery || filterStatus !== "all"
+                    ? "No material requests found. Try adjusting your filters."
+                    : "Create a new request to get started."
+                }
                 keyExtractor={(req) => req._id}
               />
-
-
             </div>
           </div>
         )}
@@ -875,6 +924,47 @@ const MaterialRequests = () => {
                   <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <label className="flex flex-col gap-2">
                       <span className="text-sm font-medium text-[#111418]">
+                        Request Type <span className="text-red-500">*</span>
+                      </span>
+                      <div className="relative">
+                        <i className="fa-solid fa-tag absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
+                        <select
+                          name="requestType"
+                          value={formData.requestType || ""}
+                          onChange={handleFormChange}
+                          className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
+                          required
+                        >
+                          <option value="">Select Request Type</option>
+                          <option value="Internal Transfer">
+                            Internal Transfer (From Inventory)
+                          </option>
+                          <option value="RFQ">
+                            RFQ (Request for Quotation)
+                          </option>
+                          <option value="Purchase Request">
+                            Purchase Request
+                          </option>
+                          <option value="Emergency Purchase">
+                            Emergency Purchase
+                          </option>
+                          <option value="Stock Replenishment">
+                            Stock Replenishment
+                          </option>
+                        </select>
+                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
+                      </div>
+                      {formData.requestType === "Internal Transfer" && (
+                        <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                          <i className="fa-solid fa-info-circle"></i>
+                          Items will be pulled from existing inventory if
+                          available
+                        </p>
+                      )}
+                    </label>
+
+                    <label className="flex flex-col gap-2">
+                      <span className="text-sm font-medium text-[#111418]">
                         Request Title <span className="text-red-500">*</span>
                       </span>
                       <input
@@ -903,7 +993,10 @@ const MaterialRequests = () => {
                         >
                           <option value="">Select Department</option>
                           {(_departments || []).map((dept) => (
-                            <option key={dept._id || dept.name} value={dept.name}>
+                            <option
+                              key={dept._id || dept.name}
+                              value={dept.name}
+                            >
                               {dept.name}
                             </option>
                           ))}
@@ -1078,7 +1171,7 @@ const MaterialRequests = () => {
                                 handleLineItemChange(
                                   index,
                                   "itemName",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                               required
@@ -1101,7 +1194,7 @@ const MaterialRequests = () => {
                                 handleLineItemChange(
                                   index,
                                   "description",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                             />
@@ -1116,7 +1209,7 @@ const MaterialRequests = () => {
                                 handleLineItemChange(
                                   index,
                                   "quantity",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                               required
@@ -1130,7 +1223,7 @@ const MaterialRequests = () => {
                                 handleLineItemChange(
                                   index,
                                   "quantityType",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                               required
@@ -1160,7 +1253,7 @@ const MaterialRequests = () => {
                                   handleLineItemChange(
                                     index,
                                     "amount",
-                                    values.value
+                                    values.value,
                                   );
                                 }}
                               />
@@ -1169,7 +1262,7 @@ const MaterialRequests = () => {
                           <td className="p-3 text-right font-medium text-[#111418]">
                             {formatCurrency(
                               (parseFloat(item.quantity) || 0) *
-                                (parseFloat(item.amount) || 0)
+                                (parseFloat(item.amount) || 0),
                             )}
                           </td>
                           <td className="p-3 text-center">
@@ -1210,8 +1303,8 @@ const MaterialRequests = () => {
                             sum +
                             (parseFloat(item.quantity) || 0) *
                               (parseFloat(item.amount) || 0),
-                          0
-                        )
+                          0,
+                        ),
                       )}
                     </span>
                   </div>
@@ -1266,7 +1359,6 @@ const MaterialRequests = () => {
                       <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
                     </div>
                   </label>
-
                 </div>
               </div>
 
@@ -1537,10 +1629,10 @@ const MaterialRequests = () => {
                   <span className="text-gray-900">
                     {selectedRequest.requestDate
                       ? new Date(
-                          selectedRequest.requestDate
+                          selectedRequest.requestDate,
                         ).toLocaleDateString()
                       : new Date(
-                          selectedRequest.createdAt
+                          selectedRequest.createdAt,
                         ).toLocaleDateString()}
                   </span>
                 </div>
@@ -1636,28 +1728,46 @@ const MaterialRequests = () => {
                 Approval Action
               </h6>
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Vendor <span className="text-red-500">*</span>
-                </label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={selectedVendor}
-                  onChange={(e) => setSelectedVendor(e.target.value)}
-                  required
-                >
-                  <option value="">Choose vendor...</option>
-                  {vendors.map((vendor) => (
-                    <option key={vendor.id} value={vendor.name}>
-                      {vendor.name} - {vendor.category}
-                    </option>
-                  ))}
-                </select>
-                <small className="text-gray-500 text-sm mt-1 block">
-                  A Purchase Order will be created with this vendor upon
-                  approval
-                </small>
-              </div>
+              {selectedRequest.requestType === "Internal Transfer" ? (
+                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <i className="fa-solid fa-warehouse text-blue-600 text-xl mt-1"></i>
+                    <div>
+                      <h6 className="font-semibold text-blue-900 mb-1">
+                        Internal Transfer Request
+                      </h6>
+                      <p className="text-sm text-blue-700">
+                        Upon approval, items will be automatically pulled from
+                        existing inventory if available. Insufficient stock will
+                        be noted in the fulfillment report.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Vendor <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={selectedVendor}
+                    onChange={(e) => setSelectedVendor(e.target.value)}
+                    required
+                  >
+                    <option value="">Choose vendor...</option>
+                    {vendors.map((vendor) => (
+                      <option key={vendor.id} value={vendor.name}>
+                        {vendor.name} - {vendor.category}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="text-gray-500 text-sm mt-1 block">
+                    A Purchase Order will be created with this vendor upon
+                    approval
+                  </small>
+                </div>
+              )}
 
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1699,10 +1809,15 @@ const MaterialRequests = () => {
                 type="button"
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleApproveRequest}
-                disabled={!selectedVendor}
+                disabled={
+                  selectedRequest.requestType !== "Internal Transfer" &&
+                  !selectedVendor
+                }
               >
                 <i className="fa-solid fa-check"></i>
-                Approve & Create PO
+                {selectedRequest.requestType === "Internal Transfer"
+                  ? "Approve & Fulfill from Inventory"
+                  : "Approve & Create PO"}
               </button>
             </div>
           </div>
@@ -1728,25 +1843,25 @@ const MaterialRequests = () => {
                           selectedRequest.status === "pending"
                             ? "bg-amber-100 text-amber-800"
                             : selectedRequest.status === "approved"
-                            ? "bg-green-100 text-green-800"
-                            : selectedRequest.status === "rejected"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-gray-100 text-gray-800"
+                              ? "bg-green-100 text-green-800"
+                              : selectedRequest.status === "rejected"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-gray-100 text-gray-800"
                         }`}
                       >
                         {selectedRequest.status === "pending"
                           ? "Pending Your Review"
                           : selectedRequest.status === "approved"
-                          ? "Approved"
-                          : selectedRequest.status === "rejected"
-                          ? "Rejected"
-                          : selectedRequest.status}
+                            ? "Approved"
+                            : selectedRequest.status === "rejected"
+                              ? "Rejected"
+                              : selectedRequest.status}
                       </span>
                     </div>
                     <p className="text-[#617589] text-sm font-normal">
                       Created on{" "}
                       {new Date(
-                        selectedRequest.date || selectedRequest.createdAt
+                        selectedRequest.date || selectedRequest.createdAt,
                       ).toLocaleDateString("en-US", {
                         year: "numeric",
                         month: "short",
@@ -1822,7 +1937,7 @@ const MaterialRequests = () => {
                         <p className="text-[#111418] text-base font-medium">
                           {selectedRequest.requiredByDate
                             ? new Date(
-                                selectedRequest.requiredByDate
+                                selectedRequest.requiredByDate,
                               ).toLocaleDateString("en-US", {
                                 year: "numeric",
                                 month: "short",
@@ -1912,7 +2027,7 @@ const MaterialRequests = () => {
                                   {formatCurrency(item.quantity * item.amount)}
                                 </td>
                               </tr>
-                            )
+                            ),
                           )}
                         </tbody>
                         <tfoot className="bg-gray-50 border-t border-gray-200">
@@ -1928,8 +2043,8 @@ const MaterialRequests = () => {
                                 (selectedRequest.lineItems || []).reduce(
                                   (sum, item) =>
                                     sum + item.quantity * item.amount,
-                                  0
-                                )
+                                  0,
+                                ),
                               )}
                             </td>
                           </tr>
@@ -2094,7 +2209,7 @@ const MaterialRequests = () => {
                             <p className="text-xs text-[#617589]">
                               {new Date(
                                 selectedRequest.date ||
-                                  selectedRequest.createdAt
+                                  selectedRequest.createdAt,
                               ).toLocaleDateString("en-US", {
                                 month: "short",
                                 day: "numeric",
@@ -2147,7 +2262,7 @@ const MaterialRequests = () => {
                               <p className="text-xs text-[#617589]">
                                 {selectedRequest.approvedDate
                                   ? new Date(
-                                      selectedRequest.approvedDate
+                                      selectedRequest.approvedDate,
                                     ).toLocaleDateString()
                                   : "Recently"}
                               </p>
@@ -2169,7 +2284,7 @@ const MaterialRequests = () => {
                                 <p className="text-xs text-[#617589]">
                                   {selectedRequest.rejectedDate
                                     ? new Date(
-                                        selectedRequest.rejectedDate
+                                        selectedRequest.rejectedDate,
                                       ).toLocaleDateString()
                                     : "Recently"}
                                 </p>
