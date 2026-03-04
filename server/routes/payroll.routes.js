@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const PayrollRun = require('../models/PayrollRun');
-const { checkSecurityRole } = require('../middleware/auth.middleware');
+const { checkSecurityRole } = require('../middleware/securityAuth');
 
 // GET all historical payroll runs
 router.get('/runs', async (req, res) => {

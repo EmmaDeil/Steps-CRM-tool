@@ -334,11 +334,39 @@ const Admin = () => {
     }));
   };
 
+  const toggleUserOverride = (category, permission) => {
+    setSelectedUser((prev) => {
+      if (!prev) return prev;
+      const roleDef = rolePermissions[prev.role]?.[category]?.[permission] || false;
+      const current = prev.permissions?.[category]?.[permission];
+      const nextVal = typeof current === 'boolean' ? !current : !roleDef;
+      
+      return {
+        ...prev,
+        permissions: {
+          ...(prev.permissions || {}),
+          [category]: {
+            ...((prev.permissions && prev.permissions[category]) || {}),
+            [permission]: nextVal,
+          },
+        },
+      };
+    });
+  };
+
+  const hasUserOverride = (category, permission) => {
+    if (!selectedUser) return false;
+    const current = selectedUser.permissions?.[category]?.[permission];
+    if (typeof current === 'boolean') return current;
+    return rolePermissions[selectedUser.role]?.[category]?.[permission] || false;
+  };
+
   const handleEditUser = (userId) => {
     const user = users.find((u) => u._id === userId);
     if (user) {
       setSelectedUser({
         ...user,
+        permissions: user.permissions || {},
         selectedModules: user.permissions?.modules || [],
       });
       setShowEditUserModal(true);
@@ -356,7 +384,7 @@ const Admin = () => {
         role: selectedUser.role,
         status: selectedUser.status,
         permissions: {
-          ...rolePermissions[selectedUser.role],
+          ...selectedUser.permissions, // Preserve overrides
           modules: selectedUser.selectedModules,
         },
       };
@@ -1227,6 +1255,68 @@ const Admin = () => {
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
                     Select which modules this user can access
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Security Access Overrides
+                  </label>
+                  <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">View Logs</p>
+                        <p className="text-sm text-gray-600">Access to system audit logs</p>
+                      </div>
+                      <button
+                        onClick={() => toggleUserOverride("security", "viewLogs")}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          hasUserOverride("security", "viewLogs") ? "bg-blue-600" : "bg-gray-200"
+                        }`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          hasUserOverride("security", "viewLogs") ? "translate-x-6" : "translate-x-1"
+                        }`} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">Export Logs</p>
+                        <p className="text-sm text-gray-600">Download audit logs report</p>
+                      </div>
+                      <button
+                        onClick={() => toggleUserOverride("security", "exportLogs")}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          hasUserOverride("security", "exportLogs") ? "bg-blue-600" : "bg-gray-200"
+                        }`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          hasUserOverride("security", "exportLogs") ? "translate-x-6" : "translate-x-1"
+                        }`} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">Manage Settings</p>
+                        <p className="text-sm text-gray-600">Global configuration access</p>
+                      </div>
+                      <button
+                        onClick={() => toggleUserOverride("security", "manageSettings")}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          hasUserOverride("security", "manageSettings") ? "bg-blue-600" : "bg-gray-200"
+                        }`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          hasUserOverride("security", "manageSettings") ? "translate-x-6" : "translate-x-1"
+                        }`} />
+                      </button>
+                    </div>
+
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Override role defaults explicitly for this user
                   </p>
                 </div>
               </div>

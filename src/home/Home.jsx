@@ -7,6 +7,54 @@ import Breadcrumb from "../components/Breadcrumb";
 import { apiService } from "../services/api";
 import Footer from "../components/Footer";
 
+// Custom Error Boundary for Module Loading
+class ModuleErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, reloadAttempted: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Module loading error:", error, errorInfo);
+
+    // Auto-reload once if not already attempted
+    if (!this.state.reloadAttempted) {
+      this.setState({ reloadAttempted: true });
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      if (!this.state.reloadAttempted) {
+        return (
+          <div className="flex-1 flex items-center justify-center px-4 py-10">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+              <h3 className="text-lg font-bold mb-2 text-[#111418]">
+                Module Loading Error
+              </h3>
+              <p className="text-sm text-[#617589] mb-2">
+                Reloading to find the module...
+              </p>
+            </div>
+          </div>
+        );
+      }
+
+      return this.props.fallback;
+    }
+
+    return this.props.children;
+  }
+}
+
 // Dynamically load module components with fallback mapping for renamed modules
 const loadModuleComponent = (componentName) => {
   if (!componentName) return null;
@@ -27,7 +75,15 @@ const loadModuleComponent = (componentName) => {
 
   try {
     return lazy(() =>
-      import(`../components/modules/${finalComponentName}.jsx`)
+      import(`../components/modules/${finalComponentName}.jsx`).catch(
+        (error) => {
+          console.error(
+            `Failed to load component: ${finalComponentName}`,
+            error,
+          );
+          throw error; // Re-throw to trigger Suspense error boundary
+        },
+      ),
     );
   } catch (error) {
     console.error(`Failed to load component: ${finalComponentName}`, error);
@@ -178,14 +234,47 @@ export default function Home() {
         <div className="min-h-screen flex flex-col">
           <Navbar user={user} />
           <div className="flex-1">
-            <Suspense
-              key={id}
+            <ModuleErrorBoundary
               fallback={
-                <div className="p-4 text-center">Loading module...</div>
+                <div className="flex-1 flex items-center justify-center px-4 py-10">
+                  <div className="text-center max-w-md">
+                    <h3 className="text-xl font-bold mb-2 text-[#111418]">
+                      ⚠️ Module Not Available
+                    </h3>
+                    <p className="text-sm text-[#617589] mb-4">
+                      The <strong>{found.name}</strong> module could not be
+                      loaded. This may be because the component file is missing
+                      or there's a build issue.
+                    </p>
+                    <div className="flex gap-3 justify-center">
+                      <button
+                        className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                        onClick={() => window.location.reload()}
+                      >
+                        <i className="fa-solid fa-rotate-right text-base"></i>
+                        Try Again
+                      </button>
+                      <button
+                        className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 hover:bg-blue-50"
+                        onClick={() => navigate("/home")}
+                      >
+                        <i className="fa-solid fa-home text-base"></i>
+                        Back to Home
+                      </button>
+                    </div>
+                  </div>
+                </div>
               }
             >
-              <ModuleComp />
-            </Suspense>
+              <Suspense
+                key={id}
+                fallback={
+                  <div className="p-4 text-center">Loading module...</div>
+                }
+              >
+                <ModuleComp />
+              </Suspense>
+            </ModuleErrorBoundary>
           </div>
         </div>
       );
