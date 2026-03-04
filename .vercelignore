@@ -1,0 +1,46 @@
+# Dependencies
+node_modules
+npm-debug.log
+.npm
+
+# Environment variables (use Vercel UI instead)
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+dist
+build
+.next
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local uploads (not needed - using MongoDB storage)
+server/uploads
+uploads
+
+# Git
+.git
+.gitignore
+
+# Testing
+coverage
+.nyc_output
+
+# Logs
+logs
+*.log
+
+# Misc
+*.md
+README.md
+LICENSE

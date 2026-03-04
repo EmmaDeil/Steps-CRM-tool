@@ -10,7 +10,16 @@ const EmployeeSchema = new mongoose.Schema({
   jobTitle: { type: String },
   startDate: { type: Date },
   status: { type: String, default: 'Active', enum: ['Active', 'On Leave', 'Terminated'] },
-  avatar: { type: String, default: '' },
+  avatar: { type: String, default: '' }, // Stores base64 data URL (data:image/png;base64,...)
+  employeeId: { type: String },
+  salary: { type: Number, default: 0 },
+  address: { type: String },
+  emergencyContact: {
+    name: { type: String },
+    relationship: { type: String },
+    phone: { type: String }
+  },
+  managerId: { type: String },
   role: { type: String }, // Used in UI for role descriptor
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

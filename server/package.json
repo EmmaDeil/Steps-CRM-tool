@@ -9,6 +9,7 @@
     "seed": "node seed.js",
     "seed:clear": "node seed.js --clear",
     "seed:users": "node seed.js --users",
+    "test:connection": "node test-connection.js",
     "vercel-build": "echo 'No build step required for Express API'"
   },
   "dependencies": {
@@ -23,7 +24,6 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^7.5.0",
     "morgan": "^1.10.0",
-    "multer": "^1.4.5-lts.1",
     "nodemailer": "^7.0.11",
     "socket.io": "^4.8.3"
   },

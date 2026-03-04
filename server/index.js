@@ -9,8 +9,6 @@ const mongoSanitize = require('express-mongo-sanitize');
 const mongoose = require('mongoose');
 const path = require('path');
 const dotenv = require('dotenv');
-const multer = require('multer');
-const fs = require('fs');
 // Ensure .env is loaded even when the server is started from the repo root
 dotenv.config({ path: path.join(__dirname, '.env') });
 
@@ -177,76 +175,37 @@ app.use((req, res, next) => {
   next();
 });
 
-// Create uploads directories if they don't exist
-const uploadsDir = path.join(__dirname, 'uploads', 'vendors');
-const avatarsDir = path.join(__dirname, 'uploads', 'avatars');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-if (!fs.existsSync(avatarsDir)) {
-  fs.mkdirSync(avatarsDir, { recursive: true });
-}
+// File upload helper - validates base64 data
+const validateBase64File = (base64String, maxSizeMB, allowedTypes) => {
+  if (!base64String || !base64String.startsWith('data:')) {
+    throw new Error('Invalid file format. Expected base64 data URL.');
+  }
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  },
-});
+  // Extract mime type and validate
+  const mimeMatch = base64String.match(/data:([^;]+);/);
+  if (!mimeMatch) {
+    throw new Error('Invalid file format.');
+  }
+  
+  const mimeType = mimeMatch[1];
+  if (allowedTypes && !allowedTypes.test(mimeType)) {
+    throw new Error(`File type ${mimeType} not allowed.`);
+  }
 
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit per file
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /pdf|doc|docx|jpg|jpeg|png/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+  // Check file size (base64 is ~33% larger than binary)
+  const sizeMatch = base64String.match(/base64,(.+)$/);
+  if (sizeMatch) {
+    const base64Data = sizeMatch[1];
+    const sizeInBytes = (base64Data.length * 3) / 4;
+    const sizeInMB = sizeInBytes / (1024 * 1024);
     
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Only PDF, DOC, DOCX, JPG, and PNG files are allowed'));
+    if (sizeInMB > maxSizeMB) {
+      throw new Error(`File size exceeds ${maxSizeMB}MB limit.`);
     }
-  },
-});
+  }
 
-// Avatar upload configuration
-const avatarStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, avatarsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'avatar-' + uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
-const avatarUpload = multer({
-  storage: avatarStorage,
-  limits: {
-    fileSize: 2 * 1024 * 1024, // 2MB limit for avatars
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpg|jpeg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Only JPG, JPEG, PNG, GIF, and WEBP images are allowed for avatars'));
-    }
-  },
-});
-
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+  return { mimeType, valid: true };
+};
 
 // MongoDB connection string
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -258,12 +217,15 @@ if (!MONGODB_URI) {
 async function start() {
   try {
     await mongoose.connect(MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 30000, // Increased to 30 seconds
       socketTimeoutMS: 45000,
+      family: 4, // Use IPv4, skip trying IPv6
       maxPoolSize: 10,
       minPoolSize: 2,
+      tls: true, // Enable TLS/SSL
+      tlsAllowInvalidCertificates: false,
+      retryWrites: true,
+      w: 'majority',
     });
     console.log('✓ Connected to MongoDB');
 
@@ -3277,10 +3239,10 @@ async function start() {
   });
 
   // Update employee by ID with avatar upload
-  app.put('/api/hr/employees/:id', avatarUpload.single('avatar'), async (req, res) => {
+  app.put('/api/hr/employees/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, email, phone, dateOfBirth, department, jobTitle, status, salary, address, emergencyContact, updatedBy } = req.body;
+      const { name, email, phone, dateOfBirth, department, jobTitle, status, salary, address, emergencyContact, avatar, updatedBy } = req.body;
       const ObjectId = require('mongoose').Types.ObjectId;
       
       // Check if ID is valid MongoDB ObjectId
@@ -3325,22 +3287,20 @@ async function start() {
         changes.push({ field: 'emergencyContact', oldValue: oldEmployee.emergencyContact, newValue: parsedContact });
       }
 
-      // Handle avatar file upload
-      if (req.file) {
-        const avatarUrl = `/uploads/avatars/${req.file.filename}`;
-        updateData.avatar = avatarUrl;
-        changes.push({ field: 'avatar', oldValue: oldEmployee.avatar, newValue: avatarUrl });
-        
-        // Delete old avatar file if it exists (async)
-        if (oldEmployee.avatar && oldEmployee.avatar.startsWith('/uploads/avatars/')) {
-          const oldFilePath = path.join(__dirname, oldEmployee.avatar);
-          try {
-            await fs.promises.access(oldFilePath);
-            await fs.promises.unlink(oldFilePath);
-          } catch (err) {
-            // File doesn't exist or can't be deleted, ignore
-            console.log('Could not delete old avatar:', err.message);
-          }
+      // Handle avatar base64 upload
+      if (avatar && avatar !== oldEmployee.avatar) {
+        try {
+          // Validate base64 avatar (2MB limit, image types only)
+          const allowedTypes = /^image\/(jpeg|jpg|png|gif|webp)$/;
+          validateBase64File(avatar, 2, allowedTypes);
+          
+          updateData.avatar = avatar; // Store base64 data URL directly
+          changes.push({ field: 'avatar', oldValue: 'hidden', newValue: 'updated' });
+        } catch (validationError) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Avatar validation failed: ${validationError.message}` 
+          });
         }
       }
 
@@ -4425,25 +4385,40 @@ async function start() {
     }
   });
 
-  // Create new vendor with file upload
-  app.post('/api/vendors', upload.array('documents', 5), async (req, res) => {
+  // Create new vendor with base64 document upload
+  app.post('/api/vendors', async (req, res) => {
     try {
       const vendorData = req.body;
+      const { documents: base64Documents } = req.body;
       
-      // Process uploaded documents
+      // Process base64 documents if provided
       const documents = [];
-      if (req.files && req.files.length > 0) {
-        req.files.forEach((file) => {
-          documents.push({
-            filename: file.filename,
-            originalName: file.originalname,
-            path: file.path,
-            size: file.size,
-            mimetype: file.mimetype,
-            uploadedAt: new Date(),
-          });
-        });
+      if (base64Documents && Array.isArray(base64Documents)) {
+        const allowedTypes = /^(application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document)|image\/(jpeg|jpg|png))$/;
+        
+        for (const doc of base64Documents) {
+          try {
+            // Validate base64 document (5MB limit)
+            const validation = validateBase64File(doc.data, 5, allowedTypes);
+            
+            documents.push({
+              name: doc.name || 'document',
+              data: doc.data, // Store full base64 data URL
+              size: Math.round((doc.data.length * 3) / 4), // Calculate approximate size
+              type: validation.mimeType,
+              uploadedAt: new Date(),
+            });
+          } catch (validationError) {
+            return res.status(400).json({ 
+              success: false, 
+              error: `Document validation failed: ${validationError.message}` 
+            });
+          }
+        }
       }
+      
+      // Remove base64Documents from vendorData as we've processed it
+      delete vendorData.documents;
       
       // Create new vendor
       const vendor = new VendorModel({
@@ -4462,41 +4437,48 @@ async function start() {
       });
     } catch (error) {
       console.error('Error creating vendor:', error);
-      
-      // Clean up uploaded files if vendor creation fails
-      if (req.files && req.files.length > 0) {
-        req.files.forEach((file) => {
-          fs.unlink(file.path, (err) => {
-            if (err) console.error('Error deleting file:', err);
-          });
-        });
-      }
-      
       res.status(500).json({ success: false, error: error.message });
     }
   });
 
   // Update vendor
-  app.put('/api/vendors/:id', upload.array('documents', 5), async (req, res) => {
+  app.put('/api/vendors/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const updates = req.body;
+      const { documents: base64Documents } = req.body;
       
       const vendor = await VendorModel.findById(id);
       if (!vendor) {
         return res.status(404).json({ success: false, error: 'Vendor not found' });
       }
       
-      // Process new uploaded documents
-      if (req.files && req.files.length > 0) {
-        const newDocuments = req.files.map((file) => ({
-          filename: file.filename,
-          originalName: file.originalname,
-          path: file.path,
-          size: file.size,
-          mimetype: file.mimetype,
-          uploadedAt: new Date(),
-        }));
+      // Process new base64 documents if provided
+      if (base64Documents && Array.isArray(base64Documents)) {
+        const allowedTypes = /^(application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document)|image\/(jpeg|jpg|png))$/;
+        const newDocuments = [];
+        
+        for (const doc of base64Documents) {
+          try {
+            // Validate base64 document (5MB limit)
+            const validation = validateBase64File(doc.data, 5, allowedTypes);
+            
+            newDocuments.push({
+              name: doc.name || 'document',
+              data: doc.data,
+              size: Math.round((doc.data.length * 3) / 4),
+              type: validation.mimeType,
+              uploadedAt: new Date(),
+            });
+          } catch (validationError) {
+            return res.status(400).json({ 
+              success: false, 
+              error: `Document validation failed: ${validationError.message}` 
+            });
+          }
+        }
+        
+        // Append new documents to existing ones
         updates.documents = [...(vendor.documents || []), ...newDocuments];
       }
       
@@ -4525,15 +4507,7 @@ async function start() {
         return res.status(404).json({ success: false, error: 'Vendor not found' });
       }
       
-      // Delete associated documents from filesystem
-      if (vendor.documents && vendor.documents.length > 0) {
-        vendor.documents.forEach((doc) => {
-          fs.unlink(doc.path, (err) => {
-            if (err) console.error('Error deleting file:', err);
-          });
-        });
-      }
-      
+      // No need to delete files from filesystem anymore - documents stored in MongoDB
       await VendorModel.findByIdAndDelete(id);
       
       res.json({
@@ -4542,6 +4516,71 @@ async function start() {
       });
     } catch (error) {
       console.error('Error deleting vendor:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get vendor document by index
+  app.get('/api/vendors/:id/documents/:docIndex', async (req, res) => {
+    try {
+      const { id, docIndex } = req.params;
+      
+      const vendor = await VendorModel.findById(id);
+      if (!vendor) {
+        return res.status(404).json({ success: false, error: 'Vendor not found' });
+      }
+      
+      const index = parseInt(docIndex);
+      if (isNaN(index) || index < 0 || index >= vendor.documents.length) {
+        return res.status(404).json({ success: false, error: 'Document not found' });
+      }
+      
+      const document = vendor.documents[index];
+      
+      // Return the base64 data URL directly - client can use it in download or display
+      res.json({
+        success: true,
+        data: {
+          name: document.name,
+          data: document.data,
+          type: document.type,
+          size: document.size,
+          uploadedAt: document.uploadedAt,
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching vendor document:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Delete specific vendor document
+  app.delete('/api/vendors/:id/documents/:docIndex', async (req, res) => {
+    try {
+      const { id, docIndex } = req.params;
+      
+      const vendor = await VendorModel.findById(id);
+      if (!vendor) {
+        return res.status(404).json({ success: false, error: 'Vendor not found' });
+      }
+      
+      const index = parseInt(docIndex);
+      if (isNaN(index) || index < 0 || index >= vendor.documents.length) {
+        return res.status(404).json({ success: false, error: 'Document not found' });
+      }
+      
+      // Remove document from array
+      vendor.documents.splice(index, 1);
+      vendor.updatedAt = new Date();
+      await vendor.save();
+      
+      res.json({
+        success: true,
+        message: 'Document deleted successfully',
+        data: vendor,
+      });
+    } catch (error) {
+      console.error('Error deleting vendor document:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });

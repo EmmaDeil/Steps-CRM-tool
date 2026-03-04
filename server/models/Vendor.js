@@ -86,11 +86,10 @@ const vendorSchema = new mongoose.Schema(
     },
     documents: [
       {
-        filename: String,
-        originalName: String,
-        path: String,
+        name: String, // Original filename
+        data: String, // Base64 encoded file data (data:application/pdf;base64,...)
         size: Number,
-        mimetype: String,
+        type: String, // MIME type
         uploadedAt: {
           type: Date,
           default: Date.now,
