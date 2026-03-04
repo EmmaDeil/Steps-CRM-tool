@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
+import DataTable from "../common/DataTable";
 
 const PurchaseOrders = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -185,13 +186,9 @@ const PurchaseOrders = () => {
 
   const statusCounts = {
     all: total,
-    draft: purchaseOrders.filter((po) => po.status?.toLowerCase() === "draft")
-      .length,
-    issued: purchaseOrders.filter((po) => po.status?.toLowerCase() === "issued")
-      .length,
-    received: purchaseOrders.filter(
-      (po) => po.status?.toLowerCase() === "received"
-    ).length,
+    draft: purchaseOrders?.filter((po) => po.status?.toLowerCase() === "draft")?.length || 0,
+    issued: purchaseOrders?.filter((po) => po.status?.toLowerCase() === "issued")?.length || 0,
+    received: purchaseOrders?.filter((po) => po.status?.toLowerCase() === "received")?.length || 0,
   };
 
   // Pagination handlers
@@ -247,6 +244,112 @@ const PurchaseOrders = () => {
     return pages;
   };
 
+  const purchaseOrderColumns = [
+    {
+      header: (
+        <input
+          type="checkbox"
+          className="rounded border-[#dbe0e6] text-[#137fec] focus:ring-[#137fec]/20"
+        />
+      ),
+      accessorKey: "select",
+      className: "w-[40px] pl-4 pr-3 py-3",
+      cellClassName: "pl-4 pr-3 py-3",
+      cell: () => (
+        <input
+          type="checkbox"
+          className="rounded border-[#dbe0e6] text-[#137fec] focus:ring-[#137fec]/20"
+        />
+      ),
+    },
+    {
+      header: (
+        <div className="flex items-center gap-1 group cursor-pointer hover:text-[#137fec]">
+          PO Number <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
+        </div>
+      ),
+      accessorKey: "poNumber",
+      className: "px-4 py-3",
+      cellClassName: "px-4 py-3",
+      cell: (po) => (
+        <a href={`#${po._id || po.id}`} className="text-sm font-medium text-[#137fec] hover:underline">
+          {po.poNumber || "N/A"}
+        </a>
+      ),
+    },
+    {
+      header: (
+        <div className="flex items-center gap-1 group cursor-pointer hover:text-[#137fec]">
+          Vendor <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
+        </div>
+      ),
+      accessorKey: "vendor",
+      className: "px-4 py-3",
+      cellClassName: "px-4 py-3",
+      cell: (po, index) => {
+        const vendorName = po.vendor || "Unknown Vendor";
+        const vendorInitials = getVendorInitials(vendorName);
+        const vendorColor = getRandomVendorColor(index);
+        return (
+          <div className="flex items-center gap-3">
+            <div className={`size-8 rounded-full ${getVendorBgColor(vendorColor)} flex items-center justify-center text-xs font-bold`}>
+              {vendorInitials}
+            </div>
+            <span className="text-sm text-[#111418] font-medium">{vendorName}</span>
+          </div>
+        );
+      },
+    },
+    {
+      header: (
+        <div className="flex items-center gap-1 group cursor-pointer hover:text-[#137fec]">
+          Order Date <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
+        </div>
+      ),
+      accessorKey: "orderDate",
+      className: "px-4 py-3",
+      cellClassName: "px-4 py-3 text-sm text-[#617589]",
+      cell: (po) => formatDate(po.createdAt || po.orderDate),
+    },
+    {
+      header: "Status",
+      accessorKey: "status",
+      className: "px-4 py-3",
+      cellClassName: "px-4 py-3",
+      cell: (po) => {
+        const statusInfo = getStatusInfo(po.status);
+        return (
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColorClasses(statusInfo.color)}`}>
+            <span className={`size-1.5 rounded-full ${getStatusDotColor(statusInfo.color)}`}></span>{" "}
+            {statusInfo.label}
+          </span>
+        );
+      },
+    },
+    {
+      header: (
+        <div className="flex items-center justify-end gap-1 group cursor-pointer hover:text-[#137fec]">
+          Total Amount <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
+        </div>
+      ),
+      accessorKey: "totalAmount",
+      className: "px-4 py-3 text-right",
+      cellClassName: "px-4 py-3 text-sm font-medium text-[#111418] text-right font-mono",
+      cell: (po) => `$${(po.totalAmount || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+    },
+    {
+      header: "Actions",
+      accessorKey: "actions",
+      className: "px-4 py-3 text-center w-[80px]",
+      cellClassName: "px-4 py-3 text-center",
+      cell: () => (
+        <button className="p-1 rounded-md text-[#617589] hover:bg-gray-100 transition-colors cursor-pointer">
+          <i className="fa-solid fa-ellipsis-vertical text-[16px]"></i>
+        </button>
+      ),
+    },
+  ];
+
   return (
     <div className="w-full min-h-screen bg-[#f6f7f8] flex flex-col">
       <Breadcrumb
@@ -268,7 +371,10 @@ const PurchaseOrders = () => {
               Manage, track, and create new purchase orders.
             </p>
           </div>
-          <button className="flex items-center justify-center gap-2 overflow-hidden rounded-lg h-10 px-5 bg-[#137fec] hover:bg-blue-600 transition-colors text-white text-sm font-bold leading-normal tracking-[0.015em] shadow-sm">
+          <button 
+            className="flex items-center justify-center gap-2 overflow-hidden rounded-lg h-10 px-5 bg-[#137fec] hover:bg-blue-600 transition-colors text-white text-sm font-bold leading-normal tracking-[0.015em] shadow-sm"
+            onClick={() => toast("Purchase Orders are automatically created when Material Requests are approved. Head over to Material Requests to start the process.", { icon: 'ℹ️', duration: 5000 })}
+          >
             <i className="fa-solid fa-plus text-[16px]"></i>
             <span className="truncate">Create Purchase Order</span>
           </button>
@@ -431,166 +537,16 @@ const PurchaseOrders = () => {
 
         {/* Data Table Section */}
         <div className="bg-white rounded-xl border border-[#dbe0e6] overflow-hidden shadow-sm flex flex-col">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#f9fafb] border-b border-[#dbe0e6]">
-                  <th className="py-3 pl-4 pr-3 w-[40px]">
-                    <input
-                      type="checkbox"
-                      className="rounded border-[#dbe0e6] text-[#137fec] focus:ring-[#137fec]/20"
-                    />
-                  </th>
-                  <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider cursor-pointer group hover:text-[#137fec]">
-                    <div className="flex items-center gap-1">
-                      PO Number{" "}
-                      <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
-                    </div>
-                  </th>
-                  <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider cursor-pointer group hover:text-[#137fec]">
-                    <div className="flex items-center gap-1">
-                      Vendor{" "}
-                      <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
-                    </div>
-                  </th>
-                  <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider cursor-pointer group hover:text-[#137fec]">
-                    <div className="flex items-center gap-1">
-                      Order Date{" "}
-                      <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
-                    </div>
-                  </th>
-                  <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider text-right cursor-pointer group hover:text-[#137fec]">
-                    <div className="flex items-center justify-end gap-1">
-                      Total Amount{" "}
-                      <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
-                    </div>
-                  </th>
-                  <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider text-center w-[80px]">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#f0f2f4]">
-                {loading ? (
-                  <tr>
-                    <td colSpan="7" className="py-12 text-center">
-                      <div className="flex flex-col items-center justify-center gap-3">
-                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#137fec]"></div>
-                        <p className="text-sm text-[#617589]">
-                          Loading purchase orders...
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : error ? (
-                  <tr>
-                    <td colSpan="7" className="py-12 text-center">
-                      <div className="flex flex-col items-center justify-center gap-3">
-                        <i className="fa-solid fa-exclamation-triangle text-3xl text-red-500"></i>
-                        <p className="text-sm text-[#617589]">{error}</p>
-                        <button
-                          onClick={fetchPurchaseOrders}
-                          className="px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
-                        >
-                          Retry
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : purchaseOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="py-12 text-center">
-                      <div className="flex flex-col items-center justify-center gap-3">
-                        <i className="fa-solid fa-inbox text-4xl text-[#617589]"></i>
-                        <p className="text-sm text-[#617589]">
-                          No purchase orders found
-                        </p>
-                        <p className="text-xs text-[#617589]">
-                          Try adjusting your filters or create a new purchase
-                          order
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  purchaseOrders.map((po, index) => {
-                    const statusInfo = getStatusInfo(po.status);
-                    const vendorName = po.vendor || "Unknown Vendor";
-                    const vendorInitials = getVendorInitials(vendorName);
-                    const vendorColor = getRandomVendorColor(index);
-
-                    return (
-                      <tr
-                        key={po._id || po.id}
-                        className="group hover:bg-[#fcfcfd] transition-colors"
-                      >
-                        <td className="py-3 pl-4 pr-3">
-                          <input
-                            type="checkbox"
-                            className="rounded border-[#dbe0e6] text-[#137fec] focus:ring-[#137fec]/20"
-                          />
-                        </td>
-                        <td className="py-3 px-4">
-                          <a
-                            href={`#${po._id || po.id}`}
-                            className="text-sm font-medium text-[#137fec] hover:underline"
-                          >
-                            {po.poNumber || "N/A"}
-                          </a>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`size-8 rounded-full ${getVendorBgColor(
-                                vendorColor
-                              )} flex items-center justify-center text-xs font-bold`}
-                            >
-                              {vendorInitials}
-                            </div>
-                            <span className="text-sm text-[#111418] font-medium">
-                              {vendorName}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-[#617589]">
-                          {formatDate(po.createdAt || po.orderDate)}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColorClasses(
-                              statusInfo.color
-                            )}`}
-                          >
-                            <span
-                              className={`size-1.5 rounded-full ${getStatusDotColor(
-                                statusInfo.color
-                              )}`}
-                            ></span>{" "}
-                            {statusInfo.label}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-sm font-medium text-[#111418] text-right font-mono">
-                          $
-                          {(po.totalAmount || 0).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <button className="p-1 rounded-md text-[#617589] hover:bg-gray-100 transition-colors">
-                            <i className="fa-solid fa-ellipsis-vertical text-[16px]"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
+          <DataTable
+            columns={purchaseOrderColumns}
+            data={purchaseOrders}
+            isLoading={loading}
+            emptyMessage={
+              error ? error : "No purchase orders found. Try adjusting your filters or create a new purchase order."
+            }
+            keyExtractor={(po) => po._id || po.id}
+          />
+          
           {/* Pagination */}
           <div className="flex items-center justify-between px-4 py-3 border-t border-[#dbe0e6] bg-white">
             <div className="flex items-center gap-2">

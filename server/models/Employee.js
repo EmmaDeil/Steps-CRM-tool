@@ -1,84 +1,35 @@
 const mongoose = require('mongoose');
 
-const employeeSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true,
-  },
-  phone: {
-    type: String,
-    trim: true,
-  },
-  dateOfBirth: {
-    type: Date,
-  },
-  department: {
-    type: String,
-    required: true,
-    default: 'Engineering',
-  },
-  role: {
-    type: String,
-    required: true,
-    default: 'Employee',
-  },
-  startDate: {
-    type: Date,
-    default: Date.now,
-  },
-  status: {
-    type: String,
-    enum: ['Active', 'On Leave', 'Inactive', 'Terminated'],
-    default: 'Active',
-  },
-  avatar: {
-    type: String,
-  },
-  employeeId: {
-    type: String,
-    unique: true,
-    sparse: true,
-  },
-  // Additional fields for HR management
-  jobTitle: {
-    type: String,
-  },
-  managerId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Employee',
-  },
-  salary: {
-    type: Number,
-  },
-  address: {
-    street: String,
-    city: String,
-    state: String,
-    zipCode: String,
-    country: String,
-  },
-  emergencyContact: {
-    name: String,
-    relationship: String,
-    phone: String,
-  },
-}, {
-  timestamps: true,
+const EmployeeSchema = new mongoose.Schema({
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
+  email: { type: String, required: true },
+  phone: { type: String },
+  dateOfBirth: { type: Date },
+  department: { type: String },
+  jobTitle: { type: String },
+  startDate: { type: Date },
+  status: { type: String, default: 'Active', enum: ['Active', 'On Leave', 'Terminated'] },
+  avatar: { type: String, default: '' },
+  role: { type: String }, // Used in UI for role descriptor
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
-// Indexes for performance
-employeeSchema.index({ name: 1 });
-employeeSchema.index({ email: 1 });
-employeeSchema.index({ department: 1 });
-employeeSchema.index({ status: 1 });
-employeeSchema.index({ employeeId: 1 });
+// Virtual for full name since UI expects `e.name`
+EmployeeSchema.virtual('name').get(function() {
+  return `${this.firstName} ${this.lastName}`;
+});
 
-module.exports = mongoose.model('Employee', employeeSchema);
+// Transform output to match UI expectations (e.g., `id` instead of `_id`)
+EmployeeSchema.set('toJSON', {
+  virtuals: true,
+  transform: (doc, ret) => {
+    ret.id = ret._id;
+    delete ret._id;
+    delete ret.__v;
+    return ret;
+  }
+});
+
+module.exports = mongoose.model('Employee', EmployeeSchema);

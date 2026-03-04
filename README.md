@@ -256,10 +256,13 @@ await apiService.accounting.createTransaction({
 - `GET /api/accounting/stats` - Get financial stats
 
 #### Inventory Module
-- `GET /api/inventory/items` - Get inventory items
-- `POST /api/inventory/items` - Create item
-- `PUT /api/inventory/items/:id` - Update item
-- `GET /api/inventory/stats` - Get inventory stats
+- `GET /api/inventory` - Get inventory items
+- `POST /api/inventory` - Create item
+- `PUT /api/inventory/:id` - Update item
+- `DELETE /api/inventory/:id` - Delete item
+
+#### Analytics Module
+- `GET /api/analytics/reports` - Get aggregated analytics reports and charts
 
 #### HR Module
 - `GET /api/hr/employees` - Get employees

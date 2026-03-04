@@ -7,6 +7,9 @@ const materialRequestSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    requestTitle: { 
+      type: String 
+    },
     requestType: {
       type: String,
       required: true,
@@ -23,14 +26,29 @@ const materialRequestSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    requiredByDate: { 
+      type: Date 
+    },
+    budgetCode: { 
+      type: String 
+    },
+    reason: { 
+      type: String 
+    },
+    preferredVendor: { 
+      type: String 
+    },
     date: {
       type: String,
       required: true,
     },
     status: {
       type: String,
-      enum: ['pending', 'approved', 'rejected'],
+      enum: ['pending', 'approved', 'rejected', 'fulfilled'],
       default: 'pending',
+    },
+    rejectionReason: { 
+      type: String 
     },
     lineItems: [
       {
@@ -49,7 +67,14 @@ const materialRequestSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
   }
 );
+
+// Virtual for ID mapped to _id
+materialRequestSchema.virtual('id').get(function() {
+  return this._id.toHexString();
+});
 
 module.exports = mongoose.model('MaterialRequest', materialRequestSchema);

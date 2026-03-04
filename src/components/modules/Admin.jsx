@@ -63,22 +63,11 @@ const Admin = () => {
     role: "Editor",
   });
 
+  const [dbRoles, setDbRoles] = useState([]);
   const [rolePermissions, setRolePermissions] = useState({
-    Admin: {
-      userManagement: { viewUsers: true, editUsers: true, inviteUsers: true },
-      billingFinance: { viewInvoices: true, manageSubscription: true },
-      systemSettings: { globalConfiguration: true },
-    },
-    Editor: {
-      userManagement: { viewUsers: true, editUsers: true, inviteUsers: false },
-      billingFinance: { viewInvoices: false, manageSubscription: false },
-      systemSettings: { globalConfiguration: false },
-    },
-    Viewer: {
-      userManagement: { viewUsers: true, editUsers: false, inviteUsers: false },
-      billingFinance: { viewInvoices: false, manageSubscription: false },
-      systemSettings: { globalConfiguration: false },
-    },
+    Admin: {},
+    Editor: {},
+    Viewer: {},
   });
 
   const fetchUsers = useCallback(async () => {
@@ -138,9 +127,32 @@ const Admin = () => {
     }
   }, [logPage, logFilterAction, logFilterStatus]);
 
+  const fetchRoles = useCallback(async () => {
+    try {
+      const res = await apiService.get("/api/admin/roles");
+      const rolesArray = res.data || [];
+      setDbRoles(rolesArray);
+      
+      const permissionsMap = {};
+      rolesArray.forEach(r => {
+        permissionsMap[r.name] = r.permissions;
+      });
+      // Fallback for UI if db doesn't have default roles seeded yet
+      setRolePermissions({
+        Admin: permissionsMap.Admin || {},
+        Editor: permissionsMap.Editor || {},
+        Viewer: permissionsMap.Viewer || {},
+      });
+    } catch (error) {
+      console.error("Error fetching roles:", error);
+      toast.error("Failed to load system roles");
+    }
+  }, []);
+
   useEffect(() => {
     fetchAdminData();
     fetchModules();
+    fetchRoles();
     if (activeView === "users") {
       fetchUsers();
     }
@@ -148,7 +160,7 @@ const Admin = () => {
       fetchLogs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeView, fetchUsers, fetchModules, fetchLogs]);
+  }, [activeView, fetchUsers, fetchModules, fetchLogs, fetchRoles]);
 
   const fetchAdminData = async () => {
     setStatsLoading(true);
@@ -287,9 +299,26 @@ const Admin = () => {
     }
   };
 
-  const handleSaveRolePermissions = () => {
-    toast.success("Role permissions updated successfully!");
-    setShowConfigureRolesModal(false);
+  const handleSaveRolePermissions = async () => {
+    try {
+      const roleObj = dbRoles.find(r => r.name === selectedRoleTab);
+      if (!roleObj) {
+        toast.error("Could not find role definition");
+        return;
+      }
+
+      await apiService.put(`/api/admin/roles/${roleObj._id}`, {
+        permissions: rolePermissions[selectedRoleTab],
+      });
+
+      toast.success("Role permissions updated successfully!");
+      setShowConfigureRolesModal(false);
+      // Refresh user endpoints internally so cached roles update
+      fetchRoles();
+    } catch (error) {
+      console.error("Error saving role:", error);
+      toast.error("Failed to update role permissions");
+    }
   };
 
   const togglePermission = (role, category, permission) => {

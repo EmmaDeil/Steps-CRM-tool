@@ -53,14 +53,14 @@ const Payroll = ({ onBack }) => {
 
   // Load saved draft on component mount
   useEffect(() => {
-    const loadDraft = () => {
+    const loadDraft = async () => {
       try {
-        const savedDraft = localStorage.getItem("payrollDraft");
-        if (savedDraft) {
-          const draft = JSON.parse(savedDraft);
+        const response = await apiService.get("/api/payroll/draft");
+        if (response && response.data) {
+          const draft = response.data;
           const shouldLoad = window.confirm(
-            `Found a saved draft from ${new Date(
-              draft.savedAt
+            `Found a securely saved draft from ${new Date(
+              draft.updatedAt || draft.createdAt
             ).toLocaleString()}. Would you like to load it?`
           );
 
@@ -69,12 +69,15 @@ const Payroll = ({ onBack }) => {
             setEmployees(draft.employees || []);
             setDeductions(draft.deductions || deductions);
             setPayRates(draft.payRates || payRates);
+            // In API we didn't explicitly store currentStep in Schema, but it's safe to load properties flexibly.
             setCurrentStep(draft.currentStep || 1);
-            toast.success("Draft loaded successfully!");
+            toast.success("Draft loaded safely from server!");
           }
         }
       } catch (error) {
-        console.error("Error loading draft:", error);
+        if (error.response?.status !== 404) {
+          console.error("Error loading draft:", error);
+        }
       }
     };
 
@@ -278,19 +281,13 @@ const Payroll = ({ onBack }) => {
         deductions: deductions,
         payRates: payRates,
         currentStep: currentStep,
-        savedAt: new Date().toISOString(),
       };
 
-      // Save to localStorage as draft
-      localStorage.setItem("payrollDraft", JSON.stringify(draftData));
-
-      // Optionally save to server
-      // await apiService.post("/api/payroll/draft", draftData);
-
-      toast.success("Payroll draft saved successfully!");
+      await apiService.post("/api/payroll/draft", draftData);
+      toast.success("Payroll draft saved on the server!");
     } catch (error) {
       console.error("Error saving draft:", error);
-      toast.error("Failed to save draft");
+      toast.error("Failed to save secure draft");
     } finally {
       setLoading(false);
     }
@@ -299,17 +296,17 @@ const Payroll = ({ onBack }) => {
   const handleSubmitPayroll = async () => {
     try {
       setLoading(true);
-      // API call to submit payroll
-      // const response = await apiService.post("/api/payroll/submit", {
-      //   period: selectedPeriod,
-      //   employees: employees,
-      //   deductions: deductions,
-      // });
-      toast.success("Payroll submitted for approval!");
+      await apiService.post("/api/payroll/submit", {
+        period: selectedPeriod,
+        employees: employees,
+        deductions: deductions,
+        payRates: payRates
+      });
+      toast.success("Payroll validated and submitted for approval!");
       setCurrentStep(5);
     } catch (error) {
       console.error("Error submitting payroll:", error);
-      toast.error("Failed to submit payroll");
+      toast.error("Failed to submit payroll via server");
     } finally {
       setLoading(false);
     }

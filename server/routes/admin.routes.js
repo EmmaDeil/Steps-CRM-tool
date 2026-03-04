@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const AuditLog = require('../models/AuditLog');
+const Role = require('../models/Role');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 
 // All admin routes require authentication and Admin role
@@ -57,6 +58,60 @@ router.get('/logs', async (req, res) => {
     } catch (error) {
         console.error('Error fetching audit logs:', error);
         res.status(500).json({ message: 'Failed to fetch audit logs' });
+    }
+});
+
+// ============================================================
+// GET /api/admin/roles
+// Fetch all system roles
+// ============================================================
+router.get('/roles', async (req, res) => {
+    try {
+        const roles = await Role.find().sort({ name: 1 });
+        res.json(roles);
+    } catch (error) {
+        console.error('Error fetching roles:', error);
+        res.status(500).json({ message: 'Failed to fetch roles' });
+    }
+});
+
+// ============================================================
+// PUT /api/admin/roles/:id
+// Update a specific role's permissions
+// ============================================================
+router.put('/roles/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { permissions } = req.body;
+
+        const role = await Role.findById(id);
+        if (!role) {
+            return res.status(404).json({ message: 'Role not found' });
+        }
+
+        // Only update permissions (name and isSystem are locked)
+        role.permissions = permissions;
+        await role.save();
+
+        await AuditLog.create({
+            actor: {
+                userId: req.user._id.toString(),
+                userName: req.user.fullName || req.user.email,
+                userEmail: req.user.email,
+                initials: (req.user.fullName || req.user.email).substring(0, 2).toUpperCase(),
+            },
+            action: 'Role Changed',
+            actionColor: 'purple',
+            ipAddress: req.ip || req.connection?.remoteAddress || '127.0.0.1',
+            userAgent: req.headers['user-agent'],
+            description: `Permissions updated for role: ${role.name}`,
+            status: 'Success',
+        });
+
+        res.json({ message: 'Role updated successfully', role });
+    } catch (error) {
+        console.error('Error updating role:', error);
+        res.status(500).json({ message: 'Failed to update role' });
     }
 });
 

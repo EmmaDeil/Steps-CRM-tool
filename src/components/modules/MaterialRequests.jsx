@@ -7,6 +7,7 @@ import Breadcrumb from "../Breadcrumb";
 import { useDepartments } from "../../context/useDepartments";
 import { NumericFormat } from "react-number-format";
 import { formatCurrency } from "../../services/currency";
+import DataTable from "../common/DataTable";
 
 const MaterialRequests = () => {
   const { user } = useAuth();
@@ -101,9 +102,18 @@ const MaterialRequests = () => {
   const fetchVendors = async () => {
     try {
       const response = await apiService.get("/api/vendors");
-      setVendors(response.data || []);
+      if (response && response.data && Array.isArray(response.data.vendors)) {
+        setVendors(response.data.vendors);
+      } else if (response && Array.isArray(response.data)) {
+        setVendors(response.data);
+      } else if (Array.isArray(response)) {
+        setVendors(response);
+      } else {
+        setVendors([]);
+      }
     } catch {
       // Silently fail - vendors are optional
+      setVendors([]);
     }
   };
 
@@ -187,7 +197,6 @@ const MaterialRequests = () => {
       setShowApprovalModal(false);
       setSelectedRequest(null);
       setSelectedVendor("");
-      navigate("/dashboard/material-requests");
       fetchRequests();
     } catch {
       toast.error("Failed to approve request");
@@ -211,7 +220,6 @@ const MaterialRequests = () => {
       setShowApprovalModal(false);
       setSelectedRequest(null);
       setRejectionReason("");
-      navigate("/dashboard/material-requests");
       fetchRequests();
     } catch {
       toast.error("Failed to reject request");
@@ -275,7 +283,7 @@ const MaterialRequests = () => {
     try {
       setLoading(true);
       const response = await apiService.get("/api/material-requests");
-      setRequests(response.data || []);
+      setRequests(response.data || response || []);
       setError(null);
     } catch {
       setError("Failed to load material requests");
@@ -517,6 +525,154 @@ const MaterialRequests = () => {
     );
   }
 
+  const materialRequestColumns = [
+    {
+      header: "Request ID",
+      accessorKey: "requestId",
+      cell: (req) => (
+        <span className="text-sm font-semibold text-[#137fec]">
+          #{req.requestId}
+        </span>
+      ),
+    },
+    {
+      header: "Title & Description",
+      accessorKey: "title",
+      cell: (req) => (
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-[#111418]">
+            {req.lineItems && req.lineItems.length > 0
+              ? req.lineItems[0].itemName
+              : req.requestType || "Material Request"}
+          </span>
+          <span className="text-xs text-[#617589]">
+            {req.lineItems &&
+              req.lineItems.length > 1 &&
+              `+${req.lineItems.length - 1} more items`}
+            {req.department && ` • ${req.department}`}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: "Requester",
+      accessorKey: "requester",
+      cell: (req) => (
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-[#137fec] text-white flex items-center justify-center text-xs font-semibold">
+            {req.requestedBy?.charAt(0)?.toUpperCase() || "?"}
+          </div>
+          <span className="text-sm text-[#111418]">{req.requestedBy}</span>
+        </div>
+      ),
+    },
+    {
+      header: "Submitted",
+      accessorKey: "submitted",
+      cell: (req) => (
+        <span className="text-sm text-[#617589]">
+          {new Date(req.date || req.createdAt).toLocaleDateString()}
+        </span>
+      ),
+    },
+    {
+      header: "Required By",
+      accessorKey: "requiredBy",
+      cell: (req) => (
+        <span className="text-sm text-[#617589]">
+          {req.requiredBy ? new Date(req.requiredBy).toLocaleDateString() : "-"}
+        </span>
+      ),
+    },
+    {
+      header: "Approver",
+      accessorKey: "approver",
+      cell: (req) => (
+        <span className="text-sm text-[#617589]">{req.approver || "-"}</span>
+      ),
+    },
+    {
+      header: "Status",
+      accessorKey: "status",
+      cell: (req) => (
+        <span
+          className={`inline-flex px-2 py-1 text-xs font-medium rounded ${
+            req.status === "approved"
+              ? "bg-green-100 text-green-800"
+              : req.status === "pending"
+              ? "bg-yellow-100 text-yellow-800"
+              : req.status === "rejected"
+              ? "bg-red-100 text-red-800"
+              : req.status === "fulfilled"
+              ? "bg-blue-100 text-blue-800"
+              : "bg-gray-100 text-gray-800"
+          }`}
+        >
+          {req.status?.charAt(0).toUpperCase() + req.status?.slice(1)}
+        </span>
+      ),
+    },
+    {
+      header: "Actions",
+      accessorKey: "actions",
+      className: "text-right",
+      cellClassName: "text-right",
+      cell: (req) => (
+        <div
+          className="flex items-center justify-end gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleViewRequest(req);
+            }}
+            className="p-1 text-[#617589] hover:text-[#137fec] transition-colors"
+            title="View details"
+          >
+            <i className="fa-solid fa-eye"></i>
+          </button>
+          {canUserEdit(req) && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEditRequest(req);
+              }}
+              className="p-1 text-[#617589] hover:text-[#137fec] transition-colors"
+              title="Edit request"
+            >
+              <i className="fa-solid fa-pen-to-square"></i>
+            </button>
+          )}
+          {isUserApprover(req) && req.status === "pending" && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleApproveClick(req);
+                }}
+                className="p-1 text-[#617589] hover:text-green-600 transition-colors"
+                title="Approve request"
+              >
+                <i className="fa-solid fa-check"></i>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRejectClick(req);
+                }}
+                className="p-1 text-[#617589] hover:text-red-600 transition-colors"
+                title="Reject request"
+              >
+                <i className="fa-solid fa-times"></i>
+              </button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   return (
     <>
       <div className="min-h-screen bg-gray-50">
@@ -651,246 +807,32 @@ const MaterialRequests = () => {
               </div>
             </div>
 
-            {/* Material Requests Table */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
-                        Request ID
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
-                        Title & Description
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
-                        Requester
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
-                        Submitted
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
-                        Required By
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
-                        Approver
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {filteredRequests.length === 0 ? (
-                      <tr>
-                        <td colSpan="8" className="px-4 py-12 text-center">
-                          <div className="flex flex-col items-center gap-2">
-                            <i className="fa-solid fa-box-open text-4xl text-gray-300 mb-2"></i>
-                            <p className="text-[#617589] font-medium">
-                              No material requests found
-                            </p>
-                            <p className="text-sm text-[#617589]">
-                              {searchQuery || filterStatus !== "all"
-                                ? "Try adjusting your filters"
-                                : "Create a new request to get started"}
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredRequests
-                        .filter(
-                          (req) =>
-                            searchQuery === "" ||
-                            req.requestId
-                              ?.toLowerCase()
-                              .includes(searchQuery.toLowerCase()) ||
-                            req.requestedBy
-                              ?.toLowerCase()
-                              .includes(searchQuery.toLowerCase()) ||
-                            req.lineItems?.some((item) =>
-                              item.itemName
-                                ?.toLowerCase()
-                                .includes(searchQuery.toLowerCase())
-                            )
-                        )
-                        .map((req) => (
-                          <tr
-                            key={req._id}
-                            className="hover:bg-gray-50 transition-colors cursor-pointer"
-                            onClick={() => handleViewRequest(req)}
-                          >
-                            <td className="px-4 py-4">
-                              <span className="text-sm font-semibold text-[#137fec]">
-                                #{req.requestId}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex flex-col gap-1">
-                                <span className="text-sm font-medium text-[#111418]">
-                                  {req.lineItems && req.lineItems.length > 0
-                                    ? req.lineItems[0].itemName
-                                    : req.requestType || "Material Request"}
-                                </span>
-                                <span className="text-xs text-[#617589]">
-                                  {req.lineItems &&
-                                    req.lineItems.length > 1 &&
-                                    `+${req.lineItems.length - 1} more items`}
-                                  {req.department && ` • ${req.department}`}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full bg-[#137fec] text-white flex items-center justify-center text-xs font-semibold">
-                                  {req.requestedBy?.charAt(0)?.toUpperCase() ||
-                                    "?"}
-                                </div>
-                                <span className="text-sm text-[#111418]">
-                                  {req.requestedBy}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <span className="text-sm text-[#617589]">
-                                {new Date(
-                                  req.date || req.createdAt
-                                ).toLocaleDateString()}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4">
-                              <span className="text-sm text-[#617589]">
-                                {req.requiredBy
-                                  ? new Date(
-                                      req.requiredBy
-                                    ).toLocaleDateString()
-                                  : "-"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4">
-                              <span className="text-sm text-[#617589]">
-                                {req.approver || "-"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4">
-                              <span
-                                className={`inline-flex px-2 py-1 text-xs font-medium rounded ${
-                                  req.status === "approved"
-                                    ? "bg-green-100 text-green-800"
-                                    : req.status === "pending"
-                                    ? "bg-yellow-100 text-yellow-800"
-                                    : req.status === "rejected"
-                                    ? "bg-red-100 text-red-800"
-                                    : req.status === "fulfilled"
-                                    ? "bg-blue-100 text-blue-800"
-                                    : "bg-gray-100 text-gray-800"
-                                }`}
-                              >
-                                {req.status?.charAt(0).toUpperCase() +
-                                  req.status?.slice(1)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4 text-right">
-                              <div
-                                className="flex items-center justify-end gap-2"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleViewRequest(req);
-                                  }}
-                                  className="p-1 text-[#617589] hover:text-[#137fec] transition-colors"
-                                  title="View details"
-                                >
-                                  <i className="fa-solid fa-eye"></i>
-                                </button>
-                                {canUserEdit(req) && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleEditRequest(req);
-                                    }}
-                                    className="p-1 text-[#617589] hover:text-[#137fec] transition-colors"
-                                    title="Edit request"
-                                  >
-                                    <i className="fa-solid fa-pen-to-square"></i>
-                                  </button>
-                                )}
-                                {isUserApprover(req) &&
-                                  req.status === "pending" && (
-                                    <>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleApproveClick(req);
-                                        }}
-                                        className="p-1 text-[#617589] hover:text-green-600 transition-colors"
-                                        title="Approve request"
-                                      >
-                                        <i className="fa-solid fa-check"></i>
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleRejectClick(req);
-                                        }}
-                                        className="p-1 text-[#617589] hover:text-red-600 transition-colors"
-                                        title="Reject request"
-                                      >
-                                        <i className="fa-solid fa-times"></i>
-                                      </button>
-                                    </>
-                                  )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={materialRequestColumns}
+                data={filteredRequests.filter(
+                  (req) =>
+                    searchQuery === "" ||
+                    req.requestId
+                      ?.toLowerCase()
+                      .includes(searchQuery.toLowerCase()) ||
+                    req.requestedBy
+                      ?.toLowerCase()
+                      .includes(searchQuery.toLowerCase()) ||
+                    req.lineItems?.some((item) =>
+                      item.itemName
+                        ?.toLowerCase()
+                        .includes(searchQuery.toLowerCase())
+                    )
+                )}
+                isLoading={loading}
+                emptyMessage={searchQuery || filterStatus !== "all" 
+                  ? "No material requests found. Try adjusting your filters." 
+                  : "Create a new request to get started."}
+                keyExtractor={(req) => req._id}
+              />
 
-              {/* Pagination */}
-              {filteredRequests.length > 0 && (
-                <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-                  <div className="text-sm text-[#617589]">
-                    Showing{" "}
-                    <span className="font-medium text-[#111418]">1</span> to{" "}
-                    <span className="font-medium text-[#111418]">
-                      {Math.min(10, filteredRequests.length)}
-                    </span>{" "}
-                    of{" "}
-                    <span className="font-medium text-[#111418]">
-                      {filteredRequests.length}
-                    </span>{" "}
-                    requests
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      className="px-3 py-1 text-sm text-[#617589] hover:bg-gray-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled
-                    >
-                      <i className="fa-solid fa-chevron-left"></i>
-                    </button>
-                    <button className="px-3 py-1 text-sm bg-[#137fec] text-white rounded">
-                      1
-                    </button>
-                    <button className="px-3 py-1 text-sm text-[#617589] hover:bg-gray-100 rounded transition-colors">
-                      2
-                    </button>
-                    <button className="px-3 py-1 text-sm text-[#617589] hover:bg-gray-100 rounded transition-colors">
-                      3
-                    </button>
-                    <button className="px-3 py-1 text-sm text-[#617589] hover:bg-gray-100 rounded transition-colors">
-                      <i className="fa-solid fa-chevron-right"></i>
-                    </button>
-                  </div>
-                </div>
-              )}
+
             </div>
           </div>
         )}
@@ -1555,7 +1497,6 @@ const MaterialRequests = () => {
                   setSelectedRequest(null);
                   setSelectedVendor("");
                   setRejectionReason("");
-                  navigate("/dashboard/material-requests");
                 }}
               >
                 <i className="fa-solid fa-times text-xl"></i>
@@ -1740,7 +1681,6 @@ const MaterialRequests = () => {
                   setSelectedRequest(null);
                   setSelectedVendor("");
                   setRejectionReason("");
-                  navigate("/dashboard/material-requests");
                 }}
               >
                 <i className="fa-solid fa-circle-xmark"></i>

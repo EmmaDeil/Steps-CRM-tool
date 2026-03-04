@@ -7,6 +7,7 @@ import { useDepartments } from "../../context/useDepartments";
 import Payroll from "./Payroll";
 import EmployeeProfile from "./EmployeeProfile";
 import BulkEditModal from "./BulkEditModal";
+import DataTable from "../common/DataTable";
 
 const StatCard = ({ label, icon, value, trend, trendType }) => (
   <div className="flex flex-col gap-1 rounded-xl p-5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -310,6 +311,122 @@ const HRM = () => {
     }
   };
 
+  const employeeColumns = [
+    {
+      header: (
+        <input
+          type="checkbox"
+          checked={selectedEmployees.length === employees.length && employees.length > 0}
+          onChange={(e) => {
+            if (e.target.checked) setSelectedEmployees([...employees]);
+            else setSelectedEmployees([]);
+          }}
+          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+        />
+      ),
+      accessorKey: "select",
+      className: "w-12 px-5 py-3",
+      cellClassName: "px-5 py-3",
+      cell: (e) => (
+        <input
+          type="checkbox"
+          checked={selectedEmployees.some((emp) => emp.id === e.id)}
+          onChange={(ev) => {
+            ev.stopPropagation();
+            if (ev.target.checked) setSelectedEmployees([...selectedEmployees, e]);
+            else setSelectedEmployees(selectedEmployees.filter((emp) => emp.id !== e.id));
+          }}
+          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+        />
+      ),
+    },
+    {
+      header: "Employee",
+      accessorKey: "employee",
+      className: "px-5 py-3",
+      cellClassName: "px-5 py-3 cursor-pointer",
+      cell: (e) => (
+        <div
+          className="flex items-center gap-3"
+          onClick={() => {
+            setSelectedEmployee(e);
+            setShowEmployeeProfile(true);
+          }}
+        >
+          <div
+            className={`size-10 rounded-full border border-slate-200 dark:border-slate-700 bg-center bg-cover flex items-center justify-center text-xs font-semibold text-slate-700 dark:text-slate-200 ${
+              e.avatar ? "" : "bg-slate-100 dark:bg-slate-700"
+            }`}
+            style={{
+              backgroundImage: e.avatar ? `url('${e.avatar}')` : "none",
+            }}
+            aria-label={e.name ? `${e.name} avatar` : "Avatar"}
+          >
+            {!e.avatar && (e.name ? e.name.charAt(0) : "?")}
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900 dark:text-white">{e.name}</p>
+            <p className="text-xs text-slate-500">{e.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      header: "Role",
+      accessorKey: "role",
+      className: "px-5 py-3",
+      cellClassName: "px-5 py-3 text-slate-600 dark:text-slate-300",
+    },
+    {
+      header: "Department",
+      accessorKey: "department",
+      className: "px-5 py-3 hidden sm:table-cell",
+      cellClassName: "px-5 py-3 text-slate-600 dark:text-slate-300 hidden sm:table-cell",
+    },
+    {
+      header: "Status",
+      accessorKey: "status",
+      className: "px-5 py-3",
+      cellClassName: "px-5 py-3",
+      cell: (e) => (
+        <span
+          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+            e.status === "Active"
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+              : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+          }`}
+        >
+          <span
+            className={`size-1.5 rounded-full ${
+              e.status === "Active" ? "bg-emerald-500" : "bg-amber-500"
+            }`}
+          ></span>{" "}
+          {e.status}
+        </span>
+      ),
+    },
+    {
+      header: "Action",
+      accessorKey: "action",
+      className: "px-5 py-3 text-right",
+      cellClassName: "px-5 py-3 text-right",
+      cell: (e) => (
+        <div onClick={(event) => event.stopPropagation()}>
+          <button
+            onClick={() => {
+              setSelectedEmployee(e);
+              setShowEmployeeProfile(true);
+            }}
+            className="text-slate-400 hover:text-primary transition-colors"
+            title="View Profile"
+          >
+            <i className="fa-solid fa-ellipsis-vertical text-[16px]"></i>
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   if (showPayroll) {
     return <Payroll onBack={() => setShowPayroll(false)} />;
   }
@@ -445,144 +562,13 @@ const HRM = () => {
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 text-xs uppercase font-semibold">
-                        <tr>
-                          <th className="px-5 py-3 w-12">
-                            <input
-                              type="checkbox"
-                              checked={
-                                selectedEmployees.length === employees.length &&
-                                employees.length > 0
-                              }
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedEmployees([...employees]);
-                                } else {
-                                  setSelectedEmployees([]);
-                                }
-                              }}
-                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                          </th>
-                          <th className="px-5 py-3">Employee</th>
-                          <th className="px-5 py-3">Role</th>
-                          <th className="px-5 py-3 hidden sm:table-cell">
-                            Department
-                          </th>
-                          <th className="px-5 py-3">Status</th>
-                          <th className="px-5 py-3 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
-                        {employees.map((e) => (
-                          <tr
-                            key={e.id}
-                            className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-                          >
-                            <td className="px-5 py-3">
-                              <input
-                                type="checkbox"
-                                checked={selectedEmployees.some(
-                                  (emp) => emp.id === e.id
-                                )}
-                                onChange={(ev) => {
-                                  ev.stopPropagation();
-                                  if (ev.target.checked) {
-                                    setSelectedEmployees([
-                                      ...selectedEmployees,
-                                      e,
-                                    ]);
-                                  } else {
-                                    setSelectedEmployees(
-                                      selectedEmployees.filter(
-                                        (emp) => emp.id !== e.id
-                                      )
-                                    );
-                                  }
-                                }}
-                                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                              />
-                            </td>
-                            <td
-                              className="px-5 py-3 cursor-pointer"
-                              onClick={() => {
-                                setSelectedEmployee(e);
-                                setShowEmployeeProfile(true);
-                              }}
-                            >
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className={`size-10 rounded-full border border-slate-200 dark:border-slate-700 bg-center bg-cover flex items-center justify-center text-xs font-semibold text-slate-700 dark:text-slate-200 ${
-                                    e.avatar
-                                      ? ""
-                                      : "bg-slate-100 dark:bg-slate-700"
-                                  }`}
-                                  style={{
-                                    backgroundImage: e.avatar
-                                      ? `url('${e.avatar}')`
-                                      : "none",
-                                  }}
-                                  aria-label={
-                                    e.name ? `${e.name} avatar` : "Avatar"
-                                  }
-                                >
-                                  {!e.avatar &&
-                                    (e.name ? e.name.charAt(0) : "?")}
-                                </div>
-                                <div>
-                                  <p className="font-semibold text-slate-900 dark:text-white">
-                                    {e.name}
-                                  </p>
-                                  <p className="text-xs text-slate-500">
-                                    {e.email}
-                                  </p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-5 py-3 text-slate-600 dark:text-slate-300">
-                              {e.role}
-                            </td>
-                            <td className="px-5 py-3 text-slate-600 dark:text-slate-300 hidden sm:table-cell">
-                              {e.department}
-                            </td>
-                            <td className="px-5 py-3">
-                              <span
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  e.status === "Active"
-                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
-                                    : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                                }`}
-                              >
-                                <span
-                                  className={`size-1.5 rounded-full ${
-                                    e.status === "Active"
-                                      ? "bg-emerald-500"
-                                      : "bg-amber-500"
-                                  }`}
-                                ></span>{" "}
-                                {e.status}
-                              </span>
-                            </td>
-                            <td
-                              className="px-5 py-3 text-right"
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              <button
-                                onClick={() => {
-                                  setSelectedEmployee(e);
-                                  setShowEmployeeProfile(true);
-                                }}
-                                className="text-slate-400 hover:text-primary transition-colors"
-                                title="View Profile"
-                              >
-                                <i className="fa-solid fa-ellipsis-vertical text-[16px]"></i>
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <DataTable
+                      columns={employeeColumns}
+                      data={employees}
+                      isLoading={employeesLoading}
+                      emptyMessage="No employees found."
+                      keyExtractor={(item) => item.id}
+                    />
                   </div>
                 </div>
 

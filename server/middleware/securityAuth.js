@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const UserModel = require('../models/User');
+const RoleModel = require('../models/Role');
 
 /**
  * Middleware to check if user has specific security permission
@@ -38,25 +39,28 @@ const checkSecurityPermission = (requiredPermission) => {
         });
       }
 
-      // Admin and Security Admin have all permissions
+      // Hardcoded super-admin fallback
       if (user.role === 'Admin' || user.role === 'Security Admin') {
         req.user = user;
         return next();
       }
 
-      // Check specific permission
-      if (!user.permissions || !user.permissions.security) {
-        return res.status(403).json({ 
-          success: false, 
-          error: 'No security permissions configured for user' 
-        });
-      }
+      // 1. Fetch the user's base role capabilities from the database
+      const role = await RoleModel.findOne({ name: user.role });
+      
+      // 2. Determine if the permission is explicitly configured at the user-level (override)
+      const userOverride = user.permissions?.security?.[requiredPermission];
+      
+      // 3. Determine if the permission is granted by the role
+      const roleGrants = role?.permissions?.security?.[requiredPermission] === true;
 
-      // Check if user has the required permission
-      if (!user.permissions.security[requiredPermission]) {
+      // 4. Resolve final access: Use user override if it is explicitly boolean true/false. Otherwise, fallback to role.
+      const hasAccess = typeof userOverride === 'boolean' ? userOverride : roleGrants;
+
+      if (!hasAccess) {
         return res.status(403).json({ 
           success: false, 
-          error: `Insufficient permissions. Required: ${requiredPermission}`,
+          error: `Insufficient permissions. Required: security.${requiredPermission}`,
           requiredPermission
         });
       }
@@ -158,66 +162,7 @@ const checkSecurityRole = (allowedRoles) => {
   };
 };
 
-/**
- * Get default security permissions based on role
- */
-const getDefaultSecurityPermissions = (role) => {
-  const permissions = {
-    viewLogs: false,
-    exportLogs: false,
-    manageSettings: false,
-    manageNotifications: false,
-    viewAnalytics: false,
-    manageSessions: false,
-    generateReports: false,
-  };
-
-  switch (role) {
-    case 'Admin':
-    case 'Security Admin':
-      // Full access to all security features
-      return {
-        viewLogs: true,
-        exportLogs: true,
-        manageSettings: true,
-        manageNotifications: true,
-        viewAnalytics: true,
-        manageSessions: true,
-        generateReports: true,
-      };
-    
-    case 'Security Analyst':
-      // Can view and analyze, but not modify settings
-      return {
-        viewLogs: true,
-        exportLogs: true,
-        manageSettings: false,
-        manageNotifications: false,
-        viewAnalytics: true,
-        manageSessions: false,
-        generateReports: true,
-      };
-    
-    case 'Editor':
-      // Limited security access
-      return {
-        viewLogs: true,
-        exportLogs: false,
-        manageSettings: false,
-        manageNotifications: false,
-        viewAnalytics: false,
-        manageSessions: false,
-        generateReports: false,
-      };
-    
-    default:
-      // Viewer and user roles have no security permissions by default
-      return permissions;
-  }
-};
-
 module.exports = {
   checkSecurityPermission,
   checkSecurityRole,
-  getDefaultSecurityPermissions,
 };

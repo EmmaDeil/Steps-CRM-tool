@@ -36,8 +36,69 @@ const JobRequisitionModel = require('./models/JobRequisition');
 const TrainingModel = require('./models/Training');
 const DepartmentModel = require('./models/Department');
 const JobTitleModel = require('./models/JobTitle');
+const RoleModel = require('./models/Role');
 
 // Static lists used to seed the DB when empty
+const DEFAULT_ROLES = [
+  {
+    name: 'Admin',
+    description: 'Full access to all settings and user management.',
+    isSystem: true,
+    permissions: {
+      userManagement: { viewUsers: true, editUsers: true, inviteUsers: true },
+      billingFinance: { viewInvoices: true, manageSubscription: true },
+      systemSettings: { globalConfiguration: true },
+      security: {
+        viewLogs: true,
+        exportLogs: true,
+        manageSettings: true,
+        manageNotifications: true,
+        viewAnalytics: true,
+        manageSessions: true,
+        generateReports: true,
+      },
+    }
+  },
+  {
+    name: 'Editor',
+    description: 'Can edit content but usually cannot manage system users.',
+    isSystem: true,
+    permissions: {
+      userManagement: { viewUsers: true, editUsers: false, inviteUsers: false },
+      billingFinance: { viewInvoices: false, manageSubscription: false },
+      systemSettings: { globalConfiguration: false },
+      security: {
+        viewLogs: true,
+        exportLogs: false,
+        manageSettings: false,
+        manageNotifications: false,
+        viewAnalytics: true,
+        manageSessions: false,
+        generateReports: true,
+      },
+    }
+  },
+  {
+    name: 'Viewer',
+    description: 'Read-only access to published content.',
+    isSystem: true,
+    permissions: {
+      userManagement: { viewUsers: true, editUsers: false, inviteUsers: false },
+      billingFinance: { viewInvoices: false, manageSubscription: false },
+      systemSettings: { globalConfiguration: false },
+      security: {
+        viewLogs: false,
+        exportLogs: false,
+        manageSettings: false,
+        manageNotifications: false,
+        viewAnalytics: false,
+        manageSessions: false,
+        generateReports: false,
+      },
+    }
+  }
+];
+
 const DEFAULT_DEPARTMENTS = [
   { name: 'IT Security', code: 'ITS', icon: 'fa-shield-halved', color: 'blue' },
   { name: 'HR', code: 'HR', icon: 'fa-users', color: 'purple' },
@@ -676,6 +737,18 @@ async function start() {
   // ============ BUDGET ROUTES ============
   const budgetRoutes = require('./routes/budget.routes');
   app.use('/api/budget', budgetRoutes);
+
+  // ============ HR ROUTES ============
+  const hrRoutes = require('./routes/hr.routes');
+  app.use('/api/hr', hrRoutes);
+
+  // ============ PAYROLL ROUTES ============
+  const payrollRoutes = require('./routes/payroll.routes');
+  app.use('/api/payroll', payrollRoutes);
+
+  // ============ PROCUREMENT ROUTES ============
+  const procurementRoutes = require('./routes/procurement.routes');
+  app.use('/api', procurementRoutes);
 
 
   // ============ INVENTORY ROUTES ============
@@ -4732,6 +4805,22 @@ async function start() {
 
   // Make io available to routes
   app.set('io', io);
+
+  // Initialize System Data before listening
+  const initializeSystemData = async () => {
+    try {
+      const existingRolesCount = await RoleModel.countDocuments();
+      if (existingRolesCount === 0) {
+        console.log('Seeding default roles...');
+        await RoleModel.insertMany(DEFAULT_ROLES);
+        console.log('Successfully seeded default roles.');
+      }
+    } catch (err) {
+      console.error('Error seeding initial system data:', err);
+    }
+  };
+
+  await initializeSystemData();
 
   const server = httpServer.listen(port, () => {
     console.log(`Steps backend listening on http://localhost:${port}`);

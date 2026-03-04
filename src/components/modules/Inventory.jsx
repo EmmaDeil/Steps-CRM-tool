@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
+import DataTable from "../common/DataTable";
 
 const Inventory = () => {
   const [inventoryItems, setInventoryItems] = useState([]);
@@ -128,6 +129,70 @@ const Inventory = () => {
     }
   };
 
+  const inventoryColumns = [
+    {
+      header: "Product details",
+      accessorKey: "name",
+      cell: (item) => (
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200 shrink-0">
+            {item.category === "Electronics" ? <i className="fa-solid fa-laptop text-gray-500"></i> : 
+             item.category === "Furniture" ? <i className="fa-solid fa-chair text-gray-500"></i> : 
+             <i className="fa-solid fa-stapler text-gray-500"></i>}
+          </div>
+          <div>
+            <p className="font-semibold text-[#111418] leading-tight">{item.name}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{item.itemId}</p>
+          </div>
+        </div>
+      )
+    },
+    { header: "Category", accessorKey: "category" },
+    { header: "Location", accessorKey: "location" },
+    {
+      header: "Stock Level",
+      accessorKey: "quantity",
+      cell: (item) => (
+        <div className="flex flex-col gap-1 w-32">
+           <div className="flex justify-between text-xs text-gray-600 font-medium">
+             <span>{item.quantity}</span>
+             <span>/ {item.maxStock}</span>
+           </div>
+           <div className="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700 overflow-hidden">
+             <div 
+               className={`h-1.5 rounded-full ${item.quantity === 0 ? 'bg-red-500' : item.quantity < 20 ? 'bg-yellow-400' : 'bg-green-500'}`}
+               style={{ width: `${Math.min(100, Math.max(0, (item.quantity / item.maxStock) * 100))}%` }}>
+             </div>
+           </div>
+        </div>
+      )
+    },
+    {
+      header: "Status",
+      accessorKey: "status",
+      cell: (item) => getStatusBadge(item.quantity)
+    },
+    {
+      header: "Actions",
+      accessorKey: "actions",
+      className: "text-right",
+      cellClassName: "text-right",
+      cell: (item) => (
+         <div className="flex items-center justify-end gap-2 text-gray-400">
+           <button onClick={() => handleOpenModal("edit", item)} className="p-2 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Edit Item">
+             <i className="fa-solid fa-pen"></i>
+           </button>
+           <button onClick={() => handleOpenModal("restock", item)} className="p-2 hover:text-green-600 hover:bg-green-50 rounded transition-colors" title="Restock">
+             <i className="fa-solid fa-boxes-packing"></i>
+           </button>
+           <button onClick={() => handleDelete(item._id)} className="p-2 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Delete">
+             <i className="fa-solid fa-trash-can"></i>
+           </button>
+         </div>
+      )
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50 relative">
       <Breadcrumb
@@ -230,90 +295,13 @@ const Inventory = () => {
           </div>
 
           {/* Table Body */}
-          <div className="overflow-x-auto min-h-[300px]">
-            {isLoading ? (
-               <div className="flex justify-center items-center h-64">
-                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-               </div>
-            ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Product details</th>
-                      <th className="py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
-                      <th className="py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Location</th>
-                      <th className="py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock Level</th>
-                      <th className="py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                      <th className="py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {filteredItems.length === 0 ? (
-                      <tr>
-                        <td colSpan="6" className="py-12 text-center text-gray-500">
-                          <i className="fa-solid fa-box-open text-4xl mb-3 text-gray-300 block"></i>
-                          No inventory items found. Add some to get started!
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredItems.map(item => (
-                       <tr key={item._id} className="hover:bg-gray-50 transition-colors">
-                          <td className="py-4 px-6">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200 shrink-0">
-                                {item.category === "Electronics" ? <i className="fa-solid fa-laptop text-gray-500"></i> : 
-                                 item.category === "Furniture" ? <i className="fa-solid fa-chair text-gray-500"></i> : 
-                                 <i className="fa-solid fa-stapler text-gray-500"></i>}
-                              </div>
-                              <div>
-                                <p className="font-semibold text-[#111418] leading-tight">{item.name}</p>
-                                <p className="text-xs text-gray-500 mt-0.5">{item.itemId}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-4 px-6 text-sm text-gray-600">
-                             {item.category}
-                          </td>
-                          <td className="py-4 px-6 text-sm text-gray-600">
-                             {item.location}
-                          </td>
-                          <td className="py-4 px-6">
-                            <div className="flex flex-col gap-1 w-32">
-                               <div className="flex justify-between text-xs text-gray-600 font-medium">
-                                 <span>{item.quantity}</span>
-                                 <span>/ {item.maxStock}</span>
-                               </div>
-                               <div className="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700 overflow-hidden">
-                                 <div 
-                                   className={`h-1.5 rounded-full ${item.quantity === 0 ? 'bg-red-500' : item.quantity < 20 ? 'bg-yellow-400' : 'bg-green-500'}`}
-                                   style={{ width: `${Math.min(100, Math.max(0, (item.quantity / item.maxStock) * 100))}%` }}>
-                                 </div>
-                               </div>
-                            </div>
-                          </td>
-                          <td className="py-4 px-6">
-                             {getStatusBadge(item.quantity)}
-                          </td>
-                          <td className="py-4 px-6 text-right">
-                             <div className="flex items-center justify-end gap-2 text-gray-400">
-                               <button onClick={() => handleOpenModal("edit", item)} className="p-2 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Edit Item">
-                                 <i className="fa-solid fa-pen"></i>
-                               </button>
-                               <button onClick={() => handleOpenModal("restock", item)} className="p-2 hover:text-green-600 hover:bg-green-50 rounded transition-colors" title="Restock">
-                                 <i className="fa-solid fa-boxes-packing"></i>
-                               </button>
-                               <button onClick={() => handleDelete(item._id)} className="p-2 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Delete">
-                                 <i className="fa-solid fa-trash-can"></i>
-                               </button>
-                             </div>
-                          </td>
-                       </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-            )}
-          </div>
+          <DataTable 
+            columns={inventoryColumns} 
+            data={filteredItems} 
+            isLoading={isLoading} 
+            emptyMessage="No inventory items found. Add some to get started!" 
+            keyExtractor={(item) => item._id} 
+          />
 
           {/* Pagination Footer */}
           <div className="p-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600 bg-gray-50">
