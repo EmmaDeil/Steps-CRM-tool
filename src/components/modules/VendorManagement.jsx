@@ -108,7 +108,7 @@ const VendorManagement = ({ onBack }) => {
   }
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
+    <div className="w-full min-h-screen bg-gray-50 flex flex-col">
       {/* Breadcrumbs */}
       <Breadcrumb
         items={[
@@ -120,7 +120,7 @@ const VendorManagement = ({ onBack }) => {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        <div className="max-w-[1440px] mx-auto px-4 md:px-6 lg:px-8 py-6">
+        <div className="w-full px-2 py-6">
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
             <div className="flex flex-col gap-1">

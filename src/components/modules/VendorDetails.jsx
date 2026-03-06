@@ -99,7 +99,7 @@ const VendorDetails = ({ vendor, onBack }) => {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        <div className="max-w-[1280px] mx-auto px-6 lg:px-12 py-8">
+        <div className="w-full px-2 py-8">
           {/* Page Header */}
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200 mb-6">
             <div className="flex flex-col gap-2">
@@ -109,7 +109,7 @@ const VendorDetails = ({ vendor, onBack }) => {
                 </h1>
                 <span
                   className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold ring-1 ring-inset ${getStatusBadge(
-                    vendor.status
+                    vendor.status,
                   )}`}
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
@@ -258,9 +258,7 @@ const VendorDetails = ({ vendor, onBack }) => {
                     Transaction History
                   </h3>
                   <button
-                    onClick={() =>
-                      toast("View all transactions coming soon")
-                    }
+                    onClick={() => toast("View all transactions coming soon")}
                     className="text-sm font-bold text-primary hover:text-blue-600"
                   >
                     View All
@@ -384,9 +382,7 @@ const VendorDetails = ({ vendor, onBack }) => {
                     Contracts
                   </h3>
                   <button
-                    onClick={() =>
-                      toast("Upload contract feature coming soon")
-                    }
+                    onClick={() => toast("Upload contract feature coming soon")}
                     className="text-primary hover:text-blue-600 transition-colors"
                     title="Upload New Contract"
                   >
@@ -422,14 +418,12 @@ const VendorDetails = ({ vendor, onBack }) => {
                           {contract.expiry
                             ? `Expires: ${contract.expiry}`
                             : contract.effective
-                            ? `Effective: ${contract.effective}`
-                            : contract.status}
+                              ? `Effective: ${contract.effective}`
+                              : contract.status}
                         </p>
                       </div>
                       <button
-                        onClick={() =>
-                          toast("Download feature coming soon")
-                        }
+                        onClick={() => toast("Download feature coming soon")}
                         className="size-8 flex items-center justify-center rounded-full text-slate-500 hover:bg-white hover:text-primary transition-colors"
                       >
                         <i className="fa-solid fa-download text-sm"></i>
