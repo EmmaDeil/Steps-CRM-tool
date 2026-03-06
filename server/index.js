@@ -1020,50 +1020,54 @@ async function start() {
     try {
       const { name, reportType, department, startDate, endDate, includeDrafts, generatedBy } = req.body;
       
-      // Determine module and icon based on report type
-      let module = 'Analytics';
-      let icon = 'fa-chart-bar';
-      let iconColor = 'bg-blue-100 text-blue-600';
+      // Report type metadata mapping
+      const reportTypeMetadata = {
+        'Facility Usage Report': {
+          module: 'Facility Mgmt',
+          icon: 'fa-building',
+          iconColor: 'bg-blue-100 text-blue-600'
+        },
+        'Financial Report': {
+          module: 'Financials',
+          icon: 'fa-dollar-sign',
+          iconColor: 'bg-purple-100 text-purple-600'
+        },
+        'Attendance Report': {
+          module: 'HR & Admin',
+          icon: 'fa-users',
+          iconColor: 'bg-orange-100 text-orange-600'
+        },
+        'Approval Statistics': {
+          module: 'Approvals',
+          icon: 'fa-thumbs-up',
+          iconColor: 'bg-green-100 text-green-600'
+        },
+        'Custom Report': {
+          module: 'Custom',
+          icon: 'fa-file-alt',
+          iconColor: 'bg-gray-100 text-gray-600'
+        }
+      };
       
-      switch (reportType) {
-        case 'Facility Usage Report':
-          module = 'Facility Mgmt';
-          icon = 'fa-building';
-          iconColor = 'bg-blue-100 text-blue-600';
-          break;
-        case 'Financial Report':
-          module = 'Financials';
-          icon = 'fa-dollar-sign';
-          iconColor = 'bg-purple-100 text-purple-600';
-          break;
-        case 'Attendance Report':
-          module = 'HR & Admin';
-          icon = 'fa-users';
-          iconColor = 'bg-orange-100 text-orange-600';
-          break;
-        case 'Approval Statistics':
-          module = 'Approvals';
-          icon = 'fa-thumbs-up';
-          iconColor = 'bg-green-100 text-green-600';
-          break;
-        default:
-          module = 'Custom';
-          icon = 'fa-file-alt';
-          iconColor = 'bg-gray-100 text-gray-600';
-      }
+      // Get metadata for the report type or use defaults
+      const metadata = reportTypeMetadata[reportType] || {
+        module: 'General',
+        icon: 'fa-chart-bar',
+        iconColor: 'bg-blue-100 text-blue-600'
+      };
       
       const report = await ReportModel.create({
         name: name || `${reportType} - ${new Date().toLocaleDateString()}`,
         reportType,
-        module,
+        module: metadata.module,
         department: department || 'All Departments',
         startDate,
         endDate,
         includeDrafts: includeDrafts || false,
         generatedBy: generatedBy || 'System',
         status: 'Processing',
-        icon,
-        iconColor
+        icon: metadata.icon,
+        iconColor: metadata.iconColor
       });
       
       // Simulate processing time and update to Ready
@@ -1115,6 +1119,59 @@ async function start() {
     } catch (error) {
       console.error('Error archiving report:', error);
       res.status(500).json({ success: false, error: 'Failed to archive report' });
+    }
+  });
+
+  // Get available report types with metadata
+  app.get('/api/reports/types/available', async (req, res) => {
+    try {
+      const reportTypes = [
+        {
+          value: 'Facility Usage Report',
+          label: 'Facility Usage Report',
+          module: 'Facility Mgmt',
+          icon: 'fa-building',
+          iconColor: 'bg-blue-100 text-blue-600',
+          description: 'Track and analyze facility usage across different locations and time periods'
+        },
+        {
+          value: 'Financial Report',
+          label: 'Financial Report',
+          module: 'Financials',
+          icon: 'fa-dollar-sign',
+          iconColor: 'bg-purple-100 text-purple-600',
+          description: 'Generate comprehensive financial reports including revenue, expenses, and budgets'
+        },
+        {
+          value: 'Attendance Report',
+          label: 'Attendance Report',
+          module: 'HR & Admin',
+          icon: 'fa-users',
+          iconColor: 'bg-orange-100 text-orange-600',
+          description: 'Monitor employee attendance patterns, absences, and late arrivals'
+        },
+        {
+          value: 'Approval Statistics',
+          label: 'Approval Statistics',
+          module: 'Approvals',
+          icon: 'fa-thumbs-up',
+          iconColor: 'bg-green-100 text-green-600',
+          description: 'Analyze approval workflows, pending requests, and processing times'
+        },
+        {
+          value: 'Custom Report',
+          label: 'Custom Report',
+          module: 'Custom',
+          icon: 'fa-file-alt',
+          iconColor: 'bg-gray-100 text-gray-600',
+          description: 'Create custom reports based on specific criteria and data points'
+        }
+      ];
+      
+      res.json({ success: true, reportTypes });
+    } catch (error) {
+      console.error('Error fetching report types:', error);
+      res.status(500).json({ success: false, error: 'Failed to fetch report types' });
     }
   });
 

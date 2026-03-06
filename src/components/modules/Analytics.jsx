@@ -48,6 +48,8 @@ const Analytics = () => {
   const [reports, setReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(true);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [reportTypes, setReportTypes] = useState([]);
+  const [loadingReportTypes, setLoadingReportTypes] = useState(true);
 
   // --- Dynamic Datasets for Charts ---
   const [datasets, setDatasets] = useState({
@@ -80,6 +82,42 @@ const Analytics = () => {
     };
     fetchAnalytics();
   }, []);
+
+  // Fetch available report types
+  useEffect(() => {
+    const fetchReportTypes = async () => {
+      try {
+        const response = await apiService.get("/api/reports/types/available");
+        if (response?.reportTypes) {
+          setReportTypes(response.reportTypes);
+          // Set default report type if not already set from location state
+          if (
+            !location.state?.defaultReport &&
+            response.reportTypes.length > 0
+          ) {
+            setReportType(response.reportTypes[0].value);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load report types", err);
+        // Fallback to default types
+        const fallbackTypes = [
+          { value: "Facility Usage Report", label: "Facility Usage Report" },
+          { value: "Financial Report", label: "Financial Report" },
+          { value: "Attendance Report", label: "Attendance Report" },
+          { value: "Approval Statistics", label: "Approval Statistics" },
+          { value: "Custom Report", label: "Custom Report" },
+        ];
+        setReportTypes(fallbackTypes);
+        if (!location.state?.defaultReport) {
+          setReportType(fallbackTypes[0].value);
+        }
+      } finally {
+        setLoadingReportTypes(false);
+      }
+    };
+    fetchReportTypes();
+  }, [location.state?.defaultReport]);
 
   // Fetch reports from API
   useEffect(() => {
@@ -306,7 +344,9 @@ const Analytics = () => {
   };
 
   const handleResetFilters = () => {
-    setReportType("Facility Usage Report");
+    setReportType(
+      reportTypes.length > 0 ? reportTypes[0].value : "Facility Usage Report",
+    );
     setStartDate("");
     setEndDate("");
     setDepartment("All Departments");
@@ -634,13 +674,18 @@ const Analytics = () => {
                   <select
                     value={reportType}
                     onChange={(e) => setReportType(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    disabled={loadingReportTypes}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <option>Facility Usage Report</option>
-                    <option>Financial Report</option>
-                    <option>Attendance Report</option>
-                    <option>Approval Statistics</option>
-                    <option>Custom Report</option>
+                    {loadingReportTypes ? (
+                      <option>Loading report types...</option>
+                    ) : (
+                      reportTypes.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
