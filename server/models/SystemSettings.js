@@ -5,6 +5,7 @@ const systemSettingsSchema = new mongoose.Schema({
   contactEmail: { type: String, default: 'admin@acmecorp.com' },
   timezone: { type: String, default: 'UTC' },
   dateFormat: { type: String, default: 'MM/DD/YYYY' },
+  currency: { type: String, default: 'NGN' },
   primaryColor: { type: String, default: '#137fec' },
   logoUrl: { type: String, default: '' },
   slackEnabled: { type: Boolean, default: false },

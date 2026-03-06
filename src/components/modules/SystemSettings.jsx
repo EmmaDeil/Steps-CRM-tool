@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
+import { useCurrency } from "../../context/useCurrency";
 
 const SystemSettings = () => {
+  const { setCurrency } = useCurrency();
   const [generalSettings, setGeneralSettings] = useState({
     companyName: "Acme Corp",
     contactEmail: "admin@acmecorp.com",
     timezone: "UTC",
     dateFormat: "MM/DD/YYYY",
+    currency: "NGN",
   });
 
   const [themeSettings, setThemeSettings] = useState({
@@ -28,13 +31,14 @@ const SystemSettings = () => {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await apiService.get('/api/admin/system-settings');
+        const response = await apiService.get("/api/admin/system-settings");
         if (response.data) {
           setGeneralSettings({
             companyName: response.data.companyName || "Acme Corp",
             contactEmail: response.data.contactEmail || "admin@acmecorp.com",
             timezone: response.data.timezone || "UTC",
             dateFormat: response.data.dateFormat || "MM/DD/YYYY",
+            currency: response.data.currency || "NGN",
           });
           setThemeSettings({
             primaryColor: response.data.primaryColor || "#137fec",
@@ -83,7 +87,8 @@ const SystemSettings = () => {
         ...themeSettings,
         ...integrations,
       };
-      await apiService.patch('/api/admin/system-settings', payload);
+      await apiService.patch("/api/admin/system-settings", payload);
+      setCurrency(generalSettings.currency);
       toast.success("System settings updated successfully!");
     } catch (error) {
       console.error("Error saving system settings:", error);
@@ -128,7 +133,7 @@ const SystemSettings = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div className="w-full space-y-8">
           {/* General Settings Section */}
           <section>
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -190,6 +195,34 @@ const SystemSettings = () => {
                   <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                   <option value="YYYY-MM-DD">YYYY-MM-DD</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Currency
+                </label>
+                <select
+                  name="currency"
+                  value={generalSettings.currency}
+                  onChange={handleGeneralChange}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500 transition-shadow"
+                >
+                  <option value="NGN">NGN - Nigerian Naira (₦)</option>
+                  <option value="USD">USD - US Dollar ($)</option>
+                  <option value="EUR">EUR - Euro (€)</option>
+                  <option value="GBP">GBP - British Pound (£)</option>
+                  <option value="JPY">JPY - Japanese Yen (¥)</option>
+                  <option value="CAD">CAD - Canadian Dollar (CA$)</option>
+                  <option value="AUD">AUD - Australian Dollar (A$)</option>
+                  <option value="ZAR">ZAR - South African Rand (R)</option>
+                  <option value="GHS">GHS - Ghanaian Cedi (₵)</option>
+                  <option value="KES">KES - Kenyan Shilling (KSh)</option>
+                  <option value="INR">INR - Indian Rupee (₹)</option>
+                  <option value="CNY">CNY - Chinese Yuan (¥)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  This currency will be used across all modules in the
+                  application.
+                </p>
               </div>
             </div>
           </section>
