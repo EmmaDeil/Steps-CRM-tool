@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { useDepartments } from "../../context/useDepartments";
+import { useAuth } from "../../context/useAuth";
 import { apiService } from "../../services/api";
 import {
   LineChart,
@@ -21,6 +22,7 @@ import {
 
 const Analytics = () => {
   const location = useLocation();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState(
     location.state?.defaultSearch || "",
   );
@@ -43,6 +45,9 @@ const Analytics = () => {
   }, [location.state]);
 
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
+  const [reports, setReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(true);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   // --- Dynamic Datasets for Charts ---
   const [datasets, setDatasets] = useState({
@@ -50,7 +55,7 @@ const Analytics = () => {
     financialData: [],
     attendanceData: [],
     approvalData: [],
-    backendStats: {},
+    stats: {},
   });
 
   useEffect(() => {
@@ -59,7 +64,11 @@ const Analytics = () => {
         const response = await apiService.get("/api/analytics/reports");
         if (response?.data) {
           setDatasets({
-            ...response.data,
+            facilityData: response.data.facilityData || [],
+            financialData: response.data.financialData || [],
+            attendanceData: response.data.attendanceData || [],
+            approvalData: response.data.approvalData || [],
+            stats: response.data.stats || {},
           });
         }
       } catch (err) {
@@ -72,28 +81,58 @@ const Analytics = () => {
     fetchAnalytics();
   }, []);
 
+  // Fetch reports from API
+  useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        setLoadingReports(true);
+        const response = await apiService.get("/api/reports", {
+          params: {
+            reportType: reportType !== "All" ? reportType : undefined,
+            department:
+              department !== "All Departments" ? department : undefined,
+            startDate,
+            endDate,
+          },
+        });
+        if (response?.reports) {
+          setReports(response.reports);
+        }
+      } catch (err) {
+        console.error("Failed to load reports", err);
+        toast.error("Failed to fetch reports.");
+      } finally {
+        setLoadingReports(false);
+      }
+    };
+    fetchReports();
+  }, [reportType, department, startDate, endDate]);
+
   // Dynamically compute stats depending on the selected reportType
   const getDynamicStats = () => {
     switch (reportType) {
       case "Financial Report":
         return {
           title1: "Total Revenue",
-          val1: datasets.backendStats?.financialRevenue || "$19,550",
+          val1: datasets.stats?.financialRevenue || "$0",
           icon1: "fa-dollar-sign",
           color1: "green",
-          growth1: "+14.5% this month",
+          growth1: datasets.stats?.reportsGrowth || "No data",
           title2: "Total Expenses",
-          val2: datasets.backendStats?.financialExpenses || "$26,406",
+          val2: datasets.stats?.financialExpenses || "$0",
           icon2: "fa-credit-card",
           color2: "red",
           status2: "Tracking normal",
           title3: "Net Profit",
-          val3: "$4,200",
+          val3: datasets.stats?.netProfit || "$0",
           icon3: "fa-chart-pie",
           color3: "orange",
-          growth3: "Positive",
+          growth3:
+            parseInt(datasets.stats?.netProfit?.replace(/[^0-9-]/g, "")) > 0
+              ? "Positive"
+              : "Negative",
           title4: "Avg Transaction",
-          val4: "$450",
+          val4: datasets.stats?.avgTransaction || "$0",
           icon4: "fa-receipt",
           color4: "blue",
           status4: "Stable",
@@ -101,136 +140,91 @@ const Analytics = () => {
       case "Attendance Report":
         return {
           title1: "Avg Attendance",
-          val1: "88.2%",
+          val1: datasets.stats?.avgAttendance || "0%",
           icon1: "fa-user-check",
           color1: "green",
           growth1: "Stable",
           title2: "Total Absences",
-          val2: datasets.backendStats?.pendingApprovals > 5 ? "15" : "7",
+          val2: datasets.stats?.totalAbsences || 0,
           icon2: "fa-user-xmark",
           color2: "red",
-          status2: "Needs attention",
+          status2:
+            (datasets.stats?.totalAbsences || 0) > 10
+              ? "Needs attention"
+              : "Normal",
           title3: "Late Arrivals",
-          val3: "22",
+          val3: datasets.stats?.lateArrivals || 0,
           icon3: "fa-clock",
           color3: "orange",
           growth3: "Improving",
           title4: "Total Employees",
-          val4: "148",
+          val4: datasets.stats?.totalEmployees || 0,
           icon4: "fa-users",
           color4: "blue",
-          status4: "Fully Staffed",
+          status4:
+            datasets.stats?.totalEmployees > 0 ? "Fully Staffed" : "No data",
         };
       case "Approval Statistics":
         return {
           title1: "Total Approvals",
-          val1: "166",
+          val1: datasets.stats?.totalApprovals || 0,
           icon1: "fa-thumbs-up",
           color1: "blue",
-          growth1: "Up",
+          growth1: datasets.stats?.reportsGrowth || "No data",
           title2: "Pending Requests",
-          val2: datasets.backendStats?.pendingApprovals || 0,
+          val2: datasets.stats?.pendingApprovals || 0,
           icon2: "fa-hourglass-half",
           color2: "orange",
-          status2: datasets.backendStats?.approvalStatus,
+          status2: datasets.stats?.approvalStatus || "N/A",
           title3: "Rejection Rate",
-          val3: "8.5%",
+          val3: datasets.stats?.rejectionRate || "0%",
           icon3: "fa-thumbs-down",
           color3: "red",
-          growth3: "-1.2% this quarter",
+          growth3: datasets.stats?.rejectionRate
+            ? `${datasets.stats.rejectionRate} rate`
+            : "No data",
           title4: "Avg Process Time",
-          val4: "4.2 Hrs",
+          val4: datasets.stats?.avgProcessingTime || "N/A",
           icon4: "fa-stopwatch",
           color4: "green",
-          status4: "Within SLA",
+          status4: datasets.stats?.slaStatus || "N/A",
         };
       case "Custom Report":
       case "Facility Usage Report":
       default:
         return {
           title1: "Total Reports Generated",
-          val1: datasets.backendStats?.totalReports || 10,
+          val1: datasets.stats?.totalReports || 0,
           icon1: "fa-chart-bar",
           color1: "blue",
-          growth1: datasets.backendStats?.reportsGrowth,
+          growth1: datasets.stats?.reportsGrowth || "N/A",
           title2: "Pending Approvals",
-          val2: datasets.backendStats?.pendingApprovals || 0,
+          val2: datasets.stats?.pendingApprovals || 0,
           icon2: "fa-clock",
           color2: "orange",
-          status2: datasets.backendStats?.approvalStatus,
+          status2: datasets.stats?.approvalStatus || "N/A",
           title3: "Facility Usage",
-          val3: datasets.backendStats?.facilityUsage || "87%",
+          val3: datasets.stats?.facilityUsage || "0%",
           icon3: "fa-building",
           color3: "purple",
-          growth3: datasets.backendStats?.usageChange,
+          growth3: datasets.stats?.usageChange || "N/A",
           title4: "Avg Processing Time",
-          val4: datasets.backendStats?.avgProcessingTime || "1 Day",
+          val4: datasets.stats?.avgProcessingTime || "N/A",
           icon4: "fa-hourglass-half",
           color4: "blue",
-          status4: datasets.backendStats?.slaStatus,
+          status4: datasets.stats?.slaStatus || "N/A",
         };
     }
   };
 
   const stats = getDynamicStats();
 
-  const [reports] = useState([
-    {
-      id: 1,
-      name: "Q3 Facility Usage",
-      reportId: "ID: #RPT-2023-088",
-      module: "Facility Mgmt",
-      dateGenerated: "Oct 24, 2023",
-      status: "Ready",
-      icon: "fa-building",
-      iconColor: "bg-blue-100 text-blue-600",
-    },
-    {
-      id: 2,
-      name: "Monthly Expense Summary",
-      reportId: "ID: #RPT-2023-077",
-      module: "Financials",
-      dateGenerated: "Oct 23, 2023",
-      status: "Ready",
-      icon: "fa-dollar-sign",
-      iconColor: "bg-purple-100 text-purple-600",
-    },
-    {
-      id: 3,
-      name: "Staff Attendance Log",
-      reportId: "ID: #RPT-2023-074",
-      module: "HR & Admin",
-      dateGenerated: "Oct 22, 2023",
-      status: "Processing",
-      icon: "fa-users",
-      iconColor: "bg-orange-100 text-orange-600",
-    },
-    {
-      id: 4,
-      name: "Q2 Facility Usage",
-      reportId: "ID: #RPT-2023-045",
-      module: "Facility Mgmt",
-      dateGenerated: "Jul 15, 2023",
-      status: "Ready",
-      icon: "fa-building",
-      iconColor: "bg-blue-100 text-blue-600",
-    },
-    {
-      id: 5,
-      name: "Annual Budget Review",
-      reportId: "ID: #RPT-2023-012",
-      module: "Financials",
-      dateGenerated: "Jan 10, 2023",
-      status: "Archived",
-      icon: "fa-file-invoice-dollar",
-      iconColor: "bg-purple-100 text-purple-600",
-    },
-  ]);
-
+  // Filter reports based on search query
   const filteredReports = reports.filter(
     (report) =>
       report.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      report.reportId.toLowerCase().includes(searchQuery.toLowerCase()),
+      report.reportType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      report.module?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const getStatusColor = (status) => {
@@ -251,8 +245,64 @@ const Analytics = () => {
     return icons[status] || "fa-circle";
   };
 
-  const handleGenerateReport = () => {
-    toast.success("Generating report...");
+  const handleGenerateReport = async () => {
+    try {
+      setGeneratingReport(true);
+
+      const reportData = {
+        name: `${reportType} - ${new Date().toLocaleDateString()}`,
+        reportType,
+        department,
+        startDate,
+        endDate,
+        includeDrafts,
+        generatedBy: user?.email || user?.name || "System",
+      };
+
+      const response = await apiService.post("/api/reports", reportData);
+
+      if (response?.success) {
+        toast.success(
+          "Report generation started! It will appear in the list shortly.",
+        );
+
+        // Refresh reports list after a delay to show the new report
+        setTimeout(async () => {
+          try {
+            const reportsResponse = await apiService.get("/api/reports");
+            if (reportsResponse?.reports) {
+              setReports(reportsResponse.reports);
+            }
+          } catch (err) {
+            console.error("Failed to refresh reports", err);
+          }
+        }, 2500);
+      }
+    } catch (error) {
+      console.error("Error generating report:", error);
+      toast.error("Failed to generate report");
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
+  const handleDeleteReport = async (reportId) => {
+    try {
+      const confirmed = window.confirm(
+        "Are you sure you want to delete this report?",
+      );
+      if (!confirmed) return;
+
+      const response = await apiService.delete(`/api/reports/${reportId}`);
+
+      if (response?.success) {
+        toast.success("Report deleted successfully");
+        setReports(reports.filter((r) => r._id !== reportId));
+      }
+    } catch (error) {
+      console.error("Error deleting report:", error);
+      toast.error("Failed to delete report");
+    }
   };
 
   const handleResetFilters = () => {
@@ -660,10 +710,20 @@ const Analytics = () => {
                 {/* Generate Button */}
                 <button
                   onClick={handleGenerateReport}
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
+                  disabled={generatingReport}
+                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <i className="fa-solid fa-wand-magic-sparkles"></i>
-                  Generate Report
+                  {generatingReport ? (
+                    <>
+                      <i className="fa-solid fa-circle-notch fa-spin"></i>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-wand-magic-sparkles"></i>
+                      Generate Report
+                    </>
+                  )}
                 </button>
 
                 {/* Reset Filters */}
@@ -731,61 +791,113 @@ const Analytics = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {filteredReports.map((report) => (
-                      <tr key={report.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`w-10 h-10 ${report.iconColor} rounded-lg flex items-center justify-center`}
-                            >
-                              <i className={`fa-solid ${report.icon}`}></i>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900">
-                                {report.name}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                {report.reportId}
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm text-gray-900">
-                            {report.module}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm text-gray-900">
-                            {report.dateGenerated}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                              report.status,
-                            )}`}
-                          >
-                            <i
-                              className={`fa-solid ${getStatusIcon(
-                                report.status,
-                              )}`}
-                            ></i>
-                            {report.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                              <i className="fa-solid fa-eye"></i>
-                            </button>
-                            <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                              <i className="fa-solid fa-download"></i>
-                            </button>
+                    {loadingReports ? (
+                      <tr>
+                        <td colSpan="5" className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center justify-center">
+                            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-3"></div>
+                            <p className="text-sm text-gray-500">
+                              Loading reports...
+                            </p>
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    ) : filteredReports.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center justify-center">
+                            <i className="fa-solid fa-folder-open text-4xl text-gray-400 mb-3"></i>
+                            <p className="text-sm text-gray-500">
+                              {searchQuery
+                                ? "No reports match your search"
+                                : "No reports generated yet"}
+                            </p>
+                            {!searchQuery && (
+                              <p className="text-xs text-gray-400 mt-1">
+                                Use the configuration panel to generate your
+                                first report
+                              </p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredReports.map((report) => (
+                        <tr key={report._id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-10 h-10 ${report.iconColor} rounded-lg flex items-center justify-center`}
+                              >
+                                <i className={`fa-solid ${report.icon}`}></i>
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900">
+                                  {report.name}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  ID: #{report._id.slice(-8).toUpperCase()}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-sm text-gray-900">
+                              {report.module}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-sm text-gray-900">
+                              {new Date(report.createdAt).toLocaleDateString(
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                },
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                                report.status,
+                              )}`}
+                            >
+                              <i
+                                className={`fa-solid ${getStatusIcon(
+                                  report.status,
+                                )}`}
+                              ></i>
+                              {report.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="View Report"
+                              >
+                                <i className="fa-solid fa-eye"></i>
+                              </button>
+                              <button
+                                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                title="Download Report"
+                              >
+                                <i className="fa-solid fa-download"></i>
+                              </button>
+                              <button
+                                onClick={() => handleDeleteReport(report._id)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete Report"
+                              >
+                                <i className="fa-solid fa-trash"></i>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -793,20 +905,23 @@ const Analytics = () => {
               {/* Pagination */}
               <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
                 <p className="text-sm text-gray-600">
-                  Showing 1 to 5 of 128 results
+                  Showing {filteredReports.length > 0 ? "1" : "0"} to{" "}
+                  {filteredReports.length} of {reports.length} results
                 </p>
                 <div className="flex items-center gap-2">
-                  <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 text-sm">
+                  <button
+                    disabled
+                    className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
                     Previous
                   </button>
                   <button className="px-3 py-1 bg-blue-600 text-white rounded text-sm font-medium">
                     1
                   </button>
-                  <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 text-sm">
-                    2
-                  </button>
-                  <span className="px-2 text-gray-500">...</span>
-                  <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 text-sm">
+                  <button
+                    disabled
+                    className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
                     Next
                   </button>
                 </div>

@@ -140,6 +140,7 @@ const verifyRefreshToken = (token) => {
 
 module.exports = {
   authMiddleware,
+  verifyToken: authMiddleware, // Alias for compatibility
   requireRole,
   generateToken,
   generateRefreshToken,

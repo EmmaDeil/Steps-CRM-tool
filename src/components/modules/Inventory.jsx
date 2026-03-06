@@ -31,7 +31,7 @@ const Inventory = () => {
       setIsLoading(true);
       const res = await apiService.get("/api/inventory");
       setInventoryItems(res || []);
-    } catch (err) {
+    } catch (_err) {
       toast.error("Failed to load inventory data");
     } finally {
       setIsLoading(false);
@@ -148,7 +148,7 @@ const Inventory = () => {
       await apiService.delete(`/api/inventory/${id}`);
       toast.success("Item deleted successfully");
       fetchInventory();
-    } catch (err) {
+    } catch (_err) {
       toast.error("Failed to delete item");
     }
   };
