@@ -1264,9 +1264,13 @@ async function start() {
 
   app.post('/api/material-requests', async (req, res) => {
     try {
-      // Generate request ID
+      // Generate request ID with format MR-YYYY-MM-DD-COUNT
       const count = await MaterialRequestModel.countDocuments();
-      const requestId = String(count + 1).padStart(6, '0');
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const requestId = `MR-${year}-${month}-${day}-${String(count + 1).padStart(3, '0')}`;
       
       // Calculate total amount from line items for rule matching
       const totalAmount = req.body.lineItems?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
