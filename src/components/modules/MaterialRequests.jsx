@@ -724,7 +724,7 @@ const MaterialRequests = () => {
 
   return (
     <>
-      <div className="min-h-screen bg-gray-50">
+      <div className="w-full min-h-screen bg-gray-50 px-1">
         <Breadcrumb
           items={[
             { label: "Home", href: "/home", icon: "fa-house" },

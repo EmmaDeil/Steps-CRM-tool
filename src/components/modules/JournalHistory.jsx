@@ -54,7 +54,7 @@ const JournalHistory = ({ onBack, onNewEntry }) => {
     setSelectedEntries((prev) =>
       prev.includes(entryId)
         ? prev.filter((id) => id !== entryId)
-        : [...prev, entryId]
+        : [...prev, entryId],
     );
   };
 
@@ -116,7 +116,7 @@ const JournalHistory = ({ onBack, onNewEntry }) => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
       {/* Breadcrumbs */}
       <Breadcrumb
         items={[
@@ -389,7 +389,7 @@ const JournalHistory = ({ onBack, onNewEntry }) => {
                         <td className="py-3 px-4 text-center">
                           <span
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(
-                              entry.status
+                              entry.status,
                             )}`}
                           >
                             {entry.status}

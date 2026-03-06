@@ -34,11 +34,11 @@ const JournalEntry = ({ onBack }) => {
   const calculateTotals = () => {
     const totalDebit = lineItems.reduce(
       (sum, item) => sum + (parseFloat(item.debit) || 0),
-      0
+      0,
     );
     const totalCredit = lineItems.reduce(
       (sum, item) => sum + (parseFloat(item.credit) || 0),
-      0
+      0,
     );
     const difference = totalDebit - totalCredit;
     return { totalDebit, totalCredit, difference };
@@ -46,7 +46,7 @@ const JournalEntry = ({ onBack }) => {
 
   const handleLineItemChange = (id, field, value) => {
     setLineItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
     );
   };
 
@@ -77,7 +77,7 @@ const JournalEntry = ({ onBack }) => {
 
     if (Math.abs(difference) > 0.01) {
       toast.error(
-        "Entry is not balanced. Total debits must equal total credits."
+        "Entry is not balanced. Total debits must equal total credits.",
       );
       return;
     }
@@ -88,7 +88,7 @@ const JournalEntry = ({ onBack }) => {
     }
 
     const validLineItems = lineItems.filter(
-      (item) => item.account && (item.debit > 0 || item.credit > 0)
+      (item) => item.account && (item.debit > 0 || item.credit > 0),
     );
 
     if (validLineItems.length < 2) {
@@ -121,7 +121,7 @@ const JournalEntry = ({ onBack }) => {
   const isBalanced = Math.abs(difference) < 0.01;
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
       {/* Breadcrumbs */}
       <Breadcrumb
         items={[
@@ -292,7 +292,7 @@ const JournalEntry = ({ onBack }) => {
                             handleLineItemChange(
                               item.id,
                               "account",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                         >
@@ -313,7 +313,7 @@ const JournalEntry = ({ onBack }) => {
                             handleLineItemChange(
                               item.id,
                               "description",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                         />
@@ -333,7 +333,7 @@ const JournalEntry = ({ onBack }) => {
                             handleLineItemChange(
                               item.id,
                               "debit",
-                              parseFloat(e.target.value) || 0
+                              parseFloat(e.target.value) || 0,
                             )
                           }
                         />
@@ -353,7 +353,7 @@ const JournalEntry = ({ onBack }) => {
                             handleLineItemChange(
                               item.id,
                               "credit",
-                              parseFloat(e.target.value) || 0
+                              parseFloat(e.target.value) || 0,
                             )
                           }
                         />

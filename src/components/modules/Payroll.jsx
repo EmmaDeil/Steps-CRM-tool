@@ -60,8 +60,8 @@ const Payroll = ({ onBack }) => {
           const draft = response.data;
           const shouldLoad = window.confirm(
             `Found a securely saved draft from ${new Date(
-              draft.updatedAt || draft.createdAt
-            ).toLocaleString()}. Would you like to load it?`
+              draft.updatedAt || draft.createdAt,
+            ).toLocaleString()}. Would you like to load it?`,
           );
 
           if (shouldLoad) {
@@ -300,7 +300,7 @@ const Payroll = ({ onBack }) => {
         period: selectedPeriod,
         employees: employees,
         deductions: deductions,
-        payRates: payRates
+        payRates: payRates,
       });
       toast.success("Payroll validated and submitted for approval!");
       setCurrentStep(5);
@@ -393,11 +393,11 @@ const Payroll = ({ onBack }) => {
 
   const years = Array.from(
     { length: 5 },
-    (_, i) => new Date().getFullYear() - i
+    (_, i) => new Date().getFullYear() - i,
   );
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-background-dark">
+    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -475,8 +475,8 @@ const Payroll = ({ onBack }) => {
                         step.completed
                           ? "bg-blue-600 text-white"
                           : step.active
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
-                          : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
+                            : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
                       }`}
                     >
                       {step.completed ? (
@@ -587,7 +587,7 @@ const Payroll = ({ onBack }) => {
                         >
                           {schedule}
                         </button>
-                      )
+                      ),
                     )}
                   </div>
                   <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
@@ -702,7 +702,7 @@ const Payroll = ({ onBack }) => {
                       <p className="font-medium text-slate-900 dark:text-white">
                         {selectedPeriod.startDate
                           ? new Date(
-                              selectedPeriod.startDate
+                              selectedPeriod.startDate,
                             ).toLocaleDateString("en-US", {
                               year: "numeric",
                               month: "short",
@@ -721,7 +721,7 @@ const Payroll = ({ onBack }) => {
                                 year: "numeric",
                                 month: "short",
                                 day: "numeric",
-                              }
+                              },
                             )
                           : "Not set"}
                       </p>
@@ -843,7 +843,7 @@ const Payroll = ({ onBack }) => {
                               <div className="flex items-center gap-3">
                                 <div
                                   className={`size-8 rounded-full ${getColorClasses(
-                                    employee.color
+                                    employee.color,
                                   )} flex items-center justify-center text-xs font-bold`}
                                 >
                                   {employee.initials}
@@ -922,7 +922,10 @@ const Payroll = ({ onBack }) => {
                   {/* Pagination */}
                   <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
                     <p className="text-sm text-gray-500">
-                      Showing {employees.length === 0 ? 0 : indexOfFirstItem + 1}-{Math.min(indexOfLastItem, employees.length)} of {employees.length} employees
+                      Showing{" "}
+                      {employees.length === 0 ? 0 : indexOfFirstItem + 1}-
+                      {Math.min(indexOfLastItem, employees.length)} of{" "}
+                      {employees.length} employees
                     </p>
                     <div className="flex gap-2">
                       <button
@@ -937,7 +940,9 @@ const Payroll = ({ onBack }) => {
                       </span>
                       <button
                         onClick={handleNextPage}
-                        disabled={currentPage === totalPages || employees.length === 0}
+                        disabled={
+                          currentPage === totalPages || employees.length === 0
+                        }
                         className="px-3 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         Next
@@ -1032,7 +1037,7 @@ const Payroll = ({ onBack }) => {
                   <p className="text-xs text-gray-500 mb-1">Total Pension</p>
                   <p className="text-lg font-bold text-slate-900 dark:text-white">
                     {formatCurrency(
-                      (totalGrossPay * deductions.pensionRate) / 100
+                      (totalGrossPay * deductions.pensionRate) / 100,
                     )}
                   </p>
                 </div>
@@ -1045,7 +1050,7 @@ const Payroll = ({ onBack }) => {
                           (deductions.taxRate + deductions.pensionRate)) /
                           100 -
                         deductions.healthInsurance -
-                        deductions.otherDeductions
+                        deductions.otherDeductions,
                     )}
                   </p>
                 </div>
@@ -1079,7 +1084,7 @@ const Payroll = ({ onBack }) => {
                           (deductions.taxRate + deductions.pensionRate)) /
                           100 +
                           deductions.healthInsurance +
-                          deductions.otherDeductions
+                          deductions.otherDeductions,
                       )}
                     </p>
                   </div>
@@ -1094,7 +1099,7 @@ const Payroll = ({ onBack }) => {
                             (deductions.taxRate + deductions.pensionRate)) /
                             100 -
                           deductions.healthInsurance -
-                          deductions.otherDeductions
+                          deductions.otherDeductions,
                       )}
                     </p>
                   </div>
@@ -1264,7 +1269,7 @@ const Payroll = ({ onBack }) => {
               <div className="flex items-center gap-3">
                 <div
                   className={`size-10 rounded-full ${getColorClasses(
-                    editingEmployee.color
+                    editingEmployee.color,
                   )} flex items-center justify-center text-sm font-bold`}
                 >
                   {editingEmployee.initials}
@@ -1409,14 +1414,14 @@ const Payroll = ({ onBack }) => {
                     <span className="text-blue-800 dark:text-blue-300">
                       Regular:{" "}
                       {parseFloat(
-                        editingEmployee.tempRegularHours || 0
+                        editingEmployee.tempRegularHours || 0,
                       ).toFixed(2)}{" "}
                       hrs × ₦{payRates.regularRate}
                     </span>
                     <span className="font-mono text-blue-900 dark:text-blue-100">
                       {formatCurrency(
                         parseFloat(editingEmployee.tempRegularHours || 0) *
-                          payRates.regularRate
+                          payRates.regularRate,
                       )}
                     </span>
                   </div>
@@ -1429,7 +1434,7 @@ const Payroll = ({ onBack }) => {
                     <span className="font-mono text-blue-900 dark:text-blue-100">
                       {formatCurrency(
                         parseFloat(editingEmployee.tempOvertime || 0) *
-                          payRates.overtimeRate
+                          payRates.overtimeRate,
                       )}
                     </span>
                   </div>
@@ -1439,7 +1444,7 @@ const Payroll = ({ onBack }) => {
                     </span>
                     <span className="font-mono text-blue-900 dark:text-blue-100">
                       {formatCurrency(
-                        parseFloat(editingEmployee.tempCommission || 0)
+                        parseFloat(editingEmployee.tempCommission || 0),
                       )}
                     </span>
                   </div>
@@ -1454,7 +1459,7 @@ const Payroll = ({ onBack }) => {
                           payRates.regularRate +
                           parseFloat(editingEmployee.tempOvertime || 0) *
                             payRates.overtimeRate +
-                          parseFloat(editingEmployee.tempCommission || 0)
+                          parseFloat(editingEmployee.tempCommission || 0),
                       )}
                     </span>
                   </div>

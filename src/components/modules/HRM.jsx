@@ -129,7 +129,7 @@ const HRM = () => {
   const openRequisitions = requisitions.length;
   // newHires provided in analytics
   const pendingApprovals = leaveRequests.filter(
-    (l) => l.status === "pending"
+    (l) => l.status === "pending",
   ).length;
 
   const formattedPayrollDate = useMemo(() => {
@@ -172,7 +172,7 @@ const HRM = () => {
         apiService.get(
           `/api/hr/employees${
             search ? `?search=${encodeURIComponent(search)}` : ""
-          }`
+          }`,
         ),
         apiService.get("/api/hr/requisitions"),
         apiService.get(`/api/hr/analytics?range=${range}`),
@@ -186,40 +186,40 @@ const HRM = () => {
       setEmployees(
         empRes.status === "fulfilled" && empRes.value
           ? empRes.value.data || []
-          : []
+          : [],
       );
 
       console.log(
         "Fetched employees:",
         empRes.status === "fulfilled" && empRes.value
           ? empRes.value.data || []
-          : []
+          : [],
       );
       setRequisitions(
         reqRes.status === "fulfilled" && reqRes.value.data
           ? Array.isArray(reqRes.value.data)
             ? reqRes.value.data
             : reqRes.value.data.data || []
-          : []
+          : [],
       );
       setAnalytics(
         anaRes.status === "fulfilled" && anaRes.value.data
           ? anaRes.value.data
-          : { turnoverRates: [], months: [], newHires: 0 }
+          : { turnoverRates: [], months: [], newHires: 0 },
       );
       setLeaveRequests(
         leaveRes.status === "fulfilled" && leaveRes.value.data
           ? Array.isArray(leaveRes.value.data)
             ? leaveRes.value.data
             : leaveRes.value.data.data || []
-          : []
+          : [],
       );
       setLeaveAllocations(
         allocRes.status === "fulfilled" && allocRes.value.data
           ? Array.isArray(allocRes.value.data)
             ? allocRes.value.data
             : allocRes.value.data.data || []
-          : []
+          : [],
       );
       setPerformance(
         perfRes.status === "fulfilled" && perfRes.value.data
@@ -227,19 +227,19 @@ const HRM = () => {
           : {
               q3CompletedPct: 0,
               pending: { selfReviews: 0, managerReviews: 0 },
-            }
+            },
       );
       setTraining(
         trainRes.status === "fulfilled" && trainRes.value.data
           ? Array.isArray(trainRes.value.data)
             ? trainRes.value.data
             : trainRes.value.data.data || []
-          : []
+          : [],
       );
       setPayrollNext(
         payRes.status === "fulfilled" && payRes.value.data
           ? payRes.value.data
-          : { date: "", runApproved: false }
+          : { date: "", runApproved: false },
       );
 
       // Check for failures and log them
@@ -291,7 +291,7 @@ const HRM = () => {
     try {
       await apiService.post(`/api/hr/leave-requests/${id}/approve`);
       setLeaveRequests((prev) =>
-        prev.map((l) => (l.id === id ? { ...l, status: "approved" } : l))
+        prev.map((l) => (l.id === id ? { ...l, status: "approved" } : l)),
       );
       toast.success("Leave approved");
     } catch {
@@ -303,7 +303,7 @@ const HRM = () => {
     try {
       await apiService.post(`/api/hr/leave-requests/${id}/reject`);
       setLeaveRequests((prev) =>
-        prev.map((l) => (l.id === id ? { ...l, status: "rejected" } : l))
+        prev.map((l) => (l.id === id ? { ...l, status: "rejected" } : l)),
       );
       toast.success("Leave rejected");
     } catch {
@@ -316,7 +316,10 @@ const HRM = () => {
       header: (
         <input
           type="checkbox"
-          checked={selectedEmployees.length === employees.length && employees.length > 0}
+          checked={
+            selectedEmployees.length === employees.length &&
+            employees.length > 0
+          }
           onChange={(e) => {
             if (e.target.checked) setSelectedEmployees([...employees]);
             else setSelectedEmployees([]);
@@ -333,8 +336,12 @@ const HRM = () => {
           checked={selectedEmployees.some((emp) => emp.id === e.id)}
           onChange={(ev) => {
             ev.stopPropagation();
-            if (ev.target.checked) setSelectedEmployees([...selectedEmployees, e]);
-            else setSelectedEmployees(selectedEmployees.filter((emp) => emp.id !== e.id));
+            if (ev.target.checked)
+              setSelectedEmployees([...selectedEmployees, e]);
+            else
+              setSelectedEmployees(
+                selectedEmployees.filter((emp) => emp.id !== e.id),
+              );
           }}
           className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
         />
@@ -365,7 +372,9 @@ const HRM = () => {
             {!e.avatar && (e.name ? e.name.charAt(0) : "?")}
           </div>
           <div>
-            <p className="font-semibold text-slate-900 dark:text-white">{e.name}</p>
+            <p className="font-semibold text-slate-900 dark:text-white">
+              {e.name}
+            </p>
             <p className="text-xs text-slate-500">{e.email}</p>
           </div>
         </div>
@@ -381,7 +390,8 @@ const HRM = () => {
       header: "Department",
       accessorKey: "department",
       className: "px-5 py-3 hidden sm:table-cell",
-      cellClassName: "px-5 py-3 text-slate-600 dark:text-slate-300 hidden sm:table-cell",
+      cellClassName:
+        "px-5 py-3 text-slate-600 dark:text-slate-300 hidden sm:table-cell",
     },
     {
       header: "Status",
@@ -444,7 +454,7 @@ const HRM = () => {
   }
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display min-h-screen w-full">
+    <div className="w-full min-h-screen bg-gray-50 px-1">
       <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
         <div className="flex h-full grow flex-col w-full">
           {/* Breadcrumb */}
@@ -900,7 +910,7 @@ const HRM = () => {
                               department: employeeForm.department,
                               jobTitle: employeeForm.jobTitle,
                               startDate: employeeForm.startDate,
-                            }
+                            },
                           );
 
                           console.log("Employee creation response:", response);
@@ -923,7 +933,7 @@ const HRM = () => {
                         } catch (error) {
                           console.error("Error adding employee:", error);
                           toast.error(
-                            error.message || "Failed to add employee"
+                            error.message || "Failed to add employee",
                           );
                         } finally {
                           setEmployeeFormLoading(false);
@@ -1116,7 +1126,7 @@ const HRM = () => {
                       onClick={() => {
                         const form = document.querySelector("form");
                         form?.dispatchEvent(
-                          new Event("submit", { bubbles: true })
+                          new Event("submit", { bubbles: true }),
                         );
                       }}
                       disabled={employeeFormLoading}
@@ -1305,7 +1315,7 @@ const HRM = () => {
                       onClick={() => {
                         const form = document.querySelector("form");
                         form?.dispatchEvent(
-                          new Event("submit", { bubbles: true })
+                          new Event("submit", { bubbles: true }),
                         );
                       }}
                       disabled={jobFormLoading}
@@ -1349,7 +1359,7 @@ const HRM = () => {
                         try {
                           await apiService.post(
                             "/api/hr/leave-allocations",
-                            leaveAllocationForm
+                            leaveAllocationForm,
                           );
                           toast.success("Leave allocation saved successfully");
                           setShowLeaveAllocationModal(false);
@@ -1367,7 +1377,7 @@ const HRM = () => {
                           fetchAll();
                         } catch (error) {
                           toast.error(
-                            error.message || "Failed to allocate leave"
+                            error.message || "Failed to allocate leave",
                           );
                         } finally {
                           setLeaveAllocationLoading(false);
@@ -1384,7 +1394,7 @@ const HRM = () => {
                             value={leaveAllocationForm.employeeId}
                             onChange={(e) => {
                               const selectedEmp = employees.find(
-                                (emp) => emp.id === e.target.value
+                                (emp) => emp.id === e.target.value,
                               );
                               setLeaveAllocationForm({
                                 ...leaveAllocationForm,
@@ -1493,7 +1503,7 @@ const HRM = () => {
                             value={leaveAllocationForm.managerId}
                             onChange={(e) => {
                               const selectedManager = employees.find(
-                                (emp) => emp.id === e.target.value
+                                (emp) => emp.id === e.target.value,
                               );
                               setLeaveAllocationForm({
                                 ...leaveAllocationForm,
@@ -1527,7 +1537,7 @@ const HRM = () => {
                       onClick={() => {
                         const form = document.querySelector("form");
                         form?.dispatchEvent(
-                          new Event("submit", { bubbles: true })
+                          new Event("submit", { bubbles: true }),
                         );
                       }}
                       disabled={leaveAllocationLoading}

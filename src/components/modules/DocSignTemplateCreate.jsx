@@ -173,7 +173,7 @@ const DocSignTemplateCreate = ({ onBack }) => {
   };
 
   return (
-    <div className="w-full min-h-screen bg-[#f6f7f8] flex flex-col">
+    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -340,10 +340,10 @@ const DocSignTemplateCreate = ({ onBack }) => {
                             role.color === "blue"
                               ? "bg-blue-600 text-white"
                               : role.color === "purple"
-                              ? "bg-purple-100 text-purple-600"
-                              : role.color === "orange"
-                              ? "bg-orange-100 text-orange-600"
-                              : "bg-green-100 text-green-600"
+                                ? "bg-purple-100 text-purple-600"
+                                : role.color === "orange"
+                                  ? "bg-orange-100 text-orange-600"
+                                  : "bg-green-100 text-green-600"
                           }`}
                         >
                           {index + 1}
@@ -486,12 +486,12 @@ const DocSignTemplateCreate = ({ onBack }) => {
                                 field.type === "signature"
                                   ? "fa-signature"
                                   : field.type === "date"
-                                  ? "fa-calendar-day"
-                                  : field.type === "initials"
-                                  ? "fa-font"
-                                  : field.type === "checkbox"
-                                  ? "fa-square-check"
-                                  : "fa-text-width"
+                                    ? "fa-calendar-day"
+                                    : field.type === "initials"
+                                      ? "fa-font"
+                                      : field.type === "checkbox"
+                                        ? "fa-square-check"
+                                        : "fa-text-width"
                               }`}
                             ></i>
                             <span className="capitalize">

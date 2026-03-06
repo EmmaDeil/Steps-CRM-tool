@@ -228,7 +228,7 @@ const SecuritySettings = () => {
               startDate = new Date(yesterday.setHours(0, 0, 0, 0));
               params.append(
                 "endDate",
-                new Date(yesterday.setHours(23, 59, 59, 999)).toISOString()
+                new Date(yesterday.setHours(23, 59, 59, 999)).toISOString(),
               );
               break;
             }
@@ -260,7 +260,7 @@ const SecuritySettings = () => {
       }
 
       const response = await apiService.get(
-        `/api/audit-logs?${params.toString()}`
+        `/api/audit-logs?${params.toString()}`,
       );
       if (response.data) {
         setActivityLogs(response.data.logs || []);
@@ -329,7 +329,7 @@ const SecuritySettings = () => {
         // Show toast notification for important events
         if (newLog.status === "Failed" || newLog.action === "Access Denied") {
           toast.error(
-            `Security Alert: ${newLog.action} - ${newLog.actor.userName}`
+            `Security Alert: ${newLog.action} - ${newLog.actor.userName}`,
           );
         }
       });
@@ -408,7 +408,7 @@ const SecuritySettings = () => {
       const response = await fetch(
         `${
           apiService.defaults.baseURL
-        }/api/audit-logs/export?${params.toString()}`
+        }/api/audit-logs/export?${params.toString()}`,
       );
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -468,7 +468,7 @@ const SecuritySettings = () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ logIds: selectedLogs }),
-        }
+        },
       );
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -542,7 +542,7 @@ const SecuritySettings = () => {
   const handlePanicLogout = async () => {
     if (
       !window.confirm(
-        "Are you sure you want to log out ALL users? This action cannot be undone."
+        "Are you sure you want to log out ALL users? This action cannot be undone.",
       )
     ) {
       return;
@@ -563,7 +563,7 @@ const SecuritySettings = () => {
     try {
       const response = await apiService.post(
         "/api/security/notification-rules",
-        rule
+        rule,
       );
       setNotificationRules((prev) => [...prev, response.data.rule]);
       toast.success("Notification rule added");
@@ -578,7 +578,7 @@ const SecuritySettings = () => {
     try {
       await apiService.delete(`/api/security/notification-rules/${ruleId}`);
       setNotificationRules((prev) =>
-        prev.filter((rule) => rule._id !== ruleId)
+        prev.filter((rule) => rule._id !== ruleId),
       );
       toast.success("Notification rule deleted");
     } catch (error) {
@@ -625,7 +625,7 @@ const SecuritySettings = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="w-full min-h-screen bg-gray-50 px-1">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -1149,7 +1149,7 @@ const SecuritySettings = () => {
                       <td className="px-6 py-4">
                         <span
                           className={`text-sm font-medium ${getActionColor(
-                            log.actionColor
+                            log.actionColor,
                           )}`}
                         >
                           {log.action}
@@ -1168,7 +1168,7 @@ const SecuritySettings = () => {
                       <td className="px-6 py-4">
                         <span
                           className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                            log.status
+                            log.status,
                           )}`}
                         >
                           <i
@@ -1358,7 +1358,7 @@ const SecuritySettings = () => {
 
               const response = await apiService.get(
                 `/api/audit-logs/export/${format}?${params.toString()}`,
-                { responseType: "blob" }
+                { responseType: "blob" },
               );
 
               const blob = new Blob([response.data]);
@@ -1395,7 +1395,7 @@ const SecuritySettings = () => {
                 "/api/security/compliance-report",
                 {
                   type: reportType,
-                }
+                },
               );
 
               toast.dismiss();
@@ -2587,7 +2587,7 @@ const AnalyticsDashboardModal = ({ isOpen, onClose, data }) => {
                 {actionStats?.slice(0, 8).map((stat, idx) => {
                   const total = actionStats.reduce(
                     (sum, s) => sum + s.count,
-                    0
+                    0,
                   );
                   const percentage = ((stat.count / total) * 100).toFixed(1);
                   return (

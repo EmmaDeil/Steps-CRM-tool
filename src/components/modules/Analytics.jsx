@@ -16,13 +16,17 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend
+  Legend,
 } from "recharts";
 
 const Analytics = () => {
   const location = useLocation();
-  const [searchQuery, setSearchQuery] = useState(location.state?.defaultSearch || "");
-  const [reportType, setReportType] = useState(location.state?.defaultReport || "Facility Usage Report");
+  const [searchQuery, setSearchQuery] = useState(
+    location.state?.defaultSearch || "",
+  );
+  const [reportType, setReportType] = useState(
+    location.state?.defaultReport || "Facility Usage Report",
+  );
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [department, setDepartment] = useState("All Departments");
@@ -46,16 +50,16 @@ const Analytics = () => {
     financialData: [],
     attendanceData: [],
     approvalData: [],
-    backendStats: {}
+    backendStats: {},
   });
 
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const response = await apiService.get('/api/analytics/reports');
+        const response = await apiService.get("/api/analytics/reports");
         if (response?.data) {
           setDatasets({
-            ...response.data
+            ...response.data,
           });
         }
       } catch (err) {
@@ -73,33 +77,97 @@ const Analytics = () => {
     switch (reportType) {
       case "Financial Report":
         return {
-          title1: "Total Revenue", val1: datasets.backendStats?.financialRevenue || "$19,550", icon1: "fa-dollar-sign", color1: "green", growth1: "+14.5% this month",
-          title2: "Total Expenses", val2: datasets.backendStats?.financialExpenses || "$26,406", icon2: "fa-credit-card", color2: "red", status2: "Tracking normal",
-          title3: "Net Profit", val3: "$4,200", icon3: "fa-chart-pie", color3: "orange", growth3: "Positive",
-          title4: "Avg Transaction", val4: "$450", icon4: "fa-receipt", color4: "blue", status4: "Stable",
+          title1: "Total Revenue",
+          val1: datasets.backendStats?.financialRevenue || "$19,550",
+          icon1: "fa-dollar-sign",
+          color1: "green",
+          growth1: "+14.5% this month",
+          title2: "Total Expenses",
+          val2: datasets.backendStats?.financialExpenses || "$26,406",
+          icon2: "fa-credit-card",
+          color2: "red",
+          status2: "Tracking normal",
+          title3: "Net Profit",
+          val3: "$4,200",
+          icon3: "fa-chart-pie",
+          color3: "orange",
+          growth3: "Positive",
+          title4: "Avg Transaction",
+          val4: "$450",
+          icon4: "fa-receipt",
+          color4: "blue",
+          status4: "Stable",
         };
       case "Attendance Report":
         return {
-          title1: "Avg Attendance", val1: "88.2%", icon1: "fa-user-check", color1: "green", growth1: "Stable",
-          title2: "Total Absences", val2: datasets.backendStats?.pendingApprovals > 5 ? "15" : "7", icon2: "fa-user-xmark", color2: "red", status2: "Needs attention",
-          title3: "Late Arrivals", val3: "22", icon3: "fa-clock", color3: "orange", growth3: "Improving",
-          title4: "Total Employees", val4: "148", icon4: "fa-users", color4: "blue", status4: "Fully Staffed",
+          title1: "Avg Attendance",
+          val1: "88.2%",
+          icon1: "fa-user-check",
+          color1: "green",
+          growth1: "Stable",
+          title2: "Total Absences",
+          val2: datasets.backendStats?.pendingApprovals > 5 ? "15" : "7",
+          icon2: "fa-user-xmark",
+          color2: "red",
+          status2: "Needs attention",
+          title3: "Late Arrivals",
+          val3: "22",
+          icon3: "fa-clock",
+          color3: "orange",
+          growth3: "Improving",
+          title4: "Total Employees",
+          val4: "148",
+          icon4: "fa-users",
+          color4: "blue",
+          status4: "Fully Staffed",
         };
       case "Approval Statistics":
         return {
-          title1: "Total Approvals", val1: "166", icon1: "fa-thumbs-up", color1: "blue", growth1: "Up",
-          title2: "Pending Requests", val2: datasets.backendStats?.pendingApprovals || 0, icon2: "fa-hourglass-half", color2: "orange", status2: datasets.backendStats?.approvalStatus,
-          title3: "Rejection Rate", val3: "8.5%", icon3: "fa-thumbs-down", color3: "red", growth3: "-1.2% this quarter",
-          title4: "Avg Process Time", val4: "4.2 Hrs", icon4: "fa-stopwatch", color4: "green", status4: "Within SLA",
+          title1: "Total Approvals",
+          val1: "166",
+          icon1: "fa-thumbs-up",
+          color1: "blue",
+          growth1: "Up",
+          title2: "Pending Requests",
+          val2: datasets.backendStats?.pendingApprovals || 0,
+          icon2: "fa-hourglass-half",
+          color2: "orange",
+          status2: datasets.backendStats?.approvalStatus,
+          title3: "Rejection Rate",
+          val3: "8.5%",
+          icon3: "fa-thumbs-down",
+          color3: "red",
+          growth3: "-1.2% this quarter",
+          title4: "Avg Process Time",
+          val4: "4.2 Hrs",
+          icon4: "fa-stopwatch",
+          color4: "green",
+          status4: "Within SLA",
         };
       case "Custom Report":
       case "Facility Usage Report":
       default:
         return {
-          title1: "Total Reports Generated", val1: datasets.backendStats?.totalReports || 10, icon1: "fa-chart-bar", color1: "blue", growth1: datasets.backendStats?.reportsGrowth,
-          title2: "Pending Approvals", val2: datasets.backendStats?.pendingApprovals || 0, icon2: "fa-clock", color2: "orange", status2: datasets.backendStats?.approvalStatus,
-          title3: "Facility Usage", val3: datasets.backendStats?.facilityUsage || "87%", icon3: "fa-building", color3: "purple", growth3: datasets.backendStats?.usageChange,
-          title4: "Avg Processing Time", val4: datasets.backendStats?.avgProcessingTime || "1 Day", icon4: "fa-hourglass-half", color4: "blue", status4: datasets.backendStats?.slaStatus,
+          title1: "Total Reports Generated",
+          val1: datasets.backendStats?.totalReports || 10,
+          icon1: "fa-chart-bar",
+          color1: "blue",
+          growth1: datasets.backendStats?.reportsGrowth,
+          title2: "Pending Approvals",
+          val2: datasets.backendStats?.pendingApprovals || 0,
+          icon2: "fa-clock",
+          color2: "orange",
+          status2: datasets.backendStats?.approvalStatus,
+          title3: "Facility Usage",
+          val3: datasets.backendStats?.facilityUsage || "87%",
+          icon3: "fa-building",
+          color3: "purple",
+          growth3: datasets.backendStats?.usageChange,
+          title4: "Avg Processing Time",
+          val4: datasets.backendStats?.avgProcessingTime || "1 Day",
+          icon4: "fa-hourglass-half",
+          color4: "blue",
+          status4: datasets.backendStats?.slaStatus,
         };
     }
   };
@@ -162,7 +230,7 @@ const Analytics = () => {
   const filteredReports = reports.filter(
     (report) =>
       report.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      report.reportId.toLowerCase().includes(searchQuery.toLowerCase())
+      report.reportId.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const getStatusColor = (status) => {
@@ -199,7 +267,7 @@ const Analytics = () => {
   // Departments now provided by useDepartments()
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="w-full min-h-screen bg-gray-50 px-1">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -232,10 +300,16 @@ const Analytics = () => {
             <div className="flex items-start justify-between mb-3">
               <div>
                 <p className="text-sm text-gray-600 mb-1">{stats.title1}</p>
-                <p className="text-3xl font-bold text-[#111418]">{stats.val1}</p>
+                <p className="text-3xl font-bold text-[#111418]">
+                  {stats.val1}
+                </p>
               </div>
-              <div className={`w-10 h-10 bg-${stats.color1}-100 rounded-lg flex items-center justify-center`}>
-                <i className={`fa-solid ${stats.icon1} text-${stats.color1}-600`}></i>
+              <div
+                className={`w-10 h-10 bg-${stats.color1}-100 rounded-lg flex items-center justify-center`}
+              >
+                <i
+                  className={`fa-solid ${stats.icon1} text-${stats.color1}-600`}
+                ></i>
               </div>
             </div>
             {stats.growth1 && (
@@ -250,10 +324,16 @@ const Analytics = () => {
             <div className="flex items-start justify-between mb-3">
               <div>
                 <p className="text-sm text-gray-600 mb-1">{stats.title2}</p>
-                <p className="text-3xl font-bold text-[#111418]">{stats.val2}</p>
+                <p className="text-3xl font-bold text-[#111418]">
+                  {stats.val2}
+                </p>
               </div>
-              <div className={`w-10 h-10 bg-${stats.color2}-100 rounded-lg flex items-center justify-center`}>
-                <i className={`fa-solid ${stats.icon2} text-${stats.color2}-600`}></i>
+              <div
+                className={`w-10 h-10 bg-${stats.color2}-100 rounded-lg flex items-center justify-center`}
+              >
+                <i
+                  className={`fa-solid ${stats.icon2} text-${stats.color2}-600`}
+                ></i>
               </div>
             </div>
             {stats.status2 && (
@@ -267,14 +347,22 @@ const Analytics = () => {
             <div className="flex items-start justify-between mb-3">
               <div>
                 <p className="text-sm text-gray-600 mb-1">{stats.title3}</p>
-                <p className="text-3xl font-bold text-[#111418]">{stats.val3}</p>
+                <p className="text-3xl font-bold text-[#111418]">
+                  {stats.val3}
+                </p>
               </div>
-              <div className={`w-10 h-10 bg-${stats.color3}-100 rounded-lg flex items-center justify-center`}>
-                <i className={`fa-solid ${stats.icon3} text-${stats.color3}-600`}></i>
+              <div
+                className={`w-10 h-10 bg-${stats.color3}-100 rounded-lg flex items-center justify-center`}
+              >
+                <i
+                  className={`fa-solid ${stats.icon3} text-${stats.color3}-600`}
+                ></i>
               </div>
             </div>
             <p className={`text-sm text-${stats.color3}-600 font-medium`}>
-              {stats.growth3 && <i className="fa-solid fa-arrow-trend-up mr-1"></i>}
+              {stats.growth3 && (
+                <i className="fa-solid fa-arrow-trend-up mr-1"></i>
+              )}
               {stats.growth3 || stats.status3}
             </p>
           </div>
@@ -283,10 +371,16 @@ const Analytics = () => {
             <div className="flex items-start justify-between mb-3">
               <div>
                 <p className="text-sm text-gray-600 mb-1">{stats.title4}</p>
-                <p className="text-3xl font-bold text-[#111418]">{stats.val4}</p>
+                <p className="text-3xl font-bold text-[#111418]">
+                  {stats.val4}
+                </p>
               </div>
-              <div className={`w-10 h-10 bg-${stats.color4}-100 rounded-lg flex items-center justify-center`}>
-                <i className={`fa-solid ${stats.icon4} text-${stats.color4}-600`}></i>
+              <div
+                className={`w-10 h-10 bg-${stats.color4}-100 rounded-lg flex items-center justify-center`}
+              >
+                <i
+                  className={`fa-solid ${stats.icon4} text-${stats.color4}-600`}
+                ></i>
               </div>
             </div>
             {stats.status4 && (
@@ -313,15 +407,46 @@ const Analytics = () => {
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 {reportType === "Facility Usage Report" ? (
-                  <AreaChart data={datasets.facilityData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <AreaChart
+                    data={datasets.facilityData}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                  >
                     <defs>
-                      <linearGradient id="colorUsage" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                      <linearGradient
+                        id="colorUsage"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#8884d8"
+                          stopOpacity={0.8}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#8884d8"
+                          stopOpacity={0}
+                        />
                       </linearGradient>
-                      <linearGradient id="colorMaint" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#82ca9d" stopOpacity={0}/>
+                      <linearGradient
+                        id="colorMaint"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#82ca9d"
+                          stopOpacity={0.8}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#82ca9d"
+                          stopOpacity={0}
+                        />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -329,40 +454,106 @@ const Analytics = () => {
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Area type="monotone" dataKey="usage" stroke="#8884d8" fillOpacity={1} fill="url(#colorUsage)" name="Usage (%)" />
-                    <Area type="monotone" dataKey="maintenance" stroke="#82ca9d" fillOpacity={1} fill="url(#colorMaint)" name="Maintenance (hrs)" />
+                    <Area
+                      type="monotone"
+                      dataKey="usage"
+                      stroke="#8884d8"
+                      fillOpacity={1}
+                      fill="url(#colorUsage)"
+                      name="Usage (%)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="maintenance"
+                      stroke="#82ca9d"
+                      fillOpacity={1}
+                      fill="url(#colorMaint)"
+                      name="Maintenance (hrs)"
+                    />
                   </AreaChart>
                 ) : reportType === "Financial Report" ? (
-                  <LineChart data={datasets.financialData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <LineChart
+                    data={datasets.financialData}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="name" />
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={3} activeDot={{ r: 8 }} name="Revenue ($)" />
-                    <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={3} name="Expenses ($)" />
+                    <Line
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#10b981"
+                      strokeWidth={3}
+                      activeDot={{ r: 8 }}
+                      name="Revenue ($)"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="expenses"
+                      stroke="#ef4444"
+                      strokeWidth={3}
+                      name="Expenses ($)"
+                    />
                   </LineChart>
                 ) : reportType === "Attendance Report" ? (
-                   <BarChart data={datasets.attendanceData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <BarChart
+                    data={datasets.attendanceData}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="name" />
                     <YAxis />
-                    <Tooltip cursor={{fill: 'transparent'}}/>
+                    <Tooltip cursor={{ fill: "transparent" }} />
                     <Legend />
-                    <Bar dataKey="present" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Present" />
-                    <Bar dataKey="absent" fill="#ef4444" radius={[4, 4, 0, 0]} name="Absent" />
-                    <Bar dataKey="late" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Late" />
+                    <Bar
+                      dataKey="present"
+                      fill="#3b82f6"
+                      radius={[4, 4, 0, 0]}
+                      name="Present"
+                    />
+                    <Bar
+                      dataKey="absent"
+                      fill="#ef4444"
+                      radius={[4, 4, 0, 0]}
+                      name="Absent"
+                    />
+                    <Bar
+                      dataKey="late"
+                      fill="#f59e0b"
+                      radius={[4, 4, 0, 0]}
+                      name="Late"
+                    />
                   </BarChart>
                 ) : (
-                  <BarChart data={datasets.approvalData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <BarChart
+                    data={datasets.approvalData}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="name" />
                     <YAxis />
-                    <Tooltip cursor={{fill: 'transparent'}}/>
+                    <Tooltip cursor={{ fill: "transparent" }} />
                     <Legend />
-                    <Bar dataKey="approved" stackId="a" fill="#10b981" name="Approved" />
-                    <Bar dataKey="pending" stackId="a" fill="#f59e0b" name="Pending" />
-                    <Bar dataKey="rejected" stackId="a" fill="#ef4444" name="Rejected" />
+                    <Bar
+                      dataKey="approved"
+                      stackId="a"
+                      fill="#10b981"
+                      name="Approved"
+                    />
+                    <Bar
+                      dataKey="pending"
+                      stackId="a"
+                      fill="#f59e0b"
+                      name="Pending"
+                    />
+                    <Bar
+                      dataKey="rejected"
+                      stackId="a"
+                      fill="#ef4444"
+                      name="Rejected"
+                    />
                   </BarChart>
                 )}
               </ResponsiveContainer>
@@ -572,12 +763,12 @@ const Analytics = () => {
                         <td className="px-6 py-4">
                           <span
                             className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                              report.status
+                              report.status,
                             )}`}
                           >
                             <i
                               className={`fa-solid ${getStatusIcon(
-                                report.status
+                                report.status,
                               )}`}
                             ></i>
                             {report.status}

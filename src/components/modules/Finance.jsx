@@ -54,7 +54,9 @@ const Finance = () => {
   };
 
   if (showBudget) {
-    return <Budget onBack={() => setShowBudget(false)} parentModule="Finance" />;
+    return (
+      <Budget onBack={() => setShowBudget(false)} parentModule="Finance" />
+    );
   }
 
   if (showVendorManagement) {
@@ -97,7 +99,7 @@ const Finance = () => {
   }
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display min-h-screen w-full">
+    <div className="w-full min-h-screen bg-gray-50 px-1">
       <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
         <div className="flex h-full grow flex-col w-full">
           <Breadcrumb
@@ -130,25 +132,79 @@ const Finance = () => {
 
                 {showQuickAction && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setShowQuickAction(false)} />
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowQuickAction(false)}
+                    />
                     <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-20 overflow-hidden">
                       <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700">
-                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Finance Actions</p>
+                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                          Finance Actions
+                        </p>
                       </div>
                       {[
-                        { icon: "fa-book",            color: "text-blue-600",    bg: "bg-blue-50 dark:bg-blue-900/30",    label: "New Journal Entry",    action: () => { setShowJournalEntry(true); setShowQuickAction(false); } },
-                        { icon: "fa-receipt",         color: "text-red-600",     bg: "bg-red-50 dark:bg-red-900/30",      label: "Accounts Payable",     action: () => { setShowAccountsPayable(true); setShowQuickAction(false); } },
-                        { icon: "fa-wallet",          color: "text-teal-600",    bg: "bg-teal-50 dark:bg-teal-900/30",    label: "Budget Overview",      action: () => { setShowBudget(true); setShowQuickAction(false); } },
-                        { icon: "fa-scale-balanced",  color: "text-purple-600",  bg: "bg-purple-50 dark:bg-purple-900/30",label: "Reconcile Accounts",  action: () => { setShowReconcile(true); setShowQuickAction(false); } },
-                        { icon: "fa-users",           color: "text-indigo-600",  bg: "bg-indigo-50 dark:bg-indigo-900/30",label: "Vendor Management",   action: () => { setShowVendorManagement(true); setShowQuickAction(false); } },
+                        {
+                          icon: "fa-book",
+                          color: "text-blue-600",
+                          bg: "bg-blue-50 dark:bg-blue-900/30",
+                          label: "New Journal Entry",
+                          action: () => {
+                            setShowJournalEntry(true);
+                            setShowQuickAction(false);
+                          },
+                        },
+                        {
+                          icon: "fa-receipt",
+                          color: "text-red-600",
+                          bg: "bg-red-50 dark:bg-red-900/30",
+                          label: "Accounts Payable",
+                          action: () => {
+                            setShowAccountsPayable(true);
+                            setShowQuickAction(false);
+                          },
+                        },
+                        {
+                          icon: "fa-wallet",
+                          color: "text-teal-600",
+                          bg: "bg-teal-50 dark:bg-teal-900/30",
+                          label: "Budget Overview",
+                          action: () => {
+                            setShowBudget(true);
+                            setShowQuickAction(false);
+                          },
+                        },
+                        {
+                          icon: "fa-scale-balanced",
+                          color: "text-purple-600",
+                          bg: "bg-purple-50 dark:bg-purple-900/30",
+                          label: "Reconcile Accounts",
+                          action: () => {
+                            setShowReconcile(true);
+                            setShowQuickAction(false);
+                          },
+                        },
+                        {
+                          icon: "fa-users",
+                          color: "text-indigo-600",
+                          bg: "bg-indigo-50 dark:bg-indigo-900/30",
+                          label: "Vendor Management",
+                          action: () => {
+                            setShowVendorManagement(true);
+                            setShowQuickAction(false);
+                          },
+                        },
                       ].map(({ icon, color, bg, label, action }) => (
                         <button
                           key={label}
                           onClick={action}
                           className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                         >
-                          <span className={`flex size-7 items-center justify-center rounded-lg ${bg}`}>
-                            <i className={`fa-solid ${icon} ${color} text-xs`}></i>
+                          <span
+                            className={`flex size-7 items-center justify-center rounded-lg ${bg}`}
+                          >
+                            <i
+                              className={`fa-solid ${icon} ${color} text-xs`}
+                            ></i>
                           </span>
                           {label}
                         </button>
@@ -434,7 +490,7 @@ const Finance = () => {
                                 <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
                                   {invoice.orderDate
                                     ? new Date(
-                                        invoice.orderDate
+                                        invoice.orderDate,
                                       ).toLocaleDateString()
                                     : "N/A"}
                                 </td>

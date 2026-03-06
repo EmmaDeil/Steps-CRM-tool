@@ -9,19 +9,23 @@ import axios from "axios";
 const Attendance = () => {
   const { user: authUser } = useContext(AuthContext);
   const navigate = useNavigate();
-  
+
   const [attendanceData, setAttendanceData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showMarkModal, setShowMarkModal] = useState(false);
-  const [markForm, setMarkForm] = useState({ name: "", employeeId: "", status: "present" });
+  const [markForm, setMarkForm] = useState({
+    name: "",
+    employeeId: "",
+    status: "present",
+  });
   const [isMarking, setIsMarking] = useState(false);
 
   // Determine if the user has elevated permissions to view reports/export data
-  const isElevatedUser = 
-    authUser?.role === "Admin" || 
-    authUser?.role === "Administrator" || 
-    authUser?.department === "HR" || 
+  const isElevatedUser =
+    authUser?.role === "Admin" ||
+    authUser?.role === "Administrator" ||
+    authUser?.department === "HR" ||
     authUser?.department === "Human Resources";
 
   const fetchAttendanceData = async () => {
@@ -30,17 +34,18 @@ const Attendance = () => {
       setError(null);
 
       // Bypass the global apiService to avoid the strict 10s interceptor timeout
-      const token = localStorage.getItem('authToken');
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
-      
+      const token = localStorage.getItem("authToken");
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+
       const response = await axios.get(`${API_BASE_URL}/api/attendance`, {
         timeout: 30000,
         headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
-      
+
       if (!response.data) {
         throw new Error("Failed to load attendance data");
       }
@@ -66,15 +71,21 @@ const Attendance = () => {
     }
     const headers = ["Name", "Employee ID", "Status", "Check-in Time"];
     const csvRows = [headers.join(",")];
-    attendanceData.records.forEach(record => {
-      const time = record.checkInTime ? new Date(record.checkInTime).toLocaleString() : "";
-      csvRows.push(`"${record.name || ''}","${record.employeeId || ''}","${record.status || ''}","${time}"`);
+    attendanceData.records.forEach((record) => {
+      const time = record.checkInTime
+        ? new Date(record.checkInTime).toLocaleString()
+        : "";
+      csvRows.push(
+        `"${record.name || ""}","${record.employeeId || ""}","${record.status || ""}","${time}"`,
+      );
     });
-    const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csvRows.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `attendance_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `attendance_${new Date().toISOString().split("T")[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -89,14 +100,15 @@ const Attendance = () => {
     }
     try {
       setIsMarking(true);
-      const token = localStorage.getItem('authToken');
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
-      
+      const token = localStorage.getItem("authToken");
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+
       await axios.post(`${API_BASE_URL}/api/attendance`, markForm, {
         headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
       toast.success("Attendance marked successfully");
       setShowMarkModal(false);
@@ -156,7 +168,7 @@ const Attendance = () => {
     stats.total > 0 ? ((stats.present / stats.total) * 100).toFixed(1) : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="w-full min-h-screen bg-gray-50 px-1">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -224,11 +236,11 @@ const Attendance = () => {
                           record.status === "on-time"
                             ? "bg-green-100 text-green-800"
                             : record.status === "late"
-                            ? "bg-yellow-100 text-yellow-800"
-                            : record.status === "leave" ||
-                              record.status === "on-leave"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-red-100 text-red-800"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : record.status === "leave" ||
+                                  record.status === "on-leave"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-red-100 text-red-800"
                         }`}
                       >
                         {record.status
@@ -245,7 +257,7 @@ const Attendance = () => {
                               hour: "numeric",
                               minute: "2-digit",
                               hour12: true,
-                            }
+                            },
                           )}
                         </div>
                       )}
@@ -274,7 +286,14 @@ const Attendance = () => {
               <>
                 <button
                   className="px-4 py-2 bg-white text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-medium"
-                  onClick={() => navigate("/home/12", { state: { defaultSearch: "Attendance", defaultReport: "Attendance Report" } })}
+                  onClick={() =>
+                    navigate("/home/12", {
+                      state: {
+                        defaultSearch: "Attendance",
+                        defaultReport: "Attendance Report",
+                      },
+                    })
+                  }
                 >
                   View Reports
                 </button>
@@ -294,39 +313,56 @@ const Attendance = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h3 className="text-xl font-bold text-gray-900">Mark Attendance</h3>
-              <button onClick={() => setShowMarkModal(false)} className="text-gray-400 hover:text-gray-600">
+              <h3 className="text-xl font-bold text-gray-900">
+                Mark Attendance
+              </h3>
+              <button
+                onClick={() => setShowMarkModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <i className="fa-solid fa-xmark text-xl"></i>
               </button>
             </div>
             <form onSubmit={handleMarkAttendance} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Employee Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Employee Name *
+                </label>
                 <input
                   type="text"
                   required
                   value={markForm.name}
-                  onChange={(e) => setMarkForm({ ...markForm, name: e.target.value })}
+                  onChange={(e) =>
+                    setMarkForm({ ...markForm, name: e.target.value })
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g. Jane Doe"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Employee ID *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Employee ID *
+                </label>
                 <input
                   type="text"
                   required
                   value={markForm.employeeId}
-                  onChange={(e) => setMarkForm({ ...markForm, employeeId: e.target.value })}
+                  onChange={(e) =>
+                    setMarkForm({ ...markForm, employeeId: e.target.value })
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g. EMP-001"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status
+                </label>
                 <select
                   value={markForm.status}
-                  onChange={(e) => setMarkForm({ ...markForm, status: e.target.value })}
+                  onChange={(e) =>
+                    setMarkForm({ ...markForm, status: e.target.value })
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="present">Present (On Time)</option>

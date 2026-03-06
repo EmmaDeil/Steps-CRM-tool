@@ -108,7 +108,7 @@ const VendorManagement = ({ onBack }) => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
       {/* Breadcrumbs */}
       <Breadcrumb
         items={[
@@ -244,7 +244,7 @@ const VendorManagement = ({ onBack }) => {
                     </div>
                     <span
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusBadge(
-                        vendor.status
+                        vendor.status,
                       )}`}
                     >
                       <span className="size-1.5 rounded-full bg-current"></span>

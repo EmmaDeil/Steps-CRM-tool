@@ -59,7 +59,7 @@ const Reconcile = ({ onBack }) => {
     setSelectedBank((prev) =>
       prev.includes(transactionId)
         ? prev.filter((id) => id !== transactionId)
-        : [...prev, transactionId]
+        : [...prev, transactionId],
     );
   };
 
@@ -67,7 +67,7 @@ const Reconcile = ({ onBack }) => {
     setSelectedLedger((prev) =>
       prev.includes(transactionId)
         ? prev.filter((id) => id !== transactionId)
-        : [...prev, transactionId]
+        : [...prev, transactionId],
     );
   };
 
@@ -83,7 +83,7 @@ const Reconcile = ({ onBack }) => {
         {
           bankTransactions: selectedBank,
           ledgerTransactions: selectedLedger,
-        }
+        },
       );
 
       if (response.success) {
@@ -103,8 +103,8 @@ const Reconcile = ({ onBack }) => {
     if (difference > 0.01) {
       toast.error(
         `Cannot complete reconciliation. Difference: ${formatCurrency(
-          difference
-        )}`
+          difference,
+        )}`,
       );
       return;
     }
@@ -117,7 +117,7 @@ const Reconcile = ({ onBack }) => {
           period,
           statementEnd,
           clearedBalance,
-        }
+        },
       );
 
       if (response.success) {
@@ -139,7 +139,7 @@ const Reconcile = ({ onBack }) => {
           period,
           bankTransactions: selectedBank,
           ledgerTransactions: selectedLedger,
-        }
+        },
       );
 
       if (response.success) {
@@ -160,11 +160,11 @@ const Reconcile = ({ onBack }) => {
   const unmatchedCount = bankTransactions.filter((t) => !t.matched).length;
 
   const filteredBankTransactions = bankTransactions.filter((t) =>
-    (t.description || "").toLowerCase().includes(searchBank.toLowerCase())
+    (t.description || "").toLowerCase().includes(searchBank.toLowerCase()),
   );
 
   const filteredLedgerTransactions = ledgerTransactions.filter((t) =>
-    (t.payee || "").toLowerCase().includes(searchLedger.toLowerCase())
+    (t.payee || "").toLowerCase().includes(searchLedger.toLowerCase()),
   );
 
   if (loading) {
@@ -190,7 +190,7 @@ const Reconcile = ({ onBack }) => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
       {/* Import Modal */}
       <BankStatementImportModal
         isOpen={showImportModal}
@@ -456,9 +456,7 @@ const Reconcile = ({ onBack }) => {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() =>
-                    toast("Add missing entry feature coming soon")
-                  }
+                  onClick={() => toast("Add missing entry feature coming soon")}
                   className="text-xs font-medium text-primary hover:text-blue-700 flex items-center gap-1"
                 >
                   <i className="fa-solid fa-plus text-xs"></i>
@@ -513,8 +511,8 @@ const Reconcile = ({ onBack }) => {
                           transaction.matched
                             ? "bg-blue-50/50 border-r-4 border-r-primary"
                             : transaction.uncertain
-                            ? "bg-amber-50/50 border-r-4 border-r-amber-400 border-t border-t-amber-100"
-                            : "bg-white border-r-4 border-r-transparent"
+                              ? "bg-amber-50/50 border-r-4 border-r-amber-400 border-t border-t-amber-100"
+                              : "bg-white border-r-4 border-r-transparent"
                         }`}
                       >
                         <td className="py-3 px-4">

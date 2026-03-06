@@ -132,9 +132,9 @@ const Admin = () => {
       const res = await apiService.get("/api/admin/roles");
       const rolesArray = res.data || [];
       setDbRoles(rolesArray);
-      
+
       const permissionsMap = {};
-      rolesArray.forEach(r => {
+      rolesArray.forEach((r) => {
         permissionsMap[r.name] = r.permissions;
       });
       // Fallback for UI if db doesn't have default roles seeded yet
@@ -176,10 +176,10 @@ const Admin = () => {
 
       const users = usersRes.data || [];
       const activeUsersCount = users.filter(
-        (u) => u.status === "Active"
+        (u) => u.status === "Active",
       ).length;
       const pendingUsersCount = users.filter(
-        (u) => u.status === "Pending"
+        (u) => u.status === "Pending",
       ).length;
 
       // Calculate system stats from real data
@@ -301,7 +301,7 @@ const Admin = () => {
 
   const handleSaveRolePermissions = async () => {
     try {
-      const roleObj = dbRoles.find(r => r.name === selectedRoleTab);
+      const roleObj = dbRoles.find((r) => r.name === selectedRoleTab);
       if (!roleObj) {
         toast.error("Could not find role definition");
         return;
@@ -337,10 +337,11 @@ const Admin = () => {
   const toggleUserOverride = (category, permission) => {
     setSelectedUser((prev) => {
       if (!prev) return prev;
-      const roleDef = rolePermissions[prev.role]?.[category]?.[permission] || false;
+      const roleDef =
+        rolePermissions[prev.role]?.[category]?.[permission] || false;
       const current = prev.permissions?.[category]?.[permission];
-      const nextVal = typeof current === 'boolean' ? !current : !roleDef;
-      
+      const nextVal = typeof current === "boolean" ? !current : !roleDef;
+
       return {
         ...prev,
         permissions: {
@@ -357,8 +358,10 @@ const Admin = () => {
   const hasUserOverride = (category, permission) => {
     if (!selectedUser) return false;
     const current = selectedUser.permissions?.[category]?.[permission];
-    if (typeof current === 'boolean') return current;
-    return rolePermissions[selectedUser.role]?.[category]?.[permission] || false;
+    if (typeof current === "boolean") return current;
+    return (
+      rolePermissions[selectedUser.role]?.[category]?.[permission] || false
+    );
   };
 
   const handleEditUser = (userId) => {
@@ -432,8 +435,8 @@ const Admin = () => {
       user.status === "Active"
         ? "Inactive"
         : user.status === "Inactive"
-        ? "Active"
-        : "Active";
+          ? "Active"
+          : "Active";
 
     try {
       await apiService.patch(`/api/users/${userId}/status`, {
@@ -581,7 +584,7 @@ const Admin = () => {
 
   const getModuleUrl = (moduleName) => {
     const module = availableModules.find(
-      (m) => m.componentName === moduleName || m.name === moduleName
+      (m) => m.componentName === moduleName || m.name === moduleName,
     );
     return module ? `/home/${module.id}` : "/home";
   };
@@ -635,23 +638,82 @@ const Admin = () => {
   }
 
   if (activeView === "logs") {
-    const actionTypes = ['Login','Logout','Failed Login','Config Update','User Created','User Updated','User Deleted','Role Changed','Access Denied','Export','API Key','Password Reset','MFA Enabled','MFA Disabled','Session Terminated','Backup','Restore','Import','Approval Flow','Approval','Other'];
-    const statusTypes = ['Success','Failed','Warning'];
-    const actionColors = { Login:'blue', Logout:'gray', 'Failed Login':'red', 'Config Update':'orange', 'User Created':'green', 'User Updated':'blue', 'User Deleted':'red', 'Role Changed':'purple', 'Access Denied':'red', Export:'blue', 'API Key':'purple', 'Password Reset':'orange', 'MFA Enabled':'green', 'MFA Disabled':'red', 'Session Terminated':'red', Backup:'blue', Restore:'green', Import:'blue', 'Approval Flow':'purple', Approval:'green', Other:'gray' };
-    const badgeClasses = { blue: 'bg-blue-100 text-blue-700', green: 'bg-green-100 text-green-700', red: 'bg-red-100 text-red-700', orange: 'bg-orange-100 text-orange-700', purple: 'bg-purple-100 text-purple-700', gray: 'bg-gray-100 text-gray-600' };
+    const actionTypes = [
+      "Login",
+      "Logout",
+      "Failed Login",
+      "Config Update",
+      "User Created",
+      "User Updated",
+      "User Deleted",
+      "Role Changed",
+      "Access Denied",
+      "Export",
+      "API Key",
+      "Password Reset",
+      "MFA Enabled",
+      "MFA Disabled",
+      "Session Terminated",
+      "Backup",
+      "Restore",
+      "Import",
+      "Approval Flow",
+      "Approval",
+      "Other",
+    ];
+    const statusTypes = ["Success", "Failed", "Warning"];
+    const actionColors = {
+      Login: "blue",
+      Logout: "gray",
+      "Failed Login": "red",
+      "Config Update": "orange",
+      "User Created": "green",
+      "User Updated": "blue",
+      "User Deleted": "red",
+      "Role Changed": "purple",
+      "Access Denied": "red",
+      Export: "blue",
+      "API Key": "purple",
+      "Password Reset": "orange",
+      "MFA Enabled": "green",
+      "MFA Disabled": "red",
+      "Session Terminated": "red",
+      Backup: "blue",
+      Restore: "green",
+      Import: "blue",
+      "Approval Flow": "purple",
+      Approval: "green",
+      Other: "gray",
+    };
+    const badgeClasses = {
+      blue: "bg-blue-100 text-blue-700",
+      green: "bg-green-100 text-green-700",
+      red: "bg-red-100 text-red-700",
+      orange: "bg-orange-100 text-orange-700",
+      purple: "bg-purple-100 text-purple-700",
+      gray: "bg-gray-100 text-gray-600",
+    };
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col">
-        <Breadcrumb items={[
-          { label: "Home", href: "/home", icon: "fa-house" },
-          { label: "Admin Controls", onClick: () => setSearchParams({ view: "dashboard" }), icon: "fa-user-shield" },
-          { label: "Audit Logs", icon: "fa-file-lines" },
-        ]} />
+        <Breadcrumb
+          items={[
+            { label: "Home", href: "/home", icon: "fa-house" },
+            {
+              label: "Admin Controls",
+              onClick: () => setSearchParams({ view: "dashboard" }),
+              icon: "fa-user-shield",
+            },
+            { label: "Audit Logs", icon: "fa-file-lines" },
+          ]}
+        />
         <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Audit Logs</h1>
-              <p className="text-sm text-gray-500 mt-1">{logPagination.total} total events recorded</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {logPagination.total} total events recorded
+              </p>
             </div>
           </div>
 
@@ -659,19 +721,33 @@ const Admin = () => {
           <div className="bg-white border border-gray-200 rounded-xl p-4 mb-6 flex flex-wrap gap-3 items-center">
             <select
               value={logFilterAction}
-              onChange={e => { setLogFilterAction(e.target.value); setLogPage(1); }}
+              onChange={(e) => {
+                setLogFilterAction(e.target.value);
+                setLogPage(1);
+              }}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
             >
               <option value="">All Actions</option>
-              {actionTypes.map(a => <option key={a} value={a}>{a}</option>)}
+              {actionTypes.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
             </select>
             <select
               value={logFilterStatus}
-              onChange={e => { setLogFilterStatus(e.target.value); setLogPage(1); }}
+              onChange={(e) => {
+                setLogFilterStatus(e.target.value);
+                setLogPage(1);
+              }}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none w-40"
             >
               <option value="">All Statuses</option>
-              {statusTypes.map(s => <option key={s} value={s}>{s}</option>)}
+              {statusTypes.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
             <button
               onClick={() => fetchLogs()}
@@ -680,7 +756,11 @@ const Admin = () => {
               <i className="fa-solid fa-magnifying-glass"></i> Filter
             </button>
             <button
-              onClick={() => { setLogFilterAction(""); setLogFilterStatus(""); setLogPage(1); }}
+              onClick={() => {
+                setLogFilterAction("");
+                setLogFilterStatus("");
+                setLogPage(1);
+              }}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition-colors text-gray-600"
             >
               Clear
@@ -697,54 +777,85 @@ const Admin = () => {
               <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                 <i className="fa-solid fa-file-lines text-5xl mb-4"></i>
                 <p className="font-medium">No audit logs found</p>
-                <p className="text-sm">Logs will appear here as users interact with the system</p>
+                <p className="text-sm">
+                  Logs will appear here as users interact with the system
+                </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Timestamp</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actor</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Description</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">IP</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Timestamp
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Actor
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Action
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Description
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        IP
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {logs.map((log, i) => (
-                      <tr key={log._id || i} className="hover:bg-gray-50 transition-colors">
+                      <tr
+                        key={log._id || i}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
                         <td className="px-4 py-3 text-gray-500 font-mono text-xs whitespace-nowrap">
                           {new Date(log.timestamp).toLocaleString()}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold shrink-0">
-                              {log.actor?.initials || '?'}
+                              {log.actor?.initials || "?"}
                             </div>
                             <div>
-                              <p className="font-medium text-gray-800 text-xs">{log.actor?.userName || 'System'}</p>
-                              <p className="text-gray-400 text-[10px]">{log.actor?.userEmail}</p>
+                              <p className="font-medium text-gray-800 text-xs">
+                                {log.actor?.userName || "System"}
+                              </p>
+                              <p className="text-gray-400 text-[10px]">
+                                {log.actor?.userEmail}
+                              </p>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClasses[actionColors[log.action] || 'gray']}`}>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClasses[actionColors[log.action] || "gray"]}`}
+                          >
                             {log.action}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-gray-700 max-w-xs truncate">{log.description}</td>
+                        <td className="px-4 py-3 text-gray-700 max-w-xs truncate">
+                          {log.description}
+                        </td>
                         <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            log.status === 'Success' ? 'bg-green-100 text-green-700' :
-                            log.status === 'Failed' ? 'bg-red-100 text-red-700' :
-                            'bg-amber-100 text-amber-700'
-                          }`}>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                              log.status === "Success"
+                                ? "bg-green-100 text-green-700"
+                                : log.status === "Failed"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
                             {log.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-gray-500 font-mono text-xs">{log.ipAddress}</td>
+                        <td className="px-4 py-3 text-gray-500 font-mono text-xs">
+                          {log.ipAddress}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -756,17 +867,21 @@ const Admin = () => {
           {/* Pagination */}
           {logPagination.pages > 1 && (
             <div className="flex items-center justify-between mt-4">
-              <p className="text-sm text-gray-500">Page {logPage} of {logPagination.pages}</p>
+              <p className="text-sm text-gray-500">
+                Page {logPage} of {logPagination.pages}
+              </p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setLogPage(p => Math.max(1, p - 1))}
+                  onClick={() => setLogPage((p) => Math.max(1, p - 1))}
                   disabled={logPage === 1}
                   className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors"
                 >
                   <i className="fa-solid fa-chevron-left"></i>
                 </button>
                 <button
-                  onClick={() => setLogPage(p => Math.min(logPagination.pages, p + 1))}
+                  onClick={() =>
+                    setLogPage((p) => Math.min(logPagination.pages, p + 1))
+                  }
                   disabled={logPage === logPagination.pages}
                   className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors"
                 >
@@ -910,7 +1025,7 @@ const Admin = () => {
                       <td className="px-6 py-4">
                         <span
                           className={`px-3 py-1 rounded-full text-sm font-medium ${getRoleBadgeColor(
-                            user.role
+                            user.role,
                           )}`}
                         >
                           {user.role}
@@ -1266,54 +1381,85 @@ const Admin = () => {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-medium text-gray-900">View Logs</p>
-                        <p className="text-sm text-gray-600">Access to system audit logs</p>
+                        <p className="text-sm text-gray-600">
+                          Access to system audit logs
+                        </p>
                       </div>
                       <button
-                        onClick={() => toggleUserOverride("security", "viewLogs")}
+                        onClick={() =>
+                          toggleUserOverride("security", "viewLogs")
+                        }
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          hasUserOverride("security", "viewLogs") ? "bg-blue-600" : "bg-gray-200"
+                          hasUserOverride("security", "viewLogs")
+                            ? "bg-blue-600"
+                            : "bg-gray-200"
                         }`}
                       >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          hasUserOverride("security", "viewLogs") ? "translate-x-6" : "translate-x-1"
-                        }`} />
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            hasUserOverride("security", "viewLogs")
+                              ? "translate-x-6"
+                              : "translate-x-1"
+                          }`}
+                        />
                       </button>
                     </div>
 
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-medium text-gray-900">Export Logs</p>
-                        <p className="text-sm text-gray-600">Download audit logs report</p>
+                        <p className="text-sm text-gray-600">
+                          Download audit logs report
+                        </p>
                       </div>
                       <button
-                        onClick={() => toggleUserOverride("security", "exportLogs")}
+                        onClick={() =>
+                          toggleUserOverride("security", "exportLogs")
+                        }
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          hasUserOverride("security", "exportLogs") ? "bg-blue-600" : "bg-gray-200"
+                          hasUserOverride("security", "exportLogs")
+                            ? "bg-blue-600"
+                            : "bg-gray-200"
                         }`}
                       >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          hasUserOverride("security", "exportLogs") ? "translate-x-6" : "translate-x-1"
-                        }`} />
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            hasUserOverride("security", "exportLogs")
+                              ? "translate-x-6"
+                              : "translate-x-1"
+                          }`}
+                        />
                       </button>
                     </div>
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium text-gray-900">Manage Settings</p>
-                        <p className="text-sm text-gray-600">Global configuration access</p>
+                        <p className="font-medium text-gray-900">
+                          Manage Settings
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Global configuration access
+                        </p>
                       </div>
                       <button
-                        onClick={() => toggleUserOverride("security", "manageSettings")}
+                        onClick={() =>
+                          toggleUserOverride("security", "manageSettings")
+                        }
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          hasUserOverride("security", "manageSettings") ? "bg-blue-600" : "bg-gray-200"
+                          hasUserOverride("security", "manageSettings")
+                            ? "bg-blue-600"
+                            : "bg-gray-200"
                         }`}
                       >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          hasUserOverride("security", "manageSettings") ? "translate-x-6" : "translate-x-1"
-                        }`} />
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            hasUserOverride("security", "manageSettings")
+                              ? "translate-x-6"
+                              : "translate-x-1"
+                          }`}
+                        />
                       </button>
                     </div>
-
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
                     Override role defaults explicitly for this user
@@ -1520,7 +1666,7 @@ const Admin = () => {
                             togglePermission(
                               selectedRoleTab,
                               "userManagement",
-                              "viewUsers"
+                              "viewUsers",
                             )
                           }
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
@@ -1555,7 +1701,7 @@ const Admin = () => {
                             togglePermission(
                               selectedRoleTab,
                               "userManagement",
-                              "editUsers"
+                              "editUsers",
                             )
                           }
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
@@ -1590,7 +1736,7 @@ const Admin = () => {
                             togglePermission(
                               selectedRoleTab,
                               "userManagement",
-                              "inviteUsers"
+                              "inviteUsers",
                             )
                           }
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
@@ -1636,7 +1782,7 @@ const Admin = () => {
                             togglePermission(
                               selectedRoleTab,
                               "billingFinance",
-                              "viewInvoices"
+                              "viewInvoices",
                             )
                           }
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
@@ -1671,7 +1817,7 @@ const Admin = () => {
                             togglePermission(
                               selectedRoleTab,
                               "billingFinance",
-                              "manageSubscription"
+                              "manageSubscription",
                             )
                           }
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
@@ -1717,7 +1863,7 @@ const Admin = () => {
                             togglePermission(
                               selectedRoleTab,
                               "systemSettings",
-                              "globalConfiguration"
+                              "globalConfiguration",
                             )
                           }
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
@@ -1764,7 +1910,7 @@ const Admin = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="w-full min-h-screen bg-gray-50 px-1">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -1819,12 +1965,16 @@ const Admin = () => {
             onClick={async () => {
               const toastId = toast.loading("Starting backup...");
               try {
-                const response = await apiService.get('/api/admin/backup', { responseType: 'blob' });
-                const blob = new Blob([response.data], { type: 'application/json' });
+                const response = await apiService.get("/api/admin/backup", {
+                  responseType: "blob",
+                });
+                const blob = new Blob([response.data], {
+                  type: "application/json",
+                });
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
+                const a = document.createElement("a");
                 a.href = url;
-                a.download = `backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.download = `backup-${new Date().toISOString().slice(0, 10)}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
                 toast.success("Backup downloaded!", { id: toastId });
@@ -2010,8 +2160,8 @@ const Admin = () => {
                           service.status === "online"
                             ? "bg-green-500"
                             : service.status === "warning"
-                            ? "bg-yellow-500"
-                            : "bg-red-500"
+                              ? "bg-yellow-500"
+                              : "bg-red-500"
                         }`}
                       ></div>
                       <div>
@@ -2113,7 +2263,9 @@ const Admin = () => {
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
                 <i className="fa-solid fa-clipboard-check text-blue-600 text-xl"></i>
               </div>
-              <h3 className="text-lg font-bold text-[#111418] mb-2">Approval Flow</h3>
+              <h3 className="text-lg font-bold text-[#111418] mb-2">
+                Approval Flow
+              </h3>
               <p className="text-sm text-gray-600">
                 Manage your pending approvals and expense requests.
               </p>

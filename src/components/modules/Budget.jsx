@@ -28,7 +28,9 @@ const ProgressBar = ({ value, max, color }) => {
 // ─── Summary Card ─────────────────────────────────────────
 const SummaryCard = ({ icon, label, value, sub, color }) => (
   <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-start gap-4">
-    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
+    <div
+      className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${color}`}
+    >
       <i className={`fa-solid ${icon} text-white text-lg`}></i>
     </div>
     <div>
@@ -41,20 +43,76 @@ const SummaryCard = ({ icon, label, value, sub, color }) => (
 
 // ─── Icon / color options for new line modal ──────────────
 const ICON_OPTIONS = [
-  { icon: "fa-wallet",        label: "Wallet",       color: "text-blue-600",   bar: "bg-blue-500" },
-  { icon: "fa-people-group",  label: "People",       color: "text-indigo-600", bar: "bg-indigo-500" },
-  { icon: "fa-gears",         label: "Operations",   color: "text-emerald-600",bar: "bg-emerald-500" },
-  { icon: "fa-bullhorn",      label: "Marketing",    color: "text-purple-600", bar: "bg-purple-500" },
-  { icon: "fa-server",        label: "IT",           color: "text-cyan-600",   bar: "bg-cyan-500" },
-  { icon: "fa-plane",         label: "Travel",       color: "text-orange-600", bar: "bg-orange-500" },
-  { icon: "fa-cart-flatbed",  label: "Procurement",  color: "text-rose-600",   bar: "bg-rose-500" },
-  { icon: "fa-chart-bar",     label: "Reports",      color: "text-violet-600", bar: "bg-violet-500" },
-  { icon: "fa-building",      label: "Facilities",   color: "text-amber-600",  bar: "bg-amber-500" },
-  { icon: "fa-shield-halved", label: "Compliance",   color: "text-red-600",    bar: "bg-red-500" },
+  {
+    icon: "fa-wallet",
+    label: "Wallet",
+    color: "text-blue-600",
+    bar: "bg-blue-500",
+  },
+  {
+    icon: "fa-people-group",
+    label: "People",
+    color: "text-indigo-600",
+    bar: "bg-indigo-500",
+  },
+  {
+    icon: "fa-gears",
+    label: "Operations",
+    color: "text-emerald-600",
+    bar: "bg-emerald-500",
+  },
+  {
+    icon: "fa-bullhorn",
+    label: "Marketing",
+    color: "text-purple-600",
+    bar: "bg-purple-500",
+  },
+  {
+    icon: "fa-server",
+    label: "IT",
+    color: "text-cyan-600",
+    bar: "bg-cyan-500",
+  },
+  {
+    icon: "fa-plane",
+    label: "Travel",
+    color: "text-orange-600",
+    bar: "bg-orange-500",
+  },
+  {
+    icon: "fa-cart-flatbed",
+    label: "Procurement",
+    color: "text-rose-600",
+    bar: "bg-rose-500",
+  },
+  {
+    icon: "fa-chart-bar",
+    label: "Reports",
+    color: "text-violet-600",
+    bar: "bg-violet-500",
+  },
+  {
+    icon: "fa-building",
+    label: "Facilities",
+    color: "text-amber-600",
+    bar: "bg-amber-500",
+  },
+  {
+    icon: "fa-shield-halved",
+    label: "Compliance",
+    color: "text-red-600",
+    bar: "bg-red-500",
+  },
 ];
 
 // Periods are generated dynamically from a year
-const makePeriods = (year) => [`Q1 ${year}`, `Q2 ${year}`, `Q3 ${year}`, `Q4 ${year}`, `FY ${year}`];
+const makePeriods = (year) => [
+  `Q1 ${year}`,
+  `Q2 ${year}`,
+  `Q3 ${year}`,
+  `Q4 ${year}`,
+  `FY ${year}`,
+];
 
 const makeEmptyLine = (year) => ({
   name: "",
@@ -71,33 +129,37 @@ const Budget = ({ onBack, parentModule }) => {
 
   // data state
   const [categories, setCategories] = useState([]);
-  const [loading, setLoading]       = useState(true);
+  const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const periods = makePeriods(selectedYear);
-  const [activePeriod, setActivePeriod] = useState(`Q1 ${new Date().getFullYear()}`);
+  const [activePeriod, setActivePeriod] = useState(
+    `Q1 ${new Date().getFullYear()}`,
+  );
 
   // modals
-  const [showAddModal, setShowAddModal]       = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showExportMenu, setShowExportMenu]   = useState(false);
-  const [editTarget, setEditTarget]           = useState(null); // category being edited
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [editTarget, setEditTarget] = useState(null); // category being edited
 
   // new/edit form
-  const [newLine, setNewLine] = useState(() => makeEmptyLine(new Date().getFullYear()));
-  const [saving, setSaving]   = useState(false);
+  const [newLine, setNewLine] = useState(() =>
+    makeEmptyLine(new Date().getFullYear()),
+  );
+  const [saving, setSaving] = useState(false);
 
   // upload
-  const fileRef    = useRef(null);
-  const [uploadFile, setUploadFile]   = useState(null);
+  const fileRef = useRef(null);
+  const [uploadFile, setUploadFile] = useState(null);
   const [replaceMode, setReplaceMode] = useState(false);
-  const [uploading, setUploading]     = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   // ── Fetch ─────────────────────────────────────────────
   const fetchCategories = useCallback(async (period) => {
     setLoading(true);
     try {
       const res = await apiService.get(
-        `/api/budget/categories?period=${encodeURIComponent(period)}`
+        `/api/budget/categories?period=${encodeURIComponent(period)}`,
       );
       setCategories(res.data || []);
     } catch {
@@ -123,11 +185,12 @@ const Budget = ({ onBack, parentModule }) => {
 
   // ── Aggregates ────────────────────────────────────────
   const totalAllocated = categories.reduce((s, c) => s + (c.allocated || 0), 0);
-  const totalSpent     = categories.reduce((s, c) => s + (c.spent || 0), 0);
+  const totalSpent = categories.reduce((s, c) => s + (c.spent || 0), 0);
   const totalRemaining = totalAllocated - totalSpent;
-  const overallPct     = totalAllocated > 0
-    ? ((totalSpent / totalAllocated) * 100).toFixed(1)
-    : "0.0";
+  const overallPct =
+    totalAllocated > 0
+      ? ((totalSpent / totalAllocated) * 100).toFixed(1)
+      : "0.0";
 
   // ── Export ────────────────────────────────────────────
   const handleExport = async (format = "csv") => {
@@ -135,14 +198,14 @@ const Budget = ({ onBack, parentModule }) => {
     try {
       const res = await apiService.get(
         `/api/budget/export?period=${encodeURIComponent(activePeriod)}&format=${format}`,
-        { responseType: "blob" }
+        { responseType: "blob" },
       );
       const blob = new Blob([res.data], {
         type: format === "csv" ? "text/csv" : "application/json",
       });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href     = url;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
       a.download = `budget-${activePeriod}-${new Date().toISOString().slice(0, 10)}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
@@ -192,7 +255,10 @@ const Budget = ({ onBack, parentModule }) => {
     };
     try {
       if (editTarget) {
-        await apiService.put(`/api/budget/categories/${editTarget._id}`, payload);
+        await apiService.put(
+          `/api/budget/categories/${editTarget._id}`,
+          payload,
+        );
         toast.success("Budget line updated");
       } else {
         await apiService.post("/api/budget/categories", payload);
@@ -201,7 +267,9 @@ const Budget = ({ onBack, parentModule }) => {
       setShowAddModal(false);
       fetchCategories(activePeriod);
     } catch {
-      toast.error(editTarget ? "Failed to update" : "Failed to add budget line");
+      toast.error(
+        editTarget ? "Failed to update" : "Failed to add budget line",
+      );
     } finally {
       setSaving(false);
     }
@@ -241,7 +309,9 @@ const Budget = ({ onBack, parentModule }) => {
       } else {
         // Basic CSV parse: header row assumed same as our export
         const lines = text.trim().split("\n");
-        const headers = lines[0].split(",").map((h) => h.replace(/"/g, "").trim());
+        const headers = lines[0]
+          .split(",")
+          .map((h) => h.replace(/"/g, "").trim());
         categories = lines.slice(1).map((line) => {
           const vals = line.split(",").map((v) => v.replace(/"/g, "").trim());
           return headers.reduce((obj, h, i) => ({ ...obj, [h]: vals[i] }), {});
@@ -266,7 +336,7 @@ const Budget = ({ onBack, parentModule }) => {
 
   // ─────────────────────────────────────────────────────
   return (
-    <div className="bg-gray-50 min-h-screen flex flex-col">
+    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
@@ -280,7 +350,6 @@ const Budget = ({ onBack, parentModule }) => {
 
       <div className="flex-1 py-8">
         <div className="max-w-8xl mx-auto px-2 sm:px-6 lg:px-0">
-
           {/* ── Header ── */}
           <div className="mb-8">
             {/* Title row */}
@@ -290,7 +359,8 @@ const Budget = ({ onBack, parentModule }) => {
                   Budget Overview
                 </h1>
                 <p className="mt-1 text-sm text-gray-500">
-                  Track allocations, spending and financial health across departments.
+                  Track allocations, spending and financial health across
+                  departments.
                 </p>
               </div>
 
@@ -373,17 +443,26 @@ const Budget = ({ onBack, parentModule }) => {
                 {showExportMenu && (
                   <>
                     {/* Backdrop */}
-                    <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowExportMenu(false)}
+                    />
                     <div className="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden">
                       <button
-                        onClick={() => { handleExport("csv"); setShowExportMenu(false); }}
+                        onClick={() => {
+                          handleExport("csv");
+                          setShowExportMenu(false);
+                        }}
                         className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                       >
                         <i className="fa-solid fa-file-csv text-green-600"></i>
                         Export CSV
                       </button>
                       <button
-                        onClick={() => { handleExport("json"); setShowExportMenu(false); }}
+                        onClick={() => {
+                          handleExport("json");
+                          setShowExportMenu(false);
+                        }}
                         className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
                       >
                         <i className="fa-solid fa-code text-blue-600"></i>
@@ -398,10 +477,34 @@ const Budget = ({ onBack, parentModule }) => {
 
           {/* ── Summary cards ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-            <SummaryCard icon="fa-wallet"      label="Total Budget"   value={fmt(totalAllocated)} sub={activePeriod} color="bg-blue-600" />
-            <SummaryCard icon="fa-arrow-trend-up" label="Total Spent" value={fmt(totalSpent)}     sub={`${overallPct}% utilised`} color="bg-rose-500" />
-            <SummaryCard icon="fa-piggy-bank"  label="Remaining"      value={fmt(totalRemaining)} sub={totalRemaining < 0 ? "⚠ Over budget" : "Available"} color={totalRemaining < 0 ? "bg-amber-500" : "bg-emerald-500"} />
-            <SummaryCard icon="fa-layer-group" label="Budget Lines"   value={categories.length}   sub="Active categories" color="bg-purple-600" />
+            <SummaryCard
+              icon="fa-wallet"
+              label="Total Budget"
+              value={fmt(totalAllocated)}
+              sub={activePeriod}
+              color="bg-blue-600"
+            />
+            <SummaryCard
+              icon="fa-arrow-trend-up"
+              label="Total Spent"
+              value={fmt(totalSpent)}
+              sub={`${overallPct}% utilised`}
+              color="bg-rose-500"
+            />
+            <SummaryCard
+              icon="fa-piggy-bank"
+              label="Remaining"
+              value={fmt(totalRemaining)}
+              sub={totalRemaining < 0 ? "⚠ Over budget" : "Available"}
+              color={totalRemaining < 0 ? "bg-amber-500" : "bg-emerald-500"}
+            />
+            <SummaryCard
+              icon="fa-layer-group"
+              label="Budget Lines"
+              value={categories.length}
+              sub="Active categories"
+              color="bg-purple-600"
+            />
           </div>
 
           {/* ── Category table / empty state ── */}
@@ -413,13 +516,23 @@ const Budget = ({ onBack, parentModule }) => {
           ) : categories.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 text-center">
               <i className="fa-solid fa-wallet text-5xl text-gray-300 mb-4"></i>
-              <h3 className="text-lg font-semibold text-gray-700 mb-1">No budget lines for {activePeriod}</h3>
-              <p className="text-sm text-gray-400 mb-6">Add your first budget line or import from a JSON/CSV file.</p>
+              <h3 className="text-lg font-semibold text-gray-700 mb-1">
+                No budget lines for {activePeriod}
+              </h3>
+              <p className="text-sm text-gray-400 mb-6">
+                Add your first budget line or import from a JSON/CSV file.
+              </p>
               <div className="flex justify-center gap-3">
-                <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                <button
+                  onClick={openAdd}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                >
                   <i className="fa-solid fa-plus"></i> New Budget Line
                 </button>
-                <button onClick={() => setShowUploadModal(true)} className="flex items-center gap-2 px-4 py-2 border border-gray-200 bg-white text-gray-700 rounded-lg text-sm hover:bg-gray-50 transition-colors">
+                <button
+                  onClick={() => setShowUploadModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-200 bg-white text-gray-700 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                >
                   <i className="fa-solid fa-upload"></i> Import
                 </button>
               </div>
@@ -434,32 +547,56 @@ const Budget = ({ onBack, parentModule }) => {
                       <i className="fa-solid fa-chart-pie text-gray-400 mr-2"></i>
                       Budget by Category
                     </h3>
-                    <span className="text-xs text-gray-400">Allocated vs Spent</span>
+                    <span className="text-xs text-gray-400">
+                      Allocated vs Spent
+                    </span>
                   </div>
                   <div className="divide-y divide-gray-50">
                     {categories.map((cat) => {
-                      const pct  = cat.allocated > 0 ? ((cat.spent / cat.allocated) * 100).toFixed(0) : 0;
+                      const pct =
+                        cat.allocated > 0
+                          ? ((cat.spent / cat.allocated) * 100).toFixed(0)
+                          : 0;
                       const over = cat.spent > cat.allocated;
                       return (
-                        <div key={cat._id} className="px-6 py-4 hover:bg-gray-50/60 transition-colors group">
+                        <div
+                          key={cat._id}
+                          className="px-6 py-4 hover:bg-gray-50/60 transition-colors group"
+                        >
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-3">
-                              <i className={`fa-solid ${cat.icon || "fa-wallet"} ${cat.color || "text-blue-600"} w-5 text-center`}></i>
-                              <span className="text-sm font-medium text-gray-800">{cat.name}</span>
+                              <i
+                                className={`fa-solid ${cat.icon || "fa-wallet"} ${cat.color || "text-blue-600"} w-5 text-center`}
+                              ></i>
+                              <span className="text-sm font-medium text-gray-800">
+                                {cat.name}
+                              </span>
                             </div>
                             <div className="flex items-center gap-3">
                               <div className="text-right">
-                                <span className={`text-sm font-semibold ${over ? "text-rose-600" : "text-gray-900"}`}>
+                                <span
+                                  className={`text-sm font-semibold ${over ? "text-rose-600" : "text-gray-900"}`}
+                                >
                                   {fmt(cat.spent)}
                                 </span>
-                                <span className="text-xs text-gray-400 ml-1">/ {fmt(cat.allocated)}</span>
+                                <span className="text-xs text-gray-400 ml-1">
+                                  / {fmt(cat.allocated)}
+                                </span>
                               </div>
                               {/* Actions */}
                               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => openEdit(cat)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors" title="Edit">
+                                <button
+                                  onClick={() => openEdit(cat)}
+                                  className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                  title="Edit"
+                                >
                                   <i className="fa-solid fa-pen-to-square text-xs"></i>
                                 </button>
-                                <button onClick={() => handleDelete(cat)} className="p-1 text-gray-400 hover:text-rose-600 transition-colors" title="Delete">
+                                <button
+                                  onClick={() => handleDelete(cat)}
+                                  className="p-1 text-gray-400 hover:text-rose-600 transition-colors"
+                                  title="Delete"
+                                >
                                   <i className="fa-solid fa-trash text-xs"></i>
                                 </button>
                               </div>
@@ -467,14 +604,26 @@ const Budget = ({ onBack, parentModule }) => {
                           </div>
                           <div className="flex items-center gap-3">
                             <div className="flex-1">
-                              <ProgressBar value={cat.spent} max={cat.allocated} color={over ? "bg-rose-500" : (cat.bar || "bg-blue-500")} />
+                              <ProgressBar
+                                value={cat.spent}
+                                max={cat.allocated}
+                                color={
+                                  over
+                                    ? "bg-rose-500"
+                                    : cat.bar || "bg-blue-500"
+                                }
+                              />
                             </div>
-                            <span className={`text-xs font-medium w-12 text-right ${over ? "text-rose-600" : "text-gray-500"}`}>
+                            <span
+                              className={`text-xs font-medium w-12 text-right ${over ? "text-rose-600" : "text-gray-500"}`}
+                            >
                               {pct}%
                             </span>
                           </div>
                           {cat.description && (
-                            <p className="text-xs text-gray-400 mt-1.5">{cat.description}</p>
+                            <p className="text-xs text-gray-400 mt-1.5">
+                              {cat.description}
+                            </p>
                           )}
                         </div>
                       );
@@ -482,16 +631,29 @@ const Budget = ({ onBack, parentModule }) => {
                   </div>
                   {/* Overall */}
                   <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-gray-700">Overall</span>
+                    <span className="text-sm font-semibold text-gray-700">
+                      Overall
+                    </span>
                     <div className="flex items-center gap-6">
                       {[
-                        { label: "Spent",     val: fmt(totalSpent),     cls: "" },
-                        { label: "Budget",    val: fmt(totalAllocated), cls: "" },
-                        { label: "Remaining", val: fmt(totalRemaining), cls: totalRemaining < 0 ? "text-rose-600" : "text-emerald-600" },
+                        { label: "Spent", val: fmt(totalSpent), cls: "" },
+                        { label: "Budget", val: fmt(totalAllocated), cls: "" },
+                        {
+                          label: "Remaining",
+                          val: fmt(totalRemaining),
+                          cls:
+                            totalRemaining < 0
+                              ? "text-rose-600"
+                              : "text-emerald-600",
+                        },
                       ].map(({ label, val, cls }) => (
                         <div key={label} className="text-right">
                           <p className="text-xs text-gray-400">{label}</p>
-                          <p className={`text-sm font-bold text-gray-900 ${cls}`}>{val}</p>
+                          <p
+                            className={`text-sm font-bold text-gray-900 ${cls}`}
+                          >
+                            {val}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -502,13 +664,20 @@ const Budget = ({ onBack, parentModule }) => {
               {/* Utilisation sidebar */}
               <div className="space-y-4">
                 <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl p-5 text-white shadow-sm">
-                  <p className="text-sm font-medium text-blue-200 mb-3">Utilisation Rate</p>
+                  <p className="text-sm font-medium text-blue-200 mb-3">
+                    Utilisation Rate
+                  </p>
                   <div className="flex items-end gap-2 mb-4">
                     <span className="text-4xl font-bold">{overallPct}%</span>
-                    <span className="text-blue-300 text-sm mb-1">of {activePeriod} used</span>
+                    <span className="text-blue-300 text-sm mb-1">
+                      of {activePeriod} used
+                    </span>
                   </div>
                   <div className="w-full bg-blue-500/40 rounded-full h-2.5 mb-4">
-                    <div className="h-2.5 rounded-full bg-white transition-all duration-700" style={{ width: `${overallPct}%` }} />
+                    <div
+                      className="h-2.5 rounded-full bg-white transition-all duration-700"
+                      style={{ width: `${overallPct}%` }}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-center text-sm">
                     <div className="bg-white/10 rounded-lg py-2">
@@ -525,19 +694,30 @@ const Budget = ({ onBack, parentModule }) => {
                 {/* Category mini list */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="px-5 py-3 border-b border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-800">Top Spend</h3>
+                    <h3 className="text-sm font-semibold text-gray-800">
+                      Top Spend
+                    </h3>
                   </div>
                   <ul className="divide-y divide-gray-50">
                     {[...categories]
                       .sort((a, b) => (b.spent || 0) - (a.spent || 0))
                       .slice(0, 5)
                       .map((cat) => (
-                        <li key={cat._id} className="px-5 py-3 flex items-center justify-between">
+                        <li
+                          key={cat._id}
+                          className="px-5 py-3 flex items-center justify-between"
+                        >
                           <div className="flex items-center gap-2">
-                            <i className={`fa-solid ${cat.icon || "fa-wallet"} ${cat.color || "text-blue-600"} text-xs w-4`}></i>
-                            <span className="text-sm text-gray-700 truncate max-w-[120px]">{cat.name}</span>
+                            <i
+                              className={`fa-solid ${cat.icon || "fa-wallet"} ${cat.color || "text-blue-600"} text-xs w-4`}
+                            ></i>
+                            <span className="text-sm text-gray-700 truncate max-w-[120px]">
+                              {cat.name}
+                            </span>
                           </div>
-                          <span className="text-sm font-medium text-gray-900">{fmt(cat.spent)}</span>
+                          <span className="text-sm font-medium text-gray-900">
+                            {fmt(cat.spent)}
+                          </span>
                         </li>
                       ))}
                   </ul>
@@ -558,15 +738,23 @@ const Budget = ({ onBack, parentModule }) => {
                   {editTarget ? "Edit Budget Line" : "New Budget Line"}
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {editTarget ? "Update category details" : "Add a new budget category"}
+                  {editTarget
+                    ? "Update category details"
+                    : "Add a new budget category"}
                 </p>
               </div>
-              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+              >
                 <i className="fa-solid fa-xmark text-xl"></i>
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="overflow-y-auto flex-1 p-5 sm:p-6 space-y-4">
+            <form
+              onSubmit={handleSave}
+              className="overflow-y-auto flex-1 p-5 sm:p-6 space-y-4"
+            >
               {/* Name + Period row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -576,20 +764,28 @@ const Budget = ({ onBack, parentModule }) => {
                   <input
                     type="text"
                     value={newLine.name}
-                    onChange={(e) => setNewLine({ ...newLine, name: e.target.value })}
+                    onChange={(e) =>
+                      setNewLine({ ...newLine, name: e.target.value })
+                    }
                     placeholder="e.g. R&D, Legal"
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-sm"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Period
+                  </label>
                   <select
                     value={newLine.period}
-                    onChange={(e) => setNewLine({ ...newLine, period: e.target.value })}
+                    onChange={(e) =>
+                      setNewLine({ ...newLine, period: e.target.value })
+                    }
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-sm"
                   >
-                    {periods.map((p) => <option key={p}>{p}</option>)}
+                    {periods.map((p) => (
+                      <option key={p}>{p}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -601,12 +797,16 @@ const Budget = ({ onBack, parentModule }) => {
                     Allocated ($) <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                      $
+                    </span>
                     <input
                       type="number"
                       min="0"
                       value={newLine.allocated}
-                      onChange={(e) => setNewLine({ ...newLine, allocated: e.target.value })}
+                      onChange={(e) =>
+                        setNewLine({ ...newLine, allocated: e.target.value })
+                      }
                       placeholder="50000"
                       className="w-full pl-7 pr-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-sm"
                       required
@@ -614,14 +814,20 @@ const Budget = ({ onBack, parentModule }) => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Spent so far ($)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Spent so far ($)
+                  </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                      $
+                    </span>
                     <input
                       type="number"
                       min="0"
                       value={newLine.spent}
-                      onChange={(e) => setNewLine({ ...newLine, spent: e.target.value })}
+                      onChange={(e) =>
+                        setNewLine({ ...newLine, spent: e.target.value })
+                      }
                       placeholder="0"
                       className="w-full pl-7 pr-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-sm"
                     />
@@ -631,7 +837,9 @@ const Budget = ({ onBack, parentModule }) => {
 
               {/* Icon picker */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category Icon</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Category Icon
+                </label>
                 <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
                   {ICON_OPTIONS.map((opt, idx) => (
                     <button
@@ -645,7 +853,9 @@ const Budget = ({ onBack, parentModule }) => {
                       }`}
                     >
                       <i className={`fa-solid ${opt.icon} ${opt.color}`}></i>
-                      <span className="text-gray-500 text-[10px] truncate w-full text-center">{opt.label}</span>
+                      <span className="text-gray-500 text-[10px] truncate w-full text-center">
+                        {opt.label}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -653,10 +863,14 @@ const Budget = ({ onBack, parentModule }) => {
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description (optional)
+                </label>
                 <textarea
                   value={newLine.description}
-                  onChange={(e) => setNewLine({ ...newLine, description: e.target.value })}
+                  onChange={(e) =>
+                    setNewLine({ ...newLine, description: e.target.value })
+                  }
                   placeholder="Brief note about this budget category…"
                   rows={2}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-sm resize-none"
@@ -666,21 +880,36 @@ const Budget = ({ onBack, parentModule }) => {
               {/* Preview */}
               {newLine.name && (
                 <div className="bg-gray-50 rounded-lg px-4 py-3 flex items-center gap-3 border border-gray-100">
-                  <i className={`fa-solid ${ICON_OPTIONS[newLine.iconIdx]?.icon} ${ICON_OPTIONS[newLine.iconIdx]?.color} text-lg`}></i>
+                  <i
+                    className={`fa-solid ${ICON_OPTIONS[newLine.iconIdx]?.icon} ${ICON_OPTIONS[newLine.iconIdx]?.color} text-lg`}
+                  ></i>
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">{newLine.name}</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {newLine.name}
+                    </p>
                     <p className="text-xs text-gray-400">
-                      {newLine.allocated ? `$${Number(newLine.allocated).toLocaleString()} allocated` : "Enter amount above"} · {newLine.period}
+                      {newLine.allocated
+                        ? `$${Number(newLine.allocated).toLocaleString()} allocated`
+                        : "Enter amount above"}{" "}
+                      · {newLine.period}
                     </p>
                   </div>
                 </div>
               )}
 
               <div className="flex justify-end gap-3 pt-2 pb-1">
-                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 sm:flex-none px-4 py-2.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 sm:flex-none px-4 py-2.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
                   Cancel
                 </button>
-                <button type="submit" disabled={saving} className="flex-1 sm:flex-none px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 sm:flex-none px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
                   {saving && <i className="fa-solid fa-spinner fa-spin"></i>}
                   {editTarget ? "Save Changes" : "Add Line"}
                 </button>
@@ -696,10 +925,20 @@ const Budget = ({ onBack, parentModule }) => {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-emerald-50 to-teal-50 flex justify-between items-center">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Import Budget Data</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Upload a JSON or CSV file</p>
+                <h3 className="text-lg font-bold text-gray-900">
+                  Import Budget Data
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Upload a JSON or CSV file
+                </p>
               </div>
-              <button onClick={() => { setShowUploadModal(false); setUploadFile(null); }} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <button
+                onClick={() => {
+                  setShowUploadModal(false);
+                  setUploadFile(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
                 <i className="fa-solid fa-xmark text-xl"></i>
               </button>
             </div>
@@ -713,19 +952,31 @@ const Budget = ({ onBack, parentModule }) => {
                 <p className="text-sm font-medium text-gray-700">
                   {uploadFile ? uploadFile.name : "Click to select a file"}
                 </p>
-                <p className="text-xs text-gray-400 mt-1">Supports JSON (array of categories) or CSV (exported format)</p>
-                <input ref={fileRef} type="file" accept=".json,.csv" className="hidden" onChange={handleFileChange} />
+                <p className="text-xs text-gray-400 mt-1">
+                  Supports JSON (array of categories) or CSV (exported format)
+                </p>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".json,.csv"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
               </div>
 
               {/* Period override */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Import into Period</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Import into Period
+                </label>
                 <select
                   value={activePeriod}
                   onChange={(e) => setActivePeriod(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 >
-                  {periods.map((p) => <option key={p}>{p}</option>)}
+                  {periods.map((p) => (
+                    <option key={p}>{p}</option>
+                  ))}
                 </select>
               </div>
 
@@ -738,8 +989,13 @@ const Budget = ({ onBack, parentModule }) => {
                   className="w-4 h-4 rounded text-blue-600"
                 />
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Replace existing data for this period</p>
-                  <p className="text-xs text-gray-400">If unchecked, imported lines will be added alongside existing ones</p>
+                  <p className="text-sm font-medium text-gray-700">
+                    Replace existing data for this period
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    If unchecked, imported lines will be added alongside
+                    existing ones
+                  </p>
                 </div>
               </label>
 
@@ -747,15 +1003,26 @@ const Budget = ({ onBack, parentModule }) => {
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-700 flex gap-2">
                 <i className="fa-solid fa-circle-info mt-0.5 shrink-0"></i>
                 <span>
-                  Download a template by clicking <strong>Export JSON</strong> from the main page, then modify and re-import.
+                  Download a template by clicking <strong>Export JSON</strong>{" "}
+                  from the main page, then modify and re-import.
                 </span>
               </div>
 
               <div className="flex justify-end gap-3">
-                <button onClick={() => { setShowUploadModal(false); setUploadFile(null); }} className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                <button
+                  onClick={() => {
+                    setShowUploadModal(false);
+                    setUploadFile(null);
+                  }}
+                  className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
                   Cancel
                 </button>
-                <button onClick={handleImport} disabled={!uploadFile || uploading} className="px-5 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center gap-2">
+                <button
+                  onClick={handleImport}
+                  disabled={!uploadFile || uploading}
+                  className="px-5 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center gap-2"
+                >
                   {uploading && <i className="fa-solid fa-spinner fa-spin"></i>}
                   Import
                 </button>

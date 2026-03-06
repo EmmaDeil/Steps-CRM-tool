@@ -81,7 +81,7 @@ const EmployeeProfile = ({
 
       try {
         const response = await apiService.get(
-          `/api/hr/employees/${employee._id}/activity`
+          `/api/hr/employees/${employee._id}/activity`,
         );
         if (response && response.data) {
           setActivityLog(response.data);
@@ -182,7 +182,7 @@ const EmployeeProfile = ({
       formData.append("address", editingEmployee.address || "");
       formData.append(
         "emergencyContact",
-        JSON.stringify(editingEmployee.emergencyContact || {})
+        JSON.stringify(editingEmployee.emergencyContact || {}),
       );
       formData.append("updatedBy", currentUser?._id || "unknown");
 
@@ -206,7 +206,7 @@ const EmployeeProfile = ({
           headers: {
             "Content-Type": "multipart/form-data",
           },
-        }
+        },
       );
 
       if (response) {
@@ -237,7 +237,7 @@ const EmployeeProfile = ({
           icon: "❌",
           duration: 4000,
           className: "animate-error",
-        }
+        },
       );
     } finally {
       setSaving(false);
@@ -256,7 +256,7 @@ const EmployeeProfile = ({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-6">
+    <div className="w-full min-h-screen bg-gray-50 px-1">
       {employee ? (
         <div>
           {/* Breadcrumbs */}
@@ -516,7 +516,7 @@ const EmployeeProfile = ({
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                           {employee?.dateOfBirth
                             ? new Date(
-                                employee.dateOfBirth
+                                employee.dateOfBirth,
                               ).toLocaleDateString()
                             : "Not provided"}
                         </p>
@@ -799,7 +799,7 @@ const EmployeeProfile = ({
                       <span className="text-gray-900 dark:text-gray-200 font-semibold">
                         {employee?.lastReviewDate
                           ? new Date(
-                              employee.lastReviewDate
+                              employee.lastReviewDate,
                             ).toLocaleDateString()
                           : "Not recorded"}
                       </span>
@@ -926,8 +926,8 @@ const EmployeeProfile = ({
                               {doc.updatedAt
                                 ? new Date(doc.updatedAt).toLocaleDateString()
                                 : doc.createdAt
-                                ? new Date(doc.createdAt).toLocaleDateString()
-                                : "Unknown date"}
+                                  ? new Date(doc.createdAt).toLocaleDateString()
+                                  : "Unknown date"}
                             </span>
                             {doc.url && (
                               <a
@@ -1116,7 +1116,7 @@ const EmployeeProfile = ({
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                           {employee?.dateOfBirth
                             ? new Date(
-                                employee.dateOfBirth
+                                employee.dateOfBirth,
                               ).toLocaleDateString()
                             : "Not provided"}
                         </p>
@@ -1398,7 +1398,7 @@ const EmployeeProfile = ({
                           <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                             {employee?.startDate
                               ? new Date(
-                                  employee.startDate
+                                  employee.startDate,
                                 ).toLocaleDateString()
                               : "Not set"}
                           </p>

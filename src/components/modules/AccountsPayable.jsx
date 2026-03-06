@@ -54,7 +54,7 @@ const AccountsPayable = ({ onBack }) => {
     setSelectedInvoices((prev) =>
       prev.includes(invoiceId)
         ? prev.filter((id) => id !== invoiceId)
-        : [...prev, invoiceId]
+        : [...prev, invoiceId],
     );
   };
 
@@ -68,11 +68,11 @@ const AccountsPayable = ({ onBack }) => {
         "/api/finance/accounts-payable/pay",
         {
           invoiceIds: selectedInvoices,
-        }
+        },
       );
       if (response.success) {
         toast.success(
-          `${selectedInvoices.length} invoice(s) paid successfully`
+          `${selectedInvoices.length} invoice(s) paid successfully`,
         );
         setSelectedInvoices([]);
         fetchInvoices();
@@ -130,7 +130,7 @@ const AccountsPayable = ({ onBack }) => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
       {/* Breadcrumbs */}
       <Breadcrumb
         items={[
@@ -391,7 +391,7 @@ const AccountsPayable = ({ onBack }) => {
                         <td className="py-3 px-4 text-center">
                           <span
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(
-                              invoice.status
+                              invoice.status,
                             )}`}
                           >
                             {invoice.status}

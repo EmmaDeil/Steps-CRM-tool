@@ -99,7 +99,7 @@ const Approval = () => {
               name: emp.fullName || emp.name,
               email: emp.email,
               role: emp.role || emp.department || "Employee",
-            }))
+            })),
           );
         }
       } catch (error) {
@@ -115,7 +115,7 @@ const Approval = () => {
     const fetchLeaveAllocation = async () => {
       try {
         const response = await apiService.get(
-          `/api/hr/leave-allocations?employeeId=${currentEmployeeId}&year=${new Date().getFullYear()}`
+          `/api/hr/leave-allocations?employeeId=${currentEmployeeId}&year=${new Date().getFullYear()}`,
         );
         if (response && Array.isArray(response) && response.length > 0) {
           setLeaveAllocation(response[0]);
@@ -248,7 +248,7 @@ const Approval = () => {
       setAdvanceRequests(Array.isArray(advanceRes) ? advanceRes : []);
       setRefundRequests(Array.isArray(refundRes) ? refundRes : []);
       setRetirementBreakdowns(
-        Array.isArray(retirementRes) ? retirementRes : []
+        Array.isArray(retirementRes) ? retirementRes : [],
       );
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -298,7 +298,7 @@ const Approval = () => {
       // Save to database
       const response = await apiService.post(
         "/api/advance-requests",
-        newRequest
+        newRequest,
       );
 
       if (!response) {
@@ -384,7 +384,7 @@ const Approval = () => {
       // Save to database
       const response = await apiService.post(
         "/api/refund-requests",
-        newRequest
+        newRequest,
       );
 
       if (!response) {
@@ -460,7 +460,7 @@ const Approval = () => {
       // Save to database
       const response = await apiService.post(
         "/api/approval/leave-requests",
-        newRequest
+        newRequest,
       );
 
       if (!response) {
@@ -531,7 +531,7 @@ const Approval = () => {
 
     if (!travelFormData.managerId || !travelFormData.managerEmail) {
       toast.error(
-        "Manager information is required. Please contact HR to assign a manager."
+        "Manager information is required. Please contact HR to assign a manager.",
       );
       return;
     }
@@ -569,7 +569,7 @@ const Approval = () => {
       // Save to database
       const response = await apiService.post(
         "/api/approval/travel-requests",
-        newRequest
+        newRequest,
       );
 
       if (!response) {
@@ -632,7 +632,7 @@ const Approval = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 w-full">
+    <div className="w-full min-h-screen bg-gray-50 px-1">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -882,7 +882,7 @@ const Approval = () => {
                       [...advanceRequests, ...refundRequests]
                         .sort(
                           (a, b) =>
-                            new Date(b.requestDate) - new Date(a.requestDate)
+                            new Date(b.requestDate) - new Date(a.requestDate),
                         )
                         .map((record, idx) => (
                           <tr
@@ -925,8 +925,8 @@ const Approval = () => {
                                   record.status === "approved"
                                     ? "bg-green-100 text-green-800"
                                     : record.status === "rejected"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-yellow-100 text-yellow-800"
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-yellow-100 text-yellow-800"
                                 }`}
                               >
                                 {record.status.charAt(0).toUpperCase() +
@@ -1075,7 +1075,7 @@ const Approval = () => {
                         const matches = staffList.filter((staff) =>
                           staff.name
                             .toLowerCase()
-                            .includes(e.target.value.toLowerCase())
+                            .includes(e.target.value.toLowerCase()),
                         );
                         setApproverSuggestions(matches);
                         setShowSuggestions(true);
@@ -1293,7 +1293,7 @@ const Approval = () => {
                         const matches = staffList.filter((staff) =>
                           staff.name
                             .toLowerCase()
-                            .includes(e.target.value.toLowerCase())
+                            .includes(e.target.value.toLowerCase()),
                         );
                         setApproverSuggestions(matches);
                         setShowSuggestions(true);
@@ -1447,7 +1447,7 @@ const Approval = () => {
                           const monthlyArray = Object.values(monthlyData).sort(
                             (a, b) => {
                               return b.monthYear.localeCompare(a.monthYear);
-                            }
+                            },
                           );
 
                           return monthlyArray.map((monthData, idx) => {
@@ -1458,7 +1458,7 @@ const Approval = () => {
                               ? new Date(
                                   year,
                                   parseInt(month) - 1,
-                                  1
+                                  1,
                                 ).toLocaleString("en-US", {
                                   month: "long",
                                   year: "numeric",
@@ -1481,7 +1481,7 @@ const Approval = () => {
                                 </td>
                                 <td className="px-6 py-4 text-sm font-semibold text-gray-600">
                                   {formatCurrency(
-                                    monthData.previousClosingBalance || 0
+                                    monthData.previousClosingBalance || 0,
                                   )}
                                 </td>
                                 <td className="px-6 py-4 text-sm font-semibold text-green-600">
@@ -1550,7 +1550,7 @@ const Approval = () => {
                     const monthlyArray = Object.values(monthlyData).sort(
                       (a, b) => {
                         return b.monthYear.localeCompare(a.monthYear);
-                      }
+                      },
                     );
 
                     const headers = [
@@ -1565,7 +1565,7 @@ const Approval = () => {
 
                     const rows = monthlyArray.map((monthData) => {
                       const [year, month] = (monthData.monthYear || "").split(
-                        "-"
+                        "-",
                       );
                       const monthName = month
                         ? new Date(year, parseInt(month) - 1, 1).toLocaleString(
@@ -1573,7 +1573,7 @@ const Approval = () => {
                             {
                               month: "long",
                               year: "numeric",
-                            }
+                            },
                           )
                         : monthData.monthYear;
 
@@ -1605,7 +1605,7 @@ const Approval = () => {
                       "download",
                       `retirement_history_${
                         new Date().toISOString().split("T")[0]
-                      }.csv`
+                      }.csv`,
                     );
                     link.style.visibility = "hidden";
                     document.body.appendChild(link);
@@ -1644,13 +1644,13 @@ const Approval = () => {
                       <h2 className="text-2xl font-bold text-[#111418]">
                         {(() => {
                           const [year, month] = (selectedMonthYear || "").split(
-                            "-"
+                            "-",
                           );
                           const monthName = month
                             ? new Date(
                                 year,
                                 parseInt(month) - 1,
-                                1
+                                1,
                               ).toLocaleString("en-US", {
                                 month: "long",
                                 year: "numeric",
@@ -1667,7 +1667,8 @@ const Approval = () => {
                   <button
                     onClick={() => {
                       const monthBreakdowns = retirementBreakdowns.filter(
-                        (breakdown) => breakdown.monthYear === selectedMonthYear
+                        (breakdown) =>
+                          breakdown.monthYear === selectedMonthYear,
                       );
 
                       const openingBalance =
@@ -1677,12 +1678,12 @@ const Approval = () => {
                           ?.newOpeningBalance || 0;
                       const totalInflow = monthBreakdowns.reduce(
                         (sum, breakdown) => sum + (breakdown.inflowAmount || 0),
-                        0
+                        0,
                       );
                       const totalExpenses = monthBreakdowns.reduce(
                         (sum, breakdown) =>
                           sum + (breakdown.totalExpenses || 0),
-                        0
+                        0,
                       );
 
                       const allLineItems = [];
@@ -1696,12 +1697,12 @@ const Approval = () => {
                       });
 
                       const [year, month] = (selectedMonthYear || "").split(
-                        "-"
+                        "-",
                       );
                       const monthName = month
                         ? new Date(year, parseInt(month) - 1, 1).toLocaleString(
                             "en-US",
-                            { month: "long", year: "numeric" }
+                            { month: "long", year: "numeric" },
                           )
                         : selectedMonthYear;
 
@@ -1745,7 +1746,7 @@ const Approval = () => {
                         "download",
                         `retirement_${monthName.replace(/ /g, "_")}_${
                           new Date().toISOString().split("T")[0]
-                        }.csv`
+                        }.csv`,
                       );
                       link.style.visibility = "hidden";
                       document.body.appendChild(link);
@@ -1765,7 +1766,7 @@ const Approval = () => {
               <div className="flex-1 overflow-y-auto px-8 py-6">
                 {(() => {
                   const monthBreakdowns = retirementBreakdowns.filter(
-                    (breakdown) => breakdown.monthYear === selectedMonthYear
+                    (breakdown) => breakdown.monthYear === selectedMonthYear,
                   );
 
                   if (monthBreakdowns.length === 0) {
@@ -1789,11 +1790,11 @@ const Approval = () => {
                       ?.newOpeningBalance || 0;
                   const totalInflow = monthBreakdowns.reduce(
                     (sum, breakdown) => sum + (breakdown.inflowAmount || 0),
-                    0
+                    0,
                   );
                   const totalExpenses = monthBreakdowns.reduce(
                     (sum, breakdown) => sum + (breakdown.totalExpenses || 0),
-                    0
+                    0,
                   );
 
                   // Combine all line items from all submissions
@@ -2145,8 +2146,8 @@ const Approval = () => {
                               leave.status === "approved"
                                 ? "bg-emerald-100 text-emerald-700"
                                 : leave.status === "rejected"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-amber-100 text-amber-700"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-amber-100 text-amber-700"
                             }`}
                           >
                             {leave.status || "pending"}
@@ -2462,8 +2463,8 @@ const Approval = () => {
                               travel.status === "approved"
                                 ? "bg-emerald-100 text-emerald-700"
                                 : travel.status === "rejected"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-amber-100 text-amber-700"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-amber-100 text-amber-700"
                             }`}
                           >
                             {travel.status || "pending"}

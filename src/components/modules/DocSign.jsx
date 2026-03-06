@@ -40,7 +40,7 @@ const DocSign = () => {
       if (Array.isArray(response)) {
         // Filter pending documents (documents needing user action)
         const pending = response.filter(
-          (doc) => doc.status === "Action Required" || doc.status === "Pending"
+          (doc) => doc.status === "Action Required" || doc.status === "Pending",
         );
 
         // Transform to match UI expectations
@@ -59,7 +59,7 @@ const DocSign = () => {
 
         // Templates are completed documents
         const completedDocs = response.filter(
-          (doc) => doc.status === "Completed"
+          (doc) => doc.status === "Completed",
         );
         const transformedTemplates = completedDocs.slice(0, 10).map((doc) => ({
           id: doc._id,
@@ -123,7 +123,7 @@ const DocSign = () => {
     const dueDate = new Date(
       date.getFullYear(),
       date.getMonth(),
-      date.getDate()
+      date.getDate(),
     );
 
     const diffTime = dueDate - today;
@@ -238,7 +238,7 @@ const DocSign = () => {
   }
 
   return (
-    <div className="w-full min-h-screen bg-[#f6f7f8] flex flex-col">
+    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -247,12 +247,12 @@ const DocSign = () => {
       />
 
       {/* Page Header */}
-      <header className="w-full bg-white border-b border-[#e5e7eb] py-3 shadow-sm px-4">
-        <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1">
+      <header className="w-full bg-white border-b border-[#e5e7eb] py-3 shadow-sm">
+        <div className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 px-2">
           <div>
             <h2 className="text-2xl font-bold text-[#111418]"></h2>
             <p className="text-sm text-[#617589] mt-1">
-              Manage your pending actions and template library.
+              {/* Manage your pending actions and template library. */}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -275,8 +275,8 @@ const DocSign = () => {
       </header>
 
       {/* Main Content */}
-      <main className="w-full flex-1 overflow-y-auto px-4 py-0 scroll-smooth">
-        <div className="max-w-[1400px] mx-auto space-y-10">
+      <main className="w-full flex-1 overflow-y-auto py-0 scroll-smooth">
+        <div className="w-full space-y-10 px-3 py-6">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#137fec]"></div>
@@ -298,7 +298,7 @@ const DocSign = () => {
           ) : (
             <>
               {/* Pending Requests Section */}
-              <section className="w-full space-y-4 p-2">
+              <section className="w-full space-y-4">
                 <div className="flex items-center gap-2 mb-2 mt-2">
                   <i className="fa-solid fa-clock text-orange-500 text-[20px]"></i>
                   <h3 className="text-lg font-bold text-[#111418]">
@@ -383,7 +383,7 @@ const DocSign = () => {
               <div className="w-full h-px bg-gray-200"></div>
 
               {/* Saved Templates Section */}
-              <section className="w-full space-y-6 p-2">
+              <section className="w-full space-y-6">
                 <div className="flex items-center gap-2">
                   <i className="fa-solid fa-folder-open text-[#137fec] text-[20px]"></i>
                   <h3 className="text-lg font-bold text-[#111418]">
@@ -466,7 +466,6 @@ const DocSign = () => {
                         <option>Sort: Name (A-Z)</option>
                         <option>Sort: Date Created</option>
                       </select>
-                      <i className="fa-solid fa-sort absolute right-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-[16px]"></i>
                     </div>
                   </div>
                 </div>
