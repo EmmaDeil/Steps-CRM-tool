@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "../Navbar";
 import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
@@ -15,9 +14,10 @@ const DocSignRequest = ({ onBack }) => {
   const [fileURL, setFileURL] = useState(null);
   const [fileName, setFileName] = useState("No document selected");
   const [uploading, setUploading] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages] = useState(5); // Total pages in PDF (can be updated after PDF loads)
-  const [zoom, setZoom] = useState(100);
+
+  // Constants for PDF viewing (no navigation controls)
+  const currentPage = 1;
+  const zoom = 100;
 
   // Form state
   const [recipients, setRecipients] = useState([
@@ -28,7 +28,7 @@ const DocSignRequest = ({ onBack }) => {
   const [message, setMessage] = useState("");
   const [reminderFrequency, setReminderFrequency] = useState("no");
   const [expirationDate, setExpirationDate] = useState("");
-  const [customBranding, setCustomBranding] = useState(false);
+  const [customBranding, setCustomBranding] = useState(true);
   const [sending, setSending] = useState(false);
 
   // Drag and drop state for fields
@@ -37,9 +37,14 @@ const DocSignRequest = ({ onBack }) => {
   const [selectedFieldId, setSelectedFieldId] = useState(null);
   const [draggedPlacedFieldId, setDraggedPlacedFieldId] = useState(null);
 
+  // Employee search autocomplete state
+  const [employeeSearchResults, setEmployeeSearchResults] = useState({});
+  const [activeDropdown, setActiveDropdown] = useState(null);
+
   // Search for employee by name with debouncing
   const searchEmployee = useCallback(async (recipientId, searchName) => {
     if (!searchName || searchName.length < 2) {
+      setEmployeeSearchResults((prev) => ({ ...prev, [recipientId]: [] }));
       return;
     }
 
@@ -47,23 +52,40 @@ const DocSignRequest = ({ onBack }) => {
       const response = await apiService.hr.getEmployees({ search: searchName });
       const employees = response.data || [];
 
-      // Find exact or close match
-      const matchedEmployee = employees.find((emp) =>
-        emp.name?.toLowerCase().includes(searchName.toLowerCase())
-      );
+      // Store search results for dropdown
+      const matchingEmployees = employees
+        .filter((emp) =>
+          emp.name?.toLowerCase().includes(searchName.toLowerCase()),
+        )
+        .slice(0, 5); // Limit to 5 results
 
-      if (matchedEmployee && matchedEmployee.email) {
-        // Auto-populate email
-        setRecipients((recipients) =>
-          recipients.map((r) =>
-            r.id === recipientId ? { ...r, email: matchedEmployee.email } : r
-          )
-        );
-      }
+      setEmployeeSearchResults((prev) => ({
+        ...prev,
+        [recipientId]: matchingEmployees,
+      }));
     } catch (error) {
       console.error("Error searching employees:", error);
+      setEmployeeSearchResults((prev) => ({ ...prev, [recipientId]: [] }));
     }
   }, []);
+
+  // Select employee from dropdown
+  const selectEmployee = (recipientId, employee) => {
+    setRecipients((recipients) =>
+      recipients.map((r) =>
+        r.id === recipientId
+          ? {
+              ...r,
+              name: employee.name || "",
+              email: employee.email || "",
+            }
+          : r,
+      ),
+    );
+    setEmployeeSearchResults((prev) => ({ ...prev, [recipientId]: [] }));
+    setActiveDropdown(null);
+    toast.success(`Selected ${employee.name}`);
+  };
 
   // Debounce employee search
   useEffect(() => {
@@ -103,7 +125,7 @@ const DocSignRequest = ({ onBack }) => {
 
   const updateRecipient = (id, field, value) => {
     setRecipients(
-      recipients.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+      recipients.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
     );
   };
 
@@ -266,16 +288,6 @@ const DocSignRequest = ({ onBack }) => {
     }
   };
 
-  // Zoom controls
-  const handleZoomIn = () => setZoom((prev) => Math.min(prev + 10, 200));
-  const handleZoomOut = () => setZoom((prev) => Math.max(prev - 10, 50));
-
-  // Page navigation
-  const handleNextPage = () =>
-    setCurrentPage((prev) => Math.min(prev + 1, totalPages));
-  const handlePrevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
-  const handleFirstPage = () => setCurrentPage(1);
-
   // Drag and drop handlers
   const handleDragStart = (e, fieldType) => {
     setDraggedField(fieldType);
@@ -350,8 +362,8 @@ const DocSignRequest = ({ onBack }) => {
               assignedName: recipient.name || `Signer ${recipient.order}`,
               color: recipient.color,
             }
-          : field
-      )
+          : field,
+      ),
     );
     toast.success("Field reassigned");
   };
@@ -359,8 +371,8 @@ const DocSignRequest = ({ onBack }) => {
   const handleFieldRequiredToggle = (fieldId) => {
     setPlacedFields(
       placedFields.map((field) =>
-        field.id === fieldId ? { ...field, required: !field.required } : field
-      )
+        field.id === fieldId ? { ...field, required: !field.required } : field,
+      ),
     );
   };
 
@@ -394,8 +406,8 @@ const DocSignRequest = ({ onBack }) => {
               position: { x: xPercent, y: yPercent },
               page: currentPage,
             }
-          : field
-      )
+          : field,
+      ),
     );
 
     setDraggedPlacedFieldId(null);
@@ -403,7 +415,6 @@ const DocSignRequest = ({ onBack }) => {
 
   return (
     <div className="w-full p-3 min-h-screen bg-white flex flex-col">
-      <Navbar />
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -485,6 +496,7 @@ const DocSignRequest = ({ onBack }) => {
                     ? "bg-white text-[#137fec] shadow-sm"
                     : "text-gray-500 hover:text-gray-700"
                 }`}
+                title="Recipients sign one after another in order"
               >
                 <i className="fa-solid fa-list-ol text-xs"></i>
                 Sequential
@@ -496,11 +508,17 @@ const DocSignRequest = ({ onBack }) => {
                     ? "bg-white text-[#137fec] shadow-sm"
                     : "text-gray-500 hover:text-gray-700"
                 }`}
+                title="All recipients can sign at the same time"
               >
                 <i className="fa-solid fa-layer-group text-xs"></i>
                 Parallel
               </button>
             </div>
+            <p className="text-xs text-[#617589] mb-4 -mt-2">
+              {signingMode === "sequential"
+                ? "📋 Signers must sign in the order listed"
+                : "⚡ All signers can sign simultaneously"}
+            </p>
 
             {/* Recipients List */}
             <div className="space-y-4">
@@ -513,7 +531,7 @@ const DocSignRequest = ({ onBack }) => {
                 >
                   <div
                     className={`absolute -left-6 top-2 bottom-2 w-1 ${getColorClasses(
-                      recipient.color
+                      recipient.color,
                     ).bg.replace("bg-", "bg-")} ${
                       getColorClasses(recipient.color).border
                     } border-l-4 rounded-r`}
@@ -526,7 +544,7 @@ const DocSignRequest = ({ onBack }) => {
                     >
                       <i
                         className={`fa-solid fa-${getOrderIcon(
-                          recipient.order
+                          recipient.order,
                         )} text-xs`}
                       ></i>
                       Signer {recipient.order}
@@ -551,12 +569,63 @@ const DocSignRequest = ({ onBack }) => {
                       } outline-none text-[#111418] placeholder:text-gray-400`}
                       placeholder="Search name or directory..."
                       value={recipient.name}
-                      onChange={(e) =>
-                        updateRecipient(recipient.id, "name", e.target.value)
+                      onChange={(e) => {
+                        updateRecipient(recipient.id, "name", e.target.value);
+                        setActiveDropdown(recipient.id);
+                      }}
+                      onFocus={() => setActiveDropdown(recipient.id)}
+                      onBlur={() =>
+                        setTimeout(() => setActiveDropdown(null), 200)
                       }
                     />
                     <i className="fa-solid fa-address-book absolute right-3 top-1/2 -translate-y-1/2 text-[#137fec] cursor-pointer hover:bg-blue-50 p-1 rounded text-[14px]"></i>
+
+                    {/* Employee Search Dropdown */}
+                    {activeDropdown === recipient.id &&
+                      employeeSearchResults[recipient.id]?.length > 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {employeeSearchResults[recipient.id].map(
+                            (employee) => (
+                              <div
+                                key={employee._id || employee.id}
+                                onClick={() =>
+                                  selectEmployee(recipient.id, employee)
+                                }
+                                className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-semibold">
+                                    {employee.name?.charAt(0).toUpperCase() ||
+                                      "?"}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-[#111418] truncate">
+                                      {employee.name}
+                                    </p>
+                                    <p className="text-xs text-[#617589] truncate">
+                                      {employee.email}
+                                    </p>
+                                    {employee.department && (
+                                      <p className="text-xs text-gray-400 truncate">
+                                        {employee.department}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      )}
                   </div>
+
+                  {/* Email Display - Shows when populated */}
+                  {recipient.email && (
+                    <div className="flex items-center gap-2 text-xs text-[#617589] bg-gray-50 px-3 py-2 rounded-lg">
+                      <i className="fa-solid fa-envelope text-[#137fec]"></i>
+                      <span className="truncate">{recipient.email}</span>
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -667,7 +736,7 @@ const DocSignRequest = ({ onBack }) => {
         </aside>
 
         {/* Main Document Preview Area */}
-        <main className="flex-1 bg-[#f6f7f8] relative flex flex-col h-full overflow-hidden">
+        <main className="flex-1 bg-[#f6f7f8] relative flex flex-col">
           {/* Upload Section - Show when no file */}
           {!uploadedFile ? (
             <div className="flex-1 flex items-center justify-center p-12">
@@ -703,52 +772,6 @@ const DocSignRequest = ({ onBack }) => {
             </div>
           ) : (
             <>
-              {/* Document Controls */}
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-white shadow-lg rounded-lg px-2 py-2 flex items-center gap-1 border border-gray-200">
-                <button
-                  onClick={handleFirstPage}
-                  disabled={currentPage === 1}
-                  className="w-8 h-8 rounded hover:bg-gray-100 text-[#617589] hover:text-[#137fec] flex items-center justify-center transition-colors disabled:opacity-50"
-                >
-                  <i className="fa-solid fa-backward-step text-[14px]"></i>
-                </button>
-                <button
-                  onClick={handlePrevPage}
-                  disabled={currentPage === 1}
-                  className="w-8 h-8 rounded hover:bg-gray-100 text-[#617589] hover:text-[#137fec] flex items-center justify-center transition-colors disabled:opacity-50"
-                >
-                  <i className="fa-solid fa-chevron-left text-[14px]"></i>
-                </button>
-                <span className="text-xs font-semibold text-[#111418] w-20 text-center select-none font-mono">
-                  Page {currentPage} / {totalPages}
-                </span>
-                <button
-                  onClick={handleNextPage}
-                  disabled={currentPage === totalPages}
-                  className="w-8 h-8 rounded hover:bg-gray-100 text-[#617589] hover:text-[#137fec] flex items-center justify-center transition-colors disabled:opacity-50"
-                >
-                  <i className="fa-solid fa-chevron-right text-[14px]"></i>
-                </button>
-                <div className="w-px h-5 bg-gray-200 mx-2"></div>
-                <button
-                  onClick={handleZoomOut}
-                  disabled={zoom <= 50}
-                  className="w-8 h-8 rounded hover:bg-gray-100 text-[#617589] hover:text-[#137fec] flex items-center justify-center transition-colors disabled:opacity-50"
-                >
-                  <i className="fa-solid fa-minus text-[14px]"></i>
-                </button>
-                <span className="text-xs font-medium text-[#111418] w-12 text-center select-none">
-                  {zoom}%
-                </span>
-                <button
-                  onClick={handleZoomIn}
-                  disabled={zoom >= 200}
-                  className="w-8 h-8 rounded hover:bg-gray-100 text-[#617589] hover:text-[#137fec] flex items-center justify-center transition-colors disabled:opacity-50"
-                >
-                  <i className="fa-solid fa-plus text-[14px]"></i>
-                </button>
-              </div>
-
               {/* PDF Viewer */}
               <div className="flex-1 overflow-auto p-12 flex justify-center items-start">
                 <div
@@ -774,7 +797,6 @@ const DocSignRequest = ({ onBack }) => {
                         style={{
                           width: "620px",
                           height: "877px",
-                          pointerEvents: "none",
                         }}
                         title="PDF Preview"
                       />
@@ -1057,7 +1079,7 @@ const DocSignRequest = ({ onBack }) => {
                       onChange={(e) =>
                         handleFieldAssignment(
                           selectedFieldId,
-                          parseInt(e.target.value)
+                          parseInt(e.target.value),
                         )
                       }
                       className="w-full text-sm border-gray-300 rounded-md shadow-sm h-9 bg-white focus:border-[#137fec] focus:ring-[#137fec]"

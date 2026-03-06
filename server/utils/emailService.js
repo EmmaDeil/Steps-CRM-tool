@@ -380,14 +380,41 @@ async function sendSignatureRequestEmail(documentData, recipientEmail, recipient
 
   const signLink = `${frontendUrl}/docsign/sign/${documentData._id}`;
   
+  // Fetch company branding if customBranding is enabled
+  let companyName = '';
+  let companyLogo = '';
+  let primaryColor = '#137fec';
+  
+  if (documentData.customBranding) {
+    try {
+      const SystemSettings = require('../models/SystemSettings');
+      const settings = await SystemSettings.findOne();
+      if (settings) {
+        companyName = settings.companyName || 'Acme Corp';
+        companyLogo = settings.logoUrl || '';
+        primaryColor = settings.primaryColor || '#137fec';
+      }
+    } catch (error) {
+      console.warn('Could not fetch system settings for branding:', error);
+    }
+  }
+  
   const mailOptions = {
     from: emailUser,
     to: recipientEmail,
     subject: documentData.subject || 'You have a document to sign',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: #137fec; padding: 20px; border-radius: 8px 8px 0 0;">
+        <div style="background-color: ${primaryColor}; padding: 20px; border-radius: 8px 8px 0 0;">
+          ${documentData.customBranding && companyLogo ? `
+            <div style="text-align: center; margin-bottom: 15px;">
+              <img src="${companyLogo}" alt="${companyName}" style="max-height: 60px; max-width: 200px;" />
+            </div>
+          ` : ''}
           <h2 style="color: white; margin: 0;">📝 Document Signature Request</h2>
+          ${documentData.customBranding && companyName && !companyLogo ? `
+            <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0 0; font-size: 14px;">${companyName}</p>
+          ` : ''}
         </div>
         
         <div style="padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
@@ -398,7 +425,7 @@ async function sendSignatureRequestEmail(documentData, recipientEmail, recipient
           </p>
 
           ${documentData.message ? `
-          <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #137fec; margin: 20px 0; border-radius: 4px;">
+          <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid ${primaryColor}; margin: 20px 0; border-radius: 4px;">
             <p style="margin: 0; color: #111418;"><strong>Message from sender:</strong></p>
             <p style="margin: 10px 0 0 0; color: #617589;">${documentData.message}</p>
           </div>
@@ -411,7 +438,7 @@ async function sendSignatureRequestEmail(documentData, recipientEmail, recipient
           </div>
 
           <div style="text-align: center; margin: 35px 0;">
-            <a href="${signLink}" style="background-color: #137fec; color: white; padding: 14px 40px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600; font-size: 16px;">
+            <a href="${signLink}" style="background-color: ${primaryColor}; color: white; padding: 14px 40px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600; font-size: 16px;">
               Review & Sign Document
             </a>
           </div>

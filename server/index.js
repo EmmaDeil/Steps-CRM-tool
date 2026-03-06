@@ -712,6 +712,10 @@ async function start() {
   const procurementRoutes = require('./routes/procurement.routes');
   app.use('/api', procurementRoutes);
 
+  // ============ MAINTENANCE ROUTES ============
+  const maintenanceRoutes = require('./routes/maintenance.routes');
+  app.use('/api/maintenance', maintenanceRoutes);
+
 
   // ============ INVENTORY ROUTES ============
   const InventoryItemModel = require('./models/InventoryItem');
@@ -1329,6 +1333,7 @@ async function start() {
                   subject: saved.metadata?.subject,
                   message: saved.metadata?.message,
                   dueDate: saved.dueDate,
+                  customBranding: saved.metadata?.customBranding || false,
                 },
                 recipient.email,
                 recipient.name

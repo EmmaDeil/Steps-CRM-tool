@@ -752,7 +752,7 @@ const MaterialRequests = () => {
         />
 
         {!showForm && !showApprovalModal && !showViewModal && (
-          <div className="max-w-[1400px] mx-auto px-6 py-6">
+          <div className="max-w-[1490px] mx-auto px-1 py-6">
             {/* Page Header */}
             <div className="flex justify-between items-start mb-6">
               <div>
