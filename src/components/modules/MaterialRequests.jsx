@@ -433,8 +433,8 @@ const MaterialRequests = () => {
       return;
     }
 
-    if (!formData.requestType || !formData.approver) {
-      toast.error("Please fill in request type and approver");
+    if (!formData.requestType) {
+      toast.error("Please select a request type");
       return;
     }
 
@@ -1032,33 +1032,24 @@ const MaterialRequests = () => {
                       </div>
                     </label>
 
-                    <label className="flex flex-col gap-2 sm:col-span-2">
-                      <span className="text-sm font-medium text-[#111418]">
-                        Assign Approver <span className="text-red-500">*</span>
-                      </span>
-                      <div className="relative">
-                        <i className="fa-solid fa-user-check absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
-                        <select
-                          name="approver"
-                          value={formData.approver}
-                          onChange={handleFormChange}
-                          className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
-                          required
-                        >
-                          <option value="">Select Manager</option>
-                          {usersLoading ? (
-                            <option disabled>Loading users...</option>
-                          ) : (
-                            userList.map((u) => (
-                              <option key={u.id} value={u.name}>
-                                {u.name} - {u.role}
-                              </option>
-                            ))
-                          )}
-                        </select>
-                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
+                    {/* Approval Info Message */}
+                    <div className="sm:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
+                        <div>
+                          <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                            Auto-Approval Routing
+                          </h4>
+                          <p className="text-xs text-blue-700">
+                            This request will be automatically routed through
+                            the approval chain based on configured rules.
+                            Approvers will be assigned according to your
+                            department, request amount, and approval workflow
+                            settings.
+                          </p>
+                        </div>
                       </div>
-                    </label>
+                    </div>
                   </div>
                 </div>
 

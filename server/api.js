@@ -6,6 +6,7 @@ const LeaveAllocation = require('./models/LeaveAllocation');
 const LeaveRequest = require('./models/LeaveRequest');
 const TravelRequest = require('./models/TravelRequest');
 const UserModel = require('./models/User');
+const { buildApprovalChain } = require('./utils/approvalRuleHelper');
 
 async function getModules() {
   return ModuleModel.find().sort({ id: 1 }).lean();
@@ -86,7 +87,31 @@ async function getLeaveRequests(query = {}) {
 }
 
 async function createLeaveRequest(data) {
-  return LeaveRequest.create(data);
+  const requestData = { ...data };
+  
+  // Calculate duration for rule matching
+  const duration = requestData.days || 1;
+  requestData.duration = duration;
+  
+  // Try to build approval chain from rules
+  const approvalInfo = await buildApprovalChain('Leave Requests', requestData);
+  
+  // If rule-based approval is available, use it
+  if (approvalInfo.usesRuleBasedApproval && approvalInfo.approvalChain.length > 0) {
+    requestData.usesRuleBasedApproval = true;
+    requestData.approvalRuleId = approvalInfo.rule._id;
+    requestData.approvalChain = approvalInfo.approvalChain;
+    requestData.currentApprovalLevel = 1;
+    requestData.status = 'pending_manager';
+    
+    // Get first approver from chain
+    const firstApprover = approvalInfo.approvalChain[0];
+    requestData.managerId = firstApprover.approverId;
+    requestData.managerName = firstApprover.approverName;
+    requestData.managerEmail = firstApprover.approverEmail;
+  }
+  
+  return LeaveRequest.create(requestData);
 }
 
 async function updateLeaveRequestStatus(id, status, comments, approverType) {
@@ -123,7 +148,33 @@ async function getTravelRequests(query = {}) {
 }
 
 async function createTravelRequest(data) {
-  return TravelRequest.create(data);
+  const requestData = { ...data };
+  
+  // Calculate duration for rule matching
+  const fromDate = new Date(requestData.fromDate);
+  const toDate = new Date(requestData.toDate);
+  const duration = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
+  requestData.duration = duration;
+  
+  // Try to build approval chain from rules
+  const approvalInfo = await buildApprovalChain('Travel Requests', requestData);
+  
+  // If rule-based approval is available, use it
+  if (approvalInfo.usesRuleBasedApproval && approvalInfo.approvalChain.length > 0) {
+    requestData.usesRuleBasedApproval = true;
+    requestData.approvalRuleId = approvalInfo.rule._id;
+    requestData.approvalChain = approvalInfo.approvalChain;
+    requestData.currentApprovalLevel = 1;
+    requestData.status = 'pending_manager';
+    
+    // Get first approver from chain
+    const firstApprover = approvalInfo.approvalChain[0];
+    requestData.managerId = firstApprover.approverId;
+    requestData.managerName = firstApprover.approverName;
+    requestData.managerEmail = firstApprover.approverEmail;
+  }
+  
+  return TravelRequest.create(requestData);
 }
 
 async function updateTravelRequestStatus(id, status, comments, approverType) {

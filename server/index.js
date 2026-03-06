@@ -119,6 +119,7 @@ const DEFAULT_JOB_TITLES = [
 const VendorModel = require('./models/Vendor');
 const approvalRuleRoutes = require('./routes/approvalRule.routes');
 const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail } = require('./utils/emailService');
+const { buildApprovalChain } = require('./utils/approvalRuleHelper');
 const { Server } = require('socket.io');
 const http = require('http');
 
@@ -1267,15 +1268,48 @@ async function start() {
       const count = await MaterialRequestModel.countDocuments();
       const requestId = String(count + 1).padStart(6, '0');
       
+      // Calculate total amount from line items for rule matching
+      const totalAmount = req.body.lineItems?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+      
+      // Prepare request data for approval rule matching
       const requestData = {
         ...req.body,
         requestId,
+        amount: totalAmount,
+        employeeId: req.body.requestedBy, // For manager lookup
       };
+      
+      // Try to build approval chain from rules
+      const approvalInfo = await buildApprovalChain('Material Requests', requestData);
+      
+      // If rule-based approval is available, use it
+      if (approvalInfo.usesRuleBasedApproval && approvalInfo.approvalChain.length > 0) {
+        requestData.usesRuleBasedApproval = true;
+        requestData.approvalRuleId = approvalInfo.rule._id;
+        requestData.approvalChain = approvalInfo.approvalChain;
+        requestData.currentApprovalLevel = 1;
+        requestData.status = 'pending';
+        
+        // Get first approver from chain
+        const firstApprover = approvalInfo.approvalChain[0];
+        requestData.approver = firstApprover.approverName;
+      }
       
       const newRequest = await MaterialRequestModel.create(requestData);
       
-      // Send approval email to approver
-      await sendApprovalEmail(newRequest);
+      // Send approval email to current approver
+      if (newRequest.usesRuleBasedApproval && newRequest.approvalChain.length > 0) {
+        const currentApprover = newRequest.approvalChain.find(a => a.status === 'pending');
+        if (currentApprover) {
+          await sendApprovalEmail({
+            ...newRequest.toObject(),
+            approver: currentApprover.approverName,
+            approverEmail: currentApprover.approverEmail
+          });
+        }
+      } else if (newRequest.approver) {
+        await sendApprovalEmail(newRequest);
+      }
       
       res.status(201).json({ message: 'Request created and email sent', data: newRequest });
     } catch (err) {
@@ -1463,7 +1497,26 @@ async function start() {
 
   app.post('/api/advance-requests', async (req, res) => {
     try {
-      const newRequest = await AdvanceRequestModel.create(req.body);
+      const requestData = { ...req.body };
+      
+      // Try to build approval chain from rules
+      const approvalInfo = await buildApprovalChain('Advance Requests', requestData);
+      
+      // If rule-based approval is available, use it
+      if (approvalInfo.usesRuleBasedApproval && approvalInfo.approvalChain.length > 0) {
+        requestData.usesRuleBasedApproval = true;
+        requestData.approvalRuleId = approvalInfo.rule._id;
+        requestData.approvalChain = approvalInfo.approvalChain;
+        requestData.currentApprovalLevel = 1;
+        requestData.status = 'pending';
+        
+        // Get first approver from chain
+        const firstApprover = approvalInfo.approvalChain[0];
+        requestData.approver = firstApprover.approverName;
+        requestData.approverEmail = firstApprover.approverEmail;
+      }
+      
+      const newRequest = await AdvanceRequestModel.create(requestData);
       res.status(201).json({ message: 'Request created successfully', data: newRequest });
     } catch (err) {
       console.error('Error creating advance request:', err);
@@ -1501,7 +1554,26 @@ async function start() {
 
   app.post('/api/refund-requests', async (req, res) => {
     try {
-      const newRequest = await RefundRequestModel.create(req.body);
+      const requestData = { ...req.body };
+      
+      // Try to build approval chain from rules
+      const approvalInfo = await buildApprovalChain('Refund Requests', requestData);
+      
+      // If rule-based approval is available, use it
+      if (approvalInfo.usesRuleBasedApproval && approvalInfo.approvalChain.length > 0) {
+        requestData.usesRuleBasedApproval = true;
+        requestData.approvalRuleId = approvalInfo.rule._id;
+        requestData.approvalChain = approvalInfo.approvalChain;
+        requestData.currentApprovalLevel = 1;
+        requestData.status = 'pending';
+        
+        // Get first approver from chain
+        const firstApprover = approvalInfo.approvalChain[0];
+        requestData.approver = firstApprover.approverName;
+        requestData.approverEmail = firstApprover.approverEmail;
+      }
+      
+      const newRequest = await RefundRequestModel.create(requestData);
       res.status(201).json({ message: 'Request created successfully', data: newRequest });
     } catch (err) {
       console.error('Error creating refund request:', err);

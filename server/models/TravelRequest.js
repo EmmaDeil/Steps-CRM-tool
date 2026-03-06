@@ -19,9 +19,23 @@ const travelRequestSchema = new mongoose.Schema({
   accommodationRequired: { type: Boolean, default: false },
   budget: { type: Number, required: true },
   description: { type: String },
-  managerId: { type: String, required: true },
-  managerName: { type: String, required: true },
+  managerId: { type: String, required: false }, // Made optional for rule-based approval
+  managerName: { type: String, required: false },
   managerEmail: { type: String },
+  // Multi-level approval fields
+  usesRuleBasedApproval: { type: Boolean, default: false },
+  approvalRuleId: { type: mongoose.Schema.Types.ObjectId, ref: 'ApprovalRule' },
+  currentApprovalLevel: { type: Number, default: 1 },
+  approvalChain: [{
+    level: Number,
+    approverRole: String,
+    approverId: String,
+    approverName: String,
+    approverEmail: String,
+    status: { type: String, enum: ['pending', 'approved', 'rejected', 'awaiting'], default: 'awaiting' },
+    approvedAt: Date,
+    comments: String
+  }],
   status: { 
     type: String, 
     default: 'pending_manager',

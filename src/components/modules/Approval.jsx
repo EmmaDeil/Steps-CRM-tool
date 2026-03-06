@@ -59,8 +59,8 @@ const Approval = () => {
   });
   const [travelFormLoading, setTravelFormLoading] = useState(false);
 
-  const [staffList, setStaffList] = useState([]);
-  const [approverSuggestions, setApproverSuggestions] = useState([]);
+  const [_staffList, _setStaffList] = useState([]);
+  const [approverSuggestions, _setApproverSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [advanceFormData, setAdvanceFormData] = useState({
     amount: "",
@@ -93,7 +93,7 @@ const Approval = () => {
       try {
         const response = await apiService.get("/api/hr/employees");
         if (response && Array.isArray(response)) {
-          setStaffList(
+          _setStaffList(
             response.map((emp) => ({
               id: emp._id || emp.id,
               name: emp.fullName || emp.name,
@@ -266,11 +266,7 @@ const Approval = () => {
   const handleAdvanceSubmit = async (e) => {
     e.preventDefault();
 
-    // Validate approver is selected
-    if (!advanceFormData.approver || !advanceFormData.approverEmail) {
-      toast.error("Approver must be selected");
-      return;
-    }
+    // Approver will be auto-assigned by backend based on approval rules
 
     // Validate amount
     if (!advanceFormData.amount || parseFloat(advanceFormData.amount) <= 0) {
@@ -345,11 +341,7 @@ const Approval = () => {
   const handleRefundSubmit = async (e) => {
     e.preventDefault();
 
-    // Validate approver is selected
-    if (!refundFormData.approver || !refundFormData.approverEmail) {
-      toast.error("Approver must be selected");
-      return;
-    }
+    // Approver will be auto-assigned by backend based on approval rules
 
     // Validate amount
     if (!refundFormData.amount || parseFloat(refundFormData.amount) <= 0) {
@@ -424,10 +416,7 @@ const Approval = () => {
       return;
     }
 
-    if (!leaveFormData.managerId || !leaveFormData.managerEmail) {
-      toast.error("Manager information is required");
-      return;
-    }
+    // Manager will be auto-assigned by backend based on approval rules
 
     // Check if enough leave balance
     if (
@@ -1058,30 +1047,37 @@ const Approval = () => {
                     </select>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#111418] mb-2">
-                    Approver <span className="text-red-600">*</span>
-                  </label>
+
+                {/* Auto-Approval Routing Info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
+                    <div>
+                      <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                        Auto-Approval Routing
+                      </h4>
+                      <p className="text-xs text-blue-700">
+                        This request will be automatically routed through the
+                        approval chain based on configured rules. Approvers will
+                        be assigned according to the request amount and approval
+                        workflow settings.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "none" }}>
                   <div className="relative">
                     <input
                       type="text"
-                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418]"
                       value={advanceFormData.approver}
                       onChange={(e) => {
                         setAdvanceFormData({
                           ...advanceFormData,
                           approver: e.target.value,
                         });
-                        const matches = staffList.filter((staff) =>
-                          staff.name
-                            .toLowerCase()
-                            .includes(e.target.value.toLowerCase()),
-                        );
-                        setApproverSuggestions(matches);
-                        setShowSuggestions(true);
                       }}
-                      placeholder="Search staff..."
-                      required
                     />
                     {showSuggestions && approverSuggestions.length > 0 && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#dbe0e6] rounded-lg shadow-lg max-h-40 overflow-y-auto z-10">
@@ -1276,30 +1272,37 @@ const Approval = () => {
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#111418] mb-2">
-                    Approver <span className="text-red-600">*</span>
-                  </label>
+
+                {/* Auto-Approval Routing Info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
+                    <div>
+                      <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                        Auto-Approval Routing
+                      </h4>
+                      <p className="text-xs text-blue-700">
+                        This request will be automatically routed through the
+                        approval chain based on configured rules. Approvers will
+                        be assigned according to the request amount and approval
+                        workflow settings.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "none" }}>
                   <div className="relative">
                     <input
                       type="text"
-                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418]"
                       value={refundFormData.approver}
                       onChange={(e) => {
                         setRefundFormData({
                           ...refundFormData,
                           approver: e.target.value,
                         });
-                        const matches = staffList.filter((staff) =>
-                          staff.name
-                            .toLowerCase()
-                            .includes(e.target.value.toLowerCase()),
-                        );
-                        setApproverSuggestions(matches);
-                        setShowSuggestions(true);
                       }}
-                      placeholder="Search staff..."
-                      required
                     />
                     {showSuggestions && approverSuggestions.length > 0 && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#dbe0e6] rounded-lg shadow-lg max-h-40 overflow-y-auto z-10">
@@ -2357,7 +2360,25 @@ const Approval = () => {
                     </div>
                   )}
 
-                  <div>
+                  {/* Auto-Approval Routing Info */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
+                      <div>
+                        <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                          Auto-Approval Routing
+                        </h4>
+                        <p className="text-xs text-blue-700">
+                          This leave request will be automatically routed
+                          through the approval chain based on configured rules.
+                          Approvers will be assigned according to the leave
+                          duration and approval workflow settings.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "none" }}>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                       Manager <span className="text-red-500">*</span>
                     </label>
@@ -2406,10 +2427,9 @@ const Approval = () => {
                 <button
                   onClick={handleLeaveSubmit}
                   disabled={
-                    !leaveFormData.managerId ||
-                    (remainingLeave &&
-                      remainingLeave.remaining < 0 &&
-                      leaveFormData.leaveType !== "unpaid")
+                    remainingLeave &&
+                    remainingLeave.remaining < 0 &&
+                    leaveFormData.leaveType !== "unpaid"
                   }
                   className="px-6 py-3 rounded-lg text-sm font-medium bg-primary text-white hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -2722,7 +2742,25 @@ const Approval = () => {
                     ></textarea>
                   </div>
 
-                  <div>
+                  {/* Auto-Approval Routing Info */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
+                      <div>
+                        <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                          Auto-Approval Routing
+                        </h4>
+                        <p className="text-xs text-blue-700">
+                          This travel request will be automatically routed
+                          through the approval chain based on configured rules.
+                          Approvers will be assigned according to the travel
+                          duration, budget, and approval workflow settings.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "none" }}>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                       Manager Approver <span className="text-red-500">*</span>
                     </label>
@@ -2750,7 +2788,7 @@ const Approval = () => {
                 </button>
                 <button
                   onClick={handleTravelSubmit}
-                  disabled={!travelFormData.managerId || travelFormLoading}
+                  disabled={travelFormLoading}
                   className="px-6 py-3 rounded-lg text-sm font-medium bg-primary text-white hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {travelFormLoading ? (

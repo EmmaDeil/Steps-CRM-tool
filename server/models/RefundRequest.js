@@ -11,8 +11,22 @@ const refundRequestSchema = new mongoose.Schema({
   category: { type: String, required: true },
   receiptNumber: { type: String },
   transactionDate: { type: String, required: true },
-  approver: { type: String, required: true },
-  approverEmail: { type: String, required: true },
+  approver: { type: String, required: false }, // Made optional for rule-based approval
+  approverEmail: { type: String, required: false },
+  // Multi-level approval fields
+  usesRuleBasedApproval: { type: Boolean, default: false },
+  approvalRuleId: { type: mongoose.Schema.Types.ObjectId, ref: 'ApprovalRule' },
+  currentApprovalLevel: { type: Number, default: 1 },
+  approvalChain: [{
+    level: Number,
+    approverRole: String,
+    approverId: String,
+    approverName: String,
+    approverEmail: String,
+    status: { type: String, enum: ['pending', 'approved', 'rejected', 'awaiting'], default: 'awaiting' },
+    approvedAt: Date,
+    comments: String
+  }],
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   requestDate: { type: String, required: true },
   rejectionReason: { type: String },

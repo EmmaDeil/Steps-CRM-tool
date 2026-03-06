@@ -51,7 +51,7 @@ const approvalRuleSchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: false, // Made optional to allow system-created rules
     },
   },
   { timestamps: true }
