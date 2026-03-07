@@ -1039,25 +1039,6 @@ const MaterialRequests = () => {
                         <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
                       </div>
                     </label>
-
-                    {/* Approval Info Message */}
-                    <div className="sm:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <div className="flex items-start gap-3">
-                        <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
-                        <div>
-                          <h4 className="text-sm font-semibold text-blue-900 mb-1">
-                            Auto-Approval Routing
-                          </h4>
-                          <p className="text-xs text-blue-700">
-                            This request will be automatically routed through
-                            the approval chain based on configured rules.
-                            Approvers will be assigned according to your
-                            department, request amount, and approval workflow
-                            settings.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
 
@@ -1120,213 +1101,229 @@ const MaterialRequests = () => {
                 </div>
               </div>
 
-              {/* SECTION 2: Material Details Table */}
+              {/* SECTION 2: Material Details */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
                 <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                   <h3 className="text-base font-bold text-[#111418]">
+                    <i className="fa-solid fa-boxes-stacked text-[#137fec] mr-2"></i>
                     Material Details
                   </h3>
-                  <span className="text-xs font-medium text-[#617589]">
-                    Currency: USD ($)
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-[#617589] bg-white px-2.5 py-1 rounded-full border border-gray-200">
+                      {lineItems.length}{" "}
+                      {lineItems.length === 1 ? "item" : "items"}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[20%]">
-                          Item Name / SKU
-                        </th>
-                        <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[25%]">
-                          Description
-                        </th>
-                        <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[10%]">
-                          Qty
-                        </th>
-                        <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[12%]">
-                          UoM
-                        </th>
-                        <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[12%]">
-                          Unit Cost
-                        </th>
-                        <th className="py-3 px-4 text-xs font-semibold text-[#617589] uppercase tracking-wider w-[12%] text-right">
-                          Total
-                        </th>
-                        <th className="py-3 px-4 w-[5%]"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 text-sm">
-                      {lineItems.map((item, index) => (
-                        <tr
-                          key={index}
-                          className="group hover:bg-gray-50 transition-colors"
-                        >
-                          <td className="p-3">
-                            <select
-                              className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] px-3 py-2 text-sm"
-                              value={item.itemName}
-                              onChange={(e) => {
-                                const selected = itemOptions.find(
-                                  (o) => o.value === e.target.value,
-                                );
-                                handleLineItemChange(
-                                  index,
-                                  "itemName",
-                                  e.target.value,
-                                );
-                                if (selected) {
-                                  if (selected.unitPrice) {
-                                    handleLineItemChange(
-                                      index,
-                                      "amount",
-                                      selected.unitPrice,
-                                    );
-                                  }
-                                  if (selected.unit) {
-                                    handleLineItemChange(
-                                      index,
-                                      "quantityType",
-                                      selected.unit,
-                                    );
-                                  }
-                                }
-                              }}
-                              required
-                            >
-                              <option value="">-- Select Item --</option>
-                              {itemOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="p-3">
-                            <input
-                              type="text"
-                              className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] px-3 py-2 text-sm"
-                              placeholder="Description"
-                              value={item.description}
-                              onChange={(e) =>
-                                handleLineItemChange(
-                                  index,
-                                  "description",
-                                  e.target.value,
-                                )
-                              }
-                            />
-                          </td>
-                          <td className="p-3">
-                            <input
-                              type="number"
-                              className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] px-3 py-2 text-sm text-center"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) =>
-                                handleLineItemChange(
-                                  index,
-                                  "quantity",
-                                  e.target.value,
-                                )
-                              }
-                              required
-                            />
-                          </td>
-                          <td className="p-3">
-                            <select
-                              className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] px-2 py-2 text-sm"
-                              value={item.quantityType}
-                              onChange={(e) =>
-                                handleLineItemChange(
-                                  index,
-                                  "quantityType",
-                                  e.target.value,
-                                )
-                              }
-                              required
-                            >
-                              <option value="">-- Unit --</option>
-                              {quantityTypeOptions.map((option) => (
-                                <option key={option} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="p-3">
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#617589]">
-                                $
-                              </span>
-                              <NumericFormat
-                                className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] pl-6 pr-2 py-2 text-sm text-right"
-                                value={item.amount}
-                                thousandSeparator
-                                allowNegative={false}
-                                decimalScale={2}
-                                fixedDecimalScale
-                                placeholder="0.00"
-                                onValueChange={(values) => {
+                <div className="p-4 space-y-3">
+                  {lineItems.map((item, index) => (
+                    <div
+                      key={index}
+                      className="border border-gray-200 rounded-lg p-4 hover:border-[#137fec]/30 hover:shadow-sm transition-all bg-white group relative"
+                    >
+                      {/* Item number badge & remove */}
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-bold text-white bg-[#137fec] px-2 py-0.5 rounded-full">
+                          Item {index + 1}
+                        </span>
+                        {lineItems.length > 1 && (
+                          <button
+                            type="button"
+                            className="text-gray-400 hover:text-red-500 transition-colors p-1 rounded-lg hover:bg-red-50"
+                            onClick={() => removeLineItem(index)}
+                          >
+                            <i className="fa-solid fa-trash-can text-sm"></i>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Row 1: Item select + Description */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Item / SKU
+                          </span>
+                          <select
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            value={item.itemName}
+                            onChange={(e) => {
+                              const selected = itemOptions.find(
+                                (o) => o.value === e.target.value,
+                              );
+                              handleLineItemChange(
+                                index,
+                                "itemName",
+                                e.target.value,
+                              );
+                              if (selected) {
+                                if (selected.unitPrice)
                                   handleLineItemChange(
                                     index,
                                     "amount",
-                                    values.value,
+                                    selected.unitPrice,
                                   );
-                                }}
-                              />
-                            </div>
-                          </td>
-                          <td className="p-3 text-right font-medium text-[#111418]">
-                            {formatCurrency(
-                              (parseFloat(item.quantity) || 0) *
-                                (parseFloat(item.amount) || 0),
-                              { currency: formData.currency || appCurrency },
-                            )}
-                          </td>
-                          <td className="p-3 text-center">
-                            {lineItems.length > 1 && (
-                              <button
-                                type="button"
-                                className="text-[#617589] hover:text-red-500 transition-colors p-1 rounded"
-                                onClick={() => removeLineItem(index)}
-                              >
-                                <i className="fa-solid fa-trash text-base"></i>
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                                if (selected.unit)
+                                  handleLineItemChange(
+                                    index,
+                                    "quantityType",
+                                    selected.unit,
+                                  );
+                              }
+                            }}
+                            required
+                          >
+                            <option value="">Select item...</option>
+                            {itemOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Description
+                          </span>
+                          <input
+                            type="text"
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            placeholder="Brief description..."
+                            value={item.description}
+                            onChange={(e) =>
+                              handleLineItemChange(
+                                index,
+                                "description",
+                                e.target.value,
+                              )
+                            }
+                          />
+                        </label>
+                      </div>
+
+                      {/* Row 2: Qty, UoM, Unit Cost, Total */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Qty
+                          </span>
+                          <input
+                            type="number"
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            min="1"
+                            placeholder="0"
+                            value={item.quantity}
+                            onChange={(e) =>
+                              handleLineItemChange(
+                                index,
+                                "quantity",
+                                e.target.value,
+                              )
+                            }
+                            required
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Unit
+                          </span>
+                          <select
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            value={item.quantityType}
+                            onChange={(e) =>
+                              handleLineItemChange(
+                                index,
+                                "quantityType",
+                                e.target.value,
+                              )
+                            }
+                            required
+                          >
+                            <option value="">Select...</option>
+                            {quantityTypeOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Unit Cost
+                          </span>
+                          <NumericFormat
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            value={item.amount}
+                            thousandSeparator
+                            allowNegative={false}
+                            decimalScale={2}
+                            fixedDecimalScale
+                            placeholder="0.00"
+                            prefix={
+                              formData.currency === "NGN"
+                                ? "₦"
+                                : formData.currency === "GBP"
+                                  ? "£"
+                                  : formData.currency === "EUR"
+                                    ? "€"
+                                    : "$"
+                            }
+                            onValueChange={(values) => {
+                              handleLineItemChange(
+                                index,
+                                "amount",
+                                values.value,
+                              );
+                            }}
+                          />
+                        </label>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Line Total
+                          </span>
+                          <div className="flex items-center h-[42px] px-3 rounded-lg bg-gray-50 border border-gray-200">
+                            <span className="text-sm font-bold text-[#111418]">
+                              {formatCurrency(
+                                (parseFloat(item.quantity) || 0) *
+                                  (parseFloat(item.amount) || 0),
+                                { currency: formData.currency || appCurrency },
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
-                {/* Table Footer */}
-                <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={addLineItem}
-                    className="flex items-center gap-2 text-[#137fec] hover:text-[#0d6efd] font-semibold text-sm px-2 py-1 rounded hover:bg-[#137fec]/10 transition-colors"
-                  >
-                    <i className="fa-solid fa-circle-plus text-lg"></i>
-                    Add Item
-                  </button>
-                  <div className="flex items-center gap-4 text-base">
-                    <span className="text-[#617589] font-medium">
-                      Grand Total:
-                    </span>
-                    <span className="text-2xl font-bold text-[#111418]">
-                      {formatCurrency(
-                        lineItems.reduce(
-                          (sum, item) =>
-                            sum +
-                            (parseFloat(item.quantity) || 0) *
-                              (parseFloat(item.amount) || 0),
-                          0,
-                        ),
-                        { currency: formData.currency || appCurrency },
-                      )}
-                    </span>
+                {/* Footer: Add Item + Grand Total */}
+                <div className="px-4 py-4 bg-gray-50 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={addLineItem}
+                      className="flex items-center gap-2 text-[#137fec] hover:text-[#0d6efd] font-semibold text-sm px-3 py-2 rounded-lg hover:bg-[#137fec]/10 border border-dashed border-[#137fec]/40 transition-colors"
+                    >
+                      <i className="fa-solid fa-plus text-sm"></i>
+                      Add Another Item
+                    </button>
+                    <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-lg border border-gray-200 shadow-sm">
+                      <span className="text-sm text-[#617589] font-medium">
+                        Grand Total
+                      </span>
+                      <span className="text-xl font-bold text-[#111418]">
+                        {formatCurrency(
+                          lineItems.reduce(
+                            (sum, item) =>
+                              sum +
+                              (parseFloat(item.quantity) || 0) *
+                                (parseFloat(item.amount) || 0),
+                            0,
+                          ),
+                          { currency: formData.currency || appCurrency },
+                        )}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1362,8 +1359,20 @@ const MaterialRequests = () => {
                             setFormMentionSearch("");
                           }
                         }}
+                        onKeyDown={(e) => {
+                          if (
+                            e.key === "Enter" &&
+                            !e.shiftKey &&
+                            !showFormMentionDropdown
+                          ) {
+                            e.preventDefault();
+                            if (message.trim()) {
+                              e.target.form?.requestSubmit();
+                            }
+                          }
+                        }}
                         className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-4 py-3 min-h-[100px]"
-                        placeholder="Add a comment or justification... Use @ to mention someone"
+                        placeholder="Add a comment or justification... Use @ to mention someone (Enter to submit, Shift+Enter for new line)"
                         required
                       />
                       {showFormMentionDropdown && (
@@ -1507,7 +1516,7 @@ const MaterialRequests = () => {
               </div>
 
               {/* Footer Actions */}
-              <div className="sticky bottom-0 z-10 -mx-4 sm:-mx-6 bg-white border-t border-gray-200 p-4 sm:px-6 sm:py-4 flex flex-col-reverse sm:flex-row items-center justify-end gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] rounded-t-lg">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:px-6 sm:py-4 flex flex-col-reverse sm:flex-row items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -1522,6 +1531,66 @@ const MaterialRequests = () => {
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                   <button
                     type="button"
+                    onClick={async () => {
+                      try {
+                        const requestData = {
+                          ...formData,
+                          lineItems: lineItems.filter(
+                            (item) =>
+                              item.itemName ||
+                              item.quantity ||
+                              item.description,
+                          ),
+                          requestedBy:
+                            user?.fullName ||
+                            user?.primaryEmailAddress?.emailAddress ||
+                            "Unknown User",
+                          date: new Date().toISOString().split("T")[0],
+                          status: "draft",
+                          attachments: attachments.map((f) => f.name),
+                          message: message,
+                        };
+
+                        if (isEditMode && selectedRequest) {
+                          await apiService.put(
+                            `/api/material-requests/${selectedRequest._id}`,
+                            requestData,
+                          );
+                          toast.success("Draft updated successfully!");
+                        } else {
+                          await apiService.post(
+                            "/api/material-requests",
+                            requestData,
+                          );
+                          toast.success("Draft saved successfully!");
+                        }
+
+                        setShowForm(false);
+                        setIsEditMode(false);
+                        setSelectedRequest(null);
+                        setFormData({
+                          requestType: "",
+                          approver: "",
+                          department: "",
+                          currency: appCurrency,
+                        });
+                        setLineItems([
+                          {
+                            itemName: "",
+                            quantity: "",
+                            quantityType: "",
+                            amount: "",
+                            description: "",
+                          },
+                        ]);
+                        setAttachments([]);
+                        setMessage("");
+                        localStorage.removeItem("materialRequestsState");
+                        fetchRequests();
+                      } catch {
+                        toast.error("Failed to save draft");
+                      }
+                    }}
                     className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg border border-gray-300 bg-white text-[#111418] text-sm font-bold hover:bg-gray-50 transition-colors"
                   >
                     <i className="fa-solid fa-floppy-disk text-base"></i>
@@ -2162,7 +2231,7 @@ const MaterialRequests = () => {
                           <textarea
                             ref={viewCommentRef}
                             className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-[#111418] placeholder-[#617589] focus:border-[#137fec] focus:ring-1 focus:ring-[#137fec] min-h-[70px] resize-y outline-none transition-all"
-                            placeholder="Add a comment... Use @ to mention someone"
+                            placeholder="Add a comment... Use @ to mention someone (Enter to send, Shift+Enter for new line)"
                             value={viewComment}
                             onChange={(e) => {
                               setViewComment(e.target.value);
@@ -2176,6 +2245,43 @@ const MaterialRequests = () => {
                               } else {
                                 setShowViewMentionDropdown(false);
                                 setViewMentionSearch("");
+                              }
+                            }}
+                            onKeyDown={async (e) => {
+                              if (
+                                e.key === "Enter" &&
+                                !e.shiftKey &&
+                                !showViewMentionDropdown
+                              ) {
+                                e.preventDefault();
+                                if (!viewComment.trim() || submittingComment)
+                                  return;
+                                setSubmittingComment(true);
+                                try {
+                                  await apiService.post(
+                                    `/api/material-requests/${selectedRequest._id}/comments`,
+                                    { text: viewComment.trim() },
+                                  );
+                                  setViewComment("");
+                                  setShowViewMentionDropdown(false);
+                                  const res = await apiService.get(
+                                    "/api/material-requests",
+                                  );
+                                  const allReqs = res.data || res || [];
+                                  setRequests(allReqs);
+                                  const updated = allReqs.find(
+                                    (r) => r._id === selectedRequest._id,
+                                  );
+                                  if (updated) setSelectedRequest(updated);
+                                } catch (err) {
+                                  alert(
+                                    "Failed to post comment: " +
+                                      (err?.response?.data?.error ||
+                                        err.message),
+                                  );
+                                } finally {
+                                  setSubmittingComment(false);
+                                }
                               }
                             }}
                           />
