@@ -689,6 +689,61 @@ async function start() {
   // ============ APPROVAL SETTINGS ROUTES ============
   app.use("/api/approval-settings", checkSecurityRole(['Admin']), approvalRuleRoutes);
 
+  // ============ PUBLIC VISITOR SIGN-IN (no auth required) ============
+  const VisitorPassModel = require('./models/VisitorPass');
+  const { SecurityLog: SecurityLogModel } = require('./models/PhysicalSecurity');
+
+  // GET - Fetch visitor pass info by token (public)
+  app.get('/api/visitor/sign-in/:token', async (req, res) => {
+    try {
+      const pass = await VisitorPassModel.findOne({ token: req.params.token });
+      if (!pass) return res.status(404).json({ message: 'Visitor pass not found or expired' });
+      if (pass.status === 'signed-in') return res.status(400).json({ message: 'This pass has already been used to sign in', pass });
+      if (pass.status === 'checked-out') return res.status(400).json({ message: 'This pass has been checked out', pass });
+      if (pass.status === 'expired' || new Date() > pass.expiresAt) return res.status(400).json({ message: 'This visitor pass has expired' });
+      res.json({ pass: { _id: pass._id, token: pass.token, status: pass.status, expiresAt: pass.expiresAt, createdBy: pass.createdBy } });
+    } catch (err) {
+      console.error('Error fetching visitor pass:', err);
+      res.status(500).json({ message: 'Server error' });
+    }
+  });
+
+  // POST - Visitor submits sign-in form (public)
+  app.post('/api/visitor/sign-in/:token', async (req, res) => {
+    try {
+      const pass = await VisitorPassModel.findOne({ token: req.params.token });
+      if (!pass) return res.status(404).json({ message: 'Visitor pass not found or expired' });
+      if (pass.status !== 'pending') return res.status(400).json({ message: 'This pass has already been used' });
+      if (new Date() > pass.expiresAt) return res.status(400).json({ message: 'This visitor pass has expired' });
+
+      const { visitorName, visitorEmail, visitorPhone, company, purpose, hostName } = req.body;
+      if (!visitorName || !visitorName.trim()) return res.status(400).json({ message: 'Visitor name is required' });
+
+      pass.visitorName = visitorName.trim();
+      pass.visitorEmail = (visitorEmail || '').trim();
+      pass.visitorPhone = (visitorPhone || '').trim();
+      pass.company = (company || '').trim();
+      pass.purpose = (purpose || '').trim();
+      pass.hostName = (hostName || '').trim();
+      pass.status = 'signed-in';
+      pass.signedInAt = new Date();
+      await pass.save();
+
+      // Create activity log
+      await SecurityLogModel.create({
+        time: new Date().toLocaleTimeString(),
+        type: 'Visitor',
+        details: `Visitor ${pass.visitorName} signed in${pass.company ? ` from ${pass.company}` : ''}${pass.hostName ? ` to meet ${pass.hostName}` : ''}`,
+        severity: 'info',
+      });
+
+      res.json({ message: 'Signed in successfully', pass });
+    } catch (err) {
+      console.error('Error processing visitor sign-in:', err);
+      res.status(500).json({ message: 'Server error' });
+    }
+  });
+
   // ============ PHYSICAL SECURITY ROUTES ============
   const physicalSecurityRoutes = require('./routes/physicalSecurity.routes');
   app.use('/api/physical-security', physicalSecurityRoutes);
@@ -3459,16 +3514,68 @@ async function start() {
   // Get departments list (DB-driven, seed when empty)
   app.get('/api/departments', async (req, res) => {
     try {
-      let departments = await DepartmentModel.find().lean();
+      let departments = await DepartmentModel.find().sort({ name: 1 }).lean();
       if (!departments || departments.length === 0) {
         // Seed defaults
         await DepartmentModel.insertMany(DEFAULT_DEPARTMENTS);
-        departments = await DepartmentModel.find().lean();
+        departments = await DepartmentModel.find().sort({ name: 1 }).lean();
       }
       res.json({ departments });
     } catch (err) {
       console.error('Error fetching departments:', err);
       res.status(500).json({ message: 'Failed to fetch departments' });
+    }
+  });
+
+  // Create a new department
+  app.post('/api/departments', async (req, res) => {
+    try {
+      const { name, code, icon, color } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ message: 'Department name is required' });
+      }
+      const existing = await DepartmentModel.findOne({ name: name.trim() });
+      if (existing) {
+        return res.status(409).json({ message: 'A department with this name already exists' });
+      }
+      const dept = await DepartmentModel.create({ name: name.trim(), code: (code || '').trim(), icon: icon || null, color: color || null });
+      res.status(201).json({ department: dept });
+    } catch (err) {
+      console.error('Error creating department:', err);
+      res.status(500).json({ message: 'Failed to create department' });
+    }
+  });
+
+  // Update a department
+  app.put('/api/departments/:id', async (req, res) => {
+    try {
+      const { name, code, icon, color } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ message: 'Department name is required' });
+      }
+      // Check uniqueness (excluding current)
+      const existing = await DepartmentModel.findOne({ name: name.trim(), _id: { $ne: req.params.id } });
+      if (existing) {
+        return res.status(409).json({ message: 'A department with this name already exists' });
+      }
+      const updated = await DepartmentModel.findByIdAndUpdate(req.params.id, { name: name.trim(), code: (code || '').trim(), icon: icon || null, color: color || null }, { new: true });
+      if (!updated) return res.status(404).json({ message: 'Department not found' });
+      res.json({ department: updated });
+    } catch (err) {
+      console.error('Error updating department:', err);
+      res.status(500).json({ message: 'Failed to update department' });
+    }
+  });
+
+  // Delete a department
+  app.delete('/api/departments/:id', async (req, res) => {
+    try {
+      const deleted = await DepartmentModel.findByIdAndDelete(req.params.id);
+      if (!deleted) return res.status(404).json({ message: 'Department not found' });
+      res.json({ message: 'Department deleted successfully' });
+    } catch (err) {
+      console.error('Error deleting department:', err);
+      res.status(500).json({ message: 'Failed to delete department' });
     }
   });
 

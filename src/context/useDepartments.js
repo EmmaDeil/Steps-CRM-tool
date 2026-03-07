@@ -11,11 +11,8 @@ export function useDepartments() {
     setError(null);
     try {
       const response = await apiService.get("/api/departments");
-      if (response.data && response.data.departments) {
-        setDepartments(response.data.departments);
-      } else {
-        setDepartments([]);
-      }
+      const depts = response?.departments || response?.data?.departments || [];
+      setDepartments(depts);
     } catch (err) {
       setError(err);
     } finally {

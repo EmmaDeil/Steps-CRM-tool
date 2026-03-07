@@ -7,6 +7,7 @@ import Home from "./home/Home";
 import Profile from "./components/Profile";
 import PrivateRoute from "./components/PrivateRoute";
 import NotFound from "./components/NotFound";
+import VisitorSignIn from "./components/VisitorSignIn";
 import { Toaster } from "react-hot-toast";
 import Navbar from "./components/Navbar";
 
@@ -27,6 +28,7 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/visitor/:token" element={<VisitorSignIn />} />
 
         <Route
           path="/home"

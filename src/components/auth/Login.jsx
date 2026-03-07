@@ -162,7 +162,7 @@ const Login = () => {
       </div>
 
       {/* Right Panel - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gray-50">
+      <div className="w-full lg:w-1/2 flex items-center justify-center px-4 py-2 bg-gray-50">
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
@@ -183,7 +183,7 @@ const Login = () => {
           </div>
 
           {/* Login Form */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 px-5 py-6 sm:px-8 sm:py-8">
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Email Input */}
               <div>

@@ -49,10 +49,27 @@ const StatCard = ({ label, icon, value, trend, trendType }) => (
 
 const HRM = () => {
   const { user } = useAuth();
-  const { departments, loading: departmentsLoading } = useDepartments();
+  const {
+    departments,
+    loading: departmentsLoading,
+    refresh: refreshDepartments,
+  } = useDepartments();
   const [employees, setEmployees] = useState([]);
   const [employeesLoading, setEmployeesLoading] = useState(true);
   const [search, setSearch] = useState("");
+
+  // Department management state
+  const [showDeptModal, setShowDeptModal] = useState(false);
+  const [deptModalMode, setDeptModalMode] = useState("add"); // "add" | "edit"
+  const [editingDept, setEditingDept] = useState(null);
+  const [deptForm, setDeptForm] = useState({
+    name: "",
+    code: "",
+    icon: "fa-building",
+    color: "#3B82F6",
+  });
+  const [deptSubmitting, setDeptSubmitting] = useState(false);
+  const [deptDeleting, setDeptDeleting] = useState(null);
 
   const [requisitions, setRequisitions] = useState([]);
   const [analytics, setAnalytics] = useState({
@@ -435,6 +452,90 @@ const HRM = () => {
         </div>
       ),
     },
+  ];
+
+  // Department CRUD handlers
+  const handleOpenDeptModal = (mode, dept = null) => {
+    setDeptModalMode(mode);
+    setEditingDept(dept);
+    if (mode === "add") {
+      setDeptForm({
+        name: "",
+        code: "",
+        icon: "fa-building",
+        color: "#3B82F6",
+      });
+    } else if (dept) {
+      setDeptForm({
+        name: dept.name || "",
+        code: dept.code || "",
+        icon: dept.icon || "fa-building",
+        color: dept.color || "#3B82F6",
+      });
+    }
+    setShowDeptModal(true);
+  };
+
+  const handleDeptSubmit = async (e) => {
+    e.preventDefault();
+    setDeptSubmitting(true);
+    try {
+      if (deptModalMode === "add") {
+        await apiService.post("/api/departments", deptForm);
+        toast.success("Department created successfully");
+      } else {
+        await apiService.put(`/api/departments/${editingDept._id}`, deptForm);
+        toast.success("Department updated successfully");
+      }
+      setShowDeptModal(false);
+      refreshDepartments();
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.message ||
+          err?.serverData?.message ||
+          `Failed to ${deptModalMode === "add" ? "create" : "update"} department`,
+      );
+    } finally {
+      setDeptSubmitting(false);
+    }
+  };
+
+  const handleDeleteDept = async (dept) => {
+    if (
+      !window.confirm(
+        `Delete department "${dept.name}"? This cannot be undone.`,
+      )
+    )
+      return;
+    setDeptDeleting(dept._id);
+    try {
+      await apiService.delete(`/api/departments/${dept._id}`);
+      toast.success("Department deleted");
+      refreshDepartments();
+    } catch (_err) {
+      toast.error("Failed to delete department");
+    } finally {
+      setDeptDeleting(null);
+    }
+  };
+
+  const deptIconOptions = [
+    "fa-building",
+    "fa-users",
+    "fa-dollar-sign",
+    "fa-cogs",
+    "fa-bullhorn",
+    "fa-gavel",
+    "fa-shield-halved",
+    "fa-laptop-code",
+    "fa-chart-line",
+    "fa-headset",
+    "fa-project-diagram",
+    "fa-truck",
+    "fa-flask",
+    "fa-graduation-cap",
+    "fa-heart-pulse",
+    "fa-scale-balanced",
   ];
 
   if (showPayroll) {
@@ -866,6 +967,215 @@ const HRM = () => {
                 </div>
               </div>
             </div>
+
+            {/* Department Management Section */}
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8">
+              <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                <h3 className="text-slate-900 dark:text-white font-bold text-lg flex items-center gap-2">
+                  <i className="fa-solid fa-sitemap text-blue-500"></i>
+                  Department Management
+                </h3>
+                <button
+                  onClick={() => handleOpenDeptModal("add")}
+                  className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
+                >
+                  <i className="fa-solid fa-plus text-xs"></i>
+                  Add Department
+                </button>
+              </div>
+              <div className="p-5">
+                {departmentsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <i className="fa-solid fa-spinner fa-spin text-blue-500 text-xl mr-3"></i>
+                    <span className="text-slate-500">
+                      Loading departments...
+                    </span>
+                  </div>
+                ) : departments.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500">
+                    <i className="fa-solid fa-building text-4xl text-slate-300 mb-3"></i>
+                    <p className="text-sm">
+                      No departments yet. Create one to get started.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {departments.map((dept) => (
+                      <div
+                        key={dept._id}
+                        className="group relative flex items-center gap-3 p-4 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-300 hover:shadow-md transition-all bg-white dark:bg-slate-800"
+                      >
+                        <div
+                          className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                          style={{
+                            backgroundColor: (dept.color || "#3B82F6") + "20",
+                          }}
+                        >
+                          <i
+                            className={`fa-solid ${dept.icon || "fa-building"}`}
+                            style={{ color: dept.color || "#3B82F6" }}
+                          ></i>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                            {dept.name}
+                          </p>
+                          {dept.code && (
+                            <p className="text-xs text-slate-500 truncate">
+                              {dept.code}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleOpenDeptModal("edit", dept)}
+                            disabled={deptDeleting === dept._id}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
+                            title="Edit"
+                          >
+                            <i className="fa-solid fa-pen text-xs"></i>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDept(dept)}
+                            disabled={deptDeleting === dept._id}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                            title="Delete"
+                          >
+                            {deptDeleting === dept._id ? (
+                              <i className="fa-solid fa-spinner fa-spin text-xs"></i>
+                            ) : (
+                              <i className="fa-solid fa-trash-can text-xs"></i>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Department Add/Edit Modal */}
+            {showDeptModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden ring-1 ring-black/5">
+                  <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 bg-slate-50">
+                    <h3 className="text-lg font-bold text-slate-900">
+                      {deptModalMode === "add"
+                        ? "Add Department"
+                        : "Edit Department"}
+                    </h3>
+                    <button
+                      onClick={() => setShowDeptModal(false)}
+                      className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+                    >
+                      <i className="fa-solid fa-times"></i>
+                    </button>
+                  </div>
+                  <form onSubmit={handleDeptSubmit} className="p-6 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Department Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={deptForm.name}
+                        onChange={(e) =>
+                          setDeptForm({ ...deptForm, name: e.target.value })
+                        }
+                        placeholder="e.g. Engineering"
+                        className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-10 px-3 focus:outline-0 focus:ring-2 focus:ring-blue-500/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Department Code
+                      </label>
+                      <input
+                        type="text"
+                        value={deptForm.code}
+                        onChange={(e) =>
+                          setDeptForm({
+                            ...deptForm,
+                            code: e.target.value.toUpperCase(),
+                          })
+                        }
+                        placeholder="e.g. ENG"
+                        maxLength={10}
+                        className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-10 px-3 focus:outline-0 focus:ring-2 focus:ring-blue-500/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Color
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={deptForm.color}
+                          onChange={(e) =>
+                            setDeptForm({ ...deptForm, color: e.target.value })
+                          }
+                          className="w-10 h-10 rounded-lg border border-slate-200 cursor-pointer p-0.5"
+                        />
+                        <span className="text-sm text-slate-500">
+                          {deptForm.color}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Icon
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {deptIconOptions.map((icon) => (
+                          <button
+                            key={icon}
+                            type="button"
+                            onClick={() => setDeptForm({ ...deptForm, icon })}
+                            className={`w-9 h-9 rounded-lg flex items-center justify-center border transition-all ${
+                              deptForm.icon === icon
+                                ? "border-blue-500 bg-blue-50 text-blue-600 ring-2 ring-blue-500/30"
+                                : "border-slate-200 text-slate-500 hover:border-blue-300 hover:bg-blue-50"
+                            }`}
+                          >
+                            <i className={`fa-solid ${icon} text-sm`}></i>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setShowDeptModal(false)}
+                        className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={deptSubmitting}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {deptSubmitting ? (
+                          <>
+                            <i className="fa-solid fa-spinner fa-spin"></i>
+                            {deptModalMode === "add"
+                              ? "Creating..."
+                              : "Saving..."}
+                          </>
+                        ) : deptModalMode === "add" ? (
+                          "Create Department"
+                        ) : (
+                          "Save Changes"
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
 
             {/* Add Employee Modal */}
             {showAddEmployeeModal && (

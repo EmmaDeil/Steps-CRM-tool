@@ -89,4 +89,66 @@ router.get('/personnel', async (req, res) => {
     }
 });
 
+// --- VISITOR PASS ROUTES ---
+const VisitorPass = require('../models/VisitorPass');
+
+// POST /api/physical-security/visitor-passes - Create a new visitor pass (generates QR token)
+router.post('/visitor-passes', async (req, res) => {
+    try {
+        const pass = new VisitorPass({
+            createdBy: req.body.createdBy || 'Security Officer',
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+        });
+        await pass.save();
+
+        // Log the visitor pass creation
+        await SecurityLog.create({
+            time: new Date().toLocaleTimeString(),
+            type: 'Visitor',
+            details: `Visitor pass generated (Token: ...${pass.token.slice(-6)})`,
+            severity: 'info',
+        });
+
+        res.status(201).json(pass);
+    } catch (error) {
+        console.error('Error creating visitor pass:', error);
+        res.status(500).json({ message: 'Failed to create visitor pass' });
+    }
+});
+
+// GET /api/physical-security/visitor-passes - List recent visitor passes
+router.get('/visitor-passes', async (req, res) => {
+    try {
+        const passes = await VisitorPass.find().sort({ createdAt: -1 }).limit(50);
+        res.json(passes);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// PUT /api/physical-security/visitor-passes/:id/checkout - Check out a visitor
+router.put('/visitor-passes/:id/checkout', async (req, res) => {
+    try {
+        const pass = await VisitorPass.findByIdAndUpdate(
+            req.params.id,
+            { status: 'checked-out', checkedOutAt: new Date() },
+            { new: true }
+        );
+        if (!pass) return res.status(404).json({ message: 'Pass not found' });
+
+        await SecurityLog.create({
+            time: new Date().toLocaleTimeString(),
+            type: 'Visitor',
+            details: `Visitor ${pass.visitorName || 'Unknown'} checked out`,
+            severity: 'info',
+        });
+
+        res.json(pass);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 module.exports = router;
