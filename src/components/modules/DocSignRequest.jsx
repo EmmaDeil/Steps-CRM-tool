@@ -798,10 +798,6 @@ const DocSignRequest = ({ onBack }) => {
                           .filter((field) => field.page === currentPage)
                           .map((field) => {
                             const isSelected = selectedFieldId === field.id;
-                            const isSignatureField =
-                              field.type === "signature" ||
-                              field.type === "initials" ||
-                              field.type === "dateSigned";
 
                             // Define colors based on field type
                             let bgColor,
@@ -819,22 +815,62 @@ const DocSignRequest = ({ onBack }) => {
                               iconColor = "#b45309";
                               labelBgColor = "bg-yellow-200";
                               labelTextColor = "text-yellow-800";
-                            } else if (isSignatureField) {
-                              // Signature fields - blue
+                            } else if (field.type === "signature") {
+                              // Signature - blue
                               bgColor = "rgba(219, 234, 254, 0.95)";
                               borderColor = "#3b82f6";
                               borderStyle = "solid";
                               iconColor = "#3b82f6";
                               labelBgColor = "bg-blue-100";
                               labelTextColor = "text-blue-700";
+                            } else if (field.type === "initials") {
+                              // Initials - indigo
+                              bgColor = "rgba(224, 231, 255, 0.95)";
+                              borderColor = "#6366f1";
+                              borderStyle = "solid";
+                              iconColor = "#6366f1";
+                              labelBgColor = "bg-indigo-100";
+                              labelTextColor = "text-indigo-700";
+                            } else if (field.type === "dateSigned") {
+                              // Date Signed - cyan
+                              bgColor = "rgba(207, 250, 254, 0.95)";
+                              borderColor = "#06b6d4";
+                              borderStyle = "solid";
+                              iconColor = "#06b6d4";
+                              labelBgColor = "bg-cyan-100";
+                              labelTextColor = "text-cyan-700";
+                            } else if (field.type === "textbox") {
+                              // Textbox - emerald
+                              bgColor = "rgba(209, 250, 229, 0.95)";
+                              borderColor = "#10b981";
+                              borderStyle = "solid";
+                              iconColor = "#10b981";
+                              labelBgColor = "bg-emerald-100";
+                              labelTextColor = "text-emerald-700";
+                            } else if (field.type === "checkbox") {
+                              // Checkbox - purple
+                              bgColor = "rgba(243, 232, 255, 0.95)";
+                              borderColor = "#a855f7";
+                              borderStyle = "solid";
+                              iconColor = "#a855f7";
+                              labelBgColor = "bg-purple-100";
+                              labelTextColor = "text-purple-700";
+                            } else if (field.type === "fullName") {
+                              // Full Name - orange
+                              bgColor = "rgba(255, 237, 213, 0.95)";
+                              borderColor = "#f97316";
+                              borderStyle = "solid";
+                              iconColor = "#f97316";
+                              labelBgColor = "bg-orange-100";
+                              labelTextColor = "text-orange-700";
                             } else {
-                              // Data fields - gray
-                              bgColor = "rgba(243, 244, 246, 0.95)";
-                              borderColor = "#6b7280";
-                              borderStyle = "dashed";
-                              iconColor = "#6b7280";
-                              labelBgColor = "bg-gray-100";
-                              labelTextColor = "text-gray-700";
+                              // Fallback - teal
+                              bgColor = "rgba(204, 251, 241, 0.95)";
+                              borderColor = "#14b8a6";
+                              borderStyle = "solid";
+                              iconColor = "#14b8a6";
+                              labelBgColor = "bg-teal-100";
+                              labelTextColor = "text-teal-700";
                             }
 
                             return (
@@ -952,7 +988,7 @@ const DocSignRequest = ({ onBack }) => {
               }
               className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e7eb] bg-white hover:border-[#137fec] hover:shadow-md cursor-grab active:cursor-grabbing transition-all group select-none"
             >
-              <div className="size-8 rounded bg-blue-50 flex items-center justify-center text-[#137fec]">
+              <div className="size-8 rounded bg-indigo-50 flex items-center justify-center text-indigo-500">
                 <i className="fa-solid fa-heading text-[14px]"></i>
               </div>
               <span className="text-sm font-medium text-[#111418]">
@@ -972,7 +1008,7 @@ const DocSignRequest = ({ onBack }) => {
               }
               className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e7eb] bg-white hover:border-[#137fec] hover:shadow-md cursor-grab active:cursor-grabbing transition-all group select-none"
             >
-              <div className="size-8 rounded bg-blue-50 flex items-center justify-center text-[#137fec]">
+              <div className="size-8 rounded bg-cyan-50 flex items-center justify-center text-cyan-500">
                 <i className="fa-solid fa-calendar text-[14px]"></i>
               </div>
               <span className="text-sm font-medium text-[#111418]">
@@ -998,7 +1034,7 @@ const DocSignRequest = ({ onBack }) => {
               }
               className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e7eb] bg-white hover:border-[#137fec] hover:shadow-md cursor-grab active:cursor-grabbing transition-all group select-none"
             >
-              <div className="size-8 rounded bg-gray-50 flex items-center justify-center text-gray-500">
+              <div className="size-8 rounded bg-emerald-50 flex items-center justify-center text-emerald-500">
                 <i className="fa-solid fa-text-width text-[14px]"></i>
               </div>
               <span className="text-sm font-medium text-[#111418]">
@@ -1018,7 +1054,7 @@ const DocSignRequest = ({ onBack }) => {
               }
               className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e7eb] bg-white hover:border-[#137fec] hover:shadow-md cursor-grab active:cursor-grabbing transition-all group select-none"
             >
-              <div className="size-8 rounded bg-gray-50 flex items-center justify-center text-gray-500">
+              <div className="size-8 rounded bg-purple-50 flex items-center justify-center text-purple-500">
                 <i className="fa-solid fa-square-check text-[14px]"></i>
               </div>
               <span className="text-sm font-medium text-[#111418]">
@@ -1038,7 +1074,7 @@ const DocSignRequest = ({ onBack }) => {
               }
               className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e7eb] bg-white hover:border-[#137fec] hover:shadow-md cursor-grab active:cursor-grabbing transition-all group select-none"
             >
-              <div className="size-8 rounded bg-gray-50 flex items-center justify-center text-gray-500">
+              <div className="size-8 rounded bg-orange-50 flex items-center justify-center text-orange-500">
                 <i className="fa-solid fa-id-badge text-[14px]"></i>
               </div>
               <span className="text-sm font-medium text-[#111418]">

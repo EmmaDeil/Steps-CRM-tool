@@ -149,11 +149,7 @@ const seedData = {
     ],
   },
 
-  attendance: [
-    { id: 1, user: "John Doe", date: "2025-11-01", status: "present" },
-    { id: 2, user: "Jane Smith", date: "2025-11-01", status: "present" },
-    { id: 3, user: "Admin User", date: "2025-11-01", status: "present" },
-  ],
+  attendance: [],
 
   policies: [
     {

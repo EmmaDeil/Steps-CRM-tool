@@ -22,7 +22,7 @@ import {
 
 const Analytics = () => {
   const location = useLocation();
-  const { user } = useAuth();
+  useAuth();
   const [searchQuery, setSearchQuery] = useState(
     location.state?.defaultSearch || "",
   );
@@ -34,7 +34,26 @@ const Analytics = () => {
   const [department, setDepartment] = useState("All Departments");
   const { departments, loading: departmentsLoading } = useDepartments();
   const [includeDrafts, setIncludeDrafts] = useState(false);
+  const [customModules, setCustomModules] = useState([]);
+  const [moduleSearch, setModuleSearch] = useState("");
+  const customModuleOptions = [
+    { value: "Attendance", label: "Attendance", icon: "fa-calendar-check" },
+    { value: "Approvals", label: "Approvals", icon: "fa-thumbs-up" },
+    { value: "Finance", label: "Finance", icon: "fa-dollar-sign" },
+    {
+      value: "Leave",
+      label: "Leave Requests",
+      icon: "fa-person-walking-arrow-right",
+    },
+    { value: "Travel", label: "Travel Requests", icon: "fa-plane" },
+    {
+      value: "Materials",
+      label: "Material Requests",
+      icon: "fa-boxes-stacked",
+    },
+  ];
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
 
   useEffect(() => {
     if (location.state?.defaultSearch) {
@@ -48,7 +67,7 @@ const Analytics = () => {
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [reports, setReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(true);
-  const [generatingReport, setGeneratingReport] = useState(false);
+
   const [reportTypes, setReportTypes] = useState([]);
   const [loadingReportTypes, setLoadingReportTypes] = useState(true);
 
@@ -58,6 +77,8 @@ const Analytics = () => {
     financialData: [],
     attendanceData: [],
     approvalData: [],
+    customData: [],
+    moduleDetails: {},
     stats: {},
   });
 
@@ -71,6 +92,8 @@ const Analytics = () => {
             financialData: response.data.financialData || [],
             attendanceData: response.data.attendanceData || [],
             approvalData: response.data.approvalData || [],
+            customData: response.data.customData || [],
+            moduleDetails: response.data.moduleDetails || {},
             stats: response.data.stats || {},
           });
         }
@@ -132,6 +155,7 @@ const Analytics = () => {
               department !== "All Departments" ? department : undefined,
             startDate,
             endDate,
+            includeDrafts: includeDrafts || undefined,
           },
         });
         if (response?.reports) {
@@ -145,7 +169,7 @@ const Analytics = () => {
       }
     };
     fetchReports();
-  }, [reportType, department, startDate, endDate]);
+  }, [reportType, department, startDate, endDate, includeDrafts]);
 
   // Dynamically compute stats depending on the selected reportType
   const getDynamicStats = () => {
@@ -161,7 +185,8 @@ const Analytics = () => {
           val2: datasets.stats?.financialExpenses || "$0",
           icon2: "fa-credit-card",
           color2: "red",
-          status2: "Tracking normal",
+          status2:
+            datasets.stats?.financialExpenses !== "$0" ? "Tracking" : "No data",
           title3: "Net Profit",
           val3: datasets.stats?.netProfit || "$0",
           icon3: "fa-chart-pie",
@@ -174,7 +199,8 @@ const Analytics = () => {
           val4: datasets.stats?.avgTransaction || "$0",
           icon4: "fa-receipt",
           color4: "blue",
-          status4: "Stable",
+          status4:
+            datasets.stats?.avgTransaction !== "$0" ? "Active" : "No data",
         };
       case "Attendance Report":
         return {
@@ -182,7 +208,11 @@ const Analytics = () => {
           val1: datasets.stats?.avgAttendance || "0%",
           icon1: "fa-user-check",
           color1: "green",
-          growth1: "Stable",
+          growth1:
+            datasets.stats?.avgAttendance &&
+            datasets.stats.avgAttendance !== "0%"
+              ? "Tracking"
+              : "No data",
           title2: "Total Absences",
           val2: datasets.stats?.totalAbsences || 0,
           icon2: "fa-user-xmark",
@@ -195,7 +225,8 @@ const Analytics = () => {
           val3: datasets.stats?.lateArrivals || 0,
           icon3: "fa-clock",
           color3: "orange",
-          growth3: "Improving",
+          growth3:
+            (datasets.stats?.lateArrivals || 0) > 0 ? "Tracking" : "No data",
           title4: "Total Employees",
           val4: datasets.stats?.totalEmployees || 0,
           icon4: "fa-users",
@@ -228,7 +259,58 @@ const Analytics = () => {
           color4: "green",
           status4: datasets.stats?.slaStatus || "N/A",
         };
-      case "Custom Report":
+      case "Custom Report": {
+        const filteredCustom =
+          customModules.length > 0
+            ? (datasets.customData || []).filter((d) =>
+                customModules.includes(d.name),
+              )
+            : datasets.customData || [];
+        const customTotal = filteredCustom.reduce(
+          (sum, d) => sum + (d.total || 0),
+          0,
+        );
+        const customActive = filteredCustom.reduce(
+          (sum, d) => sum + (d.active || 0),
+          0,
+        );
+        const customIssues = filteredCustom.reduce(
+          (sum, d) => sum + (d.issues || 0),
+          0,
+        );
+        const moduleCount = filteredCustom.length;
+        return {
+          title1: "Total Records",
+          val1: customTotal,
+          icon1: "fa-database",
+          color1: "blue",
+          growth1:
+            customTotal > 0
+              ? `Across ${moduleCount} module${moduleCount !== 1 ? "s" : ""}`
+              : "No data",
+          title2: "Active/Approved",
+          val2: customActive,
+          icon2: "fa-circle-check",
+          color2: "green",
+          status2:
+            customTotal > 0
+              ? `${((customActive / customTotal) * 100).toFixed(0)}% success rate`
+              : "No data",
+          title3: "Issues/Rejected",
+          val3: customIssues,
+          icon3: "fa-triangle-exclamation",
+          color3: "red",
+          growth3:
+            customTotal > 0
+              ? `${((customIssues / customTotal) * 100).toFixed(0)}% issue rate`
+              : "No data",
+          title4: "Modules Tracked",
+          val4: moduleCount,
+          icon4: "fa-cubes",
+          color4: "purple",
+          status4: moduleCount > 0 ? "Active" : "No modules",
+        };
+      }
       case "Facility Usage Report":
       default:
         return {
@@ -284,54 +366,8 @@ const Analytics = () => {
     return icons[status] || "fa-circle";
   };
 
-  const handleGenerateReport = async () => {
-    try {
-      setGeneratingReport(true);
-
-      const reportData = {
-        name: `${reportType} - ${new Date().toLocaleDateString()}`,
-        reportType,
-        department,
-        startDate,
-        endDate,
-        includeDrafts,
-        generatedBy: user?.email || user?.name || "System",
-      };
-
-      const response = await apiService.post("/api/reports", reportData);
-
-      if (response?.success) {
-        toast.success(
-          "Report generation started! It will appear in the list shortly.",
-        );
-
-        // Refresh reports list after a delay to show the new report
-        setTimeout(async () => {
-          try {
-            const reportsResponse = await apiService.get("/api/reports");
-            if (reportsResponse?.reports) {
-              setReports(reportsResponse.reports);
-            }
-          } catch (err) {
-            console.error("Failed to refresh reports", err);
-          }
-        }, 2500);
-      }
-    } catch (error) {
-      console.error("Error generating report:", error);
-      toast.error("Failed to generate report");
-    } finally {
-      setGeneratingReport(false);
-    }
-  };
-
   const handleDeleteReport = async (reportId) => {
     try {
-      const confirmed = window.confirm(
-        "Are you sure you want to delete this report?",
-      );
-      if (!confirmed) return;
-
       const response = await apiService.delete(`/api/reports/${reportId}`);
 
       if (response?.success) {
@@ -352,6 +388,8 @@ const Analytics = () => {
     setEndDate("");
     setDepartment("All Departments");
     setIncludeDrafts(false);
+    setCustomModules([]);
+    setModuleSearch("");
     toast.success("Filters reset");
   };
 
@@ -610,161 +648,322 @@ const Analytics = () => {
                 </div>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                {reportType === "Facility Usage Report" ? (
-                  <AreaChart
-                    data={datasets.facilityData}
-                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient
-                        id="colorUsage"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="5%"
-                          stopColor="#8884d8"
-                          stopOpacity={0.8}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor="#8884d8"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                      <linearGradient
-                        id="colorMaint"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="5%"
-                          stopColor="#82ca9d"
-                          stopOpacity={0.8}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor="#82ca9d"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Area
-                      type="monotone"
-                      dataKey="usage"
-                      stroke="#8884d8"
-                      fillOpacity={1}
-                      fill="url(#colorUsage)"
-                      name="Usage (%)"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="maintenance"
-                      stroke="#82ca9d"
-                      fillOpacity={1}
-                      fill="url(#colorMaint)"
-                      name="Maintenance (hrs)"
-                    />
-                  </AreaChart>
-                ) : reportType === "Financial Report" ? (
-                  <LineChart
-                    data={datasets.financialData}
-                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="revenue"
-                      stroke="#10b981"
-                      strokeWidth={3}
-                      activeDot={{ r: 8 }}
-                      name="Revenue ($)"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="expenses"
-                      stroke="#ef4444"
-                      strokeWidth={3}
-                      name="Expenses ($)"
-                    />
-                  </LineChart>
-                ) : reportType === "Attendance Report" ? (
-                  <BarChart
-                    data={datasets.attendanceData}
-                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip cursor={{ fill: "transparent" }} />
-                    <Legend />
-                    <Bar
-                      dataKey="present"
-                      fill="#3b82f6"
-                      radius={[4, 4, 0, 0]}
-                      name="Present"
-                    />
-                    <Bar
-                      dataKey="absent"
-                      fill="#ef4444"
-                      radius={[4, 4, 0, 0]}
-                      name="Absent"
-                    />
-                    <Bar
-                      dataKey="late"
-                      fill="#f59e0b"
-                      radius={[4, 4, 0, 0]}
-                      name="Late"
-                    />
-                  </BarChart>
+              (() => {
+                const currentData =
+                  reportType === "Facility Usage Report"
+                    ? datasets.facilityData
+                    : reportType === "Financial Report"
+                      ? datasets.financialData
+                      : reportType === "Attendance Report"
+                        ? datasets.attendanceData
+                        : reportType === "Custom Report"
+                          ? customModules.length > 0
+                            ? (datasets.customData || []).filter((d) =>
+                                customModules.includes(d.name),
+                              )
+                            : datasets.customData
+                          : datasets.approvalData;
+
+                return !currentData || currentData.length === 0 ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                    <i className="fa-solid fa-chart-simple text-5xl mb-3"></i>
+                    <p className="text-lg font-medium">No data available</p>
+                    <p className="text-sm mt-1">
+                      Data will appear here once records are added to the
+                      system.
+                    </p>
+                  </div>
                 ) : (
-                  <BarChart
-                    data={datasets.approvalData}
-                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip cursor={{ fill: "transparent" }} />
-                    <Legend />
-                    <Bar
-                      dataKey="approved"
-                      stackId="a"
-                      fill="#10b981"
-                      name="Approved"
-                    />
-                    <Bar
-                      dataKey="pending"
-                      stackId="a"
-                      fill="#f59e0b"
-                      name="Pending"
-                    />
-                    <Bar
-                      dataKey="rejected"
-                      stackId="a"
-                      fill="#ef4444"
-                      name="Rejected"
-                    />
-                  </BarChart>
-                )}
-              </ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={350} minWidth={0}>
+                    {reportType === "Facility Usage Report" ? (
+                      <AreaChart
+                        data={datasets.facilityData}
+                        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                      >
+                        <defs>
+                          <linearGradient
+                            id="colorUsage"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="5%"
+                              stopColor="#8884d8"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="95%"
+                              stopColor="#8884d8"
+                              stopOpacity={0}
+                            />
+                          </linearGradient>
+                          <linearGradient
+                            id="colorMaint"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="5%"
+                              stopColor="#82ca9d"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="95%"
+                              stopColor="#82ca9d"
+                              stopOpacity={0}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Area
+                          type="monotone"
+                          dataKey="usage"
+                          stroke="#8884d8"
+                          fillOpacity={1}
+                          fill="url(#colorUsage)"
+                          name="Usage (%)"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="maintenance"
+                          stroke="#82ca9d"
+                          fillOpacity={1}
+                          fill="url(#colorMaint)"
+                          name="Maintenance (hrs)"
+                        />
+                      </AreaChart>
+                    ) : reportType === "Financial Report" ? (
+                      <LineChart
+                        data={datasets.financialData}
+                        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="revenue"
+                          stroke="#10b981"
+                          strokeWidth={3}
+                          activeDot={{ r: 8 }}
+                          name="Revenue ($)"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="expenses"
+                          stroke="#ef4444"
+                          strokeWidth={3}
+                          name="Expenses ($)"
+                        />
+                      </LineChart>
+                    ) : reportType === "Attendance Report" ? (
+                      <BarChart
+                        data={datasets.attendanceData}
+                        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip cursor={{ fill: "transparent" }} />
+                        <Legend />
+                        <Bar
+                          dataKey="present"
+                          fill="#3b82f6"
+                          radius={[4, 4, 0, 0]}
+                          name="Present"
+                        />
+                        <Bar
+                          dataKey="absent"
+                          fill="#ef4444"
+                          radius={[4, 4, 0, 0]}
+                          name="Absent"
+                        />
+                        <Bar
+                          dataKey="late"
+                          fill="#f59e0b"
+                          radius={[4, 4, 0, 0]}
+                          name="Late"
+                        />
+                      </BarChart>
+                    ) : reportType === "Custom Report" ? (
+                      <BarChart
+                        data={
+                          customModules.length > 0
+                            ? (datasets.customData || []).filter((d) =>
+                                customModules.includes(d.name),
+                              )
+                            : datasets.customData
+                        }
+                        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip cursor={{ fill: "transparent" }} />
+                        <Legend />
+                        <Bar
+                          dataKey="total"
+                          fill="#6366f1"
+                          radius={[4, 4, 0, 0]}
+                          name="Total"
+                        />
+                        <Bar
+                          dataKey="active"
+                          fill="#10b981"
+                          radius={[4, 4, 0, 0]}
+                          name="Active/Approved"
+                        />
+                        <Bar
+                          dataKey="issues"
+                          fill="#ef4444"
+                          radius={[4, 4, 0, 0]}
+                          name="Issues/Rejected"
+                        />
+                      </BarChart>
+                    ) : (
+                      <BarChart
+                        data={datasets.approvalData}
+                        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip cursor={{ fill: "transparent" }} />
+                        <Legend />
+                        <Bar
+                          dataKey="approved"
+                          stackId="a"
+                          fill="#10b981"
+                          name="Approved"
+                        />
+                        <Bar
+                          dataKey="pending"
+                          stackId="a"
+                          fill="#f59e0b"
+                          name="Pending"
+                        />
+                        <Bar
+                          dataKey="rejected"
+                          stackId="a"
+                          fill="#ef4444"
+                          name="Rejected"
+                        />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                );
+              })()
             )}
           </div>
         </div>
+
+        {/* Per-Module Detailed Stats for Custom Report */}
+        {reportType === "Custom Report" &&
+          (() => {
+            const moduleDetails = datasets.moduleDetails || {};
+            const modulesToShow =
+              customModules.length > 0
+                ? customModules
+                : Object.keys(moduleDetails);
+            if (modulesToShow.length === 0) return null;
+
+            const colorMap = {
+              blue: {
+                bg: "bg-blue-50",
+                text: "text-blue-600",
+                icon: "bg-blue-100",
+              },
+              green: {
+                bg: "bg-green-50",
+                text: "text-green-600",
+                icon: "bg-green-100",
+              },
+              red: {
+                bg: "bg-red-50",
+                text: "text-red-600",
+                icon: "bg-red-100",
+              },
+              orange: {
+                bg: "bg-orange-50",
+                text: "text-orange-600",
+                icon: "bg-orange-100",
+              },
+            };
+
+            return (
+              <div className="space-y-4">
+                {modulesToShow.map((modName) => {
+                  const detail = moduleDetails[modName];
+                  if (!detail) return null;
+                  const opt = customModuleOptions.find(
+                    (o) => o.value === modName,
+                  );
+                  return (
+                    <div
+                      key={modName}
+                      className="bg-white rounded-lg border border-gray-200 p-5"
+                    >
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <i
+                            className={`fa-solid ${opt?.icon || "fa-cube"} text-blue-600 text-sm`}
+                          ></i>
+                        </div>
+                        <h4 className="text-base font-bold text-[#111418]">
+                          {opt?.label || modName}
+                        </h4>
+                        {detail.rate && (
+                          <span className="ml-auto text-sm font-medium text-gray-500">
+                            {detail.rateLabel}:{" "}
+                            <span className="text-blue-600 font-bold">
+                              {detail.rate}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {detail.stats.map((stat, idx) => {
+                          const colors = colorMap[stat.color] || colorMap.blue;
+                          return (
+                            <div
+                              key={idx}
+                              className={`${colors.bg} rounded-lg p-3`}
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <div
+                                  className={`w-6 h-6 ${colors.icon} rounded flex items-center justify-center`}
+                                >
+                                  <i
+                                    className={`fa-solid ${stat.icon} ${colors.text} text-xs`}
+                                  ></i>
+                                </div>
+                                <span className="text-xs font-medium text-gray-500">
+                                  {stat.label}
+                                </span>
+                              </div>
+                              <p className={`text-lg font-bold ${colors.text}`}>
+                                {stat.value}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
         {/* Main Content - Report Configuration and Recent Reports */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -850,6 +1049,113 @@ const Analytics = () => {
                   </select>
                 </div>
 
+                {/* Custom Report Module Selector */}
+                {reportType === "Custom Report" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Modules to Analyze
+                    </label>
+                    <div className="relative">
+                      <div className="w-full px-3 py-2 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 bg-white">
+                        {/* Selected module tags */}
+                        <div className="flex flex-wrap gap-1 mb-1">
+                          {customModules.map((mod) => {
+                            const opt = customModuleOptions.find(
+                              (o) => o.value === mod,
+                            );
+                            return (
+                              <span
+                                key={mod}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium"
+                              >
+                                <i
+                                  className={`fa-solid ${opt?.icon || "fa-cube"} text-[10px]`}
+                                ></i>
+                                {opt?.label || mod}
+                                <button
+                                  onClick={() =>
+                                    setCustomModules(
+                                      customModules.filter((m) => m !== mod),
+                                    )
+                                  }
+                                  className="ml-0.5 hover:text-blue-900"
+                                >
+                                  <i className="fa-solid fa-xmark text-[10px]"></i>
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                        {/* Search input */}
+                        <input
+                          type="text"
+                          value={moduleSearch}
+                          onChange={(e) => setModuleSearch(e.target.value)}
+                          placeholder={
+                            customModules.length === 0
+                              ? "Search modules... (all selected by default)"
+                              : "Add more modules..."
+                          }
+                          className="w-full text-sm outline-none bg-transparent"
+                        />
+                      </div>
+                      {/* Dropdown options */}
+                      {moduleSearch && (
+                        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {customModuleOptions
+                            .filter(
+                              (opt) =>
+                                !customModules.includes(opt.value) &&
+                                opt.label
+                                  .toLowerCase()
+                                  .includes(moduleSearch.toLowerCase()),
+                            )
+                            .map((opt) => (
+                              <button
+                                key={opt.value}
+                                onClick={() => {
+                                  setCustomModules([
+                                    ...customModules,
+                                    opt.value,
+                                  ]);
+                                  setModuleSearch("");
+                                }}
+                                className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-center gap-2 text-sm transition-colors"
+                              >
+                                <i
+                                  className={`fa-solid ${opt.icon} text-gray-500 w-4`}
+                                ></i>
+                                {opt.label}
+                              </button>
+                            ))}
+                          {customModuleOptions.filter(
+                            (opt) =>
+                              !customModules.includes(opt.value) &&
+                              opt.label
+                                .toLowerCase()
+                                .includes(moduleSearch.toLowerCase()),
+                          ).length === 0 && (
+                            <p className="px-3 py-2 text-sm text-gray-400">
+                              No matching modules
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {customModules.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setCustomModules([]);
+                          setModuleSearch("");
+                        }}
+                        className="mt-1 text-xs text-blue-600 hover:underline"
+                      >
+                        Clear selection (show all)
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* Include Drafts */}
                 <div className="flex items-center gap-2">
                   <input
@@ -866,25 +1172,6 @@ const Analytics = () => {
                     Include Drafts
                   </label>
                 </div>
-
-                {/* Generate Button */}
-                <button
-                  onClick={handleGenerateReport}
-                  disabled={generatingReport}
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {generatingReport ? (
-                    <>
-                      <i className="fa-solid fa-circle-notch fa-spin"></i>
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <i className="fa-solid fa-wand-magic-sparkles"></i>
-                      Generate Report
-                    </>
-                  )}
-                </button>
 
                 {/* Reset Filters */}
                 <button
@@ -1035,12 +1322,40 @@ const Analytics = () => {
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <button
+                                onClick={() => setSelectedReport(report)}
                                 className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                 title="View Report"
                               >
                                 <i className="fa-solid fa-eye"></i>
                               </button>
                               <button
+                                onClick={() => {
+                                  const data = {
+                                    Name: report.name,
+                                    Module: report.module || "",
+                                    Type: report.reportType || "",
+                                    Status: report.status || "",
+                                    Department: report.department || "",
+                                    DateGenerated: report.createdAt
+                                      ? new Date(
+                                          report.createdAt,
+                                        ).toLocaleDateString()
+                                      : "",
+                                    GeneratedBy: report.generatedBy || "",
+                                    ...(report.data || {}),
+                                  };
+                                  const blob = new Blob(
+                                    [JSON.stringify(data, null, 2)],
+                                    { type: "application/json" },
+                                  );
+                                  const url = URL.createObjectURL(blob);
+                                  const a = document.createElement("a");
+                                  a.href = url;
+                                  a.download = `${report.name?.replace(/\s+/g, "-") || "report"}.json`;
+                                  a.click();
+                                  URL.revokeObjectURL(url);
+                                  toast.success("Report downloaded");
+                                }}
                                 className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                                 title="Download Report"
                               >
@@ -1090,6 +1405,162 @@ const Analytics = () => {
           </div>
         </div>
       </div>
+
+      {/* View Report Modal */}
+      {selectedReport && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setSelectedReport(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 ${selectedReport.iconColor || "bg-blue-100 text-blue-600"} rounded-lg flex items-center justify-center`}
+                >
+                  <i
+                    className={`fa-solid ${selectedReport.icon || "fa-file-lines"}`}
+                  ></i>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-[#111418]">
+                    {selectedReport.name}
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    ID: #{selectedReport._id?.slice(-8).toUpperCase()}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedReport(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <i className="fa-solid fa-xmark text-lg"></i>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Report Type</p>
+                  <p className="text-sm font-medium text-[#111418]">
+                    {selectedReport.reportType || "—"}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Module</p>
+                  <p className="text-sm font-medium text-[#111418]">
+                    {selectedReport.module || "—"}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Department</p>
+                  <p className="text-sm font-medium text-[#111418]">
+                    {selectedReport.department || "All Departments"}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Status</p>
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedReport.status)}`}
+                  >
+                    <i
+                      className={`fa-solid ${getStatusIcon(selectedReport.status)}`}
+                    ></i>
+                    {selectedReport.status}
+                  </span>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Generated By</p>
+                  <p className="text-sm font-medium text-[#111418]">
+                    {selectedReport.generatedBy || "—"}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Date Generated</p>
+                  <p className="text-sm font-medium text-[#111418]">
+                    {selectedReport.createdAt
+                      ? new Date(selectedReport.createdAt).toLocaleString()
+                      : "—"}
+                  </p>
+                </div>
+                {selectedReport.startDate && (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 mb-1">Date Range</p>
+                    <p className="text-sm font-medium text-[#111418]">
+                      {new Date(selectedReport.startDate).toLocaleDateString()}{" "}
+                      –{" "}
+                      {selectedReport.endDate
+                        ? new Date(selectedReport.endDate).toLocaleDateString()
+                        : "Present"}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Report Data */}
+              {selectedReport.data &&
+                Object.keys(selectedReport.data).length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-[#111418] mb-3">
+                      Report Data
+                    </h4>
+                    <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
+                      <pre className="text-xs text-gray-700 whitespace-pre-wrap">
+                        {JSON.stringify(selectedReport.data, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
+              <button
+                onClick={() => {
+                  const data = {
+                    Name: selectedReport.name,
+                    Module: selectedReport.module || "",
+                    Type: selectedReport.reportType || "",
+                    Status: selectedReport.status || "",
+                    Department: selectedReport.department || "",
+                    DateGenerated: selectedReport.createdAt
+                      ? new Date(selectedReport.createdAt).toLocaleDateString()
+                      : "",
+                    GeneratedBy: selectedReport.generatedBy || "",
+                    ...(selectedReport.data || {}),
+                  };
+                  const blob = new Blob([JSON.stringify(data, null, 2)], {
+                    type: "application/json",
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `${selectedReport.name?.replace(/\s+/g, "-") || "report"}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast.success("Report downloaded");
+                }}
+                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors flex items-center gap-2 text-sm"
+              >
+                <i className="fa-solid fa-download"></i>
+                Download
+              </button>
+              <button
+                onClick={() => setSelectedReport(null)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

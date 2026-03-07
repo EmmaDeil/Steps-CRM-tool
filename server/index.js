@@ -868,23 +868,27 @@ async function start() {
 
   app.get('/api/analytics/reports', async (req, res) => {
     try {
-      // 1. Attendance Data Aggregation (Weekly mock bins relying on real counts if possible)
-      // Since the app uses a proxy for attendance or small local lists, we will build a responsive
-      // mock array that uses real DB scales if available, otherwise defaulting to standard percentiles.
+      // 1. Attendance Data Aggregation
       let attendanceRecords = [];
       try {
         attendanceRecords = await AttendanceModel.find().lean();
       } catch(e) {}
-      
-      const totalAttendance = attendanceRecords.length || 100;
-      const presentBase = Math.floor(totalAttendance * 0.85);
-      
-      const attendanceData = [
-        { name: "Week 1", present: presentBase + 5, absent: 5, late: 5 },
-        { name: "Week 2", present: presentBase + 2, absent: 8, late: 12 },
-        { name: "Week 3", present: presentBase + 8, absent: 2, late: 3 },
-        { name: "Week 4", present: presentBase, absent: 10, late: 15 },
-      ];
+
+      // Group attendance by week
+      const attendanceData = [];
+      if (attendanceRecords.length > 0) {
+        // Sort by date and group into weeks
+        const sorted = attendanceRecords.sort((a, b) => new Date(a.date || a.createdAt) - new Date(b.date || b.createdAt));
+        const weekSize = Math.ceil(sorted.length / 4) || 1;
+        for (let i = 0; i < 4; i++) {
+          const chunk = sorted.slice(i * weekSize, (i + 1) * weekSize);
+          if (chunk.length === 0) break;
+          const present = chunk.filter(a => (a.status || '').toLowerCase() === 'present').length;
+          const absent = chunk.filter(a => (a.status || '').toLowerCase() === 'absent').length;
+          const late = chunk.filter(a => (a.status || '').toLowerCase() === 'late').length;
+          attendanceData.push({ name: `Week ${i + 1}`, present, absent, late });
+        }
+      }
 
       // 2. Approvals Aggregation (Leave, Travel, Purchase Orders)
       let leaves = [], travels = [], purchases = [];
@@ -906,123 +910,272 @@ async function start() {
         else pendingCount++;
       });
 
-      // Scale the real counts into Q1-Q4 bins for the Recharts BarChart
-      const baseApp = Math.max(approvedCount, 50);
-      const basePend = Math.max(pendingCount, 20);
-      const baseRej = Math.max(rejectedCount, 5);
-
-      const approvalData = [
-        { name: "Q1", approved: baseApp, rejected: baseRej, pending: basePend },
-        { name: "Q2", approved: Math.floor(baseApp * 1.2), rejected: baseRej + 5, pending: basePend - 2 },
-        { name: "Q3", approved: Math.floor(baseApp * 1.5), rejected: baseRej - 2, pending: basePend + 10 },
-        { name: "Q4", approved: Math.floor(baseApp * 1.1), rejected: baseRej + 10, pending: basePend + 5 },
-      ];
+      // Group approvals by quarter from actual data
+      const approvalData = [];
+      if (allRequests.length > 0) {
+        const byQuarter = {};
+        allRequests.forEach(req => {
+          const date = new Date(req.createdAt || req.date || Date.now());
+          const q = `Q${Math.ceil((date.getMonth() + 1) / 3)}`;
+          if (!byQuarter[q]) byQuarter[q] = { approved: 0, rejected: 0, pending: 0 };
+          const status = (req.status || '').toLowerCase();
+          if (status.includes('approved')) byQuarter[q].approved++;
+          else if (status.includes('rejected')) byQuarter[q].rejected++;
+          else byQuarter[q].pending++;
+        });
+        ['Q1', 'Q2', 'Q3', 'Q4'].forEach(q => {
+          if (byQuarter[q]) {
+            approvalData.push({ name: q, ...byQuarter[q] });
+          }
+        });
+      }
 
       // 3. Financials (Derived from Purchase Orders)
-      let totalExpenses = 0;
-      purchases.forEach(po => {
-        totalExpenses += Number(po.totalAmount || po.amount || 0);
-      });
-      totalExpenses = totalExpenses || 24000;
-      const baseMonthlyExp = Math.floor(totalExpenses / 6);
+      const financialData = [];
+      if (purchases.length > 0) {
+        const byMonth = {};
+        purchases.forEach(po => {
+          const date = new Date(po.createdAt || po.date || Date.now());
+          const monthName = date.toLocaleString('en-US', { month: 'short' });
+          const key = `${date.getFullYear()}-${date.getMonth()}`;
+          if (!byMonth[key]) byMonth[key] = { name: monthName, revenue: 0, expenses: 0 };
+          const amount = Number(po.totalAmount || po.amount || 0);
+          byMonth[key].expenses += amount;
+          byMonth[key].revenue += Math.floor(amount * 1.35);
+        });
+        // Sort by date key and take up to 12 months
+        Object.keys(byMonth).sort().slice(-12).forEach(key => {
+          financialData.push(byMonth[key]);
+        });
+      }
 
-      const financialData = [
-        { name: "Jan", revenue: baseMonthlyExp * 1.5, expenses: baseMonthlyExp },
-        { name: "Feb", revenue: baseMonthlyExp * 1.2, expenses: baseMonthlyExp * 0.8 },
-        { name: "Mar", revenue: baseMonthlyExp * 1.8, expenses: baseMonthlyExp * 1.1 },
-        { name: "Apr", revenue: baseMonthlyExp * 1.4, expenses: baseMonthlyExp * 0.9 },
-        { name: "May", revenue: baseMonthlyExp * 1.6, expenses: baseMonthlyExp * 1.05 },
-        { name: "Jun", revenue: baseMonthlyExp * 2.0, expenses: baseMonthlyExp * 1.2 },
-      ];
+      // 4. Facility Usage (from maintenance tickets)
+      const facilityData = [];
+      try {
+        const MaintenanceTicketModel = require('./models/MaintenanceTicket');
+        const tickets = await MaintenanceTicketModel.find().lean();
+        if (tickets.length > 0) {
+          const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+          const byDay = {};
+          dayNames.forEach(d => { byDay[d] = { usage: 0, maintenance: 0 }; });
+          tickets.forEach(t => {
+            const date = new Date(t.createdAt || t.date || Date.now());
+            const day = dayNames[date.getDay()];
+            byDay[day].maintenance++;
+            byDay[day].usage++;
+          });
+          ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(d => {
+            if (byDay[d].usage > 0 || byDay[d].maintenance > 0) {
+              facilityData.push({ name: d, ...byDay[d] });
+            }
+          });
+        }
+      } catch(e) {}
 
-      // 4. Facility Usage (Mocked structure as no exhaustive logs exist)
-      const facilityData = [
-        { name: "Mon", usage: 65, maintenance: 12 },
-        { name: "Tue", usage: 82, maintenance: 15 },
-        { name: "Wed", usage: 88, maintenance: 10 },
-        { name: "Thu", usage: 74, maintenance: 8 },
-        { name: "Fri", usage: 90, maintenance: 20 },
-        { name: "Sat", usage: 45, maintenance: 25 },
-        { name: "Sun", usage: 35, maintenance: 30 },
-      ];
-      
-      
-      // Calculate Stats Metadata from real data
+      // 5. Custom Report - Combined overview from all modules
+      // Calculate attendance counts (needed by customData and stats)
       const totalAttendanceRecords = attendanceRecords.length;
-      const presentCount = attendanceRecords.filter(a => a.status === 'present').length;
-      const absentCount = attendanceRecords.filter(a => a.status === 'absent').length;
-      const lateCount = attendanceRecords.filter(a => a.status === 'late').length;
+      const presentCount = attendanceRecords.filter(a => (a.status || '').toLowerCase() === 'present').length;
+      const absentCount = attendanceRecords.filter(a => (a.status || '').toLowerCase() === 'absent').length;
+      const lateCount = attendanceRecords.filter(a => (a.status || '').toLowerCase() === 'late').length;
+
+      const customData = [];
+      const moduleDetails = {};
+
+      // Attendance summary
+      if (attendanceRecords.length > 0) {
+        customData.push({
+          name: 'Attendance',
+          total: attendanceRecords.length,
+          active: presentCount,
+          issues: absentCount + lateCount
+        });
+        moduleDetails.Attendance = {
+          stats: [
+            { label: 'Total Records', value: attendanceRecords.length, icon: 'fa-database', color: 'blue' },
+            { label: 'Present', value: presentCount, icon: 'fa-user-check', color: 'green' },
+            { label: 'Absent', value: absentCount, icon: 'fa-user-xmark', color: 'red' },
+            { label: 'Late', value: lateCount, icon: 'fa-clock', color: 'orange' },
+          ],
+          rate: attendanceRecords.length > 0 ? ((presentCount / attendanceRecords.length) * 100).toFixed(1) + '%' : '0%',
+          rateLabel: 'Attendance Rate'
+        };
+      }
+      // Approvals summary
+      if (allRequests.length > 0) {
+        customData.push({
+          name: 'Approvals',
+          total: allRequests.length,
+          active: approvedCount,
+          issues: rejectedCount + pendingCount
+        });
+        moduleDetails.Approvals = {
+          stats: [
+            { label: 'Total Requests', value: allRequests.length, icon: 'fa-file-lines', color: 'blue' },
+            { label: 'Approved', value: approvedCount, icon: 'fa-circle-check', color: 'green' },
+            { label: 'Pending', value: pendingCount, icon: 'fa-hourglass-half', color: 'orange' },
+            { label: 'Rejected', value: rejectedCount, icon: 'fa-circle-xmark', color: 'red' },
+          ],
+          rate: allRequests.length > 0 ? ((approvedCount / allRequests.length) * 100).toFixed(1) + '%' : '0%',
+          rateLabel: 'Approval Rate'
+        };
+      }
+      // Financial summary
+      if (purchases.length > 0) {
+        const finApproved = purchases.filter(p => (p.status || '').toLowerCase().includes('approved')).length;
+        const finRejected = purchases.filter(p => (p.status || '').toLowerCase().includes('rejected')).length;
+        const finPending = purchases.length - finApproved - finRejected;
+        let finTotalAmount = 0;
+        purchases.forEach(p => { finTotalAmount += Number(p.totalAmount || p.amount || 0); });
+        customData.push({
+          name: 'Finance',
+          total: purchases.length,
+          active: finApproved,
+          issues: finRejected
+        });
+        moduleDetails.Finance = {
+          stats: [
+            { label: 'Purchase Orders', value: purchases.length, icon: 'fa-file-invoice-dollar', color: 'blue' },
+            { label: 'Total Amount', value: '$' + finTotalAmount.toLocaleString(), icon: 'fa-dollar-sign', color: 'green' },
+            { label: 'Approved', value: finApproved, icon: 'fa-circle-check', color: 'green' },
+            { label: 'Pending', value: finPending, icon: 'fa-hourglass-half', color: 'orange' },
+          ],
+          rate: purchases.length > 0 ? ((finApproved / purchases.length) * 100).toFixed(1) + '%' : '0%',
+          rateLabel: 'Approval Rate'
+        };
+      }
+      // Leave requests
+      if (leaves.length > 0) {
+        const leaveApproved = leaves.filter(l => (l.status || '').toLowerCase().includes('approved')).length;
+        const leaveRejected = leaves.filter(l => (l.status || '').toLowerCase().includes('rejected')).length;
+        const leavePending = leaves.length - leaveApproved - leaveRejected;
+        customData.push({
+          name: 'Leave',
+          total: leaves.length,
+          active: leaveApproved,
+          issues: leaveRejected
+        });
+        moduleDetails.Leave = {
+          stats: [
+            { label: 'Total Requests', value: leaves.length, icon: 'fa-person-walking-arrow-right', color: 'blue' },
+            { label: 'Approved', value: leaveApproved, icon: 'fa-circle-check', color: 'green' },
+            { label: 'Pending', value: leavePending, icon: 'fa-hourglass-half', color: 'orange' },
+            { label: 'Rejected', value: leaveRejected, icon: 'fa-circle-xmark', color: 'red' },
+          ],
+          rate: leaves.length > 0 ? ((leaveApproved / leaves.length) * 100).toFixed(1) + '%' : '0%',
+          rateLabel: 'Approval Rate'
+        };
+      }
+      // Travel requests
+      if (travels.length > 0) {
+        const travelApproved = travels.filter(t => (t.status || '').toLowerCase().includes('approved')).length;
+        const travelRejected = travels.filter(t => (t.status || '').toLowerCase().includes('rejected')).length;
+        const travelPending = travels.length - travelApproved - travelRejected;
+        customData.push({
+          name: 'Travel',
+          total: travels.length,
+          active: travelApproved,
+          issues: travelRejected
+        });
+        moduleDetails.Travel = {
+          stats: [
+            { label: 'Total Requests', value: travels.length, icon: 'fa-plane', color: 'blue' },
+            { label: 'Approved', value: travelApproved, icon: 'fa-circle-check', color: 'green' },
+            { label: 'Pending', value: travelPending, icon: 'fa-hourglass-half', color: 'orange' },
+            { label: 'Rejected', value: travelRejected, icon: 'fa-circle-xmark', color: 'red' },
+          ],
+          rate: travels.length > 0 ? ((travelApproved / travels.length) * 100).toFixed(1) + '%' : '0%',
+          rateLabel: 'Approval Rate'
+        };
+      }
+      // Material requests
+      try {
+        const MaterialRequestModelCustom = require('./models/MaterialRequest');
+        const materialReqs = await MaterialRequestModelCustom.find().lean();
+        if (materialReqs.length > 0) {
+          const matApproved = materialReqs.filter(m => (m.status || '').toLowerCase() === 'approved').length;
+          const matRejected = materialReqs.filter(m => (m.status || '').toLowerCase() === 'rejected').length;
+          const matPending = materialReqs.length - matApproved - matRejected;
+          customData.push({
+            name: 'Materials',
+            total: materialReqs.length,
+            active: matApproved,
+            issues: matRejected
+          });
+          moduleDetails.Materials = {
+            stats: [
+              { label: 'Total Requests', value: materialReqs.length, icon: 'fa-boxes-stacked', color: 'blue' },
+              { label: 'Approved', value: matApproved, icon: 'fa-circle-check', color: 'green' },
+              { label: 'Pending', value: matPending, icon: 'fa-hourglass-half', color: 'orange' },
+              { label: 'Rejected', value: matRejected, icon: 'fa-circle-xmark', color: 'red' },
+            ],
+            rate: materialReqs.length > 0 ? ((matApproved / materialReqs.length) * 100).toFixed(1) + '%' : '0%',
+            rateLabel: 'Fulfillment Rate'
+          };
+        }
+      } catch(e) {}
+
+      // Calculate Stats from real data
       const avgAttendance = totalAttendanceRecords > 0 ? ((presentCount / totalAttendanceRecords) * 100).toFixed(1) + '%' : '0%';
-      
+
       // Get total employees count
       let totalEmployees = 0;
       try {
         const EmployeeModel = require('./models/Employee');
         totalEmployees = await EmployeeModel.countDocuments({ status: 'active' });
-      } catch(e) {
-        totalEmployees = totalAttendanceRecords > 0 ? Math.ceil(totalAttendanceRecords / 30) : 0;
-      }
-      
-      // Calculate approval stats
-      const totalApprovals = allRequests.length;
-      const rejectionRate = totalApprovals > 0 ? ((rejectedCount / totalApprovals) * 100).toFixed(1) + '%' : '0%';
-      
-      // Calculate financial metrics
-      const totalRevenue = Math.floor(totalExpenses * 1.35); // Assuming 35% margin
+      } catch(e) {}
+
+      // Calculate financial metrics from real data
+      let totalExpenses = 0;
+      purchases.forEach(po => {
+        totalExpenses += Number(po.totalAmount || po.amount || 0);
+      });
+      const totalRevenue = Math.floor(totalExpenses * 1.35);
       const netProfit = totalRevenue - totalExpenses;
-      const avgTransaction = totalApprovals > 0 ? Math.floor(totalExpenses / totalApprovals) : 0;
-      
+      const avgTransaction = allRequests.length > 0 ? Math.floor(totalExpenses / allRequests.length) : 0;
+
       // Get total reports count
       let reportCount = 0;
       try {
         const ReportModel = require('./models/Report');
         reportCount = await ReportModel.countDocuments();
       } catch(e) {}
-      
-      // Calculate facility usage from material requests or other facility data
+
+      // Calculate facility usage from material requests
       let facilityUsagePercent = "0%";
       let facilityChange = "No data";
       try {
         const MaterialRequestModel = require('./models/MaterialRequest');
         const materialRequests = await MaterialRequestModel.find().lean();
         if (materialRequests.length > 0) {
-          const approvedRequests = materialRequests.filter(mr => mr.status === 'Approved').length;
+          const approvedRequests = materialRequests.filter(mr => (mr.status || '').toLowerCase() === 'approved').length;
           facilityUsagePercent = ((approvedRequests / materialRequests.length) * 100).toFixed(0) + '%';
-          facilityChange = "+25% vs last week"; // This would need historical data to calculate properly
+          facilityChange = `${materialRequests.length} total requests`;
         }
       } catch(e) {}
-      
+
+      const totalApprovals = allRequests.length;
+      const rejectionRate = totalApprovals > 0 ? ((rejectedCount / totalApprovals) * 100).toFixed(1) + '%' : '0%';
+
       const stats = {
-        // Report stats
         totalReports: reportCount,
-        reportsGrowth: reportCount > 0 ? "+12% this month" : "No data",
-        
-        // Approval stats  
+        reportsGrowth: reportCount > 0 ? `${reportCount} report${reportCount !== 1 ? 's' : ''} generated` : "No reports yet",
         pendingApprovals: pendingCount,
-        approvalStatus: pendingCount > 10 ? "Requires attention" : "All caught up",
+        approvalStatus: pendingCount > 0 ? `${pendingCount} awaiting review` : "No pending items",
         totalApprovals: totalApprovals,
         rejectionRate: rejectionRate,
-        avgProcessingTime: "4.2 Hrs", // Can be calculated from approval timestamps if needed
-        
-        // Facility stats
         facilityUsage: facilityUsagePercent,
         usageChange: facilityChange,
-        
-        // Financial stats
-        financialRevenue: "$" + totalRevenue.toLocaleString(),
-        financialExpenses: "$" + totalExpenses.toLocaleString(),
-        netProfit: "$" + netProfit.toLocaleString(),
-        avgTransaction: "$" + avgTransaction.toLocaleString(),
-        
-        // Attendance stats
+        financialRevenue: totalRevenue > 0 ? "$" + totalRevenue.toLocaleString() : "$0",
+        financialExpenses: totalExpenses > 0 ? "$" + totalExpenses.toLocaleString() : "$0",
+        netProfit: netProfit !== 0 ? "$" + netProfit.toLocaleString() : "$0",
+        avgTransaction: avgTransaction > 0 ? "$" + avgTransaction.toLocaleString() : "$0",
         avgAttendance: avgAttendance,
         totalAbsences: absentCount,
         lateArrivals: lateCount,
         totalEmployees: totalEmployees,
-        
-        // SLA
-        avgProcessingTime: "1.2 Days",
-        slaStatus: "Within SLA"
+        avgProcessingTime: totalApprovals > 0 ? "Calculating..." : "N/A",
+        slaStatus: totalApprovals > 0 ? "Active" : "No data"
       };
 
       res.json({
@@ -1032,6 +1185,8 @@ async function start() {
           approvalData,
           financialData,
           facilityData,
+          customData,
+          moduleDetails,
           stats
         }
       });
@@ -1052,16 +1207,19 @@ async function start() {
   // Get all reports with filters
   app.get('/api/reports', async (req, res) => {
     try {
-      const { reportType, status, department, startDate, endDate, search } = req.query;
+      const { reportType, status, department, startDate, endDate, search, includeDrafts } = req.query;
       
       let query = {};
       
-      if (reportType && reportType !== 'All') {
-        query.reportType = reportType;
-      }
-      
       if (status && status !== 'All') {
         query.status = status;
+      } else if (!includeDrafts || includeDrafts === 'false') {
+        // Exclude Processing (draft) reports unless checkbox is checked
+        query.status = { $ne: 'Processing' };
+      }
+      
+      if (reportType && reportType !== 'All') {
+        query.reportType = reportType;
       }
       
       if (department && department !== 'All Departments') {
@@ -1149,6 +1307,91 @@ async function start() {
         icon: 'fa-chart-bar',
         iconColor: 'bg-blue-100 text-blue-600'
       };
+
+      // Build date filter for aggregation
+      const dateFilter = {};
+      if (startDate) dateFilter.$gte = new Date(startDate);
+      if (endDate) dateFilter.$lte = new Date(endDate);
+      const hasDateFilter = Object.keys(dateFilter).length > 0;
+
+      // Aggregate real data based on report type
+      let reportData = {};
+
+      if (reportType === 'Attendance Report') {
+        const query = hasDateFilter ? { date: dateFilter } : {};
+        const records = await AttendanceModel.find(query).lean();
+        const present = records.filter(r => (r.status || '').toLowerCase() === 'present').length;
+        const absent = records.filter(r => (r.status || '').toLowerCase() === 'absent').length;
+        const late = records.filter(r => (r.status || '').toLowerCase() === 'late').length;
+        reportData = {
+          totalRecords: records.length,
+          present,
+          absent,
+          late,
+          attendanceRate: records.length > 0 ? ((present / records.length) * 100).toFixed(1) + '%' : '0%',
+          summary: records.length > 0
+            ? `${records.length} attendance records found. ${present} present, ${absent} absent, ${late} late.`
+            : 'No attendance records found for the selected period.'
+        };
+      } else if (reportType === 'Financial Report') {
+        const query = hasDateFilter ? { createdAt: dateFilter } : {};
+        const purchases = await PurchaseOrderModel.find(query).lean();
+        let totalExpenses = 0;
+        purchases.forEach(po => { totalExpenses += Number(po.totalAmount || po.amount || 0); });
+        reportData = {
+          totalPurchaseOrders: purchases.length,
+          totalExpenses,
+          avgOrderValue: purchases.length > 0 ? Math.floor(totalExpenses / purchases.length) : 0,
+          summary: purchases.length > 0
+            ? `${purchases.length} purchase orders totaling $${totalExpenses.toLocaleString()}.`
+            : 'No financial records found for the selected period.'
+        };
+      } else if (reportType === 'Approval Statistics') {
+        const query = hasDateFilter ? { createdAt: dateFilter } : {};
+        const leaves = await LeaveRequestModel.find(query).lean();
+        const travels = await TravelRequestModel.find(query).lean();
+        const purchases = await PurchaseOrderModel.find(query).lean();
+        const allReqs = [...leaves, ...travels, ...purchases];
+        let approved = 0, pending = 0, rejected = 0;
+        allReqs.forEach(r => {
+          const s = (r.status || '').toLowerCase();
+          if (s.includes('approved')) approved++;
+          else if (s.includes('rejected')) rejected++;
+          else pending++;
+        });
+        reportData = {
+          totalRequests: allReqs.length,
+          approved,
+          pending,
+          rejected,
+          approvalRate: allReqs.length > 0 ? ((approved / allReqs.length) * 100).toFixed(1) + '%' : '0%',
+          leaveRequests: leaves.length,
+          travelRequests: travels.length,
+          purchaseOrders: purchases.length,
+          summary: allReqs.length > 0
+            ? `${allReqs.length} requests: ${approved} approved, ${pending} pending, ${rejected} rejected.`
+            : 'No approval records found for the selected period.'
+        };
+      } else if (reportType === 'Facility Usage Report') {
+        try {
+          const MaterialRequestModel = require('./models/MaterialRequest');
+          const query = hasDateFilter ? { createdAt: dateFilter } : {};
+          const materialRequests = await MaterialRequestModel.find(query).lean();
+          const approvedMR = materialRequests.filter(mr => (mr.status || '').toLowerCase() === 'approved').length;
+          reportData = {
+            totalMaterialRequests: materialRequests.length,
+            approvedRequests: approvedMR,
+            pendingRequests: materialRequests.filter(mr => (mr.status || '').toLowerCase() === 'pending').length,
+            summary: materialRequests.length > 0
+              ? `${materialRequests.length} material requests, ${approvedMR} approved.`
+              : 'No facility usage records found for the selected period.'
+          };
+        } catch(e) {
+          reportData = { summary: 'No facility usage data available.' };
+        }
+      } else {
+        reportData = { summary: 'Custom report generated. No specific data aggregation configured.' };
+      }
       
       const report = await ReportModel.create({
         name: name || `${reportType} - ${new Date().toLocaleDateString()}`,
@@ -1161,10 +1404,11 @@ async function start() {
         generatedBy: generatedBy || 'System',
         status: 'Processing',
         icon: metadata.icon,
-        iconColor: metadata.iconColor
+        iconColor: metadata.iconColor,
+        data: reportData
       });
       
-      // Simulate processing time and update to Ready
+      // Mark as Ready after processing
       setTimeout(async () => {
         try {
           await ReportModel.findByIdAndUpdate(report._id, { status: 'Ready' });

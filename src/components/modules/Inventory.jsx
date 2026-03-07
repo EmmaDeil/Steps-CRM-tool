@@ -15,6 +15,8 @@ const Inventory = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("add"); // "add" | "edit" | "restock"
   const [activeItem, setActiveItem] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -122,6 +124,7 @@ const Inventory = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       if (modalMode === "add") {
         await apiService.post("/api/inventory", formData);
@@ -136,6 +139,8 @@ const Inventory = () => {
       handleCloseModal();
     } catch (err) {
       toast.error(err.response?.data?.message || `Failed to ${modalMode} item`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -144,12 +149,15 @@ const Inventory = () => {
       !window.confirm("Are you sure you want to permanently delete this item?")
     )
       return;
+    setDeletingId(id);
     try {
       await apiService.delete(`/api/inventory/${id}`);
       toast.success("Item deleted successfully");
       fetchInventory();
     } catch (_err) {
       toast.error("Failed to delete item");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -213,24 +221,31 @@ const Inventory = () => {
         <div className="flex items-center justify-end gap-2 text-gray-400">
           <button
             onClick={() => handleOpenModal("edit", item)}
-            className="p-2 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+            disabled={deletingId === item._id}
+            className="p-2 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Edit Item"
           >
             <i className="fa-solid fa-pen"></i>
           </button>
           <button
             onClick={() => handleOpenModal("restock", item)}
-            className="p-2 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+            disabled={deletingId === item._id}
+            className="p-2 hover:text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Restock"
           >
             <i className="fa-solid fa-boxes-packing"></i>
           </button>
           <button
             onClick={() => handleDelete(item._id)}
-            className="p-2 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+            disabled={deletingId === item._id}
+            className="p-2 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Delete"
           >
-            <i className="fa-solid fa-trash-can"></i>
+            {deletingId === item._id ? (
+              <i className="fa-solid fa-spinner fa-spin"></i>
+            ) : (
+              <i className="fa-solid fa-trash-can"></i>
+            )}
           </button>
         </div>
       ),
@@ -337,14 +352,14 @@ const Inventory = () => {
               <select
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
-                className="px-4 py-2 border border-gray-300 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 w-full sm:w-auto text-sm"
+                className="px-8 py-2 border border-gray-300 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 w-full sm:w-auto text-sm"
               >
                 <option value="All">All Categories</option>
                 <option value="Electronics">Electronics</option>
                 <option value="Furniture">Furniture</option>
                 <option value="Supplies">Supplies</option>
               </select>
-              <button className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors bg-white shadow-sm flex items-center gap-2 text-sm font-medium">
+              <button className="px-3 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors bg-white shadow-sm flex items-center gap-2 text-sm font-medium">
                 <i className="fa-solid fa-filter"></i> Filters
               </button>
             </div>
@@ -524,20 +539,31 @@ const Inventory = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm flex items-center gap-2"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <i
-                    className={
-                      modalMode === "restock"
-                        ? "fa-solid fa-box"
-                        : "fa-solid fa-check"
-                    }
-                  ></i>
-                  {modalMode === "add"
-                    ? "Create Item"
-                    : modalMode === "edit"
-                      ? "Save Changes"
-                      : "Confirm Restock"}
+                  {isSubmitting ? (
+                    <i className="fa-solid fa-spinner fa-spin"></i>
+                  ) : (
+                    <i
+                      className={
+                        modalMode === "restock"
+                          ? "fa-solid fa-box"
+                          : "fa-solid fa-check"
+                      }
+                    ></i>
+                  )}
+                  {isSubmitting
+                    ? modalMode === "add"
+                      ? "Creating..."
+                      : modalMode === "edit"
+                        ? "Saving..."
+                        : "Restocking..."
+                    : modalMode === "add"
+                      ? "Create Item"
+                      : modalMode === "edit"
+                        ? "Save Changes"
+                        : "Confirm Restock"}
                 </button>
               </div>
             </form>
