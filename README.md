@@ -1,4 +1,4 @@
-# 🚀 Steps CRM - Complete Implementation Guide
+# 🚀 Steps CRM - Enterprise Resource Management System
 
 ## 📋 Table of Contents
 - [Overview](#overview)
@@ -8,73 +8,82 @@
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [Architecture](#architecture)
-- [API Integration](#api-integration)
+- [API Endpoints](#api-endpoints)
 - [Deployment](#deployment)
 
 ## 🎯 Overview
 
-Steps CRM is a modern, enterprise-grade Customer Relationship Management system built with React 19, featuring:
-- 12 Integrated modules
-- Role-based access control
-- Dark mode support
-- Real-time analytics
+Steps CRM is a modern, enterprise-grade resource management system built with React and Express/MongoDB, featuring:
+- 18+ Integrated modules
+- Role-based access control (RBAC)
+- Approval workflow engine with auto-approval rules
+- Multi-currency support with global and per-request currency settings
+- Real-time analytics dashboard
+- Digital document signing
+- Admin-managed SKU/Item catalog
+- Database backup & audit logging
 - Mobile-responsive design
 
 ## ✨ Features
 
-### Core Features
-- ✅ **12 Business Modules:**
-  - Accounting (Financial Management)
-  - Inventory (Stock Management)
-  - HR Management (Employee Records)
-  - Facility Maintenance (Tickets & Maintenance)
-  - Finance (Payment Processing & Reports)
-  - Security Logs (Access & Activity Logs)
-  - Admin Controls (System Management)
-  - Attendance (Check-in/Check-out Tracking)
-  - Signature Management (Digital Signatures)
-  - Material Requests (Procurement Requests)
-  - Purchase Orders (Order Management)
-  - Analytics (Dashboard & Insights)
+### Business Modules
+- ✅ **Accounting / Finance** — Journal entries, bank statement import, reconciliation, accounts payable
+- ✅ **Inventory Management** — Stock tracking, item management
+- ✅ **HR Management** — Employee records, profiles, job titles, departments, leave management, retirement
+- ✅ **Payroll** — Payroll runs, advance requests, salary processing
+- ✅ **Attendance** — Check-in/check-out tracking
+- ✅ **Facility Maintenance** — Maintenance tickets and tracking
+- ✅ **Material Requests** — Procurement requests with admin-managed SKU/item catalog, per-request currency, @mention comments, activity tracking
+- ✅ **Purchase Orders** — Order management and vendor integration
+- ✅ **Vendor Management** — Vendor records, categories, documents
+- ✅ **Budget Management** — Budget categories and tracking
+- ✅ **Document Signing (DocSign)** — Digital signature requests, templates, signing workflow
+- ✅ **Analytics** — Dashboard charts, stats, and insights
+- ✅ **Security Logs** — Access and activity monitoring
+- ✅ **Physical Security** — Physical access control and monitoring
+- ✅ **Policy Management** — Company policies and compliance
+- ✅ **Admin Controls** — User management, role configuration, system settings, approval flow settings, SKU/item management, audit logs, database backup
 
-### Advanced Features
-- ✅ **Authentication:** Clerk integration with secure JWT tokens
-- ✅ **Dark Mode:** Full theme support with smooth transitions
-- ✅ **Role-Based Access:** User, Manager, Admin roles
-- ✅ **Analytics Dashboard:** Charts, stats, and insights
-- ✅ **Notification Center:** Real-time notifications with badges
-- ✅ **Search Enhancement:** History, suggestions, quick access
-- ✅ **Error Boundaries:** Graceful error handling
-- ✅ **Lazy Loading:** Code splitting for optimal performance
-- ✅ **Mobile Responsive:** Works perfectly on all devices
+### Platform Features
+- ✅ **Authentication** — JWT-based auth with login, signup, forgot password
+- ✅ **Approval Workflow** — Multi-step approval chains with auto-approval rules
+- ✅ **Multi-Currency** — Global currency setting + per-request currency override
+- ✅ **@Mention System** — Tag users in comments with @ mentions
+- ✅ **Activity Tracking** — Full activity log on material requests (created, comments, approvals, rejections, status changes)
+- ✅ **Breadcrumb Navigation** — Consistent navigation across all module sub-views
+- ✅ **Notification Center** — Real-time notifications with badges
+- ✅ **Error Boundaries** — Graceful error handling
+- ✅ **Lazy Loading** — Code splitting for optimal performance
+- ✅ **Mobile Responsive** — Works on all devices
 
 ## 🛠️ Tech Stack
 
 ### Frontend
-- **React 19.1.1** - Latest React version
-- **Vite** - Ultra-fast build tool
-- **React Router 6** - Client-side routing
-- **Bootstrap 5** - UI framework
-- **Recharts** - Data visualization
-- **Axios** - HTTP client
-- **React Hot Toast** - Notifications
+- **React 19** with Vite
+- **React Router 6** — Client-side routing
+- **Tailwind CSS** — Utility-first styling
+- **Recharts** — Data visualization
+- **Axios** — HTTP client
+- **React Hot Toast** — Notifications
+- **Font Awesome** — Icons
 
-### Authentication & State
-- **Clerk** - Authentication & user management
-- **Context API** - Global state management
-- **LocalStorage** - Theme & history persistence
+### Backend
+- **Node.js + Express** — REST API server
+- **MongoDB + Mongoose** — Database and ODM
+- **JWT** — Authentication tokens
+- **Multer** — File uploads (avatars, vendor docs)
 
 ### Development Tools
-- **ESLint** - Code linting
-- **PropTypes** - Type checking
-- **Git** - Version control
+- **ESLint** — Code linting
+- **PostCSS** — CSS processing
+- **Git** — Version control
 
 ## 📦 Installation
 
 ### Prerequisites
-- Node.js 18+ 
+- Node.js 18+
 - npm or yarn
-- Clerk account (free tier available)
+- MongoDB instance (local or Atlas)
 
 ### Steps
 
@@ -84,218 +93,218 @@ git clone https://github.com/EmmaDeil/Steps-CRM-tool.git
 cd Steps-CRM-tool
 ```
 
-2. **Install dependencies**
+2. **Install frontend dependencies**
 ```bash
 npm install
 ```
 
-3. **Set up environment variables**
+3. **Install server dependencies**
 ```bash
-cp .env.example .env
+cd server
+npm install
+cd ..
 ```
 
-Edit `.env` with your keys:
+4. **Set up environment variables**
+
+Create `.env` in the root:
 ```env
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_key_here
-VITE_API_BASE_URL=https://your-api-url.com
-VITE_ENV=development
+VITE_API_BASE_URL=http://localhost:4000
 ```
 
-4. **Run development server**
+Create `.env` in `server/`:
+```env
+MONGODB_URI=mongodb://localhost:27017/steps-crm
+JWT_SECRET=your_jwt_secret
+PORT=4000
+```
+
+5. **Start the server**
+```bash
+cd server
+npm run start
+```
+
+6. **Start the frontend** (in a new terminal)
 ```bash
 npm run dev
 ```
 
-5. **Open browser**
-Navigate to `http://localhost:5173`
+7. **Open browser** — Navigate to `http://localhost:5173`
 
 ## ⚙️ Configuration
 
-### Clerk Authentication Setup
-
-1. **Create Clerk Application:**
-   - Go to https://dashboard.clerk.com
-   - Create new application
-   - Copy publishable key
-
-2. **Configure User Metadata:**
-   ```json
-   {
-     "role": "admin"  // Options: "user", "manager", "admin"
-   }
-   ```
-
-3. **Set Redirect URLs:**
-   - Sign-in redirect: `/dashboard`
-   - Sign-out redirect: `/`
-
 ### Role Permissions
 
-| Role    | Access Level | Modules Available |
-|---------|-------------|-------------------|
-| User    | Basic | Accounting, Inventory, Attendance, Analytics |
-| Manager | Extended | User modules + HR, Finance |
-| Admin   | Full | All modules including Admin Controls |
+| Role    | Access Level | Description |
+|---------|-------------|-------------|
+| Staff   | Basic | Standard module access |
+| Manager | Extended | Staff access + approval capabilities |
+| Admin   | Full | All modules + Admin Controls, user management, system settings |
 
-## 💼 Usage
+### Admin Controls
 
-### Quick Start
-
-1. **Sign In**
-   - Navigate to root `/`
-   - Use Clerk sign-in component
-   - Automatically redirected to `/dashboard`
-
-2. **Dashboard Views**
-   - **Modules View:** Grid of available modules
-   - **Analytics View:** Charts and statistics
-   - Toggle between views with buttons
-
-3. **Module Navigation**
-   - Click any module card
-   - Routed to `/modules/:id`
-   - Back button in navbar
-
-4. **Theme Toggle**
-   - Click sun/moon icon in navbar
-   - Preference saved automatically
-
-5. **Notifications**
-   - Bell icon shows unread count
-   - Click to view notification center
-   - Mark as read or clear all
-
-### Keyboard Shortcuts
-
-Coming soon! (Framework ready)
+Admins can manage:
+- **Users** — Create, edit, activate/deactivate users, assign roles
+- **Roles** — Configure role permissions
+- **Approval Flow Settings** — Set up approval rules and auto-approval thresholds
+- **System Settings** — Global currency, company info, system preferences
+- **Item / SKU Management** — Manage catalog of items available in material requests
+- **Audit Logs** — View all system activity with filtering
+- **Database Backup** — Export full database as JSON
 
 ## 🏗️ Architecture
 
 ### Project Structure
 ```
-Steps-CRM/
-├── public/                 # Static assets
+StepsProject/
+├── public/                     # Static assets
+├── server/
+│   ├── index.js               # Express entry point & routes
+│   ├── api.js                 # Vercel serverless adapter
+│   ├── seed.js                # Database seeder
+│   ├── middleware/
+│   │   ├── auth.js            # JWT auth middleware
+│   │   ├── securityAuth.js    # Security middleware
+│   │   └── validation.js      # Input validation
+│   ├── models/                # Mongoose models (33 models)
+│   │   ├── User.js, Employee.js, Role.js, Department.js
+│   │   ├── MaterialRequest.js, PurchaseOrder.js, InventoryItem.js
+│   │   ├── ApprovalRule.js, AuditLog.js, SkuItem.js
+│   │   └── ... (and more)
+│   ├── routes/
+│   │   ├── admin.routes.js    # Admin, audit logs, backup
+│   │   ├── hr.routes.js       # HR & employee management
+│   │   ├── payroll.routes.js  # Payroll processing
+│   │   ├── budget.routes.js   # Budget management
+│   │   ├── procurement.routes.js  # Material requests, POs, vendors
+│   │   ├── approvalRule.routes.js # Approval workflow rules
+│   │   ├── physicalSecurity.routes.js
+│   │   └── maintenance.routes.js
+│   ├── uploads/               # File uploads (avatars, vendor docs)
+│   └── utils/
+│       └── emailService.js    # Email notifications
 ├── src/
-│   ├── assets/            # Images, logos
-│   ├── components/        # React components
-│   │   ├── modules/      # Business modules
-│   │   ├── auth/         # Authentication
-│   │   ├── ErrorBoundary.jsx
-│   │   ├── DashboardAnalytics.jsx
+│   ├── App.jsx                # Root component with routing
+│   ├── main.jsx               # Entry point
+│   ├── index.css              # Global styles (Tailwind)
+│   ├── components/
+│   │   ├── Breadcrumb.jsx     # Navigation breadcrumbs
+│   │   ├── Navbar.jsx         # Top navigation bar
+│   │   ├── Footer.jsx         # Page footer
+│   │   ├── Pagination.jsx     # Reusable pagination
 │   │   ├── NotificationCenter.jsx
-│   │   ├── ThemeToggle.jsx
-│   │   ├── Navbar.jsx
-│   │   └── Module.jsx
-│   ├── context/          # Global state
-│   │   ├── AppContext.jsx
-│   │   └── useAppContext.js
-│   ├── services/         # API layer
-│   │   └── api.js
-│   ├── dashboard/        # Dashboard components
-│   ├── App.jsx           # Root component
-│   ├── main.jsx          # Entry point
-│   ├── theme.css         # Theme variables
-│   └── index.css         # Global styles
-├── .env.example          # Environment template
-├── package.json          # Dependencies
-└── vite.config.js        # Vite configuration
+│   │   ├── PrivateRoute.jsx   # Auth route guard
+│   │   ├── Profile.jsx        # User profile
+│   │   ├── auth/              # Login, Signup, ForgotPassword
+│   │   ├── common/            # DataTable and shared components
+│   │   └── modules/           # All business module components
+│   │       ├── Admin.jsx, Analytics.jsx, Attendance.jsx
+│   │       ├── MaterialRequests.jsx, PurchaseOrders.jsx
+│   │       ├── HRM.jsx, Payroll.jsx, Finance.jsx
+│   │       ├── DocSign.jsx, DocSignRequest.jsx
+│   │       ├── VendorManagement.jsx, Inventory.jsx
+│   │       ├── SkuItemManager.jsx, ApprovalSettings.jsx
+│   │       ├── SystemSettings.jsx, SecuritySettings.jsx
+│   │       └── ... (and more)
+│   ├── context/               # React Context providers
+│   │   ├── AuthContext.jsx    # Auth state
+│   │   ├── AppContext.jsx     # App-wide state
+│   │   └── useDepartments.js  # Department hook
+│   ├── services/
+│   │   ├── api.js             # Axios API service
+│   │   ├── currency.js        # Currency formatting
+│   │   └── websocket.js       # WebSocket service
+│   ├── home/
+│   │   └── Home.jsx           # Home/dashboard page
+│   └── utils/
+│       ├── validation.js      # Client-side validation
+│       └── fileUploadHelper.js
+├── package.json
+├── vite.config.js
+├── tailwind.config.js
+├── vercel.json                # Vercel deployment config
+└── eslint.config.js
 ```
 
-### Component Hierarchy
-```
-App
-├── ErrorBoundary
-│   └── ClerkProvider
-│       └── AppProvider
-│           └── BrowserRouter
-│               ├── Auth (/)
-│               ├── Dashboard (/dashboard)
-│               │   ├── Navbar
-│               │   │   ├── ThemeToggle
-│               │   │   ├── NotificationCenter
-│               │   │   └── Search
-│               │   ├── Module (List)
-│               │   └── DashboardAnalytics
-│               ├── Module (/modules)
-│               └── Module (/modules/:id)
-│                   └── [Dynamic Module Component]
-```
+## 🔌 API Endpoints
 
-## 🔌 API Integration
+### Authentication
+- `POST /api/auth/login` — User login
+- `POST /api/auth/signup` — User registration
+- `POST /api/auth/forgot-password` — Password reset
 
-### API Service (`src/services/api.js`)
+### Users
+- `GET /api/users` — List users
+- `PUT /api/users/:id` — Update user
+- `POST /api/users/:id/avatar` — Upload avatar
 
-The centralized API service handles all HTTP requests:
+### Material Requests
+- `GET /api/material-requests` — List all requests
+- `POST /api/material-requests` — Create request (auto-generates ID, creates initial activity)
+- `PUT /api/material-requests/:id` — Update request
+- `PUT /api/material-requests/:id/approve` — Approve request
+- `PUT /api/material-requests/:id/reject` — Reject request
+- `POST /api/material-requests/:id/comments` — Add comment with @mentions
 
-```javascript
-import { apiService } from './services/api';
+### SKU / Item Catalog
+- `GET /api/sku-items` — List items (`?activeOnly=true` to filter)
+- `POST /api/sku-items` — Create item
+- `PUT /api/sku-items/:id` — Update item
+- `DELETE /api/sku-items/:id` — Delete item
 
-// Example: Fetch attendance data
-const response = await apiService.attendance.getAll();
+### Purchase Orders
+- `GET /api/purchase-orders` — List purchase orders
+- `POST /api/purchase-orders` — Create purchase order
 
-// Example: Create transaction
-await apiService.accounting.createTransaction({
-  amount: 1000,
-  type: 'income',
-  description: 'Payment received'
-});
-```
+### Vendors
+- `GET /api/vendors` — List vendors
+- `POST /api/vendors` — Create vendor
+- `PUT /api/vendors/:id` — Update vendor
+- `DELETE /api/vendors/:id` — Delete vendor
 
-### Available Endpoints
+### Inventory
+- `GET /api/inventory` — List inventory items
+- `POST /api/inventory` — Create item
+- `PUT /api/inventory/:id` — Update item
+- `DELETE /api/inventory/:id` — Delete item
 
-#### Attendance Module
-- `GET /api/attendance` - Get all attendance records
-- `GET /api/attendance/:id` - Get specific record
-- `POST /api/attendance` - Create record
-- `PUT /api/attendance/:id` - Update record
-- `DELETE /api/attendance/:id` - Delete record
+### HR
+- `GET /api/hr/employees` — List employees
+- `POST /api/hr/employees` — Create employee
+- `PUT /api/hr/employees/:id` — Update employee
 
-#### Accounting Module
-- `GET /api/accounting/transactions` - Get transactions
-- `POST /api/accounting/transactions` - Create transaction
-- `GET /api/accounting/stats` - Get financial stats
+### Payroll
+- `GET /api/payroll/runs` — List payroll runs
+- `POST /api/payroll/runs` — Create payroll run
 
-#### Inventory Module
-- `GET /api/inventory` - Get inventory items
-- `POST /api/inventory` - Create item
-- `PUT /api/inventory/:id` - Update item
-- `DELETE /api/inventory/:id` - Delete item
+### Budget
+- `GET /api/budget/categories` — List budget categories
+- `POST /api/budget/categories` — Create category
 
-#### Analytics Module
-- `GET /api/analytics/reports` - Get aggregated analytics reports and charts
+### Approval Rules
+- `GET /api/approval-rules` — List approval rules
+- `POST /api/approval-rules` — Create rule
+- `PUT /api/approval-rules/:id` — Update rule
+- `DELETE /api/approval-rules/:id` — Delete rule
 
-#### HR Module
-- `GET /api/hr/employees` - Get employees
-- `POST /api/hr/employees` - Create employee
-- `PUT /api/hr/employees/:id` - Update employee
-- `GET /api/hr/stats` - Get HR stats
+### Admin
+- `GET /api/admin/logs` — Audit logs (with pagination and filtering)
+- `GET /api/admin/roles` — List roles
+- `PUT /api/admin/roles/:id` — Update role permissions
+- `GET /api/admin/backup` — Download full database backup as JSON
+- `GET /api/admin/stats` — System statistics
 
-#### Facility Module
-- `GET /api/facility/tickets` - Get maintenance tickets
-- `POST /api/facility/tickets` - Create ticket
-- `PUT /api/facility/tickets/:id` - Update ticket
-- `GET /api/facility/stats` - Get facility stats
+### Attendance
+- `GET /api/attendance` — List records
+- `POST /api/attendance` — Create record
 
-#### Finance Module
-- `GET /api/finance/reports` - Get reports
-- `POST /api/finance/reports/generate` - Generate report
+### Facility Maintenance
+- `GET /api/maintenance/tickets` — List tickets
+- `POST /api/maintenance/tickets` — Create ticket
 
-#### Security Module
-- `GET /api/security/logs` - Get security logs
-- `GET /api/security/stats` - Get security stats
-
-#### Admin Module
-- `GET /api/admin/users` - Get all users
-- `PUT /api/admin/users/:id` - Update user
-- `GET /api/admin/system/stats` - System statistics
-
-### Error Handling
-
-All API calls automatically handle errors:
-- 401: Session expired → Redirect to login
-- 403: Permission denied → Toast notification
-- 404: Not found → Handled by component
-- 500+: Server error → Toast notification
+### Analytics
+- `GET /api/analytics/reports` — Aggregated analytics
 
 ## 🚀 Deployment
 
@@ -309,6 +318,8 @@ Output: `dist/` directory
 
 ### Deploy to Vercel
 
+The project includes a `vercel.json` configuration for seamless deployment:
+
 1. **Install Vercel CLI**
 ```bash
 npm i -g vercel
@@ -319,60 +330,35 @@ npm i -g vercel
 vercel --prod
 ```
 
-3. **Environment Variables**
-Set in Vercel dashboard:
-- `VITE_CLERK_PUBLISHABLE_KEY`
-- `VITE_API_BASE_URL`
-
-### Deploy to Netlify
-
-1. **Build command:** `npm run build`
-2. **Publish directory:** `dist`
-3. **Environment variables:** Same as above
-
-### Deploy to Custom Server
-
-1. Build the app: `npm run build`
-2. Serve `dist/` folder with any static server
-3. Configure environment variables
-4. Set up reverse proxy (nginx/Apache)
-
-## 📊 Performance
-
-### Build Stats
-- Main bundle: ~757 KB (227 KB gzipped)
-- Code splitting: 8 lazy-loaded modules (1.7-4.8 KB each)
-- CSS: ~237 KB (32 KB gzipped)
-- Total initial load: ~260 KB gzipped
-
-### Optimizations Implemented
-- ✅ Lazy loading for modules
-- ✅ Code splitting
-- ✅ Tree shaking
-- ✅ Minification
-- ✅ Gzip compression
-- ✅ React Suspense
-- ✅ Memoization ready
+3. **Environment Variables** — Set in Vercel dashboard:
+   - `VITE_API_BASE_URL`
+   - `MONGODB_URI`
+   - `JWT_SECRET`
 
 ## 🔒 Security
 
-### Implemented Security Measures
-- ✅ Environment variable protection
-- ✅ JWT token auto-injection
+- ✅ JWT authentication with token expiry
+- ✅ Role-based access control (RBAC)
+- ✅ Password hashing (bcrypt)
+- ✅ Input validation middleware
 - ✅ XSS protection (React built-in)
-- ✅ CSRF protection via Clerk
-- ✅ Secure authentication flow
-- ✅ Role-based authorization
-- ✅ Input validation ready
-- ✅ HTTPS enforcement (production)
+- ✅ Audit logging for all admin actions
+- ✅ HTTPS enforcement in production
+- ✅ File upload validation (type + size limits)
 
 ## 📝 Scripts
 
 ```bash
+# Frontend
 npm run dev      # Start development server
 npm run build    # Build for production
 npm run preview  # Preview production build
 npm run lint     # Run ESLint
+
+# Backend
+cd server
+npm run start    # Start Express server
+node seed.js     # Seed database with initial data
 ```
 
 ## 🤝 Contributing
@@ -391,13 +377,6 @@ MIT License - See LICENSE file for details
 
 - **Emmanuel Clef** - [EmmaDeil](https://github.com/EmmaDeil)
 
-## 🙏 Acknowledgments
-
-- Clerk for authentication
-- Bootstrap for UI components
-- Recharts for data visualization
-- React team for the amazing framework
-
 ## 📞 Support
 
 - **Issues:** https://github.com/EmmaDeil/Steps-CRM-tool/issues
@@ -405,6 +384,6 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Built with ❤️ using React 19 & Vite**
+**Built with ❤️ using React 19, Express & MongoDB**
 
-*Last Updated: November 5, 2025*
+*Last Updated: March 7, 2026*

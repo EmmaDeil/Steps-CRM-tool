@@ -34,6 +34,7 @@ const Analytics = () => {
   const [department, setDepartment] = useState("All Departments");
   const { departments, loading: departmentsLoading } = useDepartments();
   const [includeDrafts, setIncludeDrafts] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useEffect(() => {
     if (location.state?.defaultSearch) {
@@ -356,6 +357,89 @@ const Analytics = () => {
 
   // Departments now provided by useDepartments()
 
+  const handleExport = (format) => {
+    setShowExportMenu(false);
+    const exportData =
+      filteredReports.length > 0
+        ? filteredReports.map((r) => ({
+            Name: r.name,
+            Module: r.module || "",
+            Type: r.reportType || "",
+            Status: r.status || "",
+            Department: r.department || "",
+            DateGenerated: r.createdAt
+              ? new Date(r.createdAt).toLocaleDateString()
+              : "",
+          }))
+        : [{ Info: "No reports to export" }];
+
+    const filename = `analytics-export-${new Date().toISOString().slice(0, 10)}`;
+
+    if (format === "csv") {
+      const headers = Object.keys(exportData[0]);
+      const csvRows = [
+        headers.join(","),
+        ...exportData.map((row) =>
+          headers
+            .map((h) => `"${String(row[h] || "").replace(/"/g, '""')}"`)
+            .join(","),
+        ),
+      ];
+      const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${filename}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Exported as CSV");
+    } else if (format === "json") {
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${filename}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Exported as JSON");
+    } else if (format === "pdf") {
+      // Print-based PDF export
+      const printContent = `
+        <html><head><title>${filename}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { font-size: 18px; margin-bottom: 4px; }
+          p { font-size: 12px; color: #666; margin-bottom: 16px; }
+          table { width: 100%; border-collapse: collapse; font-size: 13px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background: #f5f5f5; font-weight: 600; }
+        </style></head><body>
+        <h1>Analytics & Reporting Export</h1>
+        <p>Report Type: ${reportType} | Department: ${department} | Exported: ${new Date().toLocaleDateString()}</p>
+        <table>
+          <thead><tr>${Object.keys(exportData[0])
+            .map((h) => `<th>${h}</th>`)
+            .join("")}</tr></thead>
+          <tbody>${exportData
+            .map(
+              (row) =>
+                `<tr>${Object.values(row)
+                  .map((v) => `<td>${v}</td>`)
+                  .join("")}</tr>`,
+            )
+            .join("")}</tbody>
+        </table>
+        </body></html>`;
+      const win = window.open("", "_blank");
+      win.document.write(printContent);
+      win.document.close();
+      win.print();
+      toast.success("PDF print dialog opened");
+    }
+  };
+
   return (
     <div className="w-full min-h-screen bg-gray-50 px-1">
       <Breadcrumb
@@ -378,10 +462,41 @@ const Analytics = () => {
               analysis.
             </p>
           </div>
-          <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors flex items-center gap-2">
-            <i className="fa-solid fa-bookmark"></i>
-            Saved Reports
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors flex items-center gap-2"
+            >
+              <i className="fa-solid fa-file-export"></i>
+              Export
+              <i className="fa-solid fa-chevron-down text-xs"></i>
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-48 py-1">
+                <button
+                  onClick={() => handleExport("csv")}
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                >
+                  <i className="fa-solid fa-file-csv text-green-600"></i>
+                  Export as CSV
+                </button>
+                <button
+                  onClick={() => handleExport("json")}
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                >
+                  <i className="fa-solid fa-file-code text-blue-600"></i>
+                  Export as JSON
+                </button>
+                <button
+                  onClick={() => handleExport("pdf")}
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                >
+                  <i className="fa-solid fa-file-pdf text-red-600"></i>
+                  Export as PDF
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Stats Cards */}
