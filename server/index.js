@@ -717,6 +717,99 @@ async function start() {
   const maintenanceRoutes = require('./routes/maintenance.routes');
   app.use('/api/maintenance', maintenanceRoutes);
 
+  // ============ SKU ITEMS ROUTES ============
+  const SkuItemModel = require('./models/SkuItem');
+
+  // Get all SKU items (optionally filter by active)
+  app.get('/api/sku-items', async (req, res) => {
+    try {
+      const filter = req.query.activeOnly === 'true' ? { isActive: true } : {};
+      const items = await SkuItemModel.find(filter).sort({ name: 1 });
+      res.json(items);
+    } catch (err) {
+      console.error('Error fetching SKU items:', err);
+      res.status(500).json({ message: 'Failed to fetch SKU items' });
+    }
+  });
+
+  // Create SKU item
+  app.post('/api/sku-items', async (req, res) => {
+    try {
+      const item = await SkuItemModel.create(req.body);
+      res.status(201).json(item);
+    } catch (err) {
+      if (err.code === 11000) {
+        return res.status(400).json({ message: 'SKU code already exists' });
+      }
+      console.error('Error creating SKU item:', err);
+      res.status(500).json({ message: 'Failed to create SKU item' });
+    }
+  });
+
+  // Update SKU item
+  app.put('/api/sku-items/:id', async (req, res) => {
+    try {
+      const item = await SkuItemModel.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      if (!item) return res.status(404).json({ message: 'SKU item not found' });
+      res.json(item);
+    } catch (err) {
+      if (err.code === 11000) {
+        return res.status(400).json({ message: 'SKU code already exists' });
+      }
+      console.error('Error updating SKU item:', err);
+      res.status(500).json({ message: 'Failed to update SKU item' });
+    }
+  });
+
+  // Delete SKU item
+  app.delete('/api/sku-items/:id', async (req, res) => {
+    try {
+      const item = await SkuItemModel.findByIdAndDelete(req.params.id);
+      if (!item) return res.status(404).json({ message: 'SKU item not found' });
+      res.json({ message: 'SKU item deleted' });
+    } catch (err) {
+      console.error('Error deleting SKU item:', err);
+      res.status(500).json({ message: 'Failed to delete SKU item' });
+    }
+  });
+
+  // ============ MATERIAL REQUEST COMMENT ROUTES ============
+  // Add comment to a material request
+  app.post('/api/material-requests/:id/comments', async (req, res) => {
+    try {
+      const request = await MaterialRequestModel.findById(req.params.id);
+      if (!request) return res.status(404).json({ message: 'Request not found' });
+
+      const { author, authorId, text } = req.body;
+      if (!text || !text.trim()) return res.status(400).json({ message: 'Comment text is required' });
+
+      const mentions = (text.match(/@(\w+\s?\w*)/g) || []).map(m => m.substring(1).trim());
+
+      const comment = {
+        author,
+        authorId,
+        text,
+        timestamp: new Date(),
+        mentions,
+      };
+      request.comments.push(comment);
+
+      request.activities.push({
+        type: 'comment',
+        author,
+        authorId,
+        text,
+        timestamp: new Date(),
+      });
+
+      await request.save();
+      res.status(201).json(request);
+    } catch (err) {
+      console.error('Error adding comment:', err);
+      res.status(500).json({ message: 'Failed to add comment' });
+    }
+  });
+
 
   // ============ INVENTORY ROUTES ============
   const InventoryItemModel = require('./models/InventoryItem');
@@ -1300,6 +1393,35 @@ async function start() {
       }
       
       const newRequest = await MaterialRequestModel.create(requestData);
+      
+      // Add initial activity for request creation
+      const initialActivity = {
+        type: 'created',
+        author: req.body.requestedBy || 'System',
+        text: `Request ${requestId} was created`,
+        timestamp: new Date(),
+      };
+      newRequest.activities.push(initialActivity);
+      
+      // If there's a message/comment, add it as the first comment and activity
+      if (req.body.message && req.body.message.trim()) {
+        const mentions = (req.body.message.match(/@(\w+\s?\w*)/g) || []).map(m => m.substring(1).trim());
+        const comment = {
+          author: req.body.requestedBy || 'Unknown',
+          text: req.body.message,
+          timestamp: new Date(),
+          mentions,
+        };
+        newRequest.comments.push(comment);
+        newRequest.activities.push({
+          type: 'comment',
+          author: req.body.requestedBy || 'Unknown',
+          text: req.body.message,
+          timestamp: new Date(),
+        });
+      }
+      
+      await newRequest.save();
       
       // Send approval email to current approver
       if (newRequest.usesRuleBasedApproval && newRequest.approvalChain.length > 0) {

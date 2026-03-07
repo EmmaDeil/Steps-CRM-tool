@@ -7,6 +7,7 @@ import Breadcrumb from "../Breadcrumb";
 import { useDepartments } from "../../context/useDepartments";
 import { NumericFormat } from "react-number-format";
 import { formatCurrency } from "../../services/currency";
+import { useCurrency } from "../../context/useCurrency";
 import DataTable from "../common/DataTable";
 
 const MaterialRequests = () => {
@@ -32,6 +33,7 @@ const MaterialRequests = () => {
   const [isEditMode, setIsEditMode] = useState(false);
 
   // Form state
+  const { currency: appCurrency } = useCurrency();
   const [formData, setFormData] = useState({
     requestType: "",
     approver: "",
@@ -41,6 +43,7 @@ const MaterialRequests = () => {
     budgetCode: "",
     reason: "",
     preferredVendor: "",
+    currency: "",
   });
 
   // Line items state
@@ -57,27 +60,29 @@ const MaterialRequests = () => {
   // Attachment state
   const [attachments, setAttachments] = useState([]);
   const [message, setMessage] = useState("");
-  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
-  const [mentionSearchTerm, setMentionSearchTerm] = useState("");
-  const [cursorPosition, setCursorPosition] = useState(0);
   const [userList, setUserList] = useState([]);
-  const [usersLoading, setUsersLoading] = useState(false);
-  const messageTextareaRef = useRef(null);
-  const attachmentInputRef = useRef(null);
+  const [skuItems, setSkuItems] = useState([]);
 
-  // Item and quantity type options
-  const itemOptions = [
-    "Office Supplies",
-    "Computer Equipment",
-    "Furniture",
-    "Cleaning Supplies",
-    "Safety Equipment",
-    "Tools",
-    "Electrical Components",
-    "Plumbing Materials",
-    "Building Materials",
-    "Laboratory Equipment",
-  ];
+  // Form comment @mention state
+  const [showFormMentionDropdown, setShowFormMentionDropdown] = useState(false);
+  const [formMentionSearch, setFormMentionSearch] = useState("");
+  const formCommentRef = useRef(null);
+
+  // Item and quantity type options (fetched from backend)
+  const itemOptions = skuItems.map((s) => ({
+    value: s.name,
+    label: `${s.name} (${s.sku})`,
+    sku: s.sku,
+    unitPrice: s.unitPrice,
+    unit: s.unit,
+  }));
+
+  // View modal comment state
+  const [viewComment, setViewComment] = useState("");
+  const [showViewMentionDropdown, setShowViewMentionDropdown] = useState(false);
+  const [viewMentionSearch, setViewMentionSearch] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const viewCommentRef = useRef(null);
 
   const quantityTypeOptions = [
     "Pieces",
@@ -128,9 +133,17 @@ const MaterialRequests = () => {
     }
   };
 
+  const fetchSkuItems = async () => {
+    try {
+      const response = await apiService.get("/api/sku-items?activeOnly=true");
+      setSkuItems(response.data || response || []);
+    } catch {
+      setSkuItems([]);
+    }
+  };
+
   const fetchUsers = async () => {
     try {
-      setUsersLoading(true);
       const response = await apiService.get("/api/users", {
         params: { status: "Active" },
       });
@@ -144,10 +157,7 @@ const MaterialRequests = () => {
       setUserList(formattedUsers);
     } catch (error) {
       console.error("Failed to fetch users:", error);
-      // Keep empty array on error
       setUserList([]);
-    } finally {
-      setUsersLoading(false);
     }
   };
 
@@ -265,6 +275,7 @@ const MaterialRequests = () => {
     fetchRequests();
     fetchUsers();
     fetchBudgetCategories();
+    fetchSkuItems();
 
     // Restore state from localStorage on mount
     const savedState = localStorage.getItem("materialRequestsState");
@@ -373,51 +384,6 @@ const MaterialRequests = () => {
     }
   };
 
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files);
-    setAttachments((prev) => [...prev, ...files]);
-    e.target.value = null; // Reset input so same file can be re-selected
-  };
-
-  const removeAttachment = (index) => {
-    setAttachments(attachments.filter((_, i) => i !== index));
-  };
-
-  const handleMessageChange = (e) => {
-    const value = e.target.value;
-    const cursorPos = e.target.selectionStart;
-    setMessage(value);
-    setCursorPosition(cursorPos);
-
-    // Check for @ mention
-    const lastAtIndex = value.lastIndexOf("@", cursorPos - 1);
-    if (lastAtIndex !== -1) {
-      const textAfterAt = value.substring(lastAtIndex + 1, cursorPos);
-      if (!textAfterAt.includes(" ") && textAfterAt.length <= 20) {
-        setMentionSearchTerm(textAfterAt.toLowerCase());
-        setShowMentionDropdown(true);
-      } else {
-        setShowMentionDropdown(false);
-      }
-    } else {
-      setShowMentionDropdown(false);
-    }
-  };
-
-  const selectMention = (userName) => {
-    const lastAtIndex = message.lastIndexOf("@", cursorPosition - 1);
-    const beforeMention = message.substring(0, lastAtIndex);
-    const afterCursor = message.substring(cursorPosition);
-    const newMessage = `${beforeMention}@${userName} ${afterCursor}`;
-    setMessage(newMessage);
-    setShowMentionDropdown(false);
-    setMentionSearchTerm("");
-  };
-
-  const filteredUsers = userList.filter((user) =>
-    user.name.toLowerCase().includes(mentionSearchTerm),
-  );
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -473,6 +439,7 @@ const MaterialRequests = () => {
         requestType: "",
         approver: "",
         department: "",
+        currency: appCurrency,
       });
       setLineItems([
         {
@@ -507,6 +474,7 @@ const MaterialRequests = () => {
       requestType: request.requestType,
       approver: request.approver,
       department: request.department,
+      currency: request.currency || appCurrency,
     });
     setLineItems(request.lineItems || []);
     setMessage(request.message || "");
@@ -764,7 +732,10 @@ const MaterialRequests = () => {
                 </p>
               </div>
               <button
-                onClick={() => setShowForm(true)}
+                onClick={() => {
+                  setFormData((prev) => ({ ...prev, currency: appCurrency }));
+                  setShowForm(true);
+                }}
                 className="px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-[#0d6efd] transition-colors flex items-center gap-2 font-medium"
               >
                 <i className="fa-solid fa-plus"></i>
@@ -888,7 +859,7 @@ const MaterialRequests = () => {
 
         {/* Request Form - New Consolidated Design */}
         {showForm && (
-          <div className="flex-1 w-full max-w-[1400px] mx-auto px-4 sm:px-6 py-8">
+          <div className="flex-1 w-full max-w-[1400px] mx-auto px-2 sm:px-6 py-8">
             {/* Page Heading */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
               <div>
@@ -1032,6 +1003,43 @@ const MaterialRequests = () => {
                       </div>
                     </label>
 
+                    <label className="flex flex-col gap-2">
+                      <span className="text-sm font-medium text-[#111418]">
+                        Currency <span className="text-red-500">*</span>
+                      </span>
+                      <div className="relative">
+                        <i className="fa-solid fa-coins absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
+                        <select
+                          name="currency"
+                          value={formData.currency || appCurrency}
+                          onChange={handleFormChange}
+                          className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
+                        >
+                          <option value="NGN">NGN - Nigerian Naira (₦)</option>
+                          <option value="USD">USD - US Dollar ($)</option>
+                          <option value="EUR">EUR - Euro (€)</option>
+                          <option value="GBP">GBP - British Pound (£)</option>
+                          <option value="JPY">JPY - Japanese Yen (¥)</option>
+                          <option value="CAD">
+                            CAD - Canadian Dollar (CA$)
+                          </option>
+                          <option value="AUD">
+                            AUD - Australian Dollar (A$)
+                          </option>
+                          <option value="ZAR">
+                            ZAR - South African Rand (R)
+                          </option>
+                          <option value="GHS">GHS - Ghanaian Cedi (₵)</option>
+                          <option value="KES">
+                            KES - Kenyan Shilling (KSh)
+                          </option>
+                          <option value="INR">INR - Indian Rupee (₹)</option>
+                          <option value="CNY">CNY - Chinese Yuan (¥)</option>
+                        </select>
+                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
+                      </div>
+                    </label>
+
                     {/* Approval Info Message */}
                     <div className="sm:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-4">
                       <div className="flex items-start gap-3">
@@ -1158,19 +1166,38 @@ const MaterialRequests = () => {
                             <select
                               className="w-full rounded border border-gray-300 bg-white text-[#111418] focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] px-3 py-2 text-sm"
                               value={item.itemName}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                const selected = itemOptions.find(
+                                  (o) => o.value === e.target.value,
+                                );
                                 handleLineItemChange(
                                   index,
                                   "itemName",
                                   e.target.value,
-                                )
-                              }
+                                );
+                                if (selected) {
+                                  if (selected.unitPrice) {
+                                    handleLineItemChange(
+                                      index,
+                                      "amount",
+                                      selected.unitPrice,
+                                    );
+                                  }
+                                  if (selected.unit) {
+                                    handleLineItemChange(
+                                      index,
+                                      "quantityType",
+                                      selected.unit,
+                                    );
+                                  }
+                                }
+                              }}
                               required
                             >
                               <option value="">-- Select Item --</option>
                               {itemOptions.map((option) => (
-                                <option key={option} value={option}>
-                                  {option}
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
                                 </option>
                               ))}
                             </select>
@@ -1254,6 +1281,7 @@ const MaterialRequests = () => {
                             {formatCurrency(
                               (parseFloat(item.quantity) || 0) *
                                 (parseFloat(item.amount) || 0),
+                              { currency: formData.currency || appCurrency },
                             )}
                           </td>
                           <td className="p-3 text-center">
@@ -1296,33 +1324,158 @@ const MaterialRequests = () => {
                               (parseFloat(item.amount) || 0),
                           0,
                         ),
+                        { currency: formData.currency || appCurrency },
                       )}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* SECTION 3: Reason & Approval */}
+              {/* SECTION 3: Comment & Approval */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                   <h3 className="text-base font-bold text-[#111418]">
-                    Reason for Request
+                    Comment
                   </h3>
                 </div>
                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <label className="flex flex-col gap-2 md:col-span-2">
+                  <div className="flex flex-col gap-2 md:col-span-2">
                     <span className="text-sm font-medium text-[#111418]">
-                      Reason for Request <span className="text-red-500">*</span>
+                      Comment <span className="text-red-500">*</span>
                     </span>
-                    <textarea
-                      name="reason"
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-4 py-3 min-h-[100px]"
-                      placeholder="Please provide a detailed justification for this request..."
-                      required
-                    />
-                  </label>
+                    <div className="relative">
+                      <textarea
+                        ref={formCommentRef}
+                        name="reason"
+                        value={message}
+                        onChange={(e) => {
+                          setMessage(e.target.value);
+                          const val = e.target.value;
+                          const pos = e.target.selectionStart;
+                          const textBefore = val.substring(0, pos);
+                          const atMatch = textBefore.match(/@(\w*)$/);
+                          if (atMatch) {
+                            setShowFormMentionDropdown(true);
+                            setFormMentionSearch(atMatch[1].toLowerCase());
+                          } else {
+                            setShowFormMentionDropdown(false);
+                            setFormMentionSearch("");
+                          }
+                        }}
+                        className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-4 py-3 min-h-[100px]"
+                        placeholder="Add a comment or justification... Use @ to mention someone"
+                        required
+                      />
+                      {showFormMentionDropdown && (
+                        <div className="absolute z-50 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto w-[280px]">
+                          {userList
+                            .filter((u) =>
+                              u.name?.toLowerCase().includes(formMentionSearch),
+                            )
+                            .slice(0, 8)
+                            .map((u) => (
+                              <button
+                                key={u.id || u._id}
+                                type="button"
+                                className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                                onClick={() => {
+                                  const textarea = formCommentRef.current;
+                                  if (!textarea) return;
+                                  const pos = textarea.selectionStart;
+                                  const text = message;
+                                  const before = text.substring(0, pos);
+                                  const after = text.substring(pos);
+                                  const replaced = before.replace(
+                                    /@(\w*)$/,
+                                    `@${u.name} `,
+                                  );
+                                  setMessage(replaced + after);
+                                  setShowFormMentionDropdown(false);
+                                  setTimeout(() => textarea.focus(), 0);
+                                }}
+                              >
+                                <strong className="text-[#111418] text-sm">
+                                  {u.name}
+                                </strong>
+                                {u.role && (
+                                  <>
+                                    <br />
+                                    <small className="text-[#617589]">
+                                      {u.role}
+                                    </small>
+                                  </>
+                                )}
+                              </button>
+                            ))}
+                          {userList.filter((u) =>
+                            u.name?.toLowerCase().includes(formMentionSearch),
+                          ).length === 0 && (
+                            <div className="px-4 py-3 text-center text-[#617589] text-sm">
+                              No users found
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1">
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.xls,.csv"
+                        className="hidden"
+                        id="mr-attachment-input"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files);
+                          setAttachments((prev) => [...prev, ...files]);
+                          e.target.value = null;
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          document
+                            .getElementById("mr-attachment-input")
+                            ?.click()
+                        }
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-[#617589] hover:text-[#137fec] hover:bg-gray-100 rounded-lg transition-colors"
+                      >
+                        <i className="fa-solid fa-paperclip"></i>
+                        <span>Attach File</span>
+                      </button>
+                      {attachments.length > 0 && (
+                        <span className="text-xs text-[#617589]">
+                          {attachments.length} file
+                          {attachments.length > 1 ? "s" : ""} attached
+                        </span>
+                      )}
+                    </div>
+                    {attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {attachments.map((file, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-sm"
+                          >
+                            <i className="fa-solid fa-file text-[#617589] text-xs"></i>
+                            <span className="text-[#111418] text-xs">
+                              {file.name}
+                            </span>
+                            <button
+                              type="button"
+                              className="text-red-400 hover:text-red-600 ml-1"
+                              onClick={() =>
+                                setAttachments(
+                                  attachments.filter((_, i) => i !== index),
+                                )
+                              }
+                            >
+                              <i className="fa-solid fa-times text-xs"></i>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   <label className="flex flex-col gap-2">
                     <span className="text-sm font-medium text-[#111418]">
@@ -1350,181 +1503,6 @@ const MaterialRequests = () => {
                       <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
                     </div>
                   </label>
-                </div>
-              </div>
-
-              {/* SECTION 4: Comments & Activity */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                  <h3 className="text-base font-bold text-[#111418]">
-                    Comments & Activity
-                  </h3>
-                  <span className="bg-blue-100 text-blue-700 text-xs px-2.5 py-0.5 rounded-full font-medium">
-                    {selectedRequest?.comments?.length || 0} Comments
-                  </span>
-                </div>
-
-                <div className="max-h-[400px] overflow-y-auto p-5 flex flex-col gap-5">
-                  {selectedRequest?.comments &&
-                  selectedRequest.comments.length > 0 ? (
-                    selectedRequest.comments.map((comment, idx) => (
-                      <div key={idx} className="flex gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#137fec] flex items-center justify-center text-white text-xs font-bold shrink-0">
-                          {comment.author?.charAt(0)?.toUpperCase() || "U"}
-                        </div>
-                        <div className="flex flex-col gap-1 w-full">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-[#111418]">
-                              {comment.author}
-                            </span>
-                            <span className="text-[10px] text-[#617589]">
-                              {comment.timestamp}
-                            </span>
-                          </div>
-                          <div className="bg-gray-100 p-3 rounded-lg rounded-tl-none border border-gray-200">
-                            <p className="text-sm text-[#111418]">
-                              {comment.text}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8 text-[#617589]">
-                      <i className="fa-regular fa-comments text-4xl mb-2 opacity-30"></i>
-                      <p className="text-sm">No comments yet. Add one below.</p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-4 border-t border-gray-200 bg-gray-50">
-                  <label className="block mb-2 text-xs font-medium text-[#617589]">
-                    Add a comment
-                  </label>
-                  <div className="relative group">
-                    {/* Hidden file input for attachments */}
-                    <input
-                      ref={attachmentInputRef}
-                      type="file"
-                      multiple
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                      className="hidden"
-                      onChange={handleFileChange}
-                    />
-                    <textarea
-                      ref={messageTextareaRef}
-                      className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-4 pr-4 pb-12 pt-3 text-sm min-h-[120px] resize-none transition-all"
-                      placeholder="Type your comment here... Use @ to mention someone"
-                      value={message}
-                      onChange={handleMessageChange}
-                    />
-
-                    {/* @Mention Dropdown */}
-                    {showMentionDropdown && (
-                      <div className="absolute z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto w-[300px]">
-                        {usersLoading ? (
-                          <div className="px-4 py-3 text-center text-[#617589]">
-                            <span className="inline-block animate-spin mr-2">
-                              ⏳
-                            </span>
-                            Loading users...
-                          </div>
-                        ) : filteredUsers.length > 0 ? (
-                          filteredUsers.map((user) => (
-                            <button
-                              key={user.id}
-                              type="button"
-                              className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
-                              onClick={() => selectMention(user.name)}
-                            >
-                              <strong className="text-[#111418]">
-                                {user.name}
-                              </strong>
-                              <br />
-                              <small className="text-[#617589]">
-                                {user.role}
-                              </small>
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-4 py-3 text-center text-[#617589]">
-                            No users found
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between pt-2 border-t border-gray-200">
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => attachmentInputRef.current?.click()}
-                          className="p-1.5 text-[#617589] hover:text-[#137fec] hover:bg-gray-100 rounded-lg transition-colors"
-                          title="Attach File"
-                        >
-                          <i className="fa-solid fa-paperclip text-lg"></i>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const textarea = messageTextareaRef.current;
-                            if (!textarea) return;
-                            const pos = textarea.selectionStart;
-                            const before = message.substring(0, pos);
-                            const after = message.substring(pos);
-                            const newMsg = before + "@" + after;
-                            setMessage(newMsg);
-                            setCursorPosition(pos + 1);
-                            setMentionSearchTerm("");
-                            setShowMentionDropdown(true);
-                            setTimeout(() => {
-                              textarea.focus();
-                              textarea.setSelectionRange(pos + 1, pos + 1);
-                            }, 0);
-                          }}
-                          className="p-1.5 text-[#617589] hover:text-[#137fec] hover:bg-gray-100 rounded-lg transition-colors"
-                          title="Tag User (@)"
-                        >
-                          <i className="fa-solid fa-at text-lg"></i>
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        className="flex items-center gap-1 px-3 py-1.5 bg-[#137fec] hover:bg-[#0d6efd] text-white rounded-lg transition-colors shadow-sm text-xs font-bold uppercase tracking-wide"
-                      >
-                        Send
-                        <i className="fa-solid fa-paper-plane text-xs"></i>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* File attachments section */}
-                  {attachments.length > 0 && (
-                    <div className="mt-3">
-                      <strong className="text-sm text-[#111418] block mb-2">
-                        <i className="fa-solid fa-file mr-1"></i>
-                        Attached Files ({attachments.length}):
-                      </strong>
-                      <div className="flex flex-wrap gap-2">
-                        {attachments.map((file, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-sm"
-                          >
-                            <i className="fa-solid fa-file text-[#617589]"></i>
-                            <span className="text-[#111418]">{file.name}</span>
-                            <button
-                              type="button"
-                              className="text-red-500 hover:text-red-700 ml-1"
-                              onClick={() => removeAttachment(index)}
-                            >
-                              <i className="fa-solid fa-times text-xs"></i>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -1674,7 +1652,9 @@ const MaterialRequests = () => {
                           {item.quantityType}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-900">
-                          {formatCurrency(item.amount)}
+                          {formatCurrency(item.amount, {
+                            currency: selectedRequest.currency,
+                          })}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-900">
                           {item.description || "-"}
@@ -1945,11 +1925,15 @@ const MaterialRequests = () => {
                           {selectedRequest.budgetCode || "Not specified"}
                         </p>
                       </div>
+                      <div className="flex flex-col gap-1">
+                        <p className="text-[#617589] text-sm">Currency</p>
+                        <p className="text-[#111418] text-base font-medium">
+                          {selectedRequest.currency || "NGN"}
+                        </p>
+                      </div>
                       {selectedRequest.message && (
                         <div className="md:col-span-2 flex flex-col gap-1 pt-2">
-                          <p className="text-[#617589] text-sm">
-                            Reason for Request
-                          </p>
+                          <p className="text-[#617589] text-sm">Comment</p>
                           <p className="text-[#111418] text-sm leading-relaxed">
                             {selectedRequest.message}
                           </p>
@@ -2012,10 +1996,14 @@ const MaterialRequests = () => {
                                   {item.quantityType}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-[#617589]">
-                                  {formatCurrency(item.amount)}
+                                  {formatCurrency(item.amount, {
+                                    currency: selectedRequest.currency,
+                                  })}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-[#111418]">
-                                  {formatCurrency(item.quantity * item.amount)}
+                                  {formatCurrency(item.quantity * item.amount, {
+                                    currency: selectedRequest.currency,
+                                  })}
                                 </td>
                               </tr>
                             ),
@@ -2036,6 +2024,7 @@ const MaterialRequests = () => {
                                     sum + item.quantity * item.amount,
                                   0,
                                 ),
+                                { currency: selectedRequest.currency },
                               )}
                             </td>
                           </tr>
@@ -2044,67 +2033,276 @@ const MaterialRequests = () => {
                     </div>
                   </div>
 
-                  {/* Communication Log */}
+                  {/* Activity & Comments */}
                   <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                       <div className="flex items-center gap-2">
-                        <i className="fa-solid fa-comments text-gray-500"></i>
+                        <i className="fa-solid fa-timeline text-gray-500"></i>
                         <h3 className="text-lg font-bold text-[#111418]">
-                          Communication Log
+                          Activity & Comments
                         </h3>
                       </div>
                       <span className="text-sm text-gray-500 font-medium">
-                        {selectedRequest.comments?.length || 0} Messages
+                        {(selectedRequest.activities?.length || 0) +
+                          (selectedRequest.comments?.length || 0)}{" "}
+                        Entries
                       </span>
                     </div>
-                    <div className="p-6 flex flex-col gap-6">
-                      {selectedRequest.comments &&
-                      selectedRequest.comments.length > 0 ? (
-                        selectedRequest.comments.map((comment, idx) => (
-                          <div key={idx} className="flex gap-4">
-                            <div className="bg-[#137fec]/20 text-[#137fec] h-10 w-10 rounded-full flex-none flex items-center justify-center text-sm font-bold">
-                              {comment.author?.charAt(0)?.toUpperCase() || "U"}
-                            </div>
-                            <div className="flex flex-col gap-1 w-full">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-sm font-bold text-[#111418]">
-                                  {comment.author}
-                                </p>
-                                <span className="text-xs text-[#617589]">
-                                  {comment.timestamp}
-                                </span>
+                    <div className="max-h-[500px] overflow-y-auto p-6 flex flex-col gap-4">
+                      {(() => {
+                        const activities = (
+                          selectedRequest.activities || []
+                        ).map((a) => ({
+                          ...a,
+                          _type: "activity",
+                          _time: new Date(a.timestamp).getTime(),
+                        }));
+                        const comments = (selectedRequest.comments || []).map(
+                          (c) => ({
+                            ...c,
+                            _type: "comment",
+                            _time: new Date(c.timestamp).getTime(),
+                          }),
+                        );
+                        const combined = [...activities, ...comments].sort(
+                          (a, b) => a._time - b._time,
+                        );
+                        if (combined.length === 0) {
+                          return (
+                            <p className="text-sm text-[#617589] text-center py-4">
+                              No activity yet
+                            </p>
+                          );
+                        }
+                        return combined.map((entry, idx) => {
+                          if (
+                            entry._type === "activity" &&
+                            entry.type !== "comment"
+                          ) {
+                            const iconMap = {
+                              created: "fa-plus-circle text-green-500",
+                              status_change: "fa-arrows-rotate text-blue-500",
+                              approval: "fa-circle-check text-green-600",
+                              rejection: "fa-circle-xmark text-red-500",
+                            };
+                            const icon =
+                              iconMap[entry.type] ||
+                              "fa-circle-info text-gray-400";
+                            return (
+                              <div
+                                key={`act-${idx}`}
+                                className="flex items-start gap-3 py-2"
+                              >
+                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                                  <i className={`fa-solid ${icon} text-sm`}></i>
+                                </div>
+                                <div className="flex flex-col gap-0.5">
+                                  <p className="text-sm text-[#111418]">
+                                    <span className="font-semibold">
+                                      {entry.author}
+                                    </span>{" "}
+                                    {entry.text}
+                                  </p>
+                                  <span className="text-[11px] text-[#617589]">
+                                    {new Date(entry.timestamp).toLocaleString()}
+                                  </span>
+                                </div>
                               </div>
-                              <p className="text-sm text-[#111418] leading-relaxed">
-                                {comment.text}
-                              </p>
+                            );
+                          }
+                          return (
+                            <div key={`cmt-${idx}`} className="flex gap-3">
+                              <div className="w-8 h-8 rounded-full bg-[#137fec] flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                {entry.author?.charAt(0)?.toUpperCase() || "U"}
+                              </div>
+                              <div className="flex flex-col gap-1 flex-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-[#111418]">
+                                    {entry.author}
+                                  </span>
+                                  <span className="text-[11px] text-[#617589]">
+                                    {new Date(entry.timestamp).toLocaleString()}
+                                  </span>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded-lg rounded-tl-none border border-gray-100">
+                                  <p className="text-sm text-[#111418] leading-relaxed whitespace-pre-wrap">
+                                    {entry.text?.replace(
+                                      /@(\w+(?:\s\w+)?)/g,
+                                      (match) => match,
+                                    )}
+                                  </p>
+                                  {entry.mentions &&
+                                    entry.mentions.length > 0 && (
+                                      <div className="mt-1.5 flex flex-wrap gap-1">
+                                        {entry.mentions.map((m, mIdx) => (
+                                          <span
+                                            key={mIdx}
+                                            className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded"
+                                          >
+                                            @{m}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-[#617589] text-center py-4">
-                          No messages yet
-                        </p>
-                      )}
+                          );
+                        });
+                      })()}
                     </div>
 
-                    {/* Add Note Section */}
-                    <div className="bg-gray-50 p-6 border-t border-gray-200">
-                      <div className="flex gap-4">
-                        <div className="hidden sm:flex bg-blue-100 text-blue-700 h-10 w-10 rounded-full flex-none items-center justify-center text-sm font-bold">
+                    {/* Add Comment Section */}
+                    <div className="bg-gray-50 p-5 border-t border-gray-200">
+                      <div className="flex gap-3">
+                        <div className="hidden sm:flex bg-blue-100 text-blue-700 h-8 w-8 rounded-full flex-none items-center justify-center text-xs font-bold shrink-0">
                           {user?.fullName?.charAt(0)?.toUpperCase() || "ME"}
                         </div>
-                        <div className="flex-1 flex flex-col gap-3 relative">
+                        <div className="flex-1 relative">
                           <textarea
-                            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-[#111418] placeholder-[#617589] focus:border-[#137fec] focus:ring-1 focus:ring-[#137fec] min-h-[60px] resize-y outline-none transition-all"
-                            placeholder="Add a note to the conversation log..."
+                            ref={viewCommentRef}
+                            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-[#111418] placeholder-[#617589] focus:border-[#137fec] focus:ring-1 focus:ring-[#137fec] min-h-[70px] resize-y outline-none transition-all"
+                            placeholder="Add a comment... Use @ to mention someone"
+                            value={viewComment}
+                            onChange={(e) => {
+                              setViewComment(e.target.value);
+                              const val = e.target.value;
+                              const pos = e.target.selectionStart;
+                              const textBefore = val.substring(0, pos);
+                              const atMatch = textBefore.match(/@(\w*)$/);
+                              if (atMatch) {
+                                setShowViewMentionDropdown(true);
+                                setViewMentionSearch(atMatch[1].toLowerCase());
+                              } else {
+                                setShowViewMentionDropdown(false);
+                                setViewMentionSearch("");
+                              }
+                            }}
                           />
-                          <div className="flex justify-between items-center">
-                            <button className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-[#617589] hover:text-[#111418] transition-colors rounded hover:bg-gray-100">
-                              <i className="fa-solid fa-paperclip text-sm"></i>
-                              <span>Attach</span>
+                          {showViewMentionDropdown && (
+                            <div className="absolute z-50 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto w-[280px]">
+                              {userList
+                                .filter((u) =>
+                                  u.name
+                                    ?.toLowerCase()
+                                    .includes(viewMentionSearch),
+                                )
+                                .slice(0, 8)
+                                .map((u) => (
+                                  <button
+                                    key={u.id || u._id}
+                                    type="button"
+                                    className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                                    onClick={() => {
+                                      const textarea = viewCommentRef.current;
+                                      if (!textarea) return;
+                                      const pos = textarea.selectionStart;
+                                      const text = viewComment;
+                                      const before = text.substring(0, pos);
+                                      const after = text.substring(pos);
+                                      const replaced = before.replace(
+                                        /@(\w*)$/,
+                                        `@${u.name} `,
+                                      );
+                                      setViewComment(replaced + after);
+                                      setShowViewMentionDropdown(false);
+                                      setTimeout(() => textarea.focus(), 0);
+                                    }}
+                                  >
+                                    <strong className="text-[#111418] text-sm">
+                                      {u.name}
+                                    </strong>
+                                    {u.role && (
+                                      <>
+                                        <br />
+                                        <small className="text-[#617589]">
+                                          {u.role}
+                                        </small>
+                                      </>
+                                    )}
+                                  </button>
+                                ))}
+                              {userList.filter((u) =>
+                                u.name
+                                  ?.toLowerCase()
+                                  .includes(viewMentionSearch),
+                              ).length === 0 && (
+                                <div className="px-4 py-3 text-center text-[#617589] text-sm">
+                                  No users found
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <div className="flex justify-between items-center mt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const textarea = viewCommentRef.current;
+                                if (!textarea) return;
+                                const pos = textarea.selectionStart;
+                                const before = viewComment.substring(0, pos);
+                                const after = viewComment.substring(pos);
+                                setViewComment(before + "@" + after);
+                                setShowViewMentionDropdown(true);
+                                setViewMentionSearch("");
+                                setTimeout(() => {
+                                  textarea.focus();
+                                  textarea.setSelectionRange(pos + 1, pos + 1);
+                                }, 0);
+                              }}
+                              className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-[#617589] hover:text-[#111418] transition-colors rounded hover:bg-gray-100"
+                            >
+                              <i className="fa-solid fa-at text-sm"></i>
+                              <span>Mention</span>
                             </button>
-                            <button className="flex h-8 cursor-pointer items-center justify-center gap-2 rounded-lg bg-white border border-gray-300 px-4 text-[#111418] shadow-sm hover:bg-gray-50 transition-colors text-xs font-bold">
-                              <span>Send Note</span>
+                            <button
+                              type="button"
+                              disabled={
+                                !viewComment.trim() || submittingComment
+                              }
+                              onClick={async () => {
+                                if (!viewComment.trim() || submittingComment)
+                                  return;
+                                setSubmittingComment(true);
+                                try {
+                                  await apiService.post(
+                                    `/api/material-requests/${selectedRequest._id}/comments`,
+                                    { text: viewComment.trim() },
+                                  );
+                                  setViewComment("");
+                                  setShowViewMentionDropdown(false);
+                                  // Refresh request data
+                                  const res = await apiService.get(
+                                    "/api/material-requests",
+                                  );
+                                  const allReqs = res.data || res || [];
+                                  setRequests(allReqs);
+                                  const updated = allReqs.find(
+                                    (r) => r._id === selectedRequest._id,
+                                  );
+                                  if (updated) setSelectedRequest(updated);
+                                } catch (err) {
+                                  alert(
+                                    "Failed to post comment: " +
+                                      (err?.response?.data?.error ||
+                                        err.message),
+                                  );
+                                } finally {
+                                  setSubmittingComment(false);
+                                }
+                              }}
+                              className="flex h-8 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#137fec] hover:bg-[#0d6efd] disabled:opacity-50 disabled:cursor-not-allowed px-4 text-white transition-colors text-xs font-bold shadow-sm"
+                            >
+                              {submittingComment ? (
+                                <span className="inline-block animate-spin">
+                                  ⏳
+                                </span>
+                              ) : (
+                                <>
+                                  <i className="fa-solid fa-paper-plane text-xs"></i>
+                                  <span>Post Comment</span>
+                                </>
+                              )}
                             </button>
                           </div>
                         </div>

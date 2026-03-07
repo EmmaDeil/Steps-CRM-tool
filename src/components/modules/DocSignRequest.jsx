@@ -430,15 +430,6 @@ const DocSignRequest = ({ onBack }) => {
       {/* Header */}
       <header className="flex items-center justify-between border-b border-[#e5e7eb] bg-white px-6 py-3 shadow-sm mb-4">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => (onBack ? onBack() : navigate("/home/9"))}
-            className="flex items-center gap-2 text-[#617589] hover:text-[#111418] transition-colors group"
-          >
-            <div className="flex items-center justify-center size-8 rounded-full bg-gray-50 group-hover:bg-gray-100">
-              <i className="fa-solid fa-arrow-left text-[14px]"></i>
-            </div>
-          </button>
-          <div className="w-px h-8 bg-gray-200 hidden sm:block"></div>
           <div className="flex flex-col">
             <h2 className="text-[#111418] text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
               {fileName}

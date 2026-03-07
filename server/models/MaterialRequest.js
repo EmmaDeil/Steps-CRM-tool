@@ -67,6 +67,10 @@ const materialRequestSchema = new mongoose.Schema(
     preferredVendor: { 
       type: String 
     },
+    currency: {
+      type: String,
+      default: 'NGN',
+    },
     date: {
       type: String,
       required: true,
@@ -93,6 +97,20 @@ const materialRequestSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    comments: [{
+      author: { type: String, required: true },
+      authorId: { type: String },
+      text: { type: String, required: true },
+      timestamp: { type: Date, default: Date.now },
+      mentions: [String],
+    }],
+    activities: [{
+      type: { type: String, enum: ['comment', 'status_change', 'approval', 'rejection', 'created'], default: 'comment' },
+      author: { type: String, required: true },
+      authorId: { type: String },
+      text: { type: String, required: true },
+      timestamp: { type: Date, default: Date.now },
+    }],
   },
   {
     timestamps: true,

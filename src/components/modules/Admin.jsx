@@ -7,6 +7,7 @@ import Breadcrumb from "../Breadcrumb";
 import SecuritySettings from "./SecuritySettings";
 import ApprovalSettings from "./ApprovalSettings";
 import SystemSettings from "./SystemSettings";
+import SkuItemManager from "./SkuItemManager";
 const Admin = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -582,13 +583,6 @@ const Admin = () => {
     return descriptions[role] || "";
   };
 
-  const getModuleUrl = (moduleName) => {
-    const module = availableModules.find(
-      (m) => m.componentName === moduleName || m.name === moduleName,
-    );
-    return module ? `/home/${module.id}` : "/home";
-  };
-
   if (activeView === "security") {
     return <SecuritySettings />;
   }
@@ -601,7 +595,7 @@ const Admin = () => {
             { label: "Home", href: "/home", icon: "fa-house" },
             {
               label: "Admin Controls",
-              href: getModuleUrl("Admin"),
+              onClick: () => setSearchParams({ view: "dashboard" }),
               icon: "fa-user-shield",
             },
             { label: "Approval Flow Settings", icon: "fa-clipboard-check" },
@@ -623,7 +617,7 @@ const Admin = () => {
             { label: "Home", href: "/home", icon: "fa-house" },
             {
               label: "Admin Controls",
-              href: getModuleUrl("Admin"),
+              onClick: () => setSearchParams({ view: "dashboard" }),
               icon: "fa-user-shield",
             },
             { label: "System Settings", icon: "fa-gear" },
@@ -631,6 +625,28 @@ const Admin = () => {
         />
         <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1">
           <SystemSettings />
+        </div>
+        <Footer variant="admin" />
+      </div>
+    );
+  }
+
+  if (activeView === "sku-items") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <Breadcrumb
+          items={[
+            { label: "Home", href: "/home", icon: "fa-house" },
+            {
+              label: "Admin Controls",
+              onClick: () => setSearchParams({ view: "dashboard" }),
+              icon: "fa-user-shield",
+            },
+            { label: "Item / SKU Management", icon: "fa-barcode" },
+          ]}
+        />
+        <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1">
+          <SkuItemManager />
         </div>
         <Footer variant="admin" />
       </div>
@@ -904,7 +920,7 @@ const Admin = () => {
             { label: "Home", href: "/home", icon: "fa-house" },
             {
               label: "Admin Controls",
-              href: getModuleUrl("Admin"),
+              onClick: () => setSearchParams({ view: "dashboard" }),
               icon: "fa-user-shield",
             },
             { label: "User Management", icon: "fa-users" },
@@ -1960,6 +1976,13 @@ const Admin = () => {
           >
             <i className="fa-solid fa-gear"></i>
             System Settings
+          </button>
+          <button
+            onClick={() => setSearchParams({ view: "sku-items" })}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-[#111418] rounded-lg font-medium flex items-center gap-2 transition-colors"
+          >
+            <i className="fa-solid fa-barcode"></i>
+            Item / SKU Management
           </button>
           <button
             onClick={async () => {
