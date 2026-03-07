@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
+import Navbar from "../Navbar";
 import { useDepartments } from "../../context/useDepartments";
 import { NumericFormat } from "react-number-format";
 import { formatCurrency } from "../../services/currency";
@@ -147,7 +148,8 @@ const MaterialRequests = () => {
       const response = await apiService.get("/api/users", {
         params: { status: "Active" },
       });
-      const formattedUsers = (response.data || []).map((user) => ({
+      const users = response.data || response || [];
+      const formattedUsers = users.map((user) => ({
         id: user._id,
         name: user.fullName,
         role: user.jobTitle || user.role || "Staff",
@@ -414,8 +416,23 @@ const MaterialRequests = () => {
           "Unknown User",
         date: new Date().toISOString().split("T")[0],
         status: "pending",
-        attachments: attachments.map((f) => f.name), // Store file names
-        message: message, // Include message with mentions
+        attachments: await Promise.all(
+          attachments.map(async (f) => {
+            if (f.fileData) return f;
+            const base64 = await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result);
+              reader.readAsDataURL(f);
+            });
+            return {
+              fileName: f.name,
+              fileData: base64,
+              fileType: f.type,
+              fileSize: f.size,
+            };
+          }),
+        ),
+        message: message,
       };
 
       if (isEditMode && selectedRequest) {
@@ -1488,7 +1505,7 @@ const MaterialRequests = () => {
 
                   <label className="flex flex-col gap-2">
                     <span className="text-sm font-medium text-[#111418]">
-                      Preferred Vendor (Optional)
+                      Preferred Vendor
                     </span>
                     <div className="relative">
                       <i className="fa-solid fa-store absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
@@ -1547,7 +1564,22 @@ const MaterialRequests = () => {
                             "Unknown User",
                           date: new Date().toISOString().split("T")[0],
                           status: "draft",
-                          attachments: attachments.map((f) => f.name),
+                          attachments: await Promise.all(
+                            attachments.map(async (f) => {
+                              if (f.fileData) return f;
+                              const base64 = await new Promise((resolve) => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => resolve(reader.result);
+                                reader.readAsDataURL(f);
+                              });
+                              return {
+                                fileName: f.name,
+                                fileData: base64,
+                                fileType: f.type,
+                                fileSize: f.size,
+                              };
+                            }),
+                          ),
                           message: message,
                         };
 
@@ -1748,15 +1780,38 @@ const MaterialRequests = () => {
                   <div className="mb-4">
                     <strong className="text-gray-700">Attachments:</strong>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {selectedRequest.attachments.map((file, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center px-3 py-1 rounded text-sm font-medium bg-gray-600 text-white"
-                        >
-                          <i className="fa-solid fa-file mr-1"></i>
-                          {file}
-                        </span>
-                      ))}
+                      {selectedRequest.attachments.map((file, idx) => {
+                        const fileName =
+                          typeof file === "string" ? file : file.fileName;
+                        const fileData =
+                          typeof file === "string" ? null : file.fileData;
+                        return (
+                          <div
+                            key={idx}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-800 border border-gray-200"
+                          >
+                            <i className="fa-solid fa-file text-gray-500"></i>
+                            <span className="truncate max-w-[150px]">
+                              {fileName}
+                            </span>
+                            {fileData && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const a = document.createElement("a");
+                                  a.href = fileData;
+                                  a.download = fileName;
+                                  a.click();
+                                }}
+                                className="text-blue-600 hover:text-blue-800 ml-1"
+                                title="Download"
+                              >
+                                <i className="fa-solid fa-download text-xs"></i>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1868,6 +1923,31 @@ const MaterialRequests = () => {
       {showViewModal && selectedRequest && (
         <div className="fixed inset-0 z-50 bg-gray-50 overflow-auto">
           <div className="min-h-screen flex flex-col">
+            {/* Navbar */}
+            <Navbar user={user} />
+
+            {/* Breadcrumb */}
+            <div className="w-full bg-gray-50 px-1">
+              <Breadcrumb
+                items={[
+                  { label: "Home", href: "/home", icon: "fa-house" },
+                  {
+                    label: "Material Requests",
+                    icon: "fa-box",
+                    onClick: (e) => {
+                      e.preventDefault();
+                      setShowViewModal(false);
+                      setSelectedRequest(null);
+                    },
+                  },
+                  {
+                    label: `Request #${selectedRequest.requestId || selectedRequest._id}`,
+                    icon: "fa-eye",
+                  },
+                ]}
+              />
+            </div>
+
             {/* Header Section */}
             <div className="bg-white border-b border-gray-200 px-6 py-4">
               <div className="max-w-[1200px] mx-auto">
@@ -1875,7 +1955,7 @@ const MaterialRequests = () => {
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-3">
                       <h1 className="text-[#111418] text-3xl font-bold leading-tight tracking-tight">
-                        Request #
+                        Material Request #
                         {selectedRequest.requestId || selectedRequest._id}
                       </h1>
                       <span
@@ -1911,27 +1991,105 @@ const MaterialRequests = () => {
                       })}
                     </p>
                   </div>
-                  <button
-                    onClick={() => {
-                      setShowViewModal(false);
-                      setSelectedRequest(null);
-                    }}
-                    className="flex h-10 min-w-[84px] cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-white border border-gray-300 px-4 text-[#111418] text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
-                  >
-                    <i className="fa-solid fa-arrow-left"></i>
-                    <span className="truncate">Back to List</span>
-                  </button>
                 </div>
 
                 {/* Action Buttons */}
                 <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 pb-4 pt-4">
-                  <button className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-white border border-gray-300 px-5 text-[#111418] shadow-sm hover:bg-gray-50 transition-colors text-sm font-bold">
+                  <button
+                    onClick={() => {
+                      const printWindow = window.open("", "_blank");
+                      if (!printWindow) return;
+                      printWindow.document.write(`
+                        <html>
+                          <head>
+                            <title>Material Request - ${selectedRequest.requestId || selectedRequest._id}</title>
+                            <style>
+                              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px; color: #111; }
+                              h1 { font-size: 24px; margin-bottom: 4px; }
+                              h3 { font-size: 16px; margin: 20px 0 8px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+                              .meta { color: #666; font-size: 13px; margin-bottom: 20px; }
+                              .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+                              .badge-pending { background: #fef3c7; color: #92400e; }
+                              .badge-approved { background: #d1fae5; color: #065f46; }
+                              .badge-rejected { background: #fee2e2; color: #991b1b; }
+                              .badge-draft { background: #e5e7eb; color: #374151; }
+                              table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+                              th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; font-size: 13px; }
+                              th { background: #f9fafb; font-weight: 600; }
+                              .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin: 12px 0; }
+                              .info-item label { font-size: 11px; color: #666; text-transform: uppercase; }
+                              .info-item p { font-size: 14px; margin: 2px 0 0; }
+                              .total-row { font-weight: 700; background: #f0f9ff; }
+                              .comment { background: #f9fafb; border: 1px solid #eee; border-radius: 6px; padding: 10px; margin: 6px 0; }
+                              .comment .author { font-weight: 600; font-size: 13px; }
+                              .comment .time { font-size: 11px; color: #888; }
+                              .comment .text { font-size: 13px; margin-top: 4px; }
+                              @media print { body { padding: 20px; } }
+                            </style>
+                          </head>
+                          <body>
+                            <h1>Material Request #${selectedRequest.requestId || ""}</h1>
+                            <p class="meta">Created: ${new Date(selectedRequest.date || selectedRequest.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+                            &nbsp;|&nbsp; Status: <span class="badge badge-${selectedRequest.status}">${selectedRequest.status?.charAt(0).toUpperCase() + selectedRequest.status?.slice(1)}</span></p>
+
+                            <h3>Request Details</h3>
+                            <div class="info-grid">
+                              <div class="info-item"><label>Request Type</label><p>${selectedRequest.requestType || "N/A"}</p></div>
+                              <div class="info-item"><label>Department</label><p>${selectedRequest.department || "N/A"}</p></div>
+                              <div class="info-item"><label>Requested By</label><p>${selectedRequest.requestedBy || "N/A"}</p></div>
+                              <div class="info-item"><label>Approver</label><p>${selectedRequest.approver || "Auto-assigned"}</p></div>
+                              <div class="info-item"><label>Required By</label><p>${selectedRequest.requiredByDate ? new Date(selectedRequest.requiredByDate).toLocaleDateString() : "N/A"}</p></div>
+                              <div class="info-item"><label>Budget Code</label><p>${selectedRequest.budgetCode || "N/A"}</p></div>
+                            </div>
+
+                            <h3>Line Items</h3>
+                            <table>
+                              <thead><tr><th>#</th><th>Item</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th></tr></thead>
+                              <tbody>
+                                ${(selectedRequest.lineItems || [])
+                                  .map(
+                                    (item, i) =>
+                                      "<tr><td>" +
+                                      (i + 1) +
+                                      "</td><td>" +
+                                      (item.itemName || "") +
+                                      "</td><td>" +
+                                      (item.description || "-") +
+                                      "</td><td>" +
+                                      (item.quantity || 0) +
+                                      "</td><td>" +
+                                      (item.quantityType || "-") +
+                                      "</td><td>" +
+                                      (parseFloat(item.amount) || 0).toFixed(
+                                        2,
+                                      ) +
+                                      "</td><td>" +
+                                      (
+                                        (parseFloat(item.quantity) || 0) *
+                                        (parseFloat(item.amount) || 0)
+                                      ).toFixed(2) +
+                                      "</td></tr>",
+                                  )
+                                  .join("")}
+                                <tr class="total-row"><td colspan="6" style="text-align:right">Grand Total</td><td>${(selectedRequest.lineItems || []).reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.amount) || 0), 0).toFixed(2)}</td></tr>
+                              </tbody>
+                            </table>
+
+                            ${selectedRequest.comments && selectedRequest.comments.length > 0 ? "<h3>Comments</h3>" + selectedRequest.comments.map((c) => '<div class="comment"><span class="author">' + (c.author || "") + '</span> <span class="time">' + new Date(c.timestamp).toLocaleString() + '</span><div class="text">' + (c.text || "").replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</div></div>").join("") : ""}
+                          </body>
+                        </html>
+                      `);
+                      printWindow.document.close();
+                      printWindow.focus();
+                      setTimeout(() => {
+                        printWindow.print();
+                        printWindow.close();
+                      }, 400);
+                    }}
+                    className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-white border border-gray-300 px-5 text-[#111418] shadow-sm hover:bg-gray-50 transition-colors text-sm font-bold"
+                  >
                     <i className="fa-solid fa-print"></i>
-                    <span className="truncate">Print Details</span>
-                  </button>
-                  <button className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-white border border-gray-300 px-5 text-[#111418] shadow-sm hover:bg-gray-50 transition-colors text-sm font-bold">
-                    <i className="fa-solid fa-share-nodes"></i>
-                    <span className="truncate">Share</span>
+                    <span className="truncate">Print</span>
                   </button>
                 </div>
               </div>
@@ -2103,7 +2261,7 @@ const MaterialRequests = () => {
                   </div>
 
                   {/* Activity & Comments */}
-                  <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
                     <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                       <div className="flex items-center gap-2">
                         <i className="fa-solid fa-timeline text-gray-500"></i>
@@ -2195,24 +2353,21 @@ const MaterialRequests = () => {
                                 </div>
                                 <div className="bg-gray-50 p-3 rounded-lg rounded-tl-none border border-gray-100">
                                   <p className="text-sm text-[#111418] leading-relaxed whitespace-pre-wrap">
-                                    {entry.text?.replace(
-                                      /@(\w+(?:\s\w+)?)/g,
-                                      (match) => match,
-                                    )}
-                                  </p>
-                                  {entry.mentions &&
-                                    entry.mentions.length > 0 && (
-                                      <div className="mt-1.5 flex flex-wrap gap-1">
-                                        {entry.mentions.map((m, mIdx) => (
+                                    {entry.text
+                                      ?.split(/(@\w+(?:\s\w+)?)/)
+                                      .map((part, pIdx) =>
+                                        /^@\w+/.test(part) ? (
                                           <span
-                                            key={mIdx}
-                                            className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded"
+                                            key={pIdx}
+                                            className="inline-flex items-center bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded text-xs mx-0.5"
                                           >
-                                            @{m}
+                                            {part}
                                           </span>
-                                        ))}
-                                      </div>
-                                    )}
+                                        ) : (
+                                          <span key={pIdx}>{part}</span>
+                                        ),
+                                      )}
+                                  </p>
                                 </div>
                               </div>
                             </div>
@@ -2260,7 +2415,11 @@ const MaterialRequests = () => {
                                 try {
                                   await apiService.post(
                                     `/api/material-requests/${selectedRequest._id}/comments`,
-                                    { text: viewComment.trim() },
+                                    {
+                                      text: viewComment.trim(),
+                                      author: user.fullName,
+                                      authorId: user._id,
+                                    },
                                   );
                                   setViewComment("");
                                   setShowViewMentionDropdown(false);
@@ -2274,7 +2433,7 @@ const MaterialRequests = () => {
                                   );
                                   if (updated) setSelectedRequest(updated);
                                 } catch (err) {
-                                  alert(
+                                  toast.error(
                                     "Failed to post comment: " +
                                       (err?.response?.data?.error ||
                                         err.message),
@@ -2359,7 +2518,6 @@ const MaterialRequests = () => {
                               className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-[#617589] hover:text-[#111418] transition-colors rounded hover:bg-gray-100"
                             >
                               <i className="fa-solid fa-at text-sm"></i>
-                              <span>Mention</span>
                             </button>
                             <button
                               type="button"
@@ -2373,7 +2531,11 @@ const MaterialRequests = () => {
                                 try {
                                   await apiService.post(
                                     `/api/material-requests/${selectedRequest._id}/comments`,
-                                    { text: viewComment.trim() },
+                                    {
+                                      text: viewComment.trim(),
+                                      author: user.fullName,
+                                      authorId: user._id,
+                                    },
                                   );
                                   setViewComment("");
                                   setShowViewMentionDropdown(false);
@@ -2388,7 +2550,7 @@ const MaterialRequests = () => {
                                   );
                                   if (updated) setSelectedRequest(updated);
                                 } catch (err) {
-                                  alert(
+                                  toast.error(
                                     "Failed to post comment: " +
                                       (err?.response?.data?.error ||
                                         err.message),
@@ -2451,9 +2613,7 @@ const MaterialRequests = () => {
                           <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-4 pt-2">
                             <button className="w-full sm:w-auto flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-6 text-[#111418] shadow-sm hover:bg-gray-50 transition-colors text-sm font-bold">
                               <i className="fa-solid fa-share"></i>
-                              <span className="truncate">
-                                Forward / Delegate
-                              </span>
+                              <span className="truncate">Delegate</span>
                             </button>
                             <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
                               <button
@@ -2597,32 +2757,146 @@ const MaterialRequests = () => {
                   {selectedRequest.attachments &&
                     selectedRequest.attachments.length > 0 && (
                       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
-                          <i className="fa-solid fa-paperclip text-gray-500"></i>
-                          <h3 className="text-lg font-bold text-[#111418]">
-                            Attachments
-                          </h3>
+                        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <i className="fa-solid fa-paperclip text-gray-500"></i>
+                            <h3 className="text-lg font-bold text-[#111418]">
+                              Attachments
+                            </h3>
+                          </div>
+                          <span className="text-xs text-gray-500 font-medium">
+                            {selectedRequest.attachments.length} file
+                            {selectedRequest.attachments.length !== 1
+                              ? "s"
+                              : ""}
+                          </span>
                         </div>
                         <div className="p-4 flex flex-col gap-2">
-                          {selectedRequest.attachments.map((file, idx) => (
-                            <a
-                              key={idx}
-                              className="group flex items-center gap-3 rounded-lg border border-transparent p-2 hover:bg-gray-50 hover:border-gray-200 transition-all"
-                              href="#"
-                            >
-                              <div className="flex h-10 w-10 items-center justify-center rounded bg-red-50 text-red-600">
-                                <i className="fa-solid fa-file-pdf"></i>
+                          {selectedRequest.attachments.map((file, idx) => {
+                            const fileName =
+                              typeof file === "string" ? file : file.fileName;
+                            const fileData =
+                              typeof file === "string" ? null : file.fileData;
+                            const fileSize =
+                              typeof file === "string" ? 0 : file.fileSize || 0;
+                            const ext =
+                              fileName?.split(".").pop()?.toLowerCase() || "";
+                            const iconMap = {
+                              pdf: {
+                                icon: "fa-file-pdf",
+                                color: "text-red-600 bg-red-50",
+                              },
+                              doc: {
+                                icon: "fa-file-word",
+                                color: "text-blue-600 bg-blue-50",
+                              },
+                              docx: {
+                                icon: "fa-file-word",
+                                color: "text-blue-600 bg-blue-50",
+                              },
+                              xls: {
+                                icon: "fa-file-excel",
+                                color: "text-green-600 bg-green-50",
+                              },
+                              xlsx: {
+                                icon: "fa-file-excel",
+                                color: "text-green-600 bg-green-50",
+                              },
+                              csv: {
+                                icon: "fa-file-csv",
+                                color: "text-green-600 bg-green-50",
+                              },
+                              jpg: {
+                                icon: "fa-file-image",
+                                color: "text-purple-600 bg-purple-50",
+                              },
+                              jpeg: {
+                                icon: "fa-file-image",
+                                color: "text-purple-600 bg-purple-50",
+                              },
+                              png: {
+                                icon: "fa-file-image",
+                                color: "text-purple-600 bg-purple-50",
+                              },
+                            };
+                            const { icon: fileIcon, color: fileColor } =
+                              iconMap[ext] || {
+                                icon: "fa-file",
+                                color: "text-gray-600 bg-gray-50",
+                              };
+                            const formatSize = (bytes) => {
+                              if (!bytes) return "";
+                              if (bytes < 1024) return bytes + " B";
+                              if (bytes < 1048576)
+                                return (bytes / 1024).toFixed(1) + " KB";
+                              return (bytes / 1048576).toFixed(1) + " MB";
+                            };
+                            return (
+                              <div
+                                key={idx}
+                                className="flex items-center gap-3 rounded-lg border border-gray-100 p-3 hover:bg-gray-50 transition-all group"
+                              >
+                                <div
+                                  className={`flex h-10 w-10 items-center justify-center rounded-lg ${fileColor}`}
+                                >
+                                  <i className={`fa-solid ${fileIcon}`}></i>
+                                </div>
+                                <div className="flex flex-col overflow-hidden flex-1 min-w-0">
+                                  <p className="truncate text-sm font-medium text-[#111418]">
+                                    {fileName}
+                                  </p>
+                                  <p className="text-xs text-[#617589]">
+                                    {ext.toUpperCase()}
+                                    {fileSize
+                                      ? ` • ${formatSize(fileSize)}`
+                                      : ""}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {fileData &&
+                                    ["jpg", "jpeg", "png", "pdf"].includes(
+                                      ext,
+                                    ) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const win = window.open();
+                                          if (ext === "pdf") {
+                                            win.document.write(
+                                              `<iframe src="${fileData}" style="width:100%;height:100%;border:none;position:fixed;inset:0" />`,
+                                            );
+                                          } else {
+                                            win.document.write(
+                                              `<img src="${fileData}" style="max-width:100%;margin:auto;display:block" />`,
+                                            );
+                                          }
+                                          win.document.title = fileName;
+                                        }}
+                                        className="p-1.5 text-gray-400 hover:text-[#137fec] hover:bg-blue-50 rounded-md transition-colors"
+                                        title="View"
+                                      >
+                                        <i className="fa-solid fa-eye text-sm"></i>
+                                      </button>
+                                    )}
+                                  {fileData && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const a = document.createElement("a");
+                                        a.href = fileData;
+                                        a.download = fileName;
+                                        a.click();
+                                      }}
+                                      className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors"
+                                      title="Download"
+                                    >
+                                      <i className="fa-solid fa-download text-sm"></i>
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex flex-col overflow-hidden">
-                                <p className="truncate text-sm font-medium text-[#111418] group-hover:text-[#137fec] transition-colors">
-                                  {file}
-                                </p>
-                                <p className="text-xs text-[#617589]">
-                                  Attachment
-                                </p>
-                              </div>
-                            </a>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}

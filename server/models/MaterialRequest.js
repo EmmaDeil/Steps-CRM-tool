@@ -12,7 +12,7 @@ const materialRequestSchema = new mongoose.Schema(
     },
     requestType: {
       type: String,
-      required: true,
+      required: false,
       enum: ['Internal Transfer', 'RFQ', 'Purchase Request', 'Emergency Purchase', 'Stock Replenishment'],
       default: 'Purchase Request',
     },
@@ -22,7 +22,7 @@ const materialRequestSchema = new mongoose.Schema(
     },
     department: {
       type: String,
-      required: true,
+      required: false,
     },
     // Multi-level approval fields
     usesRuleBasedApproval: {
@@ -77,7 +77,7 @@ const materialRequestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'approved', 'rejected', 'fulfilled'],
+      enum: ['draft', 'pending', 'approved', 'rejected', 'fulfilled'],
       default: 'pending',
     },
     rejectionReason: { 
@@ -92,7 +92,12 @@ const materialRequestSchema = new mongoose.Schema(
         description: String,
       },
     ],
-    attachments: [String],
+    attachments: [{
+      fileName: String,
+      fileData: String,
+      fileType: String,
+      fileSize: Number,
+    }],
     message: {
       type: String,
       default: '',
