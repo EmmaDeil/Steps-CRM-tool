@@ -1988,12 +1988,14 @@ const Admin = () => {
             onClick={async () => {
               const toastId = toast.loading("Starting backup...");
               try {
-                const response = await apiService.get("/api/admin/backup", {
-                  responseType: "blob",
+                const token = localStorage.getItem("authToken");
+                const baseUrl =
+                  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+                const res = await fetch(`${baseUrl}/api/admin/backup`, {
+                  headers: { Authorization: `Bearer ${token}` },
                 });
-                const blob = new Blob([response.data], {
-                  type: "application/json",
-                });
+                if (!res.ok) throw new Error("Backup request failed");
+                const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;

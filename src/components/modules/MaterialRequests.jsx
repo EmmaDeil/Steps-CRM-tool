@@ -1367,7 +1367,7 @@ const MaterialRequests = () => {
                         required
                       />
                       {showFormMentionDropdown && (
-                        <div className="absolute z-50 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto w-[280px]">
+                        <div className="absolute z-50 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto w-[280px]">
                           {userList
                             .filter((u) =>
                               u.name?.toLowerCase().includes(formMentionSearch),
@@ -2180,7 +2180,7 @@ const MaterialRequests = () => {
                             }}
                           />
                           {showViewMentionDropdown && (
-                            <div className="absolute z-50 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto w-[280px]">
+                            <div className="absolute z-50 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto w-[280px]">
                               {userList
                                 .filter((u) =>
                                   u.name
