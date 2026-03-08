@@ -35,6 +35,7 @@ const TrainingModel = require('./models/Training');
 const DepartmentModel = require('./models/Department');
 const JobTitleModel = require('./models/JobTitle');
 const RoleModel = require('./models/Role');
+const { validatePassword, getPasswordPolicy } = require('./utils/passwordValidator');
 
 // Static lists used to seed the DB when empty
 const DEFAULT_ROLES = [
@@ -288,7 +289,7 @@ async function start() {
 
   // API endpoints using centralized server API helpers
   const api = require('./api');
-  const { authMiddleware, generateToken } = require('./middleware/auth');
+  const { authMiddleware, generateToken, generateMfaPendingToken, verifyMfaPendingToken } = require('./middleware/auth');
   const crypto = require('crypto');
 
   // ==================== HEALTH CHECK ROUTE ====================
@@ -325,6 +326,17 @@ async function start() {
 
   // ==================== AUTHENTICATION ROUTES ====================
 
+  // Public endpoint: password policy (for signup / reset password pages)
+  app.get('/api/auth/password-policy', async (req, res) => {
+    try {
+      const policy = await getPasswordPolicy();
+      res.json(policy);
+    } catch (err) {
+      console.error('Error fetching password policy:', err);
+      res.json({ enabled: false, minLength: 8 });
+    }
+  });
+
   // Signup
   app.post('/api/auth/signup', async (req, res) => {
     try {
@@ -354,10 +366,11 @@ async function start() {
         return res.status(400).json({ success: false, error: 'Invalid email address' });
       }
 
-      // Password length check
-      if (password.length < 8) {
-        console.warn('Signup validation failed. Password too short');
-        return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+      // Password policy check
+      const pwResult = await validatePassword(password);
+      if (!pwResult.valid) {
+        console.warn('Signup validation failed. Password policy:', pwResult.error);
+        return res.status(400).json({ success: false, error: pwResult.error });
       }
 
       // Helper to escape user input for regex
@@ -497,6 +510,54 @@ async function start() {
         });
       }
 
+      // Check if MFA is required for this user
+      const userWithMfa = await UserModel.findById(user._id).select('+mfaSecret mfaEnabled');
+      if (userWithMfa.mfaEnabled && userWithMfa.mfaSecret) {
+        // MFA is enabled — return a pending token instead of full access
+        const mfaPendingToken = generateMfaPendingToken(user._id);
+        return res.json({
+          success: true,
+          mfaRequired: true,
+          data: {
+            mfaPendingToken,
+            userId: user._id,
+          },
+        });
+      }
+
+      // Check if MFA is enforced by org policy but user hasn't set it up yet
+      const orgSettings = await SecuritySettingsModel.findOne();
+      const mfaPolicy = orgSettings?.mfaSettings;
+      if (mfaPolicy?.enabled) {
+        const mustEnroll = mfaPolicy.enforcement === 'All Users' ||
+          (mfaPolicy.enforcement === 'Admins Only' && user.role === 'Admin');
+        if (mustEnroll && !userWithMfa.mfaEnabled) {
+          // User needs to setup MFA — give them a full token but flag it
+          const token = generateToken(user._id, user.role);
+          user.lastLogin = new Date();
+          await user.save();
+          const userData = {
+            _id: user._id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            fullName: user.fullName,
+            email: user.email,
+            role: user.role,
+            status: user.status,
+            profilePicture: user.profilePicture,
+            department: user.department,
+            jobTitle: user.jobTitle,
+            mfaEnabled: false,
+          };
+          return res.json({
+            success: true,
+            mfaSetupRequired: true,
+            message: 'MFA setup is required by your organization',
+            data: { user: userData, token },
+          });
+        }
+      }
+
       // Update last login
       user.lastLogin = new Date();
       await user.save();
@@ -516,6 +577,7 @@ async function start() {
         profilePicture: user.profilePicture,
         department: user.department,
         jobTitle: user.jobTitle,
+        mfaEnabled: !!userWithMfa.mfaEnabled,
       };
 
       res.json({
@@ -651,6 +713,12 @@ async function start() {
           success: false,
           error: 'Invalid or expired token',
         });
+      }
+
+      // Validate new password against policy
+      const pwCheck = await validatePassword(newPassword);
+      if (!pwCheck.valid) {
+        return res.status(400).json({ success: false, error: pwCheck.error });
       }
 
       // Update password
@@ -3215,29 +3283,249 @@ async function start() {
     }
   });
 
-  // Setup 2FA (Phase 2 Enhancement)
-  app.post('/api/security/2fa-setup', async (req, res) => {
+  // ==================== MFA ENDPOINTS ====================
+
+  // Verify MFA code during login
+  app.post('/api/auth/mfa-verify', async (req, res) => {
     try {
-      const { method, phoneNumber } = req.body;
-      
-      // In production, this would integrate with actual 2FA providers
+      const { authenticator } = require('otplib');
+      const { mfaPendingToken, code } = req.body;
+
+      if (!mfaPendingToken || !code) {
+        return res.status(400).json({ success: false, error: 'Token and code are required' });
+      }
+
+      // Verify the pending token
+      const tokenResult = verifyMfaPendingToken(mfaPendingToken);
+      if (!tokenResult.valid) {
+        return res.status(401).json({ success: false, error: 'MFA session expired. Please login again.' });
+      }
+
+      const user = await UserModel.findById(tokenResult.userId).select('+mfaSecret +mfaBackupCodes');
+      if (!user) {
+        return res.status(401).json({ success: false, error: 'User not found' });
+      }
+
+      // Check TOTP code
+      const isValid = authenticator.check(code, user.mfaSecret);
+
+      // If TOTP failed, check backup codes
+      let usedBackupCode = false;
+      if (!isValid && user.mfaBackupCodes?.length > 0) {
+        const codeIndex = user.mfaBackupCodes.indexOf(code);
+        if (codeIndex !== -1) {
+          // Remove used backup code
+          user.mfaBackupCodes.splice(codeIndex, 1);
+          await user.save();
+          usedBackupCode = true;
+        }
+      }
+
+      if (!isValid && !usedBackupCode) {
+        return res.status(401).json({ success: false, error: 'Invalid verification code' });
+      }
+
+      // MFA passed — issue full access token
+      user.lastLogin = new Date();
+      user.mfaVerifiedAt = new Date();
+      await user.save();
+
+      const token = generateToken(user._id, user.role);
+      const userData = {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        profilePicture: user.profilePicture,
+        department: user.department,
+        jobTitle: user.jobTitle,
+        mfaEnabled: true,
+      };
+
+      res.json({
+        success: true,
+        message: usedBackupCode ? 'Verified with backup code' : 'MFA verified',
+        usedBackupCode,
+        remainingBackupCodes: usedBackupCode ? user.mfaBackupCodes.length : undefined,
+        data: { user: userData, token },
+      });
+    } catch (error) {
+      console.error('MFA verify error:', error);
+      res.status(500).json({ success: false, error: 'MFA verification failed' });
+    }
+  });
+
+  // Generate MFA setup (secret + QR code) — requires auth
+  app.post('/api/auth/mfa-setup', authMiddleware, async (req, res) => {
+    try {
+      const { authenticator } = require('otplib');
+      const QRCode = require('qrcode');
+
+      const user = await UserModel.findById(req.user._id).select('+mfaSecret');
+
+      // Generate a new secret
+      const secret = authenticator.generateSecret();
+
+      // Create otpauth URI for authenticator apps
+      const appName = 'Netlink EMS';
+      const otpauthUrl = authenticator.keyuri(user.email, appName, secret);
+
+      // Generate QR code as data URL
+      const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
+
+      // Store the secret temporarily (will be confirmed in mfa-confirm)
+      user.mfaSecret = secret;
+      await user.save();
+
+      res.json({
+        success: true,
+        data: {
+          secret,
+          qrCode: qrCodeDataUrl,
+          otpauthUrl,
+        },
+      });
+    } catch (error) {
+      console.error('MFA setup error:', error);
+      res.status(500).json({ success: false, error: 'Failed to generate MFA setup' });
+    }
+  });
+
+  // Confirm MFA setup — verify user can produce valid codes
+  app.post('/api/auth/mfa-confirm', authMiddleware, async (req, res) => {
+    try {
+      const { authenticator } = require('otplib');
+      const { code } = req.body;
+
+      if (!code) {
+        return res.status(400).json({ success: false, error: 'Verification code is required' });
+      }
+
+      const user = await UserModel.findById(req.user._id).select('+mfaSecret');
+      if (!user.mfaSecret) {
+        return res.status(400).json({ success: false, error: 'MFA setup not initiated. Call /api/auth/mfa-setup first.' });
+      }
+
+      // Verify the code matches the secret
+      const isValid = authenticator.check(code, user.mfaSecret);
+      if (!isValid) {
+        return res.status(400).json({ success: false, error: 'Invalid verification code. Please try again.' });
+      }
+
+      // Generate backup codes
+      const backupCodes = [];
+      for (let i = 0; i < 8; i++) {
+        backupCodes.push(crypto.randomBytes(4).toString('hex'));
+      }
+
+      // Enable MFA
+      user.mfaEnabled = true;
+      user.mfaBackupCodes = backupCodes;
+      user.mfaVerifiedAt = new Date();
+      await user.save();
+
+      // Audit log
       await AuditLogModel.create({
+        actor: {
+          userId: req.user._id.toString(),
+          userName: req.user.fullName || req.user.email,
+          userEmail: req.user.email,
+          initials: (req.user.fullName || req.user.email).substring(0, 2).toUpperCase(),
+        },
         action: 'MFA Enable',
-        actor: { userName: 'Current User', userEmail: 'user@example.com' },
-        description: `2FA setup completed using ${method}`,
-        ipAddress: req.ip,
+        actionColor: 'green',
+        ipAddress: req.ip || req.connection?.remoteAddress || '127.0.0.1',
         userAgent: req.headers['user-agent'],
-        status: 'success'
+        description: `MFA enabled by ${req.user.email}`,
+        status: 'Success',
       });
 
-      res.json({ 
-        message: '2FA setup completed successfully',
-        method,
-        phoneNumber: phoneNumber ? `***-***-${phoneNumber.slice(-4)}` : undefined
+      res.json({
+        success: true,
+        message: 'MFA enabled successfully',
+        data: { backupCodes },
       });
-    } catch (err) {
-      console.error('Error setting up 2FA:', err);
-      res.status(500).json({ message: 'Failed to setup 2FA' });
+    } catch (error) {
+      console.error('MFA confirm error:', error);
+      res.status(500).json({ success: false, error: 'Failed to confirm MFA setup' });
+    }
+  });
+
+  // Disable MFA — requires auth + password confirmation
+  app.post('/api/auth/mfa-disable', authMiddleware, async (req, res) => {
+    try {
+      const { password } = req.body;
+      if (!password) {
+        return res.status(400).json({ success: false, error: 'Password is required to disable MFA' });
+      }
+
+      const user = await UserModel.findById(req.user._id).select('+password');
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        return res.status(401).json({ success: false, error: 'Incorrect password' });
+      }
+
+      user.mfaEnabled = false;
+      user.mfaSecret = undefined;
+      user.mfaBackupCodes = undefined;
+      user.mfaVerifiedAt = undefined;
+      await user.save();
+
+      // Audit log
+      await AuditLogModel.create({
+        actor: {
+          userId: req.user._id.toString(),
+          userName: req.user.fullName || req.user.email,
+          userEmail: req.user.email,
+          initials: (req.user.fullName || req.user.email).substring(0, 2).toUpperCase(),
+        },
+        action: 'MFA Disable',
+        actionColor: 'red',
+        ipAddress: req.ip || req.connection?.remoteAddress || '127.0.0.1',
+        userAgent: req.headers['user-agent'],
+        description: `MFA disabled by ${req.user.email}`,
+        status: 'Success',
+      });
+
+      res.json({ success: true, message: 'MFA has been disabled' });
+    } catch (error) {
+      console.error('MFA disable error:', error);
+      res.status(500).json({ success: false, error: 'Failed to disable MFA' });
+    }
+  });
+
+  // Get MFA status for current user
+  app.get('/api/auth/mfa-status', authMiddleware, async (req, res) => {
+    try {
+      const user = await UserModel.findById(req.user._id).select('mfaEnabled mfaVerifiedAt');
+      const orgSettings = await SecuritySettingsModel.findOne();
+      const mfaPolicy = orgSettings?.mfaSettings;
+
+      let enforced = false;
+      if (mfaPolicy?.enabled) {
+        enforced = mfaPolicy.enforcement === 'All Users' ||
+          (mfaPolicy.enforcement === 'Admins Only' && req.user.role === 'Admin');
+      }
+
+      res.json({
+        success: true,
+        data: {
+          mfaEnabled: !!user.mfaEnabled,
+          mfaVerifiedAt: user.mfaVerifiedAt,
+          orgMfaEnforced: enforced,
+          orgMfaPolicy: mfaPolicy ? {
+            enabled: mfaPolicy.enabled,
+            enforcement: mfaPolicy.enforcement,
+            method: mfaPolicy.method,
+          } : null,
+        },
+      });
+    } catch (error) {
+      console.error('MFA status error:', error);
+      res.status(500).json({ success: false, error: 'Failed to get MFA status' });
     }
   });
 

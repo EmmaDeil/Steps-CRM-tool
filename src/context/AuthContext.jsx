@@ -21,7 +21,9 @@ export const AuthProvider = ({ children }) => {
     }
   });
   const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem("authToken"));
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    !!localStorage.getItem("authToken"),
+  );
   const [sessionConfig, setSessionConfig] = useState(SESSION_CONFIG);
 
   // Update last activity timestamp
@@ -107,7 +109,28 @@ export const AuthProvider = ({ children }) => {
         password,
       });
       if (response && response.success) {
-        // Store token securely
+        // Check if MFA verification is needed
+        if (response.mfaRequired) {
+          return {
+            success: true,
+            mfaRequired: true,
+            mfaPendingToken: response.data.mfaPendingToken,
+          };
+        }
+
+        // Check if MFA setup is required by org policy
+        if (response.mfaSetupRequired) {
+          localStorage.setItem("authToken", response.data.token);
+          localStorage.setItem("authUser", JSON.stringify(response.data.user));
+          localStorage.setItem("rememberMe", rememberMe.toString());
+          setUser(response.data.user);
+          setIsAuthenticated(true);
+          setSessionConfig((prev) => ({ ...prev, rememberMe }));
+          updateActivity();
+          return { success: true, mfaSetupRequired: true };
+        }
+
+        // Normal login — store token
         localStorage.setItem("authToken", response.data.token);
         localStorage.setItem("authUser", JSON.stringify(response.data.user));
         localStorage.setItem("rememberMe", rememberMe.toString());
@@ -126,6 +149,40 @@ export const AuthProvider = ({ children }) => {
       return {
         success: false,
         error: serverMsg || error.message || "Login failed",
+      };
+    }
+  };
+
+  const verifyMfa = async (mfaPendingToken, code, rememberMe = false) => {
+    try {
+      const response = await apiService.post("/api/auth/mfa-verify", {
+        mfaPendingToken,
+        code,
+      });
+      if (response && response.success) {
+        localStorage.setItem("authToken", response.data.token);
+        localStorage.setItem("authUser", JSON.stringify(response.data.user));
+        localStorage.setItem("rememberMe", rememberMe.toString());
+        setUser(response.data.user);
+        setIsAuthenticated(true);
+        setSessionConfig((prev) => ({ ...prev, rememberMe }));
+        updateActivity();
+        return {
+          success: true,
+          usedBackupCode: response.usedBackupCode,
+          remainingBackupCodes: response.remainingBackupCodes,
+        };
+      }
+      return {
+        success: false,
+        error: response?.error || "MFA verification failed",
+      };
+    } catch (error) {
+      console.error("MFA verify error:", error);
+      const serverMsg = error.serverData?.error || error.serverData?.message;
+      return {
+        success: false,
+        error: serverMsg || error.message || "MFA verification failed",
       };
     }
   };
@@ -158,7 +215,7 @@ export const AuthProvider = ({ children }) => {
       // Optional: Add confirmation for explicit logout
       if (!skipConfirmation && sessionConfig.rememberMe) {
         const confirmed = window.confirm(
-          "Are you sure you want to logout? You will need to login again."
+          "Are you sure you want to logout? You will need to login again.",
         );
         if (!confirmed) return { cancelled: true };
       }
@@ -226,6 +283,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated,
     sessionConfig,
     login,
+    verifyMfa,
     signup,
     logout,
     forceLogout,

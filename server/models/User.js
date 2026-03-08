@@ -103,6 +103,19 @@ const userSchema = new mongoose.Schema({
     ref: 'Employee',
     default: null,
   },
+  mfaEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  mfaSecret: {
+    type: String,
+    select: false,
+  },
+  mfaBackupCodes: {
+    type: [String],
+    select: false,
+  },
+  mfaVerifiedAt: Date,
 }, {
   timestamps: true,
 });

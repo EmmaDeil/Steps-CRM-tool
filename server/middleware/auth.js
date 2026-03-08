@@ -18,6 +18,32 @@ const generateToken = (userId, userRole, expiresIn = '7d') => {
   );
 };
 
+// Generate a short-lived MFA-pending token (not a full access token)
+const generateMfaPendingToken = (userId) => {
+  return jwt.sign(
+    {
+      userId,
+      type: 'mfa-pending',
+      iat: Math.floor(Date.now() / 1000),
+    },
+    JWT_SECRET,
+    { expiresIn: '5m' }
+  );
+};
+
+// Verify an MFA-pending token
+const verifyMfaPendingToken = (token) => {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.type !== 'mfa-pending') {
+      return { valid: false, error: 'Invalid token type' };
+    }
+    return { valid: true, userId: decoded.userId };
+  } catch (error) {
+    return { valid: false, error: error.message };
+  }
+};
+
 // Generate refresh token (longer expiry)
 const generateRefreshToken = (userId) => {
   return jwt.sign(
@@ -143,6 +169,8 @@ module.exports = {
   verifyToken: authMiddleware, // Alias for compatibility
   requireRole,
   generateToken,
+  generateMfaPendingToken,
+  verifyMfaPendingToken,
   generateRefreshToken,
   verifyRefreshToken,
   JWT_SECRET,

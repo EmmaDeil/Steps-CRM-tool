@@ -27,6 +27,10 @@ const Admin = () => {
     totalRetirementBreakdowns: 0,
   });
   const [statsLoading, setStatsLoading] = useState(true);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [restoreFile, setRestoreFile] = useState(null);
+  const [restoring, setRestoring] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
   const [serviceStatus, setServiceStatus] = useState([]);
   const [servicesLoading, setServicesLoading] = useState(true);
 
@@ -1991,8 +1995,10 @@ const Admin = () => {
             Item / SKU Management
           </button>
           <button
+            disabled={backingUp}
             onClick={async () => {
               const toastId = toast.loading("Starting backup...");
+              setBackingUp(true);
               try {
                 const token = localStorage.getItem("authToken");
                 const baseUrl =
@@ -2012,12 +2018,30 @@ const Admin = () => {
               } catch (e) {
                 console.error(e);
                 toast.error("Backup failed", { id: toastId });
+              } finally {
+                setBackingUp(false);
               }
             }}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-300 disabled:cursor-not-allowed text-[#111418] rounded-lg font-medium flex items-center gap-2 transition-colors"
+          >
+            {backingUp ? (
+              <>
+                <i className="fa-solid fa-spinner fa-spin"></i>
+                Backing up...
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-database"></i>
+                Backup Data
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => setShowRestoreModal(true)}
             className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-[#111418] rounded-lg font-medium flex items-center gap-2 transition-colors"
           >
-            <i className="fa-solid fa-database"></i>
-            Backup Data
+            <i className="fa-solid fa-upload"></i>
+            Restore Data
           </button>
         </div>
 
@@ -2223,7 +2247,7 @@ const Admin = () => {
           <h2 className="text-2xl font-bold text-[#111418] mb-6">
             Administration Modules
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* User Management */}
             <div
               onClick={() => setSearchParams({ view: "users" })}
@@ -2272,17 +2296,19 @@ const Admin = () => {
               </p>
             </div>
 
-            {/* Reports */}
+            {/* Reports & Logs */}
             <div
-              onClick={() => navigate("/admin?tab=reports")}
+              onClick={() => setSearchParams({ view: "logs" })}
               className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-lg transition-all cursor-pointer hover:border-orange-400"
             >
               <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
                 <i className="fa-solid fa-chart-bar text-orange-600 text-xl"></i>
               </div>
-              <h3 className="text-lg font-bold text-[#111418] mb-2">Reports</h3>
+              <h3 className="text-lg font-bold text-[#111418] mb-2">
+                Reports & Logs
+              </h3>
               <p className="text-sm text-gray-600">
-                Generate and export detailed system and performance reports.
+                View audit logs, system reports, and activity history.
               </p>
             </div>
 
@@ -2301,11 +2327,161 @@ const Admin = () => {
                 Manage your pending approvals and expense requests.
               </p>
             </div>
+
+            {/* Item / SKU Management */}
+            <div
+              onClick={() => setSearchParams({ view: "sku-items" })}
+              className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-lg transition-all cursor-pointer hover:border-teal-400"
+            >
+              <div className="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center mb-4">
+                <i className="fa-solid fa-barcode text-teal-600 text-xl"></i>
+              </div>
+              <h3 className="text-lg font-bold text-[#111418] mb-2">
+                Item / SKU Management
+              </h3>
+              <p className="text-sm text-gray-600">
+                Manage inventory items, SKU codes, and stock tracking.
+              </p>
+            </div>
           </div>
         </div>
 
         <Footer variant="admin" />
       </div>
+
+      {/* Restore Data Modal */}
+      {showRestoreModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-[#111418] flex items-center gap-2">
+                <i className="fa-solid fa-upload text-orange-500"></i>
+                Restore Data
+              </h2>
+              <button
+                onClick={() => {
+                  setShowRestoreModal(false);
+                  setRestoreFile(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fa-solid fa-times text-xl"></i>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex gap-3">
+                  <i className="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5"></i>
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800">
+                      Warning
+                    </p>
+                    <p className="text-sm text-amber-700 mt-1">
+                      Restoring will replace all existing data (except audit
+                      logs) with the data from the backup file. This action
+                      cannot be undone.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select backup file (.json)
+                </label>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={(e) => setRestoreFile(e.target.files[0] || null)}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+              </div>
+
+              {restoreFile && (
+                <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
+                  <p>
+                    <span className="font-medium">File:</span>{" "}
+                    {restoreFile.name}
+                  </p>
+                  <p>
+                    <span className="font-medium">Size:</span>{" "}
+                    {(restoreFile.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowRestoreModal(false);
+                  setRestoreFile(null);
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                disabled={restoring}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!restoreFile) return;
+                  const toastId = toast.loading("Restoring data...");
+                  setRestoring(true);
+                  try {
+                    const text = await restoreFile.text();
+                    const backup = JSON.parse(text);
+
+                    if (!backup.collections) {
+                      throw new Error("Invalid backup file format");
+                    }
+
+                    const token = localStorage.getItem("authToken");
+                    const baseUrl =
+                      import.meta.env.VITE_API_BASE_URL ||
+                      "http://localhost:4000";
+                    const res = await fetch(`${baseUrl}/api/admin/restore`, {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify(backup),
+                    });
+                    const data = await res.json();
+                    if (!res.ok)
+                      throw new Error(data.message || "Restore failed");
+
+                    toast.success(
+                      `Restored ${data.restored.length} collections successfully!`,
+                      { id: toastId },
+                    );
+                    setShowRestoreModal(false);
+                    setRestoreFile(null);
+                  } catch (e) {
+                    console.error(e);
+                    toast.error(e.message || "Restore failed", { id: toastId });
+                  } finally {
+                    setRestoring(false);
+                  }
+                }}
+                disabled={!restoreFile || restoring}
+                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                {restoring ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin"></i>
+                    Restoring...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-upload"></i>
+                    Restore
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -165,6 +165,79 @@ router.get('/backup', async (req, res) => {
 });
 
 // ============================================================
+// POST /api/admin/restore
+// Restore database from a previously exported backup JSON
+// ============================================================
+router.post('/restore', express.json({ limit: '100mb' }), async (req, res) => {
+    try {
+        const mongoose = require('mongoose');
+        const db = mongoose.connection.db;
+        const { exportedAt, collections } = req.body;
+
+        if (!collections || typeof collections !== 'object') {
+            return res.status(400).json({ message: 'Invalid backup file format' });
+        }
+
+        const collectionNames = Object.keys(collections);
+        if (collectionNames.length === 0) {
+            return res.status(400).json({ message: 'Backup file contains no collections' });
+        }
+
+        // Skip audit logs so we don't lose the restore audit trail
+        const skipCollections = ['auditlogs'];
+        const restored = [];
+        const skipped = [];
+
+        for (const colName of collectionNames) {
+            if (skipCollections.includes(colName.toLowerCase())) {
+                skipped.push(colName);
+                continue;
+            }
+
+            const docs = collections[colName];
+            if (!Array.isArray(docs)) {
+                skipped.push(colName);
+                continue;
+            }
+
+            const col = db.collection(colName);
+            // Clear existing data
+            await col.deleteMany({});
+            // Insert backup data
+            if (docs.length > 0) {
+                await col.insertMany(docs);
+            }
+            restored.push({ name: colName, count: docs.length });
+        }
+
+        // Write a restore audit log entry
+        await AuditLog.create({
+            actor: {
+                userId: req.user._id.toString(),
+                userName: req.user.fullName || req.user.email,
+                userEmail: req.user.email,
+                initials: (req.user.fullName || req.user.email).substring(0, 2).toUpperCase(),
+            },
+            action: 'Restore',
+            actionColor: 'orange',
+            ipAddress: req.ip || req.connection?.remoteAddress || '127.0.0.1',
+            userAgent: req.headers['user-agent'],
+            description: `Database restore from backup (${exportedAt || 'unknown date'}) by ${req.user.email}. Restored ${restored.length} collections.`,
+            status: 'Success',
+        });
+
+        res.json({
+            message: 'Restore completed successfully',
+            restored,
+            skipped,
+        });
+    } catch (error) {
+        console.error('Restore error:', error);
+        res.status(500).json({ message: 'Restore failed: ' + error.message });
+    }
+});
+
+// ============================================================
 // GET /api/budget/categories
 // Returns the list of budget category names for dropdowns
 // This endpoint is accessible by all authenticated users

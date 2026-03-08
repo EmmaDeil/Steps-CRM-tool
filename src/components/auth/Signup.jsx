@@ -42,8 +42,9 @@ const Signup = () => {
 
   const calculatePasswordStrength = (password) => {
     let strength = 0;
-    if (password.length >= 8) strength += 25;
-    if (password.length >= 12) strength += 25;
+    const minLen = passwordPolicy.minLength || 8;
+    if (password.length >= Math.min(minLen, 8)) strength += 25;
+    if (password.length >= minLen) strength += 25;
     if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength += 25;
     if (/[0-9]/.test(password)) strength += 15;
     if (/[^a-zA-Z0-9]/.test(password)) strength += 10;
@@ -54,6 +55,10 @@ const Signup = () => {
   const [jobTitles, setJobTitles] = useState([]);
   const [departmentsLoading, setDepartmentsLoading] = useState(true);
   const [jobTitlesLoading, setJobTitlesLoading] = useState(true);
+  const [passwordPolicy, setPasswordPolicy] = useState({
+    enabled: false,
+    minLength: 8,
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -86,8 +91,20 @@ const Signup = () => {
       }
     };
 
+    const fetchPasswordPolicy = async () => {
+      try {
+        const res = await (
+          await import("../../services/api")
+        ).default.get("/api/auth/password-policy");
+        if (mounted && res) setPasswordPolicy(res);
+      } catch (err) {
+        console.error("Failed to fetch password policy:", err);
+      }
+    };
+
     fetchDepartments();
     fetchJobTitles();
+    fetchPasswordPolicy();
     return () => {
       mounted = false;
     };
@@ -114,8 +131,24 @@ const Signup = () => {
 
     if (!password || password.trim().length === 0)
       newErrors.password = "Password is required";
-    else if (password.length < 8)
-      newErrors.password = "Password must be at least 8 characters";
+    else {
+      const minLen = passwordPolicy.minLength || 8;
+      if (password.length < minLen)
+        newErrors.password = `Password must be at least ${minLen} characters`;
+      else if (passwordPolicy.enabled) {
+        if (passwordPolicy.uppercaseRequired && !/[A-Z]/.test(password))
+          newErrors.password =
+            "Password must contain at least one uppercase letter";
+        else if (passwordPolicy.lowercaseRequired && !/[a-z]/.test(password))
+          newErrors.password =
+            "Password must contain at least one lowercase letter";
+        else if (passwordPolicy.numberRequired && !/[0-9]/.test(password))
+          newErrors.password = "Password must contain at least one number";
+        else if (passwordPolicy.specialChars && !/[^a-zA-Z0-9]/.test(password))
+          newErrors.password =
+            "Password must contain at least one special character";
+      }
+    }
     if (password !== confirmPassword)
       newErrors.confirmPassword = "Passwords do not match";
 
