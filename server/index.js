@@ -2793,36 +2793,54 @@ async function start() {
     }
   });
 
-  // Get active sessions (Phase 2 Enhancement)
+  // Get active sessions - returns currently active users from the database
   app.get('/api/security/active-sessions', checkSecurityPermission('manageSessions'), async (req, res) => {
     try {
-      // Mock data - Replace with actual session management system
-      const activeSessions = [
-        {
-          id: '1',
-          userName: 'John Doe',
-          userEmail: 'john@example.com',
-          ipAddress: '192.168.1.100',
-          location: 'New York, US',
-          device: 'Chrome on Windows',
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          lastActivity: '2 minutes ago',
-          loginTime: new Date()
-        },
-        {
-          id: '2',
-          userName: 'Jane Smith',
-          userEmail: 'jane@example.com',
-          ipAddress: '10.0.0.50',
-          location: 'London, UK',
-          device: 'Safari on MacOS',
-          userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
-          lastActivity: '5 minutes ago',
-          loginTime: new Date()
-        }
-      ];
-      
-      res.json({ sessions: activeSessions });
+      const uaParser = (uaString) => {
+        if (!uaString) return 'Unknown';
+        if (/mobile/i.test(uaString)) return 'Mobile Browser';
+        if (/chrome/i.test(uaString)) return 'Chrome';
+        if (/firefox/i.test(uaString)) return 'Firefox';
+        if (/safari/i.test(uaString)) return 'Safari';
+        if (/edge/i.test(uaString)) return 'Edge';
+        return 'Browser';
+      };
+
+      const activeUsers = await UserModel.find({ status: 'Active' })
+        .select('firstName lastName fullName email role lastLogin createdAt department jobTitle')
+        .sort({ lastLogin: -1 })
+        .lean();
+
+      const sessions = activeUsers.map((user, idx) => {
+        const lastLogin = user.lastLogin ? new Date(user.lastLogin) : new Date(user.createdAt);
+        const diffMs = Date.now() - lastLogin.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        let lastActivity;
+        if (diffMins < 1) lastActivity = 'Just now';
+        else if (diffMins < 60) lastActivity = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+        else if (diffHours < 24) lastActivity = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+        else lastActivity = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+
+        return {
+          id: user._id.toString(),
+          userName: user.fullName || `${user.firstName} ${user.lastName}`,
+          userEmail: user.email,
+          role: user.role,
+          department: user.department || null,
+          jobTitle: user.jobTitle || null,
+          ipAddress: 'N/A',
+          location: 'N/A',
+          device: 'Web App',
+          userAgent: '',
+          lastActivity,
+          loginTime: lastLogin,
+        };
+      });
+
+      res.json({ sessions });
     } catch (err) {
       console.error('Error fetching active sessions:', err);
       res.status(500).json({ message: 'Failed to fetch active sessions' });

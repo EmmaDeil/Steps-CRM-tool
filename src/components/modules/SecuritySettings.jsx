@@ -817,20 +817,33 @@ const SecuritySettings = () => {
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600">Active Users</span>
-                      <span className="font-semibold text-gray-900">
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full text-xs">
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
                         {sessionControl.activeUsers} Online
                       </span>
                     </div>
                   </div>
 
                   <button
-                    onClick={() => setShowSessionModal(true)}
-                    className="w-full mt-4 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg font-medium transition-colors text-sm"
+                    onClick={() => {
+                      setShowSessionManagement(true);
+                      fetchActiveSessions();
+                    }}
+                    className="w-full mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm flex items-center justify-center gap-2"
                   >
+                    <i className="fa-solid fa-users"></i>
                     View Active Sessions
+                  </button>
+                  <button
+                    onClick={() => setShowSessionModal(true)}
+                    className="w-full mt-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors text-sm border border-gray-200"
+                  >
+                    <i className="fa-solid fa-gear mr-1"></i>
+                    Configure Settings
                   </button>
                 </div>
               </div>
+
             </>
           )}
         </div>
@@ -1929,6 +1942,21 @@ const SessionControlModal = ({
   onPanicLogout,
 }) => {
   const [formData, setFormData] = useState(sessionControl);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const isDirty =
+    formData.idleTimeout !== sessionControl.idleTimeout ||
+    formData.concurrentSessions !== sessionControl.concurrentSessions;
+
+  const handleSave = async () => {
+    if (!isDirty || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave(formData);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1998,11 +2026,11 @@ const SessionControlModal = ({
               <span className="text-sm font-medium text-gray-700">
                 Active Users
               </span>
-              <span className="text-2xl font-bold text-blue-600">
+              <span className="inline-flex items-center gap-1.5 text-2xl font-bold text-blue-600">
                 {sessionControl.activeUsers}
               </span>
             </div>
-            <p className="text-xs text-gray-500">Currently logged in users</p>
+            <p className="text-xs text-gray-500">Currently active users in the system</p>
           </div>
 
           <div className="bg-red-50 border-2 border-red-300 p-4 rounded-lg">
@@ -2027,15 +2055,20 @@ const SessionControlModal = ({
         <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium"
+            disabled={isSaving}
+            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
           <button
-            onClick={() => onSave(formData)}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            onClick={handleSave}
+            disabled={!isDirty || isSaving}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            Save Changes
+            {isSaving && (
+              <i className="fa-solid fa-circle-notch fa-spin text-sm"></i>
+            )}
+            {isSaving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>
@@ -2600,71 +2633,60 @@ const SessionManagementModal = ({
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3 flex-1">
-                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
                         {session.userName?.charAt(0)?.toUpperCase() || "U"}
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <h3 className="font-semibold text-gray-900">
                             {session.userName}
                           </h3>
-                          <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
                             Active
                           </span>
+                          {session.role && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                              {session.role}
+                            </span>
+                          )}
                         </div>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gray-600 truncate">
                           {session.userEmail}
                         </p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-3 text-sm">
+                          {session.department && (
+                            <div>
+                              <span className="text-gray-500">Department:</span>
+                              <p className="text-gray-900 font-medium">{session.department}</p>
+                            </div>
+                          )}
+                          {session.jobTitle && (
+                            <div>
+                              <span className="text-gray-500">Job Title:</span>
+                              <p className="text-gray-900 font-medium">{session.jobTitle}</p>
+                            </div>
+                          )}
                           <div>
-                            <span className="text-gray-500">IP Address:</span>
-                            <p className="font-mono text-gray-900">
-                              {session.ipAddress}
-                            </p>
+                            <span className="text-gray-500">Last Active:</span>
+                            <p className="text-gray-900 font-medium">{session.lastActivity}</p>
                           </div>
-                          <div>
-                            <span className="text-gray-500">Location:</span>
-                            <p className="text-gray-900">
-                              {session.location || "Unknown"}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="text-gray-500">Device:</span>
-                            <p className="text-gray-900">
-                              {session.device || "Unknown"}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="text-gray-500">
-                              Last Activity:
-                            </span>
-                            <p className="text-gray-900">
-                              {session.lastActivity}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="mt-2">
-                          <span className="text-gray-500 text-sm">
-                            Browser:
-                          </span>
-                          <p className="text-xs text-gray-600 font-mono">
-                            {session.userAgent}
-                          </p>
                         </div>
                       </div>
                     </div>
                     <button
                       onClick={() => onKillSession(session.id)}
-                      className="ml-4 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-medium flex items-center gap-2 transition-colors"
+                      className="ml-4 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-medium flex items-center gap-2 transition-colors flex-shrink-0"
                     >
                       <i className="fa-solid fa-ban"></i>
-                      Kill Session
+                      Remove
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           )}
+
         </div>
 
         <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end">
