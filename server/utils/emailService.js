@@ -221,8 +221,60 @@ module.exports = {
   sendApprovalEmail,
   sendPOReviewEmail,
   sendPasswordResetEmail,
+  sendEmailOTP,
   transporter,
 };
+
+// Send OTP code email for MFA verification
+async function sendEmailOTP(toEmail, code, userName) {
+  if (!toEmail) {
+    throw new Error('Email is required to send OTP');
+  }
+
+  const mailOptions = {
+    from: emailUser,
+    to: toEmail,
+    subject: 'Your Verification Code',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #f9fafb; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
+        <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 32px 24px; text-align: center;">
+          <div style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
+            <span style="font-size: 28px;">🔐</span>
+          </div>
+          <h2 style="color: white; margin: 0; font-size: 22px; font-weight: 700;">Verification Code</h2>
+        </div>
+        <div style="padding: 32px 24px;">
+          <p style="color: #374151; margin: 0 0 8px;">Hello${userName ? ` ${userName}` : ''},</p>
+          <p style="color: #6b7280; margin: 0 0 28px; line-height: 1.6;">Use the code below to verify your identity. This code expires in <strong>10 minutes</strong>.</p>
+          <div style="background: white; border: 2px dashed #3b82f6; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
+            <span style="font-size: 40px; font-weight: 800; letter-spacing: 12px; color: #1e40af; font-family: 'Courier New', monospace;">${code}</span>
+          </div>
+          <p style="color: #9ca3af; font-size: 13px; margin: 0; line-height: 1.6;">
+            Never share this code with anyone. If you didn't request this, please ignore this email or contact your administrator.
+          </p>
+        </div>
+        <div style="background: #f3f4f6; padding: 16px 24px; text-align: center; border-top: 1px solid #e5e7eb;">
+          <p style="color: #9ca3af; font-size: 12px; margin: 0;">This is an automated email — do not reply.</p>
+        </div>
+      </div>
+    `,
+  };
+
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📧 OTP email would be sent to:', toEmail);
+      console.log('   Code:', code);
+      return { success: true, message: 'OTP email logged (dev mode)' };
+    }
+    await transporter.sendMail(mailOptions);
+    return { success: true, message: 'OTP email sent successfully' };
+  } catch (error) {
+    console.error('Error sending OTP email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+
 
 // Send security alert email
 async function sendSecurityAlertEmail(recipientEmails, alertData) {

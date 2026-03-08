@@ -116,6 +116,20 @@ const userSchema = new mongoose.Schema({
     select: false,
   },
   mfaVerifiedAt: Date,
+  // Temporary OTP for email/SMS MFA
+  otpCode: {
+    type: String,
+    select: false,
+  },
+  otpExpires: {
+    type: Date,
+    select: false,
+  },
+  otpMethod: {
+    type: String,
+    enum: ['email', 'sms'],
+    select: false,
+  },
 }, {
   timestamps: true,
 });

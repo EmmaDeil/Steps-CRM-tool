@@ -119,7 +119,8 @@ const DEFAULT_JOB_TITLES = [
 ];
 const VendorModel = require('./models/Vendor');
 const approvalRuleRoutes = require('./routes/approvalRule.routes');
-const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail } = require('./utils/emailService');
+const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP } = require('./utils/emailService');
+const { sendSMSOTP } = require('./utils/smsService');
 const { buildApprovalChain } = require('./utils/approvalRuleHelper');
 const { Server } = require('socket.io');
 const http = require('http');
@@ -825,8 +826,10 @@ async function start() {
   app.use('/api/budget', budgetRoutes);
 
   // ============ HR ROUTES ============
-  const hrRoutes = require('./routes/hr.routes');
-  app.use('/api/hr', hrRoutes);
+  // HR routes are defined inline below (line ~4300+) with full audit logging,
+  // avatar handling, and real database queries. The routes file is kept for reference.
+  // const hrRoutes = require('./routes/hr.routes');
+  // app.use('/api/hr', hrRoutes);
 
   // ============ PAYROLL ROUTES ============
   const payrollRoutes = require('./routes/payroll.routes');
@@ -2677,6 +2680,108 @@ async function start() {
     }
   });
 
+  // ==================== MFA OTP ROUTES ====================
+
+  // Send OTP via Email or SMS (uses the tenant's MFA method setting)
+  app.post('/api/mfa/send-otp', async (req, res) => {
+    try {
+      const crypto = require('crypto');
+      const bcrypt = require('bcryptjs');
+
+      // Get userId from token payload (standard auth middleware sets req.user)
+      const userId = req.user?._id || req.body.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      // Get current MFA method from settings
+      const settings = await SecuritySettingsModel.findOne({ singleton: true });
+      const method = (settings?.mfaSettings?.method || 'Email').toLowerCase();
+
+      // Fetch the user
+      const user = await UserModel.findById(userId);
+      if (!user) return res.status(404).json({ message: 'User not found' });
+
+      // Generate 6-digit OTP
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const hashedCode = await bcrypt.hash(code, 10);
+
+      // Store hashed OTP in user document (expires in 10 minutes)
+      await UserModel.findByIdAndUpdate(userId, {
+        otpCode: hashedCode,
+        otpExpires: new Date(Date.now() + 10 * 60 * 1000),
+        otpMethod: method === 'sms' ? 'sms' : 'email',
+      });
+
+      let maskedTarget = '';
+
+      if (method === 'sms') {
+        const phone = user.phoneNumber;
+        if (!phone) {
+          return res.status(400).json({ message: 'No phone number registered on this account. Please update your profile.' });
+        }
+        await sendSMSOTP(phone, code);
+        // Mask: +1***1234
+        maskedTarget = phone.slice(0, 3) + '***' + phone.slice(-4);
+      } else {
+        // Email OTP (default for both 'email' and 'Authenticator App' fallback)
+        const email = user.email;
+        await sendEmailOTP(email, code, user.firstName || user.fullName);
+        // Mask: em***@domain.com
+        const [localPart, domain] = email.split('@');
+        maskedTarget = localPart.slice(0, 2) + '***@' + domain;
+      }
+
+      res.json({
+        success: true,
+        method: method === 'sms' ? 'sms' : 'email',
+        maskedTarget,
+        message: `Verification code sent to ${maskedTarget}`,
+      });
+    } catch (err) {
+      console.error('Error sending MFA OTP:', err);
+      res.status(500).json({ message: 'Failed to send OTP', error: err.message });
+    }
+  });
+
+  // Verify OTP submitted by the user
+  app.post('/api/mfa/verify-otp', async (req, res) => {
+    try {
+      const bcrypt = require('bcryptjs');
+
+      const userId = req.user?._id || req.body.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      const { code } = req.body;
+      if (!code) return res.status(400).json({ message: 'OTP code is required' });
+
+      // Fetch user with OTP fields (they have select: false)
+      const user = await UserModel.findById(userId).select('+otpCode +otpExpires +otpMethod');
+      if (!user) return res.status(404).json({ message: 'User not found' });
+
+      if (!user.otpCode || !user.otpExpires) {
+        return res.status(400).json({ message: 'No OTP was requested. Please request a new code.' });
+      }
+
+      if (new Date() > user.otpExpires) {
+        // Clear expired OTP
+        await UserModel.findByIdAndUpdate(userId, { otpCode: null, otpExpires: null, otpMethod: null });
+        return res.status(400).json({ message: 'OTP has expired. Please request a new code.' });
+      }
+
+      const isMatch = await bcrypt.compare(String(code), user.otpCode);
+      if (!isMatch) {
+        return res.status(400).json({ message: 'Invalid OTP code. Please try again.' });
+      }
+
+      // Clear OTP after successful verification
+      await UserModel.findByIdAndUpdate(userId, { otpCode: null, otpExpires: null, otpMethod: null });
+
+      res.json({ success: true, message: 'OTP verified successfully' });
+    } catch (err) {
+      console.error('Error verifying MFA OTP:', err);
+      res.status(500).json({ message: 'Failed to verify OTP', error: err.message });
+    }
+  });
+
   // Get active users count
   app.get('/api/security/active-users', async (req, res) => {
     try {
@@ -4381,6 +4486,39 @@ async function start() {
 
       await newEmployee.save();
 
+      // Auto-create or link a corresponding User account
+      try {
+        let existingUser = await UserModel.findOne({ email: email.toLowerCase() });
+        if (existingUser) {
+          existingUser.employeeRef = newEmployee._id;
+          if (!existingUser.department && department) existingUser.department = department;
+          if (!existingUser.jobTitle && jobTitle) existingUser.jobTitle = jobTitle;
+          await existingUser.save();
+          newEmployee.userRef = existingUser._id;
+          await newEmployee.save();
+        } else {
+          const crypto = require('crypto');
+          const tempPassword = crypto.randomBytes(16).toString('hex');
+          const nameParts = name.split(' ');
+          const newUser = await UserModel.create({
+            firstName: nameParts[0] || 'Unknown',
+            lastName: nameParts.slice(1).join(' ') || 'User',
+            fullName: name,
+            email: email.toLowerCase(),
+            password: tempPassword,
+            role: jobTitle || 'Employee',
+            department: department || 'Engineering',
+            jobTitle: jobTitle || 'Employee',
+            status: 'active',
+            employeeRef: newEmployee._id,
+          });
+          newEmployee.userRef = newUser._id;
+          await newEmployee.save();
+        }
+      } catch (linkErr) {
+        console.error('Error auto-creating/linking user for employee:', linkErr);
+      }
+
       // Format response
       const response = {
         id: newEmployee._id.toString(),
@@ -4560,6 +4698,28 @@ async function start() {
         });
       }
 
+      // Sync shared fields to linked User account
+      try {
+        if (employee.userRef) {
+          const syncData = {};
+          if (name !== undefined) {
+            const nameParts = name.split(' ');
+            syncData.firstName = nameParts[0];
+            syncData.lastName = nameParts.slice(1).join(' ') || '';
+            syncData.fullName = name;
+          }
+          if (email !== undefined) syncData.email = email.toLowerCase();
+          if (department !== undefined) syncData.department = department;
+          if (jobTitle !== undefined) syncData.jobTitle = jobTitle;
+          if (phone !== undefined) syncData.phoneNumber = phone;
+          if (Object.keys(syncData).length > 0) {
+            await UserModel.findByIdAndUpdate(employee.userRef, syncData);
+          }
+        }
+      } catch (syncErr) {
+        console.error('Error syncing employee update to user:', syncErr);
+      }
+
       // Format response
       const response = {
         id: employee._id.toString(),
@@ -4642,6 +4802,48 @@ async function start() {
     } catch (err) {
       console.error('Error bulk updating employees:', err);
       res.status(500).json({ success: false, message: 'Failed to bulk update employees', error: err.message });
+    }
+  });
+
+  // Delete employee by ID
+  app.delete('/api/hr/employees/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const ObjectId = require('mongoose').Types.ObjectId;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid employee ID' });
+      }
+
+      const deleted = await EmployeeModel.findByIdAndDelete(id);
+      if (!deleted) {
+        return res.status(404).json({ success: false, message: 'Employee not found' });
+      }
+
+      // Also remove linked User account
+      try {
+        if (deleted.userRef) {
+          await UserModel.findByIdAndDelete(deleted.userRef);
+        }
+      } catch (linkErr) {
+        console.error('Error deleting linked user:', linkErr);
+      }
+
+      // Create audit log
+      await AuditLogModel.create({
+        userId: req.body.deletedBy || 'system',
+        action: 'DELETE_EMPLOYEE',
+        resource: 'Employee',
+        resourceId: id,
+        details: { employeeName: deleted.name, email: deleted.email },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      res.json({ success: true, message: 'Employee deleted successfully' });
+    } catch (err) {
+      console.error('Error deleting employee:', err);
+      res.status(500).json({ success: false, message: 'Failed to delete employee', error: err.message });
     }
   });
 

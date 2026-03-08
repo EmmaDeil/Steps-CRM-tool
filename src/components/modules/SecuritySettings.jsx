@@ -1587,6 +1587,92 @@ const PasswordPolicyModal = ({ passwordPolicy, onClose, onSave }) => {
 // MFA Settings Modal Component
 const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
   const [formData, setFormData] = useState(mfaSettings);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Test OTP state
+  const [showTestOTP, setShowTestOTP] = useState(false);
+  const [testOTPSent, setTestOTPSent] = useState(false);
+  const [testOTPCode, setTestOTPCode] = useState("");
+  const [testMaskedTarget, setTestMaskedTarget] = useState("");
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [isVerifyingTest, setIsVerifyingTest] = useState(false);
+
+  const isDirty =
+    formData.enabled !== mfaSettings.enabled ||
+    formData.method !== mfaSettings.method ||
+    formData.enforcement !== mfaSettings.enforcement ||
+    formData.gracePeriod !== mfaSettings.gracePeriod;
+
+  const isOTPMethod =
+    formData.method === "Email" || formData.method === "SMS";
+
+  const methodInfoMap = {
+    Email: {
+      icon: "fa-envelope",
+      color: "blue",
+      message:
+        "A 6-digit code will be sent to each user's registered email address when they log in.",
+    },
+    SMS: {
+      icon: "fa-mobile-screen",
+      color: "green",
+      message:
+        "A 6-digit code will be sent via SMS to each user's registered phone number when they log in.",
+    },
+    "Authenticator App": {
+      icon: "fa-key",
+      color: "purple",
+      message: "TOTP-based authenticator apps (Google Authenticator, Authy, etc.) are supported.",
+    },
+  };
+
+  const currentInfo = methodInfoMap[formData.method] || methodInfoMap["Authenticator App"];
+
+  const handleSave = async () => {
+    if (!isDirty || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave(formData);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSendTestOTP = async () => {
+    setIsSendingTest(true);
+    setTestOTPSent(false);
+    setTestOTPCode("");
+    try {
+      const response = await apiService.post("/api/mfa/send-otp", {});
+      setTestMaskedTarget(response.data.maskedTarget || "");
+      setTestOTPSent(true);
+      toast.success(`OTP sent to ${response.data.maskedTarget}`);
+    } catch (error) {
+      const msg =
+        error?.response?.data?.message || "Failed to send test OTP";
+      toast.error(msg);
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
+
+  const handleVerifyTestOTP = async () => {
+    if (!testOTPCode.trim()) return;
+    setIsVerifyingTest(true);
+    try {
+      await apiService.post("/api/mfa/verify-otp", { code: testOTPCode });
+      toast.success("✅ OTP verified successfully! Delivery is working.");
+      setTestOTPSent(false);
+      setTestOTPCode("");
+      setShowTestOTP(false);
+    } catch (error) {
+      const msg =
+        error?.response?.data?.message || "OTP verification failed";
+      toast.error(msg);
+    } finally {
+      setIsVerifyingTest(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1606,6 +1692,7 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
         </div>
 
         <div className="p-6 space-y-6">
+          {/* Enable toggle */}
           <div>
             <label className="flex items-center gap-3 mb-4">
               <input
@@ -1622,6 +1709,7 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
             </label>
           </div>
 
+          {/* Authentication Method */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Authentication Method
@@ -1633,13 +1721,145 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
               }
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option>Authenticator App</option>
+              <option value="Authenticator App">Authenticator App</option>
+              <option value="Email">Email OTP</option>
+              <option value="SMS">SMS OTP</option>
             </select>
-            <p className="text-xs text-gray-500 mt-1">
-              TOTP-based authenticator apps are supported
-            </p>
+
+            {/* Info banner */}
+            <div
+              className={`mt-3 flex items-start gap-3 p-3 rounded-lg ${
+                currentInfo.color === "blue"
+                  ? "bg-blue-50 border border-blue-200"
+                  : currentInfo.color === "green"
+                  ? "bg-green-50 border border-green-200"
+                  : "bg-purple-50 border border-purple-200"
+              }`}
+            >
+              <i
+                className={`fa-solid ${currentInfo.icon} mt-0.5 ${
+                  currentInfo.color === "blue"
+                    ? "text-blue-500"
+                    : currentInfo.color === "green"
+                    ? "text-green-500"
+                    : "text-purple-500"
+                }`}
+              ></i>
+              <p
+                className={`text-sm ${
+                  currentInfo.color === "blue"
+                    ? "text-blue-700"
+                    : currentInfo.color === "green"
+                    ? "text-green-700"
+                    : "text-purple-700"
+                }`}
+              >
+                {currentInfo.message}
+              </p>
+            </div>
           </div>
 
+          {/* Test OTP (only for Email/SMS) */}
+          {isOTPMethod && (
+            <div className="border border-dashed border-gray-300 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <i className="fa-solid fa-flask text-gray-500 text-sm"></i>
+                  <span className="text-sm font-medium text-gray-700">
+                    Test OTP Delivery
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowTestOTP(!showTestOTP);
+                    setTestOTPSent(false);
+                    setTestOTPCode("");
+                  }}
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  {showTestOTP ? "Hide" : "Send a test"}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">
+                Verify that OTP delivery is working before saving.
+              </p>
+
+              {showTestOTP && (
+                <div className="mt-4 space-y-3">
+                  {!testOTPSent ? (
+                    <button
+                      onClick={handleSendTestOTP}
+                      disabled={isSendingTest}
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isSendingTest ? (
+                        <>
+                          <i className="fa-solid fa-circle-notch fa-spin"></i>
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <i
+                            className={`fa-solid ${
+                              formData.method === "SMS"
+                                ? "fa-mobile-screen"
+                                : "fa-paper-plane"
+                            }`}
+                          ></i>
+                          Send Test OTP via {formData.method}
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <>
+                      <p className="text-sm text-green-700 bg-green-50 p-2 rounded">
+                        <i className="fa-solid fa-check-circle mr-1"></i>
+                        Code sent to{" "}
+                        <strong>{testMaskedTarget}</strong>. Enter it
+                        below to verify.
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={testOTPCode}
+                          onChange={(e) =>
+                            setTestOTPCode(
+                              e.target.value.replace(/\D/g, "").slice(0, 6)
+                            )
+                          }
+                          placeholder="Enter 6-digit code"
+                          maxLength={6}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono tracking-widest"
+                        />
+                        <button
+                          onClick={handleVerifyTestOTP}
+                          disabled={
+                            testOTPCode.length !== 6 || isVerifyingTest
+                          }
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          {isVerifyingTest ? (
+                            <i className="fa-solid fa-circle-notch fa-spin"></i>
+                          ) : (
+                            "Verify"
+                          )}
+                        </button>
+                      </div>
+                      <button
+                        onClick={handleSendTestOTP}
+                        disabled={isSendingTest}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        Resend code
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Enforcement Policy */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Enforcement Policy
@@ -1657,6 +1877,7 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
             </select>
           </div>
 
+          {/* Grace Period */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Grace Period
@@ -1679,15 +1900,20 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
         <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium"
+            disabled={isSaving}
+            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
           <button
-            onClick={() => onSave(formData)}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            onClick={handleSave}
+            disabled={!isDirty || isSaving}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            Save Changes
+            {isSaving && (
+              <i className="fa-solid fa-circle-notch fa-spin text-sm"></i>
+            )}
+            {isSaving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>
