@@ -24,6 +24,28 @@ const PhysicalSecurity = () => {
   const [visitorPass, setVisitorPass] = useState(null);
   const [generatingPass, setGeneratingPass] = useState(false);
 
+  // Badge Modal State
+  const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
+  const [issuingBadge, setIssuingBadge] = useState(false);
+  const [badgeForm, setBadgeForm] = useState({
+    holderName: "",
+    department: "",
+    badgeType: "Employee",
+    accessLevel: "Restricted",
+    notes: "",
+  });
+  const [issuedBadge, setIssuedBadge] = useState(null);
+  const [badgeMode, setBadgeMode] = useState("visitor"); // "visitor" or "manual"
+  const [signedInVisitors, setSignedInVisitors] = useState([]);
+  const [loadingVisitors, setLoadingVisitors] = useState(false);
+
+  // Audit Trail & Log Detail State
+  const [showAuditTrail, setShowAuditTrail] = useState(false);
+  const [allLogs, setAllLogs] = useState([]);
+  const [loadingAllLogs, setLoadingAllLogs] = useState(false);
+  const [selectedLog, setSelectedLog] = useState(null);
+  const [auditFilter, setAuditFilter] = useState("All");
+
   // Fetch all physical security data
   const fetchData = async () => {
     try {
@@ -33,9 +55,9 @@ const PhysicalSecurity = () => {
         apiService.get("/api/physical-security/logs"),
         apiService.get("/api/physical-security/personnel"),
       ]);
-      setCameras(camerasRes.data);
-      setLogs(logsRes.data);
-      setPersonnel(personnelRes.data);
+      setCameras(camerasRes.data || camerasRes || []);
+      setLogs(logsRes.data || logsRes || []);
+      setPersonnel(personnelRes.data || personnelRes || []);
     } catch (error) {
       console.error("Failed to fetch physical security data:", error);
       toast.error("Failed to load security data");
@@ -91,6 +113,62 @@ const PhysicalSecurity = () => {
 
   const handleConfigureFeeds = () => {
     setIsConfigModalOpen(true);
+  };
+
+  const handleIssueBadge = async () => {
+    setBadgeForm({
+      holderName: "",
+      department: "",
+      badgeType: "Employee",
+      accessLevel: "Restricted",
+      notes: "",
+    });
+    setIssuedBadge(null);
+    setBadgeMode("visitor");
+    setIsBadgeModalOpen(true);
+    // Fetch signed-in visitors
+    setLoadingVisitors(true);
+    try {
+      const res = await apiService.get("/api/physical-security/visitor-passes");
+      const passes = res.data || res || [];
+      setSignedInVisitors(passes.filter((p) => p.status === "signed-in"));
+    } catch {
+      setSignedInVisitors([]);
+    } finally {
+      setLoadingVisitors(false);
+    }
+  };
+
+  const handleSelectVisitor = (visitor) => {
+    setBadgeForm({
+      holderName: visitor.visitorName || "",
+      department: visitor.company || "",
+      badgeType: "Visitor",
+      accessLevel: "Visitor",
+      notes: `Purpose: ${visitor.purpose || "N/A"} | Host: ${visitor.hostName || "N/A"}`,
+    });
+    setBadgeMode("form");
+  };
+
+  const handleSubmitBadge = async (e) => {
+    e.preventDefault();
+    if (!badgeForm.holderName.trim())
+      return toast.error("Holder name is required");
+    setIssuingBadge(true);
+    try {
+      const res = await apiService.post(
+        "/api/physical-security/badges",
+        badgeForm,
+      );
+      setIssuedBadge(res.data || res);
+      toast.success("Badge issued successfully!");
+      fetchData();
+    } catch (err) {
+      console.error("Failed to issue badge:", err);
+      toast.error("Failed to issue badge");
+    } finally {
+      setIssuingBadge(false);
+    }
   };
 
   const handleAddCamera = async (e) => {
@@ -177,7 +255,10 @@ const PhysicalSecurity = () => {
               </span>
             </button>
 
-            <button className="flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-gray-200 hover:border-purple-400 hover:shadow-md transition-all group">
+            <button
+              onClick={handleIssueBadge}
+              className="flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-gray-200 hover:border-purple-400 hover:shadow-md transition-all group"
+            >
               <div className="w-12 h-12 bg-purple-50 rounded-full flex items-center justify-center mb-3 group-hover:bg-purple-100 transition-colors">
                 <i className="fa-solid fa-id-card-clip text-purple-600 text-lg"></i>
               </div>
@@ -388,7 +469,8 @@ const PhysicalSecurity = () => {
                       {(logs || []).map((log) => (
                         <li
                           key={log._id}
-                          className="p-4 hover:bg-gray-50 transition-colors"
+                          className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                          onClick={() => setSelectedLog(log)}
                         >
                           <div className="flex justify-between items-start mb-1">
                             <div className="flex items-center gap-2">
@@ -418,8 +500,24 @@ const PhysicalSecurity = () => {
                   )}
                 </div>
                 <div className="p-3 border-t border-gray-100 bg-gray-50/50 text-center shrink-0">
-                  <button className="text-sm text-blue-600 font-medium hover:text-blue-700">
-                    View Full Audit Trap
+                  <button
+                    onClick={async () => {
+                      setShowAuditTrail(true);
+                      setLoadingAllLogs(true);
+                      try {
+                        const res = await apiService.get(
+                          "/api/physical-security/logs/all",
+                        );
+                        setAllLogs(res.data || res || []);
+                      } catch {
+                        setAllLogs(logs || []);
+                      } finally {
+                        setLoadingAllLogs(false);
+                      }
+                    }}
+                    className="text-sm text-blue-600 font-medium hover:text-blue-700"
+                  >
+                    View Full Audit Trail
                   </button>
                 </div>
               </div>
@@ -614,6 +712,657 @@ const PhysicalSecurity = () => {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Issue Badge Modal */}
+        {isBadgeModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <h3 className="text-lg font-bold text-gray-900 font-inter">
+                  <i className="fa-solid fa-id-card-clip text-purple-500 mr-2"></i>
+                  {issuedBadge ? "Badge Issued" : "Issue Security Badge"}
+                </h3>
+                <button
+                  onClick={() => {
+                    setIsBadgeModalOpen(false);
+                    setIssuedBadge(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <i className="fa-solid fa-xmark text-lg"></i>
+                </button>
+              </div>
+
+              <div className="p-6">
+                {issuedBadge ? (
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-5 border border-purple-100 text-center">
+                      <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i className="fa-solid fa-id-card-clip text-purple-600 text-2xl"></i>
+                      </div>
+                      <p className="text-xs text-purple-500 font-semibold uppercase tracking-wider mb-1">
+                        Badge Number
+                      </p>
+                      <p className="text-xl font-bold text-purple-800 font-mono">
+                        {issuedBadge.badgeNumber}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-xs text-gray-400 font-medium">
+                          Holder
+                        </p>
+                        <p className="text-gray-800 font-semibold">
+                          {issuedBadge.holderName}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-xs text-gray-400 font-medium">
+                          Type
+                        </p>
+                        <p className="text-gray-800 font-semibold">
+                          {issuedBadge.badgeType}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-xs text-gray-400 font-medium">
+                          Access Level
+                        </p>
+                        <p className="text-gray-800 font-semibold">
+                          {issuedBadge.accessLevel}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-xs text-gray-400 font-medium">
+                          Status
+                        </p>
+                        <p className="text-green-700 font-semibold">
+                          {issuedBadge.status}
+                        </p>
+                      </div>
+                    </div>
+                    {issuedBadge.department && (
+                      <div className="bg-gray-50 rounded-lg p-3 text-sm">
+                        <p className="text-xs text-gray-400 font-medium">
+                          Department
+                        </p>
+                        <p className="text-gray-800 font-semibold">
+                          {issuedBadge.department}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : badgeMode === "visitor" ? (
+                  <div className="space-y-4">
+                    {/* Tab switcher */}
+                    <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                      <button
+                        type="button"
+                        className="flex-1 px-3 py-2 text-sm font-medium bg-purple-600 text-white"
+                      >
+                        <i className="fa-solid fa-user-check mr-1.5"></i>
+                        Signed-In Visitors
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBadgeMode("manual")}
+                        className="flex-1 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                      >
+                        <i className="fa-solid fa-pen mr-1.5"></i>
+                        Manual Entry
+                      </button>
+                    </div>
+
+                    {loadingVisitors ? (
+                      <div className="flex flex-col items-center justify-center py-8">
+                        <i className="fa-solid fa-spinner fa-spin text-purple-500 text-2xl mb-3"></i>
+                        <p className="text-sm text-gray-500">
+                          Loading signed-in visitors...
+                        </p>
+                      </div>
+                    ) : signedInVisitors.length === 0 ? (
+                      <div className="text-center py-8">
+                        <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <i className="fa-solid fa-user-slash text-gray-400 text-xl"></i>
+                        </div>
+                        <p className="text-sm font-medium text-gray-700 mb-1">
+                          No signed-in visitors
+                        </p>
+                        <p className="text-xs text-gray-500 mb-4">
+                          All visitors have been checked out or no one has
+                          signed in yet.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setBadgeMode("manual")}
+                          className="text-sm text-purple-600 font-medium hover:text-purple-700"
+                        >
+                          Issue badge manually instead →
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {signedInVisitors.map((v) => (
+                          <button
+                            key={v._id}
+                            type="button"
+                            onClick={() => handleSelectVisitor(v)}
+                            className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50/50 transition-all text-left group"
+                          >
+                            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center shrink-0">
+                              <i className="fa-solid fa-user-check text-green-600"></i>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 truncate">
+                                {v.visitorName || "Unknown"}
+                              </p>
+                              <p className="text-xs text-gray-500 truncate">
+                                {v.company ? `${v.company} • ` : ""}
+                                {v.purpose || "No purpose listed"}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-xs text-gray-400 group-hover:text-purple-600">
+                              <i className="fa-solid fa-chevron-right"></i>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={handleSubmitBadge}
+                    className="space-y-4 text-left"
+                  >
+                    {/* Tab switcher */}
+                    <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBadgeMode("visitor");
+                          setBadgeForm({
+                            holderName: "",
+                            department: "",
+                            badgeType: "Employee",
+                            accessLevel: "Restricted",
+                            notes: "",
+                          });
+                        }}
+                        className={`flex-1 px-3 py-2 text-sm font-medium ${badgeMode === "visitor" ? "bg-purple-600 text-white" : "text-gray-600 hover:bg-gray-50"} transition-colors`}
+                      >
+                        <i className="fa-solid fa-user-check mr-1.5"></i>
+                        Signed-In Visitors
+                      </button>
+                      <button
+                        type="button"
+                        className={`flex-1 px-3 py-2 text-sm font-medium ${badgeMode !== "visitor" ? "bg-purple-600 text-white" : "text-gray-600 hover:bg-gray-50"} transition-colors`}
+                      >
+                        <i className="fa-solid fa-pen mr-1.5"></i>
+                        {badgeMode === "form" ? "From Visitor" : "Manual Entry"}
+                      </button>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Holder Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={badgeForm.holderName}
+                        onChange={(e) =>
+                          setBadgeForm({
+                            ...badgeForm,
+                            holderName: e.target.value,
+                          })
+                        }
+                        placeholder="e.g. John Smith"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Department
+                      </label>
+                      <input
+                        type="text"
+                        value={badgeForm.department}
+                        onChange={(e) =>
+                          setBadgeForm({
+                            ...badgeForm,
+                            department: e.target.value,
+                          })
+                        }
+                        placeholder="e.g. Engineering"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Badge Type
+                        </label>
+                        <select
+                          value={badgeForm.badgeType}
+                          onChange={(e) =>
+                            setBadgeForm({
+                              ...badgeForm,
+                              badgeType: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors"
+                        >
+                          <option value="Employee">Employee</option>
+                          <option value="Contractor">Contractor</option>
+                          <option value="Visitor">Visitor</option>
+                          <option value="Temporary">Temporary</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Access Level
+                        </label>
+                        <select
+                          value={badgeForm.accessLevel}
+                          onChange={(e) =>
+                            setBadgeForm({
+                              ...badgeForm,
+                              accessLevel: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors"
+                        >
+                          <option value="Full">Full Access</option>
+                          <option value="Restricted">Restricted</option>
+                          <option value="Visitor">Visitor Only</option>
+                          <option value="Custom">Custom</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Notes
+                      </label>
+                      <textarea
+                        value={badgeForm.notes}
+                        onChange={(e) =>
+                          setBadgeForm({ ...badgeForm, notes: e.target.value })
+                        }
+                        placeholder="Optional notes..."
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors resize-none"
+                      />
+                    </div>
+                    <div className="pt-2 flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setIsBadgeModalOpen(false)}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={issuingBadge}
+                        className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors focus:ring-2 focus:ring-purple-500/20 disabled:opacity-50"
+                      >
+                        {issuingBadge ? (
+                          <>
+                            <i className="fa-solid fa-spinner fa-spin mr-2"></i>
+                            Issuing...
+                          </>
+                        ) : (
+                          <>
+                            <i className="fa-solid fa-id-card-clip mr-2"></i>
+                            Issue Badge
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              {issuedBadge && (
+                <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-between">
+                  <button
+                    onClick={() => setIssuedBadge(null)}
+                    className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"
+                  >
+                    <i className="fa-solid fa-plus mr-2"></i>Issue Another
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsBadgeModalOpen(false);
+                      setIssuedBadge(null);
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Log Detail Modal */}
+        {selectedLog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <h3 className="text-lg font-bold text-gray-900 font-inter">
+                  <i className="fa-solid fa-file-lines text-blue-500 mr-2"></i>
+                  Log Details
+                </h3>
+                <button
+                  onClick={() => setSelectedLog(null)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <i className="fa-solid fa-xmark text-lg"></i>
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                {/* Severity banner */}
+                <div
+                  className={`flex items-center gap-3 p-3 rounded-lg border ${
+                    selectedLog.severity === "error"
+                      ? "bg-red-50 border-red-200"
+                      : selectedLog.severity === "warning"
+                        ? "bg-amber-50 border-amber-200"
+                        : "bg-blue-50 border-blue-200"
+                  }`}
+                >
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                      selectedLog.severity === "error"
+                        ? "bg-red-100"
+                        : selectedLog.severity === "warning"
+                          ? "bg-amber-100"
+                          : "bg-blue-100"
+                    }`}
+                  >
+                    <i
+                      className={`fa-solid ${
+                        selectedLog.severity === "error"
+                          ? "fa-circle-exclamation text-red-600"
+                          : selectedLog.severity === "warning"
+                            ? "fa-triangle-exclamation text-amber-600"
+                            : "fa-circle-info text-blue-600"
+                      } text-lg`}
+                    ></i>
+                  </div>
+                  <div>
+                    <p
+                      className={`text-sm font-semibold ${
+                        selectedLog.severity === "error"
+                          ? "text-red-800"
+                          : selectedLog.severity === "warning"
+                            ? "text-amber-800"
+                            : "text-blue-800"
+                      }`}
+                    >
+                      {selectedLog.severity === "error"
+                        ? "Error"
+                        : selectedLog.severity === "warning"
+                          ? "Warning"
+                          : "Info"}
+                    </p>
+                    <p className="text-xs text-gray-500 capitalize">
+                      {selectedLog.type} Event
+                    </p>
+                  </div>
+                </div>
+
+                {/* Details */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-2">
+                    Details
+                  </p>
+                  <p className="text-sm text-gray-800 font-medium leading-relaxed">
+                    {selectedLog.details}
+                  </p>
+                </div>
+
+                {/* Metadata grid */}
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 font-medium">Type</p>
+                    <p className="text-gray-800 font-semibold">
+                      {selectedLog.type}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 font-medium">
+                      Severity
+                    </p>
+                    <p
+                      className={`font-semibold capitalize ${
+                        selectedLog.severity === "error"
+                          ? "text-red-700"
+                          : selectedLog.severity === "warning"
+                            ? "text-amber-700"
+                            : "text-blue-700"
+                      }`}
+                    >
+                      {selectedLog.severity}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 font-medium">Time</p>
+                    <p className="text-gray-800 font-semibold">
+                      {selectedLog.time}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 font-medium">Logged</p>
+                    <p className="text-gray-800 font-semibold">
+                      {selectedLog.createdAt
+                        ? new Date(selectedLog.createdAt).toLocaleDateString()
+                        : "N/A"}
+                    </p>
+                  </div>
+                </div>
+
+                {selectedLog.createdAt && (
+                  <p className="text-xs text-gray-400 text-center">
+                    Full timestamp:{" "}
+                    {new Date(selectedLog.createdAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end">
+                <button
+                  onClick={() => setSelectedLog(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full Audit Trail Panel */}
+        {showAuditTrail && (
+          <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
+            {/* Header */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-sm">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setShowAuditTrail(false);
+                    setAuditFilter("All");
+                  }}
+                  className="text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <i className="fa-solid fa-arrow-left text-lg"></i>
+                </button>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 font-inter">
+                    <i className="fa-solid fa-list-ul text-gray-400 mr-2"></i>
+                    Full Audit Trail
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    {loadingAllLogs
+                      ? "Loading..."
+                      : `${allLogs.length} total log entries`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAuditTrail(false);
+                  setAuditFilter("All");
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <i className="fa-solid fa-xmark mr-2"></i>Close
+              </button>
+            </div>
+
+            {/* Filter tabs */}
+            <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0">
+              <div className="flex gap-2 flex-wrap">
+                {["All", "Visitor", "Access", "Alert", "System", "Guard"].map(
+                  (type) => (
+                    <button
+                      key={type}
+                      onClick={() => setAuditFilter(type)}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-colors ${
+                        auditFilter === type
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ),
+                )}
+              </div>
+            </div>
+
+            {/* Log list */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {loadingAllLogs ? (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <i className="fa-solid fa-spinner fa-spin text-blue-500 text-3xl mb-4"></i>
+                  <p className="text-gray-500 text-sm">
+                    Loading audit trail...
+                  </p>
+                </div>
+              ) : (
+                <div className="max-w-4xl mx-auto space-y-2">
+                  {(allLogs || [])
+                    .filter(
+                      (log) =>
+                        auditFilter === "All" || log.type === auditFilter,
+                    )
+                    .map((log) => (
+                      <div
+                        key={log._id}
+                        onClick={() => setSelectedLog(log)}
+                        className="bg-white rounded-lg border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer group"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                                log.severity === "error"
+                                  ? "bg-red-100"
+                                  : log.severity === "warning"
+                                    ? "bg-amber-100"
+                                    : "bg-blue-100"
+                              }`}
+                            >
+                              <i
+                                className={`fa-solid ${
+                                  log.type === "Visitor"
+                                    ? "fa-user"
+                                    : log.type === "Access"
+                                      ? "fa-key"
+                                      : log.type === "Alert"
+                                        ? "fa-bell"
+                                        : log.type === "System"
+                                          ? "fa-gear"
+                                          : log.type === "Guard"
+                                            ? "fa-shield"
+                                            : "fa-circle-info"
+                                } text-sm ${
+                                  log.severity === "error"
+                                    ? "text-red-600"
+                                    : log.severity === "warning"
+                                      ? "text-amber-600"
+                                      : "text-blue-600"
+                                }`}
+                              ></i>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-800 leading-relaxed">
+                                {log.details}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full ${
+                                    log.type === "Visitor"
+                                      ? "bg-blue-100 text-blue-700"
+                                      : log.type === "Access"
+                                        ? "bg-purple-100 text-purple-700"
+                                        : log.type === "Alert"
+                                          ? "bg-red-100 text-red-700"
+                                          : log.type === "System"
+                                            ? "bg-gray-100 text-gray-700"
+                                            : "bg-emerald-100 text-emerald-700"
+                                  }`}
+                                >
+                                  {log.type}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full ${
+                                    log.severity === "error"
+                                      ? "bg-red-100 text-red-700"
+                                      : log.severity === "warning"
+                                        ? "bg-amber-100 text-amber-700"
+                                        : "bg-green-100 text-green-700"
+                                  }`}
+                                >
+                                  {log.severity}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xs text-gray-500 font-mono">
+                              {log.time}
+                            </p>
+                            {log.createdAt && (
+                              <p className="text-[10px] text-gray-400 mt-0.5">
+                                {new Date(log.createdAt).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  {(allLogs || []).filter(
+                    (log) => auditFilter === "All" || log.type === auditFilter,
+                  ).length === 0 && (
+                    <div className="text-center py-16">
+                      <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i className="fa-solid fa-filter text-gray-400 text-xl"></i>
+                      </div>
+                      <p className="text-sm font-medium text-gray-700">
+                        No logs found
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        No entries match the "{auditFilter}" filter.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

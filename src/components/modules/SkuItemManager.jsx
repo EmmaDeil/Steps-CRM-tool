@@ -9,14 +9,20 @@ const SkuItemManager = () => {
   const [editItem, setEditItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteModal, setDeleteModal] = useState(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    sku: "",
-    category: "",
-    description: "",
-    unitPrice: "",
-    unit: "Pieces",
-    isActive: true,
+  const [formData, setFormData] = useState(() => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "SKU-";
+    for (let i = 0; i < 8; i++)
+      code += chars[Math.floor(Math.random() * chars.length)];
+    return {
+      name: "",
+      sku: code,
+      category: "",
+      description: "",
+      unitPrice: "",
+      unit: "Pieces",
+      isActive: true,
+    };
   });
 
   const unitOptions = [
@@ -74,10 +80,18 @@ const SkuItemManager = () => {
     }));
   };
 
+  const generateSku = () => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "ITEM-";
+    for (let i = 0; i < 8; i++)
+      code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  };
+
   const resetForm = () => {
     setFormData({
       name: "",
-      sku: "",
+      sku: generateSku(),
       category: "",
       description: "",
       unitPrice: "",
@@ -317,15 +331,24 @@ const SkuItemManager = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     SKU Code <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    name="sku"
-                    value={formData.sku}
-                    onChange={handleChange}
-                    placeholder="e.g. OFF-PAP-001"
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-mono uppercase focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] outline-none"
-                    required
-                  />
+                  {editItem ? (
+                    <input
+                      type="text"
+                      name="sku"
+                      value={formData.sku}
+                      onChange={handleChange}
+                      placeholder="e.g. OFF-PAP-001"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-mono uppercase focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] outline-none"
+                      required
+                    />
+                  ) : (
+                    <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-mono uppercase text-gray-600">
+                      {formData.sku}
+                      <span className="ml-2 text-xs text-gray-400 normal-case">
+                        {/* (Auto-generated) */}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

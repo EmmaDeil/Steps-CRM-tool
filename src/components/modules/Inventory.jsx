@@ -433,17 +433,28 @@ const Inventory = () => {
                 <>
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Item ID
+                      SKU Code
+                      {modalMode === "add" && (
+                        <span className="ml-2 text-xs text-blue-500 font-normal">
+                          {/* Auto-generated */}
+                        </span>
+                      )}
                     </label>
-                    <input
-                      type="text"
-                      name="itemId"
-                      value={formData.itemId}
-                      onChange={handleFormChange}
-                      required
-                      placeholder="e.g. INV-001"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
+                    {modalMode === "add" ? (
+                      <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 font-mono text-sm">
+                        {formData.itemId}
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        name="itemId"
+                        value={formData.itemId}
+                        onChange={handleFormChange}
+                        required
+                        placeholder="e.g. INV-001"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    )}
                   </div>
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1">

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { CameraFeed, SecurityLog, SecurityPersonnel } = require('../models/PhysicalSecurity');
+const { CameraFeed, SecurityLog, SecurityPersonnel, SecurityBadge } = require('../models/PhysicalSecurity');
 const { checkSecurityRole } = require('../middleware/securityAuth'); // Reusing existing role check
 
 // Protect all physical security routes. Assuming Admins and standard users with 'Security' access can view.
@@ -55,8 +55,19 @@ router.put('/cameras/:id', async (req, res) => {
 // GET /api/physical-security/logs
 router.get('/logs', async (req, res) => {
     try {
-        // In a real app, you'd paginate this.
-        const logs = await SecurityLog.find().sort({ createdAt: -1 }).limit(50);
+        const limit = parseInt(req.query.limit) || 50;
+        const logs = await SecurityLog.find().sort({ createdAt: -1 }).limit(limit);
+        res.json(logs);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// GET /api/physical-security/logs/all - Get all logs for audit trail
+router.get('/logs/all', async (req, res) => {
+    try {
+        const logs = await SecurityLog.find().sort({ createdAt: -1 });
         res.json(logs);
     } catch (error) {
         console.error(error);
@@ -147,6 +158,82 @@ router.put('/visitor-passes/:id/checkout', async (req, res) => {
         res.json(pass);
     } catch (error) {
         console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// --- BADGE ROUTES ---
+
+// GET /api/physical-security/badges - List all badges
+router.get('/badges', async (req, res) => {
+    try {
+        const badges = await SecurityBadge.find().sort({ createdAt: -1 });
+        res.json(badges);
+    } catch (error) {
+        console.error('Error fetching badges:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// POST /api/physical-security/badges - Issue a new badge
+router.post('/badges', async (req, res) => {
+    try {
+        const { holderName, department, badgeType, accessLevel, expiresAt, notes, issuedBy } = req.body;
+        if (!holderName) return res.status(400).json({ message: 'Holder name is required' });
+
+        // Generate unique badge number: BDG-YYYYMMDD-XXXX
+        const date = new Date();
+        const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+        const count = await SecurityBadge.countDocuments();
+        const badgeNumber = `BDG-${dateStr}-${String(count + 1).padStart(4, '0')}`;
+
+        const badge = new SecurityBadge({
+            badgeNumber,
+            holderName,
+            department: department || '',
+            badgeType: badgeType || 'Employee',
+            accessLevel: accessLevel || 'Restricted',
+            issuedBy: issuedBy || 'Security Officer',
+            expiresAt: expiresAt || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            notes: notes || '',
+        });
+        await badge.save();
+
+        // Log the badge issuance
+        await SecurityLog.create({
+            time: new Date().toLocaleTimeString(),
+            type: 'Access',
+            details: `Badge ${badgeNumber} issued to ${holderName} (${badgeType}, ${accessLevel} access)`,
+            severity: 'info',
+        });
+
+        res.status(201).json(badge);
+    } catch (error) {
+        console.error('Error issuing badge:', error);
+        res.status(500).json({ message: 'Failed to issue badge' });
+    }
+});
+
+// PUT /api/physical-security/badges/:id/revoke - Revoke a badge
+router.put('/badges/:id/revoke', async (req, res) => {
+    try {
+        const badge = await SecurityBadge.findByIdAndUpdate(
+            req.params.id,
+            { status: 'Revoked' },
+            { new: true }
+        );
+        if (!badge) return res.status(404).json({ message: 'Badge not found' });
+
+        await SecurityLog.create({
+            time: new Date().toLocaleTimeString(),
+            type: 'Access',
+            details: `Badge ${badge.badgeNumber} for ${badge.holderName} has been revoked`,
+            severity: 'warning',
+        });
+
+        res.json(badge);
+    } catch (error) {
+        console.error('Error revoking badge:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });

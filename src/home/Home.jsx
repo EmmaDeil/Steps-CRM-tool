@@ -175,9 +175,48 @@ export default function Home() {
     return found ? loadModuleComponent(found.componentName) : null;
   }, [found]);
 
+  // Auto-retry fetching modules when server comes back online
+  useEffect(() => {
+    if (!error || !id) return;
+    const interval = setInterval(async () => {
+      try {
+        const modsRes = await apiService.get("/api/modules");
+        const mods = modsRes || [];
+        if (mods.length > 0) {
+          setModules(mods);
+          setError(null);
+          setLoading(false);
+        }
+      } catch {
+        // Still offline, keep retrying
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [error, id]);
+
   // ===== MODULE DETAIL VIEW =====
   if (id) {
-    // Module not found
+    // Still loading or server error — show spinner instead of "not found"
+    if (loading || (error && modules.length === 0)) {
+      return (
+        <div className="min-h-screen flex flex-col">
+          <Navbar user={user} />
+          <div className="flex-1 flex items-center justify-center px-4 py-10">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mb-4"></div>
+              <h3 className="text-lg font-semibold mb-1 text-[#111418]">
+                Loading Module...
+              </h3>
+              <p className="text-sm text-[#617589]">
+                {error ? "Waiting for server connection..." : "Please wait"}
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Module genuinely not found (modules loaded but ID doesn't match)
     if (!found) {
       return (
         <div className="min-h-screen flex flex-col">

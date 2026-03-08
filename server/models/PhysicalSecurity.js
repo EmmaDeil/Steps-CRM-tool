@@ -37,8 +37,24 @@ const SecurityPersonnelSchema = new Schema({
     timestamps: true
 });
 
+// 4. Security badge tracking
+const SecurityBadgeSchema = new Schema({
+    badgeNumber: { type: String, required: true, unique: true },
+    holderName: { type: String, required: true },
+    department: { type: String, default: '' },
+    badgeType: { type: String, enum: ['Employee', 'Contractor', 'Visitor', 'Temporary'], default: 'Employee' },
+    accessLevel: { type: String, enum: ['Full', 'Restricted', 'Visitor', 'Custom'], default: 'Restricted' },
+    status: { type: String, enum: ['Active', 'Revoked', 'Expired', 'Lost'], default: 'Active' },
+    issuedBy: { type: String, default: 'Security Officer' },
+    expiresAt: { type: Date },
+    notes: { type: String, default: '' },
+}, {
+    timestamps: true
+});
+
 const CameraFeed = mongoose.model('CameraFeed', CameraFeedSchema);
 const SecurityLog = mongoose.model('SecurityLog', SecurityLogSchema);
 const SecurityPersonnel = mongoose.model('SecurityPersonnel', SecurityPersonnelSchema);
+const SecurityBadge = mongoose.model('SecurityBadge', SecurityBadgeSchema);
 
-module.exports = { CameraFeed, SecurityLog, SecurityPersonnel };
+module.exports = { CameraFeed, SecurityLog, SecurityPersonnel, SecurityBadge };
