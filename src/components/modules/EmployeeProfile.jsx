@@ -1823,7 +1823,7 @@ const EmployeeProfile = ({
                             "/api/auth/mfa-status",
                           );
                           if (res.success) setMfaStatus(res.data);
-                        } catch (err) {
+                        } catch (_err) {
                           toast.error("Failed to load MFA status");
                         }
                       }}
@@ -2013,7 +2013,7 @@ const EmployeeProfile = ({
                               res.error || "Failed to start MFA setup",
                             );
                           }
-                        } catch (err) {
+                        } catch (_err) {
                           toast.error("Failed to start MFA setup");
                         } finally {
                           setMfaLoading(false);

@@ -3,7 +3,6 @@ const router = express.Router();
 const EmployeeModel = require('../models/Employee');
 const UserModel = require('../models/User');
 const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
 
 // ================= EMPLOYEES (Live DB) =================
 router.get('/employees', async (req, res) => {
