@@ -535,8 +535,11 @@ const Admin = () => {
   const getRoleBadgeColor = (role) => {
     const colors = {
       Admin: "bg-purple-100 text-purple-700",
+      "Security Admin": "bg-red-100 text-red-700",
+      "Security Analyst": "bg-orange-100 text-orange-700",
       Editor: "bg-blue-100 text-blue-700",
       Viewer: "bg-gray-100 text-gray-700",
+      user: "bg-green-100 text-green-700",
     };
     return colors[role] || "bg-gray-100 text-gray-700";
   };
@@ -1311,8 +1314,11 @@ const Admin = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="Admin">Admin</option>
+                      <option value="Security Admin">Security Admin</option>
+                      <option value="Security Analyst">Security Analyst</option>
                       <option value="Editor">Editor</option>
                       <option value="Viewer">Viewer</option>
+                      <option value="user">User</option>
                     </select>
                   </div>
 

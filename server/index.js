@@ -2219,25 +2219,12 @@ async function start() {
     try {
       const { role, status, search } = req.query;
       
-      // Fetch both users and employees, then merge them
       let userQuery = {};
-      let employeeQuery = {};
-
-      if (role) {
-        userQuery.role = role;
-        employeeQuery.role = role;
-      }
-      if (status) {
-        userQuery.status = status;
-        employeeQuery.status = status;
-      }
+      if (role) userQuery.role = role;
+      if (status) userQuery.status = status;
       if (search) {
         userQuery.$or = [
           { fullName: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } },
-        ];
-        employeeQuery.$or = [
-          { name: { $regex: search, $options: 'i' } },
           { email: { $regex: search, $options: 'i' } },
         ];
       }
@@ -2249,48 +2236,65 @@ async function start() {
         .populate('invitedBy', 'fullName email')
         .lean();
 
-      // Fetch employees from EmployeeModel (wrap in try-catch in case model has issues)
-      let employees = [];
+      // Auto-link unlinked employees: create User accounts for employees without one
       try {
-        employees = await EmployeeModel.find(employeeQuery)
-          .sort({ createdAt: -1 })
-          .lean();
-      } catch (empErr) {
-        console.error('Error fetching employees for user list:', empErr);
-        // Continue with just users if employees fetch fails
+        const unlinkedEmployees = await EmployeeModel.find({
+          $or: [{ userRef: null }, { userRef: { $exists: false } }]
+        }).lean();
+        if (unlinkedEmployees.length > 0) {
+          const crypto = require('crypto');
+          for (const emp of unlinkedEmployees) {
+            if (!emp.email) continue;
+            // Resolve name — old records may only have `name`, not firstName/lastName
+            let fn = emp.firstName;
+            let ln = emp.lastName;
+            if ((!fn || !ln) && emp.name) {
+              const parts = emp.name.split(' ');
+              fn = fn || parts[0] || 'Unknown';
+              ln = ln || parts.slice(1).join(' ') || 'User';
+              // Also fix the employee record
+              await EmployeeModel.findByIdAndUpdate(emp._id, { firstName: fn, lastName: ln });
+            }
+            fn = fn || 'Unknown';
+            ln = ln || 'User';
+
+            const existingUser = await UserModel.findOne({ email: emp.email.toLowerCase() });
+            if (existingUser) {
+              await EmployeeModel.findByIdAndUpdate(emp._id, { userRef: existingUser._id });
+              if (!existingUser.employeeRef) {
+                await UserModel.findByIdAndUpdate(existingUser._id, { employeeRef: emp._id });
+              }
+            } else {
+              const tempPassword = crypto.randomBytes(16).toString('hex');
+              const newUser = await UserModel.create({
+                firstName: fn,
+                lastName: ln,
+                fullName: `${fn} ${ln}`,
+                email: emp.email.toLowerCase(),
+                password: tempPassword,
+                role: 'user',
+                status: 'Active',
+                department: emp.department || null,
+                jobTitle: emp.jobTitle || null,
+                phoneNumber: emp.phone || null,
+                employeeRef: emp._id,
+              });
+              await EmployeeModel.findByIdAndUpdate(emp._id, { userRef: newUser._id });
+            }
+          }
+        }
+      } catch (linkErr) {
+        console.error('Error auto-linking employees:', linkErr);
       }
 
-      // Map employees to user format and merge with users
-      const employeesAsUsers = employees.map(emp => ({
-        _id: emp._id,
-        id: emp.employeeId || emp._id?.toString(),
-        fullName: emp.name || '',
-        email: emp.email || '',
-        role: emp.role || 'Employee',
-        status: emp.status || 'Active',
-        department: emp.department || '',
-        jobTitle: emp.jobTitle || '',
-        phone: emp.phone || '',
-        avatar: emp.avatar || '',
-        createdAt: emp.createdAt || new Date(),
-        source: 'employee' // Mark as employee source
-      }));
+      // Re-fetch users after auto-linking (includes newly created user accounts)
+      const allUsers = await UserModel.find(userQuery)
+        .select('-resetPasswordToken -resetPasswordExpires')
+        .sort({ createdAt: -1 })
+        .populate('invitedBy', 'fullName email')
+        .lean();
 
-      // Merge users and employees, removing duplicates by email
-      const emailSet = new Set();
-      const mergedUsers = [];
-
-      [...users, ...employeesAsUsers].forEach(user => {
-        if (user.email && !emailSet.has(user.email)) {
-          emailSet.add(user.email);
-          mergedUsers.push(user);
-        }
-      });
-
-      // Sort by creation date
-      mergedUsers.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-
-      res.json(mergedUsers);
+      res.json(allUsers);
     } catch (err) {
       console.error('Error fetching users:', err);
       res.status(500).json({ message: 'Failed to fetch users', error: err.message });
@@ -2326,9 +2330,21 @@ async function start() {
         return res.status(400).json({ message: 'User with this email already exists' });
       }
 
+      // Split fullName into firstName/lastName
+      const nameParts = (fullName || '').trim().split(' ');
+      const firstName = nameParts[0] || 'Unknown';
+      const lastName = nameParts.slice(1).join(' ') || 'User';
+
+      // Generate a random temp password (user must reset)
+      const crypto = require('crypto');
+      const tempPassword = crypto.randomBytes(16).toString('hex');
+
       const user = new UserModel({
-        fullName,
+        firstName,
+        lastName,
+        fullName: fullName || `${firstName} ${lastName}`,
         email,
+        password: tempPassword,
         role: role || 'Viewer',
         status: 'Pending',
         permissions,
@@ -2337,7 +2353,38 @@ async function start() {
       });
 
       await user.save();
-      res.status(201).json(user);
+
+      // Auto-create or link a corresponding Employee record
+      try {
+        let existingEmp = await EmployeeModel.findOne({ email: email.toLowerCase() });
+        if (existingEmp) {
+          existingEmp.userRef = user._id;
+          await existingEmp.save();
+          user.employeeRef = existingEmp._id;
+          await user.save();
+        } else {
+          const count = await EmployeeModel.countDocuments();
+          const empId = `EMP${String(count + 1).padStart(4, '0')}`;
+          const newEmp = await EmployeeModel.create({
+            firstName,
+            lastName,
+            email: email.toLowerCase(),
+            employeeId: empId,
+            role: role || 'Employee',
+            status: 'Active',
+            userRef: user._id,
+          });
+          user.employeeRef = newEmp._id;
+          await user.save();
+        }
+      } catch (linkErr) {
+        console.error('Error linking user to employee:', linkErr);
+      }
+
+      // Return user without password
+      const userResponse = user.toObject();
+      delete userResponse.password;
+      res.status(201).json(userResponse);
     } catch (err) {
       console.error('Error creating user:', err);
       res.status(500).json({ message: 'Failed to create user' });
@@ -2350,7 +2397,12 @@ async function start() {
       const { fullName, email, role, status, permissions } = req.body;
       
       const updateData = {};
-      if (fullName !== undefined) updateData.fullName = fullName;
+      if (fullName !== undefined) {
+        updateData.fullName = fullName;
+        const parts = fullName.trim().split(' ');
+        updateData.firstName = parts[0];
+        updateData.lastName = parts.slice(1).join(' ') || 'User';
+      }
       if (email !== undefined) updateData.email = email;
       if (role !== undefined) updateData.role = role;
       if (status !== undefined) updateData.status = status;
@@ -2364,6 +2416,26 @@ async function start() {
 
       if (!user) {
         return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Sync shared fields to linked Employee
+      try {
+        if (user.employeeRef) {
+          const empSync = {};
+          if (fullName) {
+            empSync.firstName = user.firstName;
+            empSync.lastName = user.lastName;
+          }
+          if (email) empSync.email = email.toLowerCase();
+          if (user.department) empSync.department = user.department;
+          if (user.jobTitle) empSync.jobTitle = user.jobTitle;
+          if (Object.keys(empSync).length > 0) {
+            empSync.updatedAt = new Date();
+            await EmployeeModel.findByIdAndUpdate(user.employeeRef, empSync);
+          }
+        }
+      } catch (syncErr) {
+        console.error('Error syncing user update to employee:', syncErr);
       }
 
       res.json(user);
@@ -2380,6 +2452,15 @@ async function start() {
 
       if (!user) {
         return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Also delete linked Employee record
+      try {
+        if (user.employeeRef) {
+          await EmployeeModel.findByIdAndDelete(user.employeeRef);
+        }
+      } catch (linkErr) {
+        console.error('Error deleting linked employee:', linkErr);
       }
 
       res.json({ message: 'User deleted successfully' });

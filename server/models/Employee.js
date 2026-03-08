@@ -21,6 +21,7 @@ const EmployeeSchema = new mongoose.Schema({
   },
   managerId: { type: String },
   role: { type: String }, // Used in UI for role descriptor
+  userRef: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

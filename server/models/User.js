@@ -98,6 +98,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  employeeRef: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Employee',
+    default: null,
+  },
 }, {
   timestamps: true,
 });

@@ -1243,7 +1243,9 @@ const HRM = () => {
                         } catch (error) {
                           console.error("Error adding employee:", error);
                           toast.error(
-                            error.message || "Failed to add employee",
+                            error.response?.data?.message ||
+                              error.message ||
+                              "Failed to add employee",
                           );
                         } finally {
                           setEmployeeFormLoading(false);
