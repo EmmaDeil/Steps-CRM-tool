@@ -938,53 +938,12 @@ async function start() {
 
 
   // ============ INVENTORY ROUTES ============
-  const InventoryItemModel = require('./models/InventoryItem');
-
-  app.get('/api/inventory', async (req, res) => {
-    try {
-      const items = await InventoryItemModel.find().sort({ lastUpdated: -1 });
-      res.json(items);
-    } catch (err) {
-      console.error('Error fetching inventory:', err);
-      res.status(500).json({ message: 'Failed to fetch inventory items' });
-    }
-  });
-
-  app.post('/api/inventory', async (req, res) => {
-    try {
-      const newItem = await InventoryItemModel.create(req.body);
-      res.status(201).json({ message: 'Item created successfully', data: newItem });
-    } catch (err) {
-      console.error('Error creating inventory item:', err);
-      res.status(500).json({ message: 'Failed to create inventory item' });
-    }
-  });
-
-  app.put('/api/inventory/:id', async (req, res) => {
-    try {
-      const updated = await InventoryItemModel.findByIdAndUpdate(
-        req.params.id,
-        { ...req.body, lastUpdated: new Date() },
-        { new: true }
-      );
-      if (!updated) return res.status(404).json({ message: 'Item not found' });
-      res.json({ message: 'Item updated successfully', data: updated });
-    } catch (err) {
-      console.error('Error updating inventory item:', err);
-      res.status(500).json({ message: 'Failed to update inventory item' });
-    }
-  });
-
-  app.delete('/api/inventory/:id', async (req, res) => {
-    try {
-      const deleted = await InventoryItemModel.findByIdAndDelete(req.params.id);
-      if (!deleted) return res.status(404).json({ message: 'Item not found' });
-      res.json({ message: 'Item deleted successfully' });
-    } catch (err) {
-      console.error('Error deleting inventory item:', err);
-      res.status(500).json({ message: 'Failed to delete inventory item' });
-    }
-  });
+  // Routes defined in ./routes/inventory.routes.js
+  // Includes: authMiddleware, input validation, sequential IDs,
+  //           soft delete, per-item reorderPoint, server-side pagination,
+  //           restock-as-increment, and StockMovement audit logging.
+  const inventoryRoutes = require('./routes/inventory.routes');
+  app.use('/api/inventory', inventoryRoutes);
 
   // Models needed for Analytics aggregation
   const AttendanceModel = require('./models/Attendance');

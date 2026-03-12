@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const MaterialRequest = require('../models/MaterialRequest');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const InventoryItem = require('../models/InventoryItem');
+const { logMovement } = require('./inventory.routes');
 
 // ==========================================
 // MATERIAL REQUESTS API
@@ -78,44 +80,71 @@ router.post('/material-requests/:id/approve', async (req, res) => {
     if (request.requestType === 'Internal Transfer') {
       const inventoryIssues = [];
       const insufficientItems = [];
-      
-      // Check inventory availability for each line item
+
+      // Pre-validate ALL items before touching anything
       for (const item of request.lineItems) {
-        const inventoryItem = await InventoryItem.findOne({ 
-          name: { $regex: new RegExp('^' + item.itemName + '$', 'i') } 
+        const inventoryItem = await InventoryItem.findOne({
+          name: { $regex: new RegExp('^' + item.itemName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') },
+          isDeleted: false,
         });
-        
         if (!inventoryItem) {
           insufficientItems.push({ item: item.itemName, reason: 'Not found in inventory' });
         } else if (inventoryItem.quantity < item.quantity) {
-          insufficientItems.push({ 
-            item: item.itemName, 
-            reason: `Insufficient stock (Available: ${inventoryItem.quantity}, Requested: ${item.quantity})` 
+          insufficientItems.push({
+            item: item.itemName,
+            reason: `Insufficient stock (Available: ${inventoryItem.quantity}, Requested: ${item.quantity})`,
           });
-        } else {
-          // Deduct from inventory
-          inventoryItem.quantity -= item.quantity;
-          inventoryItem.lastUpdated = new Date();
-          await inventoryItem.save();
-          inventoryIssues.push({ item: item.itemName, quantityIssued: item.quantity });
         }
       }
-      
-      // Mark as fulfilled if all items were issued
+
+      // Only deduct if ALL items can be fulfilled (atomic approach)
       if (insufficientItems.length === 0) {
-        request.status = 'fulfilled';
+        // Use a MongoDB session+transaction to prevent race conditions
+        const session = await mongoose.startSession();
+        try {
+          await session.withTransaction(async () => {
+            for (const item of request.lineItems) {
+              const inventoryItem = await InventoryItem.findOneAndUpdate(
+                {
+                  name: { $regex: new RegExp('^' + item.itemName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') },
+                  isDeleted: false,
+                  quantity: { $gte: item.quantity }, // atomic double-check
+                },
+                { $inc: { quantity: -item.quantity }, lastUpdated: new Date() },
+                { new: true, session }
+              );
+              if (!inventoryItem) {
+                throw new Error(`Stock became insufficient for item: ${item.itemName}`);
+              }
+              inventoryIssues.push({ item: item.itemName, quantityIssued: item.quantity });
+              // Log movement (outside transaction is fine — best-effort audit)
+              await logMovement(
+                inventoryItem._id, 'transfer', -item.quantity,
+                inventoryItem.quantity + item.quantity, null,
+                `Internal Transfer: MR ${request._id}`
+              );
+            }
+            request.status = 'fulfilled';
+            await request.save({ session });
+          });
+        } finally {
+          await session.endSession();
+        }
+      } else {
+        // Partial — still approved but not fulfilled; no inventory deduction
+        request.status = 'approved';
         await request.save();
       }
-      
-      return res.json({ 
-        success: true, 
-        message: insufficientItems.length === 0 
-          ? 'Internal transfer approved and items issued from inventory' 
+
+      return res.json({
+        success: true,
+        message: insufficientItems.length === 0
+          ? 'Internal transfer approved and items issued from inventory'
           : 'Partial fulfillment - some items unavailable',
         request,
         inventoryIssues,
         insufficientItems,
-        type: 'internal_transfer'
+        type: 'internal_transfer',
       });
     }
 
