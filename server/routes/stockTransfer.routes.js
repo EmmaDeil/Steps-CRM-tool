@@ -35,7 +35,7 @@ function updateStockLevel(item, locationId, locationName, delta) {
   item.lastUpdated = new Date();
 }
 
-/** Build and return wabill HTML string */
+/** Build and return waybill HTML string */
 function buildWaybillHTML(transfer, companyName = 'Steps CRM') {
   const rows = transfer.lineItems.map(li => `
     <tr>
@@ -45,6 +45,12 @@ function buildWaybillHTML(transfer, companyName = 'Steps CRM') {
       <td style="text-align:center">${li.unit}</td>
       <td>${li.notes || ''}</td>
     </tr>`).join('');
+
+  // QR encodes: "WB-XXXXX | TRF-YYYYY | From → To"
+  const qrData = encodeURIComponent(
+    `${transfer.waybillNumber} | ${transfer.transferNumber} | ${transfer.fromLocationName} → ${transfer.toLocationName}`
+  );
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${qrData}&margin=4&format=svg`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -56,9 +62,12 @@ function buildWaybillHTML(transfer, companyName = 'Steps CRM') {
     body { font-family: Arial, sans-serif; font-size: 12px; color: #111; padding: 32px; }
     .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
     .company { font-size: 22px; font-weight: bold; color: #1d4ed8; }
-    .doc-info { text-align: right; }
+    .doc-info { text-align: right; display: flex; align-items: flex-start; gap: 16px; }
+    .doc-info-text { text-align: right; }
     .doc-info h2 { font-size: 18px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; color: #374151; }
     .doc-info p { margin-top: 4px; color: #6b7280; }
+    .qr-box { border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px; background: #fff; }
+    .qr-label { font-size: 8px; text-align: center; color: #9ca3af; margin-top: 2px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
     .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
     .meta-item label { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #6b7280; display: block; margin-bottom: 2px; }
     .meta-item span { font-size: 13px; font-weight: 600; }
@@ -88,10 +97,16 @@ function buildWaybillHTML(transfer, companyName = 'Steps CRM') {
       <div style="color:#6b7280;margin-top:4px;">Stock Transfer Waybill</div>
     </div>
     <div class="doc-info">
-      <h2>Waybill</h2>
-      <p><strong>${transfer.waybillNumber}</strong></p>
-      <p>Transfer: ${transfer.transferNumber}</p>
-      <p>Date: ${new Date(transfer.completedAt || transfer.updatedAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</p>
+      <div class="doc-info-text">
+        <h2>Waybill</h2>
+        <p><strong>${transfer.waybillNumber}</strong></p>
+        <p>Transfer: ${transfer.transferNumber}</p>
+        <p>Date: ${new Date(transfer.completedAt || transfer.updatedAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</p>
+      </div>
+      <div class="qr-box">
+        <img src="${qrUrl}" width="100" height="100" alt="QR Code" />
+        <div class="qr-label">Scan to verify</div>
+      </div>
     </div>
   </div>
 
