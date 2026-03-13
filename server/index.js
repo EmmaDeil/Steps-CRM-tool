@@ -839,6 +839,14 @@ async function start() {
   const procurementRoutes = require('./routes/procurement.routes');
   app.use('/api', procurementRoutes);
 
+  // ============ STORE LOCATION ROUTES ============
+  const storeLocationRoutes = require('./routes/storeLocation.routes');
+  app.use('/api/store-locations', storeLocationRoutes);
+
+  // ============ STOCK TRANSFER ROUTES ============
+  const stockTransferRoutes = require('./routes/stockTransfer.routes');
+  app.use('/api/stock-transfers', stockTransferRoutes);
+
   // ============ MAINTENANCE ROUTES ============
   const maintenanceRoutes = require('./routes/maintenance.routes');
   app.use('/api/maintenance', maintenanceRoutes);

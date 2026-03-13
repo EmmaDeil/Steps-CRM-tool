@@ -4,7 +4,10 @@ const mongoose = require('mongoose');
 const MaterialRequest = require('../models/MaterialRequest');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const InventoryItem = require('../models/InventoryItem');
+const StockTransfer = require('../models/StockTransfer');
+const StockMovement = require('../models/StockMovement');
 const { logMovement } = require('./inventory.routes');
+const { buildWaybillHTML, generateWaybillNumber, updateStockLevel, getStockAtLocation } = require('./stockTransfer.routes');
 
 // ==========================================
 // MATERIAL REQUESTS API
@@ -76,10 +79,15 @@ router.post('/material-requests/:id/approve', async (req, res) => {
     request.status = 'approved';
     const updatedRequest = await request.save();
 
-    // 2. Check if this is an Internal Transfer - pull from inventory
+    // 2. Check if this is an Internal Transfer - pull from inventory (location-aware)
     if (request.requestType === 'Internal Transfer') {
       const inventoryIssues = [];
       const insufficientItems = [];
+
+      const srcLocId   = request.sourceLocationId;
+      const srcLocName = request.sourceLocationName || 'Default Store';
+      const dstLocId   = request.destinationLocationId;
+      const dstLocName = request.destinationLocationName || 'Destination';
 
       // Pre-validate ALL items before touching anything
       for (const item of request.lineItems) {
@@ -89,63 +97,97 @@ router.post('/material-requests/:id/approve', async (req, res) => {
         });
         if (!inventoryItem) {
           insufficientItems.push({ item: item.itemName, reason: 'Not found in inventory' });
-        } else if (inventoryItem.quantity < item.quantity) {
-          insufficientItems.push({
-            item: item.itemName,
-            reason: `Insufficient stock (Available: ${inventoryItem.quantity}, Requested: ${item.quantity})`,
-          });
+        } else {
+          const available = srcLocId
+            ? getStockAtLocation(inventoryItem, srcLocId)
+            : inventoryItem.quantity;
+          if (available < item.quantity) {
+            insufficientItems.push({
+              item: item.itemName,
+              reason: `Insufficient stock at ${srcLocName} (Available: ${available}, Requested: ${item.quantity})`,
+            });
+          }
         }
       }
 
-      // Only deduct if ALL items can be fulfilled (atomic approach)
       if (insufficientItems.length === 0) {
-        // Use a MongoDB session+transaction to prevent race conditions
-        const session = await mongoose.startSession();
-        try {
-          await session.withTransaction(async () => {
-            for (const item of request.lineItems) {
-              const inventoryItem = await InventoryItem.findOneAndUpdate(
-                {
-                  name: { $regex: new RegExp('^' + item.itemName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') },
-                  isDeleted: false,
-                  quantity: { $gte: item.quantity }, // atomic double-check
-                },
-                { $inc: { quantity: -item.quantity }, lastUpdated: new Date() },
-                { new: true, session }
-              );
-              if (!inventoryItem) {
-                throw new Error(`Stock became insufficient for item: ${item.itemName}`);
-              }
-              inventoryIssues.push({ item: item.itemName, quantityIssued: item.quantity });
-              // Log movement (outside transaction is fine — best-effort audit)
-              await logMovement(
-                inventoryItem._id, 'transfer', -item.quantity,
-                inventoryItem.quantity + item.quantity, null,
-                `Internal Transfer: MR ${request._id}`
-              );
-            }
-            request.status = 'fulfilled';
-            await request.save({ session });
+        const transferLineItems = [];
+
+        for (const item of request.lineItems) {
+          const inventoryItem = await InventoryItem.findOne({
+            name: { $regex: new RegExp('^' + item.itemName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') },
+            isDeleted: false,
           });
-        } finally {
-          await session.endSession();
+          if (!inventoryItem) throw new Error(`Item ${item.itemName} not found during approval`);
+
+          const prevQty = inventoryItem.quantity;
+          if (srcLocId) {
+            updateStockLevel(inventoryItem, srcLocId, srcLocName, -item.quantity);
+            if (dstLocId) updateStockLevel(inventoryItem, dstLocId, dstLocName, +item.quantity);
+          } else {
+            inventoryItem.quantity = Math.max(0, inventoryItem.quantity - item.quantity);
+            inventoryItem.lastUpdated = new Date();
+          }
+          await inventoryItem.save();
+          inventoryIssues.push({ item: item.itemName, quantityIssued: item.quantity });
+          transferLineItems.push({
+            inventoryItemId: inventoryItem._id,
+            itemName: inventoryItem.name,
+            itemCode: inventoryItem.itemId,
+            unit: inventoryItem.unit || 'pcs',
+            requestedQty: item.quantity,
+            transferredQty: item.quantity,
+          });
+          await logMovement(inventoryItem._id, 'transfer', -item.quantity, prevQty, null,
+            `Internal Transfer MR-${request.requestId}: ${srcLocName} → ${dstLocName}`);
         }
+
+        // Auto-create a StockTransfer record + waybill
+        let autoTransfer = null;
+        let waybillUrl = null;
+        try {
+          const waybillNumber = await generateWaybillNumber();
+          autoTransfer = await StockTransfer.create({
+            fromLocationId: srcLocId || undefined,
+            fromLocationName: srcLocName,
+            toLocationId: dstLocId || undefined,
+            toLocationName: dstLocName,
+            requestedByName: request.requestedBy,
+            status: 'completed',
+            lineItems: transferLineItems,
+            linkedMaterialRequestId: request._id,
+            waybillNumber,
+            waybillGeneratedAt: new Date(),
+            completedAt: new Date(),
+            notes: `Auto-created from MR ${request.requestId}`,
+          });
+          request.linkedStockTransferId = autoTransfer._id;
+          waybillUrl = `/api/stock-transfers/${autoTransfer._id}/waybill`;
+        } catch (wbErr) {
+          console.error('Waybill record creation failed (non-critical):', wbErr.message);
+        }
+
+        request.status = 'fulfilled';
+        await request.save();
+
+        return res.json({
+          success: true,
+          message: 'Internal transfer approved and items issued from inventory',
+          request, inventoryIssues, insufficientItems: [],
+          type: 'internal_transfer',
+          stockTransfer: autoTransfer,
+          waybillUrl,
+        });
       } else {
-        // Partial — still approved but not fulfilled; no inventory deduction
         request.status = 'approved';
         await request.save();
+        return res.json({
+          success: true,
+          message: 'Partial fulfillment - some items unavailable',
+          request, inventoryIssues, insufficientItems,
+          type: 'internal_transfer',
+        });
       }
-
-      return res.json({
-        success: true,
-        message: insufficientItems.length === 0
-          ? 'Internal transfer approved and items issued from inventory'
-          : 'Partial fulfillment - some items unavailable',
-        request,
-        inventoryIssues,
-        insufficientItems,
-        type: 'internal_transfer',
-      });
     }
 
     // 3. For other request types, generate corresponding Purchase Order

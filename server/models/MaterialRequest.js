@@ -64,9 +64,14 @@ const materialRequestSchema = new mongoose.Schema(
     reason: { 
       type: String 
     },
-    preferredVendor: { 
-      type: String 
-    },
+    // Location fields for Internal Transfer requests
+    sourceLocationId:     { type: mongoose.Schema.Types.ObjectId, ref: 'StoreLocation', default: null },
+    sourceLocationName:   { type: String, default: '' },
+    destinationLocationId:   { type: mongoose.Schema.Types.ObjectId, ref: 'StoreLocation', default: null },
+    destinationLocationName: { type: String, default: '' },
+    /** Populated after approval of an Internal Transfer — links to the generated StockTransfer */
+    linkedStockTransferId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockTransfer', default: null },
+    preferredVendor: { type: String },
     currency: {
       type: String,
       default: 'NGN',

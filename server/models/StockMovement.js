@@ -19,12 +19,17 @@ const StockMovementSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['initial', 'restock', 'adjustment', 'transfer', 'deletion'],
+      enum: ['initial', 'restock', 'adjustment', 'transfer', 'location_transfer', 'deletion'],
       required: true,
     },
-    quantityChange:   { type: Number, required: true },   // positive = stock in, negative = stock out
+    quantityChange:   { type: Number, required: true },
     previousQuantity: { type: Number, required: true },
     newQuantity:      { type: Number, required: true },
+    fromLocationId:   { type: mongoose.Schema.Types.ObjectId, ref: 'StoreLocation', default: null },
+    fromLocationName: { type: String, default: '' },
+    toLocationId:     { type: mongoose.Schema.Types.ObjectId, ref: 'StoreLocation', default: null },
+    toLocationName:   { type: String, default: '' },
+    stockTransferId:  { type: mongoose.Schema.Types.ObjectId, ref: 'StockTransfer', default: null },
     performedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
