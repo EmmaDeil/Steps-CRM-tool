@@ -1,0 +1,125 @@
+import React, { useState, useEffect, useCallback } from "react";
+import { apiService } from "../../services/api";
+import { toast } from "react-hot-toast";
+
+const StoreLocations = () => {
+  const [locations, setLocations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formData, setFormData] = useState({ code: "", name: "", address: "", description: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchLocations = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await apiService.get("/api/store-locations");
+      setLocations(res?.locations || res || []);
+    } catch {
+      toast.error("Failed to load store locations");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLocations();
+  }, [fetchLocations]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await apiService.post("/api/store-locations", formData);
+      toast.success("Store location added");
+      setFormData({ code: "", name: "", address: "", description: "" });
+      setIsModalOpen(false);
+      fetchLocations();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to add location");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+        <h3 className="font-bold text-gray-800">Store Locations</h3>
+        <button onClick={() => setIsModalOpen(true)} className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors">
+          <i className="fa-solid fa-plus"></i> Add Location
+        </button>
+      </div>
+
+      <div className="p-6">
+        {loading ? (
+          <div className="flex justify-center py-12 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-2xl"></i></div>
+        ) : locations.length === 0 ? (
+          <div className="text-center py-10">
+            <i className="fa-solid fa-map-location-dot text-4xl text-gray-200 mb-3"></i>
+            <p className="text-gray-500 font-medium">No store locations defined yet</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {locations.map(loc => (
+              <div key={loc._id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                    <i className="fa-solid fa-warehouse text-gray-500"></i>
+                    {loc.name}
+                  </h4>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 uppercase">{loc.code}</span>
+                </div>
+                {loc.address && <p className="text-sm text-gray-500 mb-2 whitespace-pre-wrap"><i className="fa-solid fa-location-dot mr-1"></i>{loc.address}</p>}
+                {loc.description && <p className="text-xs text-gray-400"><i className="fa-solid fa-circle-info mr-1"></i>{loc.description}</p>}
+                <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500">
+                  <span>ID: <code className="bg-gray-50 px-1 rounded">{loc._id.toString().slice(-6)}</code></span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-gray-800">Add Store Location</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600"><i className="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Location Code *</label>
+                <input type="text" required value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                  placeholder="e.g. WHS-01" className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-sm font-mono" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input type="text" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g. Main Warehouse" className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <textarea rows="2" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <input type="text" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-sm" />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded text-sm font-medium">Cancel</button>
+                <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium flex gap-2">
+                  {isSubmitting ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-save"></i>} Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default StoreLocations;

@@ -12,6 +12,7 @@ import JournalHistory from "./JournalHistory";
 import JournalEntry from "./JournalEntry";
 import VendorManagement from "./VendorManagement";
 import Budget from "./Budget";
+import Invoicing from "./Invoicing";
 
 const Finance = () => {
   const { user } = useAuth();
@@ -28,6 +29,7 @@ const Finance = () => {
   const [showJournalEntry, setShowJournalEntry] = useState(false);
   const [showVendorManagement, setShowVendorManagement] = useState(false);
   const [showBudget, setShowBudget] = useState(false);
+  const [showInvoicing, setShowInvoicing] = useState(false);
   const [showQuickAction, setShowQuickAction] = useState(false);
 
   const displayName =
@@ -56,6 +58,27 @@ const Finance = () => {
   if (showBudget) {
     return (
       <Budget onBack={() => setShowBudget(false)} parentModule="Finance" />
+    );
+  }
+
+  if (showInvoicing) {
+    return (
+      <div className="w-full min-h-screen bg-gray-50 px-1">
+        <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
+          <div className="flex h-full grow flex-col w-full">
+            <Breadcrumb
+              items={[
+                { label: "Home", href: "/home", icon: "fa-house" },
+                { label: "Finance", onClick: () => setShowInvoicing(false), icon: "fa-coins", cursor: "pointer" },
+                { label: "Invoicing", icon: "fa-file-invoice-dollar" },
+              ]}
+            />
+            <div className="p-2 mt-4">
+              <Invoicing />
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -302,7 +325,7 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => toast("Invoicing module coming soon")}
+                onClick={() => setShowInvoicing(true)}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">

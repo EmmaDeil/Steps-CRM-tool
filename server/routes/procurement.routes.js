@@ -4,10 +4,16 @@ const mongoose = require('mongoose');
 const MaterialRequest = require('../models/MaterialRequest');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const InventoryItem = require('../models/InventoryItem');
+const InventoryIssue = require('../models/InventoryIssue');
 const StockTransfer = require('../models/StockTransfer');
 const StockMovement = require('../models/StockMovement');
 const { logMovement } = require('./inventory.routes');
-const { buildWaybillHTML, generateWaybillNumber, updateStockLevel, getStockAtLocation } = require('./stockTransfer.routes');
+const {
+  buildWaybillHTML,
+  generateWaybillNumber,
+  updateStockLevel,
+  getStockAtLocation,
+} = require('../utils/stockTransferHelpers');
 
 // ==========================================
 // MATERIAL REQUESTS API
@@ -129,7 +135,7 @@ router.post('/material-requests/:id/approve', async (req, res) => {
             inventoryItem.lastUpdated = new Date();
           }
           await inventoryItem.save();
-          inventoryIssues.push({ item: item.itemName, quantityIssued: item.quantity });
+          inventoryIssues.push({ item: item.itemName, quantityIssued: item.quantity, inventoryItemId: inventoryItem._id, unitPrice: inventoryItem.unitPrice || 0 });
           transferLineItems.push({
             inventoryItemId: inventoryItem._id,
             itemName: inventoryItem.name,
@@ -165,6 +171,31 @@ router.post('/material-requests/:id/approve', async (req, res) => {
           waybillUrl = `/api/stock-transfers/${autoTransfer._id}/waybill`;
         } catch (wbErr) {
           console.error('Waybill record creation failed (non-critical):', wbErr.message);
+        }
+
+        // Auto-create an InventoryIssue
+        let autoIssue = null;
+        try {
+          const issueLineItems = inventoryIssues.map(issue => ({
+            inventoryItemId: issue.inventoryItemId,
+            itemName: issue.item,
+            qty: issue.quantityIssued,
+            unitPrice: issue.unitPrice,
+            totalPrice: issue.quantityIssued * issue.unitPrice,
+          }));
+
+          autoIssue = await InventoryIssue.create({
+            issuedTo: request.department || request.requestedBy,
+            issuedToType: request.department ? 'department' : 'person',
+            issuedBy: req.user?._id,
+            issuedByName: req.user ? `${req.user.firstName} ${req.user.lastName}` : '',
+            lineItems: issueLineItems,
+            linkedMaterialRequestId: request._id,
+            linkedStockTransferId: autoTransfer ? autoTransfer._id : null,
+            notes: `Auto-issued from Material Request ${request.requestId}`,
+          });
+        } catch (issueErr) {
+          console.error('InventoryIssue creation failed (non-critical):', issueErr.message);
         }
 
         request.status = 'fulfilled';

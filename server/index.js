@@ -847,6 +847,18 @@ async function start() {
   const stockTransferRoutes = require('./routes/stockTransfer.routes');
   app.use('/api/stock-transfers', stockTransferRoutes);
 
+  // ============ STOCK MOVEMENT ROUTES ============
+  const stockMovementRoutes = require('./routes/stockMovement.routes');
+  app.use('/api/inventory-movements', stockMovementRoutes);
+
+  // ============ INVENTORY ISSUE ROUTES ============
+  const inventoryIssueRoutes = require('./routes/inventoryIssue.routes');
+  app.use('/api/inventory-issues', inventoryIssueRoutes);
+
+  // ============ INVOICE ROUTES ============
+  const invoiceRoutes = require('./routes/invoice.routes');
+  app.use('/api/invoices', invoiceRoutes);
+
   // ============ MAINTENANCE ROUTES ============
   const maintenanceRoutes = require('./routes/maintenance.routes');
   app.use('/api/maintenance', maintenanceRoutes);

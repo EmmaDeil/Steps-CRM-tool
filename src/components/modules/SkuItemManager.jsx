@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
+import bwipjs from "bwip-js/browser"; // For generating printable barcodes in the browser
 
 const SkuItemManager = () => {
   const [items, setItems] = useState([]);
@@ -150,6 +151,67 @@ const SkuItemManager = () => {
     }
   };
 
+  const handlePrintLabel = (item) => {
+    try {
+      const canvas = document.createElement("canvas");
+      bwipjs.toCanvas(canvas, {
+        bcid: "code128",       // Barcode type
+        text: item.sku,        // Text to encode
+        scale: 3,              // 3x scaling factor
+        height: 12,            // Bar height, in millimeters
+        includetext: true,     // Show human-readable text
+        textxalign: "center",  // Always good to set this
+      });
+      
+      const dataUrl = canvas.toDataURL("image/png");
+      
+      const printWindow = window.open("", "_blank", "width=600,height=400");
+      if (!printWindow) {
+        toast.error("Please allow popups to print labels");
+        return;
+      }
+      
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Print Label - ${item.sku}</title>
+            <style>
+              @media print {
+                @page { margin: 0; }
+                body { margin: 1cm; }
+                .no-print { display: none !important; }
+              }
+              body { font-family: system-ui, -apple-system, sans-serif; text-align: center; padding-top: 40px; background: #f9fafb; }
+              .label-card { background: white; display: inline-block; padding: 24px 32px; border: 1px dashed #cbd5e1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+              .company { font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px; }
+              .name { font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 24px; max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; }
+              img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+              .print-btn { margin-top: 30px; padding: 10px 24px; background: #137fec; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 16px; }
+              .print-btn:hover { background: #0e65c0; }
+            </style>
+          </head>
+          <body>
+            <div class="label-card">
+              <div class="company">STEPS INVENTORY</div>
+              <div class="name">${item.name}</div>
+              <img src="${dataUrl}" alt="Barcode for ${item.sku}" />
+            </div>
+            <br />
+            <button class="print-btn no-print" onclick="window.print()">Print Label</button>
+            <script>
+              window.onload = () => { setTimeout(() => { window.print(); }, 300); };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to generate barcode");
+    }
+  };
+
   const filteredItems = items.filter(
     (item) =>
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -272,7 +334,13 @@ const SkuItemManager = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handlePrintLabel(item)}
+                        className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        title="Print Barcode Label"
+                      >
+                        <i className="fa-solid fa-print text-sm"></i>
+                      </button>
                       <button
                         onClick={() => handleEdit(item)}
                         className="p-1.5 text-gray-500 hover:text-[#137fec] hover:bg-blue-50 rounded-lg transition-colors"

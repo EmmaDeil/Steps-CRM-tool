@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const InventoryItem = require('../models/InventoryItem');
+const StoreLocation = require('../models/StoreLocation');
 const { authMiddleware } = require('../middleware/auth');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -73,6 +74,44 @@ function validateInventoryBody(body, requireAllFields = true) {
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
+
+// GET fast lookup by barcode/SKU
+router.get('/scan/:code', authMiddleware, async (req, res) => {
+  try {
+    const code = req.params.code.trim();
+    // Search by exact itemId or exact name (case-insensitive)
+    const item = await InventoryItem.findOne({
+      isDeleted: false,
+      $or: [
+        { itemId: new RegExp(`^${code}$`, 'i') },
+        { name: new RegExp(`^${code}$`, 'i') }
+      ]
+    });
+
+    if (!item) {
+      // Also check SkuItems as a fallback to help auto-fill the Add modal
+      const SkuItem = require('../models/SkuItem');
+      const skuMatch = await SkuItem.findOne({
+        isActive: true,
+        $or: [
+          { sku: new RegExp(`^${code}$`, 'i') },
+          { name: new RegExp(`^${code}$`, 'i') }
+        ]
+      });
+
+      if (skuMatch) {
+        return res.json({ found: false, isNewSku: true, skuData: skuMatch });
+      }
+
+      return res.status(404).json({ message: 'Barcode clear, no matching item found.' });
+    }
+
+    res.json({ found: true, item });
+  } catch (err) {
+    console.error('Error scanning barcode:', err);
+    res.status(500).json({ message: 'Failed to process barcode scan' });
+  }
+});
 
 // GET all inventory items (paginated, filtered)
 // /api/inventory?page=1&limit=20&category=Electronics&search=laptop
@@ -146,8 +185,21 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Validation failed', errors });
     }
 
-    // Server-generated sequential ID, ignore any client-supplied one
-    const itemId = await generateNextId();
+    // Attempt to map the location string to an actual StoreLocation ID
+    const locName = req.body.location.trim();
+    const storeLoc = await StoreLocation.findOne({ name: new RegExp(`^${locName}$`, 'i') });
+    
+    // Automatically initialize stockLevels if a location was found/provided
+    const stockLevels = [];
+    if (storeLoc || locName) {
+      stockLevels.push({
+        locationId: storeLoc ? storeLoc._id : new mongoose.Types.ObjectId(), // fallback if created on-the-fly without real location UI
+        locationName: storeLoc ? storeLoc.name : locName,
+        quantity: Number(req.body.quantity) || 0,
+        maxStock: Number(req.body.maxStock) || 100,
+        reorderPoint: req.body.reorderPoint !== undefined ? Number(req.body.reorderPoint) : Math.floor(Number(req.body.maxStock) * 0.2),
+      });
+    }
 
     const newItem = await InventoryItem.create({
       itemId,
@@ -156,7 +208,8 @@ router.post('/', authMiddleware, async (req, res) => {
       quantity:     Number(req.body.quantity),
       maxStock:     Number(req.body.maxStock),
       reorderPoint: req.body.reorderPoint !== undefined ? Number(req.body.reorderPoint) : Math.floor(Number(req.body.maxStock) * 0.2),
-      location:     req.body.location.trim(),
+      location:     locName,
+      stockLevels,
       createdBy:    req.user?._id,
     });
 

@@ -20,6 +20,7 @@ const InventoryItemSchema = new mongoose.Schema(
     },
     description: { type: String, default: '' },
     unit:        { type: String, default: 'pcs' },
+    unitPrice:   { type: Number, default: 0, min: 0 },
 
     /**
      * Per-location stock breakdown. The source of truth for multi-location tracking.

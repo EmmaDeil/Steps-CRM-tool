@@ -8,6 +8,7 @@ import SecuritySettings from "./SecuritySettings";
 import ApprovalSettings from "./ApprovalSettings";
 import SystemSettings from "./SystemSettings";
 import SkuItemManager from "./SkuItemManager";
+import StoreLocations from "./StoreLocations";
 const Admin = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -654,6 +655,28 @@ const Admin = () => {
         />
         <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1">
           <SkuItemManager />
+        </div>
+        <Footer variant="admin" />
+      </div>
+    );
+  }
+
+  if (activeView === "store-locations") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <Breadcrumb
+          items={[
+            { label: "Home", href: "/home", icon: "fa-house" },
+            {
+              label: "Admin Controls",
+              onClick: () => setSearchParams({ view: "dashboard" }),
+              icon: "fa-user-shield",
+            },
+            { label: "Store Locations", icon: "fa-warehouse" },
+          ]}
+        />
+        <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1 flex flex-col w-[80%]">
+          <StoreLocations />
         </div>
         <Footer variant="admin" />
       </div>
@@ -1993,6 +2016,13 @@ const Admin = () => {
           >
             <i className="fa-solid fa-barcode"></i>
             Item / SKU Management
+          </button>
+          <button
+            onClick={() => setSearchParams({ view: "store-locations" })}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-[#111418] rounded-lg font-medium flex items-center gap-2 transition-colors"
+          >
+            <i className="fa-solid fa-warehouse"></i>
+            Store Locations
           </button>
           <button
             disabled={backingUp}

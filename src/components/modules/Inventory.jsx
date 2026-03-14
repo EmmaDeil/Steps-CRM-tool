@@ -4,11 +4,18 @@ import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
 import DataTable from "../common/DataTable";
 import StockTransfer from "./StockTransfer";
+import StockMovements from "./StockMovements";
+import StoreLocations from "./StoreLocations";
+import { useAuth } from "../../context/useAuth";
+import useBarcodeScanner from "../../hooks/useBarcodeScanner";
+import BarcodeScannerModal from "./BarcodeScannerModal";
 
 const CATEGORIES = ["Electronics", "Furniture", "Supplies", "Network"];
 const PAGE_SIZE = 20;
 
 const Inventory = () => {
+  const { user } = useAuth();
+
   // ── Tab state ──────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState("items"); // "items" | "transfers"
 
@@ -25,7 +32,7 @@ const Inventory = () => {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState("add"); // "add" | "edit" | "restock"
+  const [modalMode, setModalMode] = useState("add"); // "add" | "edit" | "restock" | "issue"
   const [activeItem, setActiveItem] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -34,8 +41,45 @@ const Inventory = () => {
   const [formData, setFormData] = useState({
     name: "", category: "Electronics", maxStock: 100,
     reorderPoint: 20, location: "", description: "", unit: "pcs",
-    addQuantity: 1, notes: "",
+    addQuantity: 1, notes: "", issueTo: "", issueToType: "department",
   });
+
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+
+  // ── Scanner Logic ──────────────────────────────────────────────────────────
+
+  const handleBarcodeScan = useCallback(async (code) => {
+    setIsScannerOpen(false); // Close camera if open
+    
+    const loadingToast = toast.loading(`Scanning ${code}...`);
+    try {
+      const res = await apiService.get(`/api/inventory/scan/${code}`);
+      toast.dismiss(loadingToast);
+      
+      if (res.found && res.item) {
+        toast.success(`Found: ${res.item.name}`);
+        handleOpenModal("restock", res.item);
+      } else if (res.isNewSku) {
+        toast.success("New SKU Detected");
+        handleOpenModal("add");
+        setFormData(prev => ({ 
+          ...prev, 
+          name: res.skuData.name, 
+          category: res.skuData.category || "Electronics", 
+          description: res.skuData.description || "" 
+        }));
+      }
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      if (err.response?.status === 404) {
+        toast.error(`No item found for barcode ${code}`);
+      } else {
+        toast.error("Error processing scan");
+      }
+    }
+  }, []);
+
+  useBarcodeScanner(handleBarcodeScan);
 
   // ── Data Fetching ──────────────────────────────────────────────────────────
 
@@ -105,9 +149,9 @@ const Inventory = () => {
     setModalMode(mode);
     setActiveItem(item);
     if (mode === "add") {
-      setFormData({ name: "", category: "Electronics", maxStock: 100, reorderPoint: 20, location: "", description: "", unit: "pcs", addQuantity: 0, notes: "" });
+      setFormData({ name: "", category: "Electronics", maxStock: 100, reorderPoint: 20, location: "", description: "", unit: "pcs", addQuantity: 0, notes: "", issueTo: "", issueToType: "department" });
     } else if (item) {
-      setFormData({ name: item.name, category: item.category, maxStock: item.maxStock, reorderPoint: item.reorderPoint ?? 20, location: item.location, description: item.description || "", unit: item.unit || "pcs", addQuantity: 1, notes: "" });
+      setFormData({ name: item.name, category: item.category, maxStock: item.maxStock, reorderPoint: item.reorderPoint ?? 20, location: item.location, description: item.description || "", unit: item.unit || "pcs", addQuantity: 1, notes: "", issueTo: "", issueToType: "department" });
     }
     setIsModalOpen(true);
   };
@@ -133,6 +177,15 @@ const Inventory = () => {
         if (formData.addQuantity <= 0) { toast.error("Restock quantity must be positive"); setIsSubmitting(false); return; }
         await apiService.post(`/api/inventory/${activeItem._id}/restock`, { addQuantity: formData.addQuantity, notes: formData.notes || "" });
         toast.success(`Restocked ${formData.addQuantity} unit(s)`);
+      } else if (modalMode === "issue") {
+        if (formData.addQuantity <= 0) { toast.error("Issue quantity must be positive"); setIsSubmitting(false); return; }
+        await apiService.post(`/api/inventory-issues`, {
+          issuedTo: formData.issueTo,
+          issuedToType: formData.issueToType,
+          notes: formData.notes,
+          lineItems: [{ inventoryItemId: activeItem._id, qty: formData.addQuantity }],
+        });
+        toast.success(`Issued ${formData.addQuantity} unit(s) to ${formData.issueTo}`);
       }
       fetchInventory(page, searchQuery, filterCategory);
       handleCloseModal();
@@ -225,6 +278,10 @@ const Inventory = () => {
             className="p-2 hover:text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50" title="Restock">
             <i className="fa-solid fa-boxes-packing"></i>
           </button>
+          <button onClick={() => handleOpenModal("issue", item)} disabled={deletingId === item._id || item.quantity === 0}
+            className="p-2 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors disabled:opacity-50" title="Issue Stock">
+            <i className="fa-solid fa-arrow-right-from-bracket"></i>
+          </button>
           <button onClick={() => { setActiveTab("transfers"); }} disabled={deletingId === item._id}
             className="p-2 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors disabled:opacity-50" title="Transfer">
             <i className="fa-solid fa-arrow-right-arrow-left"></i>
@@ -285,6 +342,8 @@ const Inventory = () => {
             {[
               { key: "items", label: "Inventory Items", icon: "fa-boxes-stacked" },
               { key: "transfers", label: "Stock Transfers", icon: "fa-arrow-right-arrow-left" },
+              ...(user?.role === "Admin" || user?.role === "Administrator" ? [{ key: "locations", label: "Store Locations", icon: "fa-map-location-dot" }] : []),
+              { key: "movements", label: "Stock Movements", icon: "fa-clock-rotate-left" },
             ].map(tab => (
               <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                 className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
@@ -352,6 +411,12 @@ const Inventory = () => {
             <StockTransfer />
           </div>
         )}
+
+        {/* ── Locations Tab ─────────────────────────────────────────────────── */}
+        {activeTab === "locations" && (user?.role === "Admin" || user?.role === "Administrator") && <StoreLocations />}
+
+        {/* ── Movements Tab ─────────────────────────────────────────────────── */}
+        {activeTab === "movements" && <StockMovements />}
       </div>
 
       {/* ── CRUD Modal ────────────────────────────────────────────────────── */}
@@ -368,7 +433,7 @@ const Inventory = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
-              {modalMode === "restock" ? (
+              {(modalMode === "restock" || modalMode === "issue") ? (
                 <>
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <p className="text-sm font-semibold text-blue-800">{activeItem?.name}</p>
@@ -385,15 +450,37 @@ const Inventory = () => {
                       </div>
                     )}
                   </div>
+                  {modalMode === "issue" && (
+                    <div className="flex gap-3 mb-2">
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Issue To *</label>
+                        <input type="text" name="issueTo" value={formData.issueTo} onChange={handleFormChange} required
+                          placeholder="Name of department, person, or project"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm" />
+                      </div>
+                      <div className="w-1/3">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                        <select name="issueToType" value={formData.issueToType} onChange={handleFormChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                          <option value="department">Department</option>
+                          <option value="person">Person</option>
+                          <option value="project">Project</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Units to Add <span className="text-xs text-green-600 font-normal">(added to current stock)</span>
+                      {modalMode === "issue" ? "Units to Issue" : "Units to Add"} <span className="text-xs text-green-600 font-normal">({modalMode === "issue" ? "deducted from" : "added to"} current stock)</span>
                     </label>
                     <input type="number" name="addQuantity" min="1"
-                      max={activeItem ? activeItem.maxStock - activeItem.quantity : undefined}
+                      max={modalMode === "issue" ? activeItem?.quantity : activeItem ? activeItem.maxStock - activeItem.quantity : undefined}
                       value={formData.addQuantity} onChange={handleFormChange} required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                    {activeItem && <p className="text-xs text-gray-400 mt-1">Max: {activeItem.maxStock - activeItem.quantity} {activeItem.unit || "pcs"}</p>}
+                    {activeItem && modalMode === "restock" && <p className="text-xs text-gray-400 mt-1">Max refit: {activeItem.maxStock - activeItem.quantity} {activeItem.unit || "pcs"}</p>}
+                    {activeItem && modalMode === "issue" && <p className="text-xs text-gray-400 mt-1">Available: {activeItem.quantity} {activeItem.unit || "pcs"}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
@@ -466,15 +553,33 @@ const Inventory = () => {
                   className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium">Cancel</button>
                 <button type="submit" disabled={isSubmitting}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSubmitting ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className={modalMode === "restock" ? "fa-solid fa-box" : "fa-solid fa-check"}></i>}
+                  {isSubmitting ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className={modalMode === "restock" ? "fa-solid fa-box" : modalMode === "issue" ? "fa-solid fa-arrow-right-from-bracket" : "fa-solid fa-check"}></i>}
                   {isSubmitting
-                    ? modalMode === "add" ? "Creating…" : modalMode === "edit" ? "Saving…" : "Restocking…"
-                    : modalMode === "add" ? "Create Item" : modalMode === "edit" ? "Save Changes" : "Confirm Restock"}
+                    ? modalMode === "add" ? "Creating…" : modalMode === "edit" ? "Saving…" : modalMode === "issue" ? "Issuing…" : "Restocking…"
+                    : modalMode === "add" ? "Create Item" : modalMode === "edit" ? "Save Changes" : modalMode === "issue" ? "Confirm Issue" : "Confirm Restock"}
                 </button>
               </div>
             </form>
           </div>
         </div>
+      )}
+
+      {/* ── Floating Barcode Button ──────────────────────────────────────────────────── */}
+      <button 
+        onClick={() => setIsScannerOpen(true)}
+        className="fixed bottom-8 right-8 w-16 h-16 bg-[#137fec] text-white rounded-full shadow-lg hover:bg-blue-600 hover:scale-105 transition-all flex items-center justify-center z-40 group"
+        title="Scan Barcode / QR Code"
+      >
+        <i className="fa-solid fa-qrcode text-2xl group-hover:scale-110 transition-transform"></i>
+      </button>
+
+      {/* Camera Scanner Modal */}
+      {isScannerOpen && (
+        <BarcodeScannerModal 
+          isOpen={isScannerOpen} 
+          onClose={() => setIsScannerOpen(false)} 
+          onScan={handleBarcodeScan} 
+        />
       )}
     </div>
   );
