@@ -4752,8 +4752,95 @@ async function start() {
         return res.status(400).json({ success: false, message: 'Invalid employee ID' });
       }
 
-      // Get old employee data for audit log
-      const oldEmployee = await EmployeeModel.findById(id).lean();
+      let targetEmployeeId = id;
+      let linkedUser = null;
+
+      // Resolve either a real employee id or a user-backed profile id.
+      let oldEmployee = await EmployeeModel.findById(id).lean();
+      if (!oldEmployee) {
+        linkedUser = await UserModel.findById(id)
+          .select('employeeRef email firstName lastName fullName status role department jobTitle phoneNumber profilePicture')
+          .lean();
+
+        if (linkedUser?.employeeRef) {
+          oldEmployee = await EmployeeModel.findById(linkedUser.employeeRef).lean();
+          if (oldEmployee) {
+            targetEmployeeId = linkedUser.employeeRef.toString();
+          }
+        }
+
+        if (!oldEmployee && linkedUser?.email) {
+          oldEmployee = await EmployeeModel.findOne({ email: linkedUser.email }).lean();
+          if (oldEmployee) {
+            targetEmployeeId = oldEmployee._id.toString();
+          }
+        }
+      }
+
+      if (!oldEmployee && linkedUser) {
+        const userUpdateData = {};
+        if (name !== undefined) {
+          const nameParts = String(name).trim().split(/\s+/);
+          userUpdateData.firstName = nameParts[0] || linkedUser.firstName || 'User';
+          userUpdateData.lastName = nameParts.slice(1).join(' ') || linkedUser.lastName || '';
+          userUpdateData.fullName = String(name).trim();
+        }
+        if (email !== undefined) userUpdateData.email = email.toLowerCase();
+        if (phone !== undefined) userUpdateData.phoneNumber = phone || null;
+        if (department !== undefined) userUpdateData.department = department || null;
+        if (jobTitle !== undefined) userUpdateData.jobTitle = jobTitle || null;
+        if (avatar !== undefined && avatar) {
+          try {
+            const allowedTypes = /^image\/(jpeg|jpg|png|gif|webp)$/;
+            validateBase64File(avatar, 2, allowedTypes);
+            userUpdateData.profilePicture = avatar;
+          } catch (validationError) {
+            return res.status(400).json({
+              success: false,
+              message: `Avatar validation failed: ${validationError.message}`
+            });
+          }
+        }
+
+        const updatedUser = await UserModel.findByIdAndUpdate(id, userUpdateData, {
+          new: true,
+          runValidators: true,
+        }).lean();
+
+        if (!updatedUser) {
+          return res.status(404).json({ success: false, message: 'Employee not found' });
+        }
+
+        return res.json({
+          success: true,
+          message: 'Profile updated successfully',
+          data: {
+            id: updatedUser._id.toString(),
+            _id: updatedUser._id,
+            name: updatedUser.fullName || [updatedUser.firstName, updatedUser.lastName].filter(Boolean).join(' ') || updatedUser.email,
+            email: updatedUser.email,
+            phone: updatedUser.phoneNumber || '',
+            dateOfBirth: '',
+            department: updatedUser.department || '',
+            role: updatedUser.role || 'Employee',
+            jobTitle: updatedUser.jobTitle || updatedUser.role || 'Employee',
+            startDate: '',
+            status: updatedUser.status || 'Active',
+            avatar: updatedUser.profilePicture || '',
+            salary: 0,
+            address: '',
+            emergencyContact: { name: '', relationship: '', phone: '' },
+            employeeId: null,
+            managerId: null,
+            managerName: '',
+            location: '',
+            workArrangement: '',
+            employmentType: '',
+            _synthetic: true,
+          },
+        });
+      }
+
       if (!oldEmployee) {
         return res.status(404).json({ success: false, message: 'Employee not found' });
       }
@@ -4855,7 +4942,7 @@ async function start() {
       }
 
       const employee = await EmployeeModel.findByIdAndUpdate(
-        id,
+        targetEmployeeId,
         updateData,
         { new: true }
       ).select('-__v').lean();
@@ -4870,7 +4957,7 @@ async function start() {
           userId: updatedBy || 'system',
           action: 'UPDATE_EMPLOYEE',
           resource: 'Employee',
-          resourceId: id,
+          resourceId: targetEmployeeId,
           details: {
             employeeName: employee.name,
             changes: changes,

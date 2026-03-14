@@ -243,53 +243,50 @@ const EmployeeProfile = ({
       setSaving(true);
       setValidationErrors({});
 
-      // Use FormData for file upload
-      const formData = new FormData();
-      formData.append("name", editingEmployee.name);
-      formData.append("email", editingEmployee.email);
-      formData.append("phone", editingEmployee.phone || "");
-      formData.append("dateOfBirth", editingEmployee.dateOfBirth || "");
-      formData.append("address", editingEmployee.address || "");
-      formData.append(
-        "emergencyContact",
-        JSON.stringify(editingEmployee.emergencyContact || {}),
-      );
-      formData.append("updatedBy", currentUser?._id || "unknown");
+      const payload = {
+        name: editingEmployee.name,
+        email: editingEmployee.email,
+        phone: editingEmployee.phone || "",
+        dateOfBirth: editingEmployee.dateOfBirth || "",
+        address: editingEmployee.address || "",
+        emergencyContact: editingEmployee.emergencyContact || {},
+        updatedBy: currentUser?._id || "unknown",
+      };
 
       // Only HR can update these fields
       if (isHR) {
-        formData.append("department", editingEmployee.department || "");
-        formData.append("jobTitle", editingEmployee.jobTitle || "");
-        formData.append("status", editingEmployee.status || "Active");
-        formData.append("salary", editingEmployee.salary || 0);
-        formData.append("startDate", editingEmployee.startDate || "");
-        formData.append("employmentType", editingEmployee.employmentType || "");
-        formData.append("managerId", editingEmployee.managerId || "");
-        formData.append("managerName", editingEmployee.managerName || "");
-        formData.append("location", editingEmployee.location || "");
-        formData.append(
-          "workArrangement",
-          editingEmployee.workArrangement || "",
-        );
+        Object.assign(payload, {
+          department: editingEmployee.department || "",
+          jobTitle: editingEmployee.jobTitle || "",
+          status: editingEmployee.status || "Active",
+          salary: editingEmployee.salary || 0,
+          startDate: editingEmployee.startDate || "",
+          employmentType: editingEmployee.employmentType || "",
+          managerId: editingEmployee.managerId || "",
+          managerName: editingEmployee.managerName || "",
+          location: editingEmployee.location || "",
+          workArrangement: editingEmployee.workArrangement || "",
+        });
       }
 
-      // Handle profile picture upload if changed
-      if (profilePictureFile) {
-        formData.append("avatar", profilePictureFile);
+      // The backend expects base64 image data, not multipart uploads.
+      if (profilePictureFile && previewUrl) {
+        payload.avatar = previewUrl;
       }
 
       const response = await apiService.put(
         `/api/hr/employees/${employee._id}`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        },
+        payload,
       );
 
       if (response) {
-        setEmployee(response.data || { ...editingEmployee });
+        const updatedEmployee = response.data || { ...editingEmployee };
+        setEmployee(updatedEmployee);
+        setPreviewUrl(
+          updatedEmployee.avatar ||
+            updatedEmployee.profilePicture ||
+            previewUrl,
+        );
         setIsEditing(false);
         setEditingEmployee(null);
         setProfilePictureFile(null);

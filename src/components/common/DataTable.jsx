@@ -1,28 +1,28 @@
-import React from 'react';
+import React from "react";
 
-const DataTable = ({ 
-  columns, 
-  data, 
-  isLoading = false, 
+const DataTable = ({
+  columns,
+  data,
+  isLoading = false,
   emptyMessage = "No records found.",
-  keyExtractor = (item, index) => item._id || item.id || index 
+  keyExtractor = (item, index) => item._id || item.id || index,
 }) => {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto overflow-y-visible">
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
             {columns.map((col, index) => (
               <th
                 key={col.accessorKey || index}
-                className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${col.className || ''}`}
+                className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${col.className || ""}`}
               >
                 {col.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
+        <tbody className="bg-white divide-y divide-gray-200 overflow-visible">
           {isLoading ? (
             // Loading Skeletons
             Array.from({ length: 5 }).map((_, i) => (
@@ -47,11 +47,14 @@ const DataTable = ({
           ) : (
             // Data Rows
             data.map((item, index) => (
-              <tr key={keyExtractor(item, index)} className="hover:bg-gray-50 transition-colors">
+              <tr
+                key={keyExtractor(item, index)}
+                className="hover:bg-gray-50 transition-colors"
+              >
                 {columns.map((col, colIndex) => (
-                  <td 
-                    key={colIndex} 
-                    className={`px-4 py-3 text-sm text-gray-900 ${col.cellClassName || ''}`}
+                  <td
+                    key={colIndex}
+                    className={`px-4 py-3 text-sm text-gray-900 ${col.cellClassName || ""}`}
                   >
                     {col.cell ? col.cell(item, index) : item[col.accessorKey]}
                   </td>

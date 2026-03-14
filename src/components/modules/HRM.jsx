@@ -100,12 +100,13 @@ const HRM = () => {
   const [leaveAllocationLoading, setLeaveAllocationLoading] = useState(false);
   const [showPayroll, setShowPayroll] = useState(false);
   const [showEmployeeProfile, setShowEmployeeProfile] = useState(false);
+  const [showEmployeeDirectoryPage, setShowEmployeeDirectoryPage] =
+    useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
   const failureToastShownRef = useRef(false);
   const [startEmployeeInEditMode, setStartEmployeeInEditMode] = useState(false);
-  const [activeDropdown, setActiveDropdown] = useState(null);
 
   // Leave allocations state
   const [leaveAllocations, setLeaveAllocations] = useState([]);
@@ -203,13 +204,6 @@ const HRM = () => {
       ]);
 
       setEmployees(
-        empRes.status === "fulfilled" && empRes.value
-          ? empRes.value.data || []
-          : [],
-      );
-
-      console.log(
-        "Fetched employees:",
         empRes.status === "fulfilled" && empRes.value
           ? empRes.value.data || []
           : [],
@@ -330,16 +324,6 @@ const HRM = () => {
     }
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (activeDropdown && !event.target.closest(".dropdown-container")) {
-        setActiveDropdown(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [activeDropdown]);
-
   const employeeColumns = useMemo(
     () => [
       {
@@ -450,10 +434,10 @@ const HRM = () => {
         header: "Action",
         accessorKey: "action",
         className: "px-5 py-3 text-right w-16",
-        cellClassName: "px-5 py-3 text-right",
+        cellClassName: "px-5 py-3 text-right relative overflow-visible",
         cell: (e) => (
           <details
-            className="relative inline-block text-left group"
+            className="relative inline-block text-left group dropdown-container"
             onClick={(ev) => ev.stopPropagation()}
           >
             <summary
@@ -593,6 +577,113 @@ const HRM = () => {
     );
   }
 
+  const renderEmployeeDirectorySection = ({ fullPage = false } = {}) => (
+    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+      <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+        <h3 className="text-slate-900 dark:text-white font-bold text-lg flex items-center gap-2">
+          <i className="fa-solid fa-people-group text-slate-400"></i>
+          Employee Directory
+          {selectedEmployees.length > 0 && (
+            <span className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs font-semibold rounded">
+              {selectedEmployees.length} selected
+            </span>
+          )}
+        </h3>
+        <div className="flex gap-3">
+          {selectedEmployees.length > 0 && (
+            <>
+              <button
+                onClick={() => {
+                  if (selectedEmployees.length === 1) {
+                    setSelectedEmployee(selectedEmployees[0]);
+                    setStartEmployeeInEditMode(true);
+                    setShowEmployeeProfile(true);
+                  } else {
+                    setShowBulkEditModal(true);
+                  }
+                }}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                <i className="fa-solid fa-pen-to-square mr-2"></i>
+                {selectedEmployees.length === 1 ? "Edit Employee" : "Bulk Edit"}
+              </button>
+              <button
+                onClick={() => setSelectedEmployees([])}
+                className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 text-sm font-semibold rounded-lg transition-colors"
+              >
+                Clear
+              </button>
+            </>
+          )}
+          {fullPage ? (
+            <button
+              onClick={() => setShowEmployeeDirectoryPage(false)}
+              className="text-primary text-sm font-bold hover:underline"
+            >
+              Back to Dashboard
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setSearch("");
+                setShowEmployeeDirectoryPage(true);
+              }}
+              className="text-primary text-sm font-bold hover:underline"
+            >
+              View All
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="px-5 py-2 border-b border-slate-100 dark:border-slate-700">
+        <div className="relative">
+          <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+          <input
+            type="text"
+            placeholder="Search employees..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+      <div className="overflow-x-auto overflow-y-visible">
+        <DataTable
+          columns={employeeColumns}
+          data={employees}
+          isLoading={employeesLoading}
+          emptyMessage="No employees found."
+          keyExtractor={(item) => item.id || item._id?.toString()}
+        />
+      </div>
+    </div>
+  );
+
+  if (showEmployeeDirectoryPage) {
+    return (
+      <div className="w-full min-h-screen bg-gray-50 px-1">
+        <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
+          <div className="flex h-full grow flex-col w-full">
+            <Breadcrumb
+              items={[
+                { label: "Home", href: "/home", icon: "fa-house" },
+                {
+                  label: "Dashboard",
+                  icon: "fa-user-tie",
+                  onClick: () => setShowEmployeeDirectoryPage(false),
+                },
+                { label: "Employee Directory", icon: "fa-people-group" },
+              ]}
+            />
+            <div className="p-2">
+              {renderEmployeeDirectorySection({ fullPage: true })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full min-h-screen bg-gray-50 px-1">
       <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
@@ -674,76 +765,7 @@ const HRM = () => {
               {/* Main Column */}
               <div className="lg:col-span-2 xl:col-span-3 flex flex-col gap-6">
                 {/* Employee Directory */}
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
-                  <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                    <h3 className="text-slate-900 dark:text-white font-bold text-lg flex items-center gap-2">
-                      <i className="fa-solid fa-people-group text-slate-400"></i>
-                      Employee Directory
-                      {selectedEmployees.length > 0 && (
-                        <span className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs font-semibold rounded">
-                          {selectedEmployees.length} selected
-                        </span>
-                      )}
-                    </h3>
-                    <div className="flex gap-3">
-                      {selectedEmployees.length > 0 && (
-                        <>
-                          <button
-                            onClick={() => {
-                              if (selectedEmployees.length === 1) {
-                                setSelectedEmployee(selectedEmployees[0]);
-                                setStartEmployeeInEditMode(true);
-                                setShowEmployeeProfile(true);
-                              } else {
-                                setShowBulkEditModal(true);
-                              }
-                            }}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
-                          >
-                            <i className="fa-solid fa-pen-to-square mr-2"></i>
-                            {selectedEmployees.length === 1
-                              ? "Edit Employee"
-                              : "Bulk Edit"}
-                          </button>
-                          <button
-                            onClick={() => setSelectedEmployees([])}
-                            className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 text-sm font-semibold rounded-lg transition-colors"
-                          >
-                            Clear
-                          </button>
-                        </>
-                      )}
-                      <button
-                        onClick={() => setSearch("")}
-                        className="text-primary text-sm font-bold hover:underline"
-                      >
-                        View All
-                      </button>
-                    </div>
-                  </div>
-                  {/* Search row */}
-                  <div className="px-5 py-2 border-b border-slate-100 dark:border-slate-700">
-                    <div className="relative">
-                      <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-                      <input
-                        type="text"
-                        placeholder="Search employees..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full pl-9 pr-4 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto overflow-y-visible">
-                    <DataTable
-                      columns={employeeColumns}
-                      data={employees}
-                      isLoading={employeesLoading}
-                      emptyMessage="No employees found."
-                      keyExtractor={(item) => item.id || item._id?.toString()}
-                    />
-                  </div>
-                </div>
+                {renderEmployeeDirectorySection()}
 
                 {/* Recruitment */}
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 flex flex-col gap-4">
@@ -804,9 +826,13 @@ const HRM = () => {
                         No leave allocations yet
                       </div>
                     ) : (
-                      leaveAllocations.map((allocation) => (
+                      leaveAllocations.map((allocation, index) => (
                         <div
-                          key={allocation.id}
+                          key={
+                            allocation.id ||
+                            allocation._id ||
+                            `${allocation.employeeId || allocation.employeeName || "allocation"}-${allocation.year || index}`
+                          }
                           className="p-4 flex flex-col gap-2"
                         >
                           <div className="flex items-center justify-between">
@@ -901,8 +927,15 @@ const HRM = () => {
                     </h3>
                   </div>
                   <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {leaveRequests.map((lr) => (
-                      <div key={lr.id} className="p-4 flex flex-col gap-3">
+                    {leaveRequests.map((lr, index) => (
+                      <div
+                        key={
+                          lr.id ||
+                          lr._id ||
+                          `${lr.name || "leave"}-${lr.range || index}`
+                        }
+                        className="p-4 flex flex-col gap-3"
+                      >
                         <div className="flex items-center gap-3">
                           <div className="size-8 rounded-full bg-slate-200 dark:bg-slate-700"></div>
                           <div>
@@ -983,8 +1016,15 @@ const HRM = () => {
                       Training
                     </h3>
                   </div>
-                  {training.map((t) => (
-                    <div key={t.id} className="flex gap-3 items-center">
+                  {training.map((t, index) => (
+                    <div
+                      key={
+                        t.id ||
+                        t._id ||
+                        `${t.title || t.name || "training"}-${index}`
+                      }
+                      className="flex gap-3 items-center"
+                    >
                       <div className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 p-2 rounded-lg">
                         <i className={`fa-solid fa-${t.icon}`}></i>
                       </div>
