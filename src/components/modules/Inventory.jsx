@@ -32,7 +32,7 @@ const Inventory = () => {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState("add"); // "add" | "edit" | "restock" | "issue"
+  const [modalMode, setModalMode] = useState("add"); // "add" | "edit" | "restock" | "issue" | "transfer"
   const [activeItem, setActiveItem] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -101,7 +101,20 @@ const Inventory = () => {
     }
   }, []);
 
-  useEffect(() => { fetchInventory(); }, []);
+  const [locations, setLocations] = useState([]);
+  const fetchLocations = useCallback(async () => {
+    try {
+      const res = await apiService.get("/api/store-locations");
+      setLocations(res);
+    } catch {
+      // silently fail if no permission or network
+    }
+  }, []);
+
+  useEffect(() => { 
+    fetchInventory(); 
+    fetchLocations();
+  }, [fetchInventory, fetchLocations]);
 
   useEffect(() => {
     const timer = setTimeout(() => fetchInventory(1, searchQuery, filterCategory), 400);
@@ -186,6 +199,26 @@ const Inventory = () => {
           lineItems: [{ inventoryItemId: activeItem._id, qty: formData.addQuantity }],
         });
         toast.success(`Issued ${formData.addQuantity} unit(s) to ${formData.issueTo}`);
+      } else if (modalMode === "transfer") {
+        if (formData.addQuantity <= 0) { toast.error("Transfer quantity must be positive"); setIsSubmitting(false); return; }
+        if (!formData.issueTo) { toast.error("Destination location ID is required"); setIsSubmitting(false); return; }
+        if (!formData.destinationName) { toast.error("Destination location name is required"); setIsSubmitting(false); return; }
+        
+        await apiService.post("/api/stock-transfers", {
+          fromLocationId: activeItem.locationId || "unspecified",
+          fromLocationName: activeItem.location || "General Store",
+          toLocationId: formData.issueTo, 
+          toLocationName: formData.destinationName,
+          lineItems: [{
+            inventoryItemId: activeItem._id,
+            itemName: activeItem.name,
+            itemCode: activeItem.itemId,
+            unit: activeItem.unit || "pcs",
+            requestedQty: formData.addQuantity,
+          }],
+          notes: formData.notes || `Transfer from inventory list.`,
+        });
+        toast.success(`Transfer request created for ${formData.addQuantity} unit(s)`);
       }
       fetchInventory(page, searchQuery, filterCategory);
       handleCloseModal();
@@ -269,26 +302,34 @@ const Inventory = () => {
       header: "Actions", accessorKey: "actions",
       className: "text-right", cellClassName: "text-right",
       cell: (item) => (
-        <div className="flex items-center justify-end gap-1 text-gray-400">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           <button onClick={() => handleOpenModal("edit", item)} disabled={deletingId === item._id}
-            className="p-2 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50" title="Edit">
-            <i className="fa-solid fa-pen"></i>
+            className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 text-sm text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50" title="Edit Item">
+            <i className="fa-solid fa-pen text-sm"></i>
           </button>
+          
+          <div className="w-px h-4 bg-gray-200 hidden sm:block"></div>
+
           <button onClick={() => handleOpenModal("restock", item)} disabled={deletingId === item._id}
-            className="p-2 hover:text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50" title="Restock">
-            <i className="fa-solid fa-boxes-packing"></i>
+            className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 text-sm text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50" title="Restock Item">
+            <i className="fa-solid fa-boxes-packing text-sm"></i>
           </button>
+
           <button onClick={() => handleOpenModal("issue", item)} disabled={deletingId === item._id || item.quantity === 0}
-            className="p-2 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors disabled:opacity-50" title="Issue Stock">
-            <i className="fa-solid fa-arrow-right-from-bracket"></i>
+            className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 text-sm text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50" title="Issue Stock">
+            <i className="fa-solid fa-arrow-right-from-bracket text-sm"></i>
           </button>
-          <button onClick={() => { setActiveTab("transfers"); }} disabled={deletingId === item._id}
-            className="p-2 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors disabled:opacity-50" title="Transfer">
-            <i className="fa-solid fa-arrow-right-arrow-left"></i>
+
+          <div className="w-px h-4 bg-gray-200 hidden sm:block"></div>
+          
+          <button onClick={() => handleOpenModal("transfer", item)} disabled={deletingId === item._id || item.quantity === 0}
+            className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 text-sm text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50" title="Transfer Stock">
+            <i className="fa-solid fa-right-left text-sm"></i>
           </button>
+
           <button onClick={() => handleDelete(item._id)} disabled={deletingId === item._id}
-            className="p-2 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50" title="Delete">
-            {deletingId === item._id ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-trash-can"></i>}
+            className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50" title="Delete Item">
+            {deletingId === item._id ? <i className="fa-solid fa-spinner fa-spin text-sm"></i> : <i className="fa-solid fa-trash-can text-sm"></i>}
           </button>
         </div>
       ),
@@ -425,7 +466,7 @@ const Inventory = () => {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
               <h3 className="text-xl font-bold text-gray-800">
-                {modalMode === "add" ? "Add New Item" : modalMode === "edit" ? "Edit Item" : "Restock Inventory"}
+                {modalMode === "add" ? "Add New Item" : modalMode === "edit" ? "Edit Item" : modalMode === "transfer" ? "Transfer Stock" : "Restock Inventory"}
               </h3>
               <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600 transition-colors">
                 <i className="fa-solid fa-xmark text-xl"></i>
@@ -433,7 +474,7 @@ const Inventory = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
-              {(modalMode === "restock" || modalMode === "issue") ? (
+              {(modalMode === "restock" || modalMode === "issue" || modalMode === "transfer") ? (
                 <>
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <p className="text-sm font-semibold text-blue-800">{activeItem?.name}</p>
@@ -470,22 +511,45 @@ const Inventory = () => {
                       </div>
                     </div>
                   )}
+                  {modalMode === "transfer" && (
+                    <div className="mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Destination Location *</label>
+                      <select name="issueTo" value={formData.issueTo} onChange={(e) => {
+                          const loc = locations.find(l => l._id === e.target.value);
+                          setFormData(prev => ({
+                            ...prev,
+                            issueTo: e.target.value,
+                            destinationName: loc ? loc.name : ""
+                          }));
+                        }} required
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm cursor-pointer bg-white">
+                        <option value="" disabled>Select destination...</option>
+                        {locations.map(loc => (
+                          <option key={loc._id} value={loc._id}>{loc.name} {loc.code ? `(${loc.code})` : ""}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {modalMode === "issue" ? "Units to Issue" : "Units to Add"} <span className="text-xs text-green-600 font-normal">({modalMode === "issue" ? "deducted from" : "added to"} current stock)</span>
+                      {modalMode === "issue" ? "Units to Issue" : modalMode === "transfer" ? "Units to Transfer" : "Units to Add"} <span className="text-xs text-green-600 font-normal">({modalMode === "issue" || modalMode === "transfer" ? "deducted from" : "added to"} current stock)</span>
                     </label>
                     <input type="number" name="addQuantity" min="1"
-                      max={modalMode === "issue" ? activeItem?.quantity : activeItem ? activeItem.maxStock - activeItem.quantity : undefined}
+                      max={modalMode === "issue" || modalMode === "transfer" ? activeItem?.quantity : activeItem ? activeItem.maxStock - activeItem.quantity : undefined}
                       value={formData.addQuantity} onChange={handleFormChange} required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                     {activeItem && modalMode === "restock" && <p className="text-xs text-gray-400 mt-1">Max refit: {activeItem.maxStock - activeItem.quantity} {activeItem.unit || "pcs"}</p>}
-                    {activeItem && modalMode === "issue" && <p className="text-xs text-gray-400 mt-1">Available: {activeItem.quantity} {activeItem.unit || "pcs"}</p>}
+                    {activeItem && (modalMode === "issue" || modalMode === "transfer") && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Available after {modalMode}: <strong className="text-blue-600">{Math.max(0, activeItem.quantity - (Number(formData.addQuantity) || 0))}</strong> {activeItem.unit || "pcs"}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
-                    <input type="text" name="notes" value={formData.notes} onChange={handleFormChange}
-                      placeholder="e.g. Monthly replenishment"
+                    <input type="text" name="notes" value={formData.notes || ""} onChange={handleFormChange}
+                      placeholder={modalMode === "transfer" ? "e.g. Reason for transfer" : "e.g. Monthly replenishment"}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                   </div>
                 </>
@@ -553,10 +617,10 @@ const Inventory = () => {
                   className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium">Cancel</button>
                 <button type="submit" disabled={isSubmitting}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSubmitting ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className={modalMode === "restock" ? "fa-solid fa-box" : modalMode === "issue" ? "fa-solid fa-arrow-right-from-bracket" : "fa-solid fa-check"}></i>}
+                  {isSubmitting ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className={modalMode === "restock" ? "fa-solid fa-box" : modalMode === "issue" || modalMode === "transfer" ? "fa-solid fa-arrow-right-from-bracket" : "fa-solid fa-check"}></i>}
                   {isSubmitting
-                    ? modalMode === "add" ? "Creating…" : modalMode === "edit" ? "Saving…" : modalMode === "issue" ? "Issuing…" : "Restocking…"
-                    : modalMode === "add" ? "Create Item" : modalMode === "edit" ? "Save Changes" : modalMode === "issue" ? "Confirm Issue" : "Confirm Restock"}
+                    ? modalMode === "add" ? "Creating…" : modalMode === "edit" ? "Saving…" : modalMode === "issue" ? "Issuing…" : modalMode === "transfer" ? "Transferring…" : "Restocking…"
+                    : modalMode === "add" ? "Create Item" : modalMode === "edit" ? "Save Changes" : modalMode === "issue" ? "Confirm Issue" : modalMode === "transfer" ? "Confirm Transfer" : "Confirm Restock"}
                 </button>
               </div>
             </form>

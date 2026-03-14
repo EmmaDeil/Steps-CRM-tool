@@ -12,7 +12,7 @@ const SkuItemManager = () => {
   const [deleteModal, setDeleteModal] = useState(null);
   const [formData, setFormData] = useState(() => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    let code = "SKU-";
+    let code = "ITEM-";
     for (let i = 0; i < 8; i++)
       code += chars[Math.floor(Math.random() * chars.length)];
     return {
@@ -334,6 +334,7 @@ const SkuItemManager = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
                       <button
                         onClick={() => handlePrintLabel(item)}
                         className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"

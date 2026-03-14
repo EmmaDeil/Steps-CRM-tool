@@ -9,6 +9,15 @@ const StoreLocations = () => {
   const [formData, setFormData] = useState({ code: "", name: "", address: "", description: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const generateLocationCode = () => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "LOC-";
+    for (let i = 0; i < 6; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return code;
+  };
+
   const fetchLocations = useCallback(async () => {
     try {
       setLoading(true);
@@ -45,7 +54,10 @@ const StoreLocations = () => {
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
       <div className="p-4 border-b border-gray-200 flex justify-between items-center">
         <h3 className="font-bold text-gray-800">Store Locations</h3>
-        <button onClick={() => setIsModalOpen(true)} className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors">
+        <button onClick={() => {
+          setFormData({ code: generateLocationCode(), name: "", address: "", description: "" });
+          setIsModalOpen(true);
+        }} className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors">
           <i className="fa-solid fa-plus"></i> Add Location
         </button>
       </div>
@@ -84,14 +96,16 @@ const StoreLocations = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <h3 className="font-bold text-gray-800">Add Store Location</h3>
+              <h3 className="font-bold text-gray-800">Add Location</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600"><i className="fa-solid fa-xmark"></i></button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Location Code *</label>
-                <input type="text" required value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                  placeholder="e.g. WHS-01" className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-sm font-mono" />
+                <div className="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded text-sm font-mono text-gray-600 flex items-center justify-between">
+                  <span>{formData.code}</span>
+                  <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 font-sans">Auto-generated</span>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
