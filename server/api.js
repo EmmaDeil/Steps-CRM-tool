@@ -6,6 +6,8 @@ const LeaveAllocation = require('./models/LeaveAllocation');
 const LeaveRequest = require('./models/LeaveRequest');
 const TravelRequest = require('./models/TravelRequest');
 const UserModel = require('./models/User');
+const EmployeeModel = require('./models/Employee');
+const mongoose = require('mongoose');
 const { buildApprovalChain } = require('./utils/approvalRuleHelper');
 
 async function getModules() {
@@ -57,18 +59,61 @@ async function getLeaveAllocations(query = {}) {
 }
 
 async function createLeaveAllocation(data) {
+  const employeeId = String(data.employeeId || '').trim();
+  const managerId = String(data.managerId || '').trim();
+  const parsedYear = Number.parseInt(data.year, 10);
+  const year = Number.isNaN(parsedYear) ? new Date().getFullYear() : parsedYear;
+
+  if (!employeeId) throw new Error('employeeId is required');
+  if (!managerId) throw new Error('managerId is required');
+
+  const buildEmployeeLookupQuery = (id) => {
+    const query = [{ employeeId: id }];
+    if (mongoose.isValidObjectId(id)) {
+      query.unshift({ _id: id });
+    }
+    return { $or: query };
+  };
+
+  const [employee, manager] = await Promise.all([
+    EmployeeModel.findOne(buildEmployeeLookupQuery(employeeId)).lean(),
+    EmployeeModel.findOne(buildEmployeeLookupQuery(managerId)).lean(),
+  ]);
+
+  const payload = {
+    ...data,
+    employeeId,
+    managerId,
+    year,
+    employeeName:
+      String(data.employeeName || '').trim() ||
+      [employee?.firstName, employee?.lastName].filter(Boolean).join(' ').trim() ||
+      employee?.name ||
+      '',
+    managerName:
+      String(data.managerName || '').trim() ||
+      [manager?.firstName, manager?.lastName].filter(Boolean).join(' ').trim() ||
+      manager?.name ||
+      '',
+    managerEmail: String(data.managerEmail || '').trim() || manager?.email || '',
+    updatedAt: new Date(),
+  };
+
+  if (!payload.employeeName) throw new Error('employeeName is required');
+  if (!payload.managerName) throw new Error('managerName is required');
+
   // Update existing if same employee and year, else create new
   const existing = await LeaveAllocation.findOne({ 
-    employeeId: data.employeeId, 
-    year: data.year 
+    employeeId: payload.employeeId,
+    year: payload.year,
   });
   
   if (existing) {
-    Object.assign(existing, data, { updatedAt: new Date() });
+    Object.assign(existing, payload);
     return existing.save();
   }
   
-  return LeaveAllocation.create(data);
+  return LeaveAllocation.create(payload);
 }
 
 async function updateLeaveUsage(employeeId, year, leaveType, daysUsed) {

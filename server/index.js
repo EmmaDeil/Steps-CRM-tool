@@ -4413,6 +4413,8 @@ async function start() {
         query = {
           $or: [
             { name: searchRegex },
+            { firstName: searchRegex },
+            { lastName: searchRegex },
             { email: searchRegex },
             { department: searchRegex },
             { role: searchRegex },
@@ -4429,7 +4431,7 @@ async function start() {
       const formattedEmployees = employees.map(emp => ({
         id: emp._id.toString(),
         _id: emp._id,
-        name: emp.name,
+        name: emp.name || [emp.firstName, emp.lastName].filter(Boolean).join(' ').trim() || emp.email,
         email: emp.email,
         phone: emp.phone || '',
         dateOfBirth: emp.dateOfBirth,
@@ -5154,7 +5156,8 @@ async function start() {
       res.status(201).json({ success: true, data: allocation });
     } catch (error) {
       console.error('Error creating leave allocation:', error);
-      res.status(500).json({ success: false, error: error.message });
+      const isValidationError = /required|invalid|validation|not found/i.test(error.message || '');
+      res.status(isValidationError ? 400 : 500).json({ success: false, error: error.message });
     }
   });
 

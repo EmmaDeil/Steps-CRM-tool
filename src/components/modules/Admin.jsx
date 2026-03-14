@@ -88,7 +88,7 @@ const Admin = () => {
       if (searchQuery) params.append("search", searchQuery);
 
       const response = await apiService.get(`/api/users?${params.toString()}`);
-      setUsers(Array.isArray(response) ? response : (response?.data || []));
+      setUsers(Array.isArray(response) ? response : response?.data || []);
       // Reset error flag on success
       if (errorToastShownRef.current["users"]) {
         errorToastShownRef.current["users"] = false;
@@ -111,11 +111,53 @@ const Admin = () => {
   }, [filterRole, filterStatus, searchQuery]);
 
   const fetchModules = useCallback(async () => {
+    setModulesLoading(true);
     try {
       const response = await apiService.get("/api/modules");
-      setAvailableModules(response.data || []);
+      const modules = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.data)
+          ? response.data
+          : [];
+
+      if (modules.length > 0) {
+        setAvailableModules(modules);
+      } else {
+        // Keep edit-user module assignment usable even if modules endpoint is empty.
+        setAvailableModules([
+          { id: "hrm", name: "HR Management", icon: "fa-people-group" },
+          { id: "inventory", name: "Inventory", icon: "fa-boxes-stacked" },
+          {
+            id: "finance",
+            name: "Finance & Accounting",
+            icon: "fa-chart-line",
+          },
+          {
+            id: "procurement",
+            name: "Procurement",
+            icon: "fa-cart-shopping",
+          },
+          { id: "facility", name: "Facility Management", icon: "fa-building" },
+          {
+            id: "documents",
+            name: "Document Management",
+            icon: "fa-file-alt",
+          },
+          {
+            id: "security",
+            name: "Security & Audit",
+            icon: "fa-shield-halved",
+          },
+          { id: "budget", name: "Budget", icon: "fa-wallet" },
+          { id: "assets", name: "Asset Management", icon: "fa-server" },
+          { id: "crm", name: "CRM", icon: "fa-handshake" },
+          { id: "admin", name: "Admin Panel", icon: "fa-gear" },
+        ]);
+      }
     } catch (error) {
       console.error("Error fetching modules:", error);
+    } finally {
+      setModulesLoading(false);
     }
   }, []);
 
@@ -288,7 +330,7 @@ const Admin = () => {
     if (showEditUserModal) {
       fetchModules();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showEditUserModal]);
 
   const handleAddUser = async () => {
@@ -423,45 +465,6 @@ const Admin = () => {
     } finally {
       setIsSavingUser(false);
     }
-  };
-
-  const fetchModules = () => {
-    setModulesLoading(true);
-    // Use a static list of the app's known modules
-    const staticModules = [
-      { id: "hrm", name: "HR Management", icon: "fa-people-group" },
-      { id: "inventory", name: "Inventory", icon: "fa-boxes-stacked" },
-      { id: "finance", name: "Finance & Accounting", icon: "fa-chart-line" },
-      { id: "procurement", name: "Procurement", icon: "fa-cart-shopping" },
-      { id: "facility", name: "Facility Management", icon: "fa-building" },
-      { id: "documents", name: "Document Management", icon: "fa-file-alt" },
-      { id: "security", name: "Security & Audit", icon: "fa-shield-halved" },
-      { id: "budget", name: "Budget", icon: "fa-wallet" },
-      { id: "assets", name: "Asset Management", icon: "fa-server" },
-      { id: "crm", name: "CRM", icon: "fa-handshake" },
-      { id: "admin", name: "Admin Panel", icon: "fa-gear" },
-    ];
-    setAvailableModules(staticModules);
-    setModulesLoading(false);
-  };
-
-  const toggleModuleAccess = (moduleId) => {
-    setSelectedUser((prev) => {
-      if (!prev) return prev;
-      const current = prev.selectedModules || [];
-      const has = current.includes(moduleId);
-      return {
-        ...prev,
-        selectedModules: has
-          ? current.filter((id) => id !== moduleId)
-          : [...current, moduleId],
-      };
-    });
-  };
-
-  const hasModuleAccess = (moduleId) => {
-    if (!selectedUser) return false;
-    return (selectedUser.selectedModules || []).includes(moduleId);
   };
 
   const handleDeleteUser = (userId) => {
@@ -632,7 +635,7 @@ const Admin = () => {
     if (!name) return "U";
     return name
       .split(" ")
-      .filter(n => n.length > 0)
+      .filter((n) => n.length > 0)
       .map((n) => n[0])
       .join("")
       .toUpperCase()
@@ -1325,7 +1328,9 @@ const Admin = () => {
                   disabled={isAddingUser}
                   className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {isAddingUser && <i className="fa-solid fa-circle-notch fa-spin"></i>}
+                  {isAddingUser && (
+                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                  )}
                   {isAddingUser ? "Adding User..." : "Add User"}
                 </button>
               </div>

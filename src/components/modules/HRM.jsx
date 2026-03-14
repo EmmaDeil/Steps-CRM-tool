@@ -106,7 +106,6 @@ const HRM = () => {
   const failureToastShownRef = useRef(false);
   const [startEmployeeInEditMode, setStartEmployeeInEditMode] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
 
   // Leave allocations state
   const [leaveAllocations, setLeaveAllocations] = useState([]);
@@ -331,177 +330,165 @@ const HRM = () => {
     }
   };
 
-  const toggleDropdown = (id, event) => {
-    if (activeDropdown === id) {
-      setActiveDropdown(null);
-    } else {
-      const rect = event.currentTarget.getBoundingClientRect();
-      setDropdownPos({
-        top: rect.bottom + 4,
-        right: window.innerWidth - rect.right,
-      });
-      setActiveDropdown(id);
-    }
-  };
-
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (activeDropdown && !event.target.closest('.dropdown-container')) {
+      if (activeDropdown && !event.target.closest(".dropdown-container")) {
         setActiveDropdown(null);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [activeDropdown]);
 
-  const employeeColumns = useMemo(() => [
-    {
-      header: (
-        <input
-          type="checkbox"
-          checked={
-            selectedEmployees.length === employees.length &&
-            employees.length > 0
-          }
-          onChange={(e) => {
-            if (e.target.checked) setSelectedEmployees([...employees]);
-            else setSelectedEmployees([]);
-          }}
-          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-        />
-      ),
-      accessorKey: "select",
-      className: "w-12 px-5 py-3",
-      cellClassName: "px-5 py-3",
-      cell: (e) => (
-        <input
-          type="checkbox"
-          checked={selectedEmployees.some((emp) => emp.id === e.id)}
-          onChange={(ev) => {
-            ev.stopPropagation();
-            if (ev.target.checked)
-              setSelectedEmployees([...selectedEmployees, e]);
-            else
-              setSelectedEmployees(
-                selectedEmployees.filter((emp) => emp.id !== e.id),
-              );
-          }}
-          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-        />
-      ),
-    },
-    {
-      header: "Employee",
-      accessorKey: "employee",
-      className: "px-5 py-3",
-      cellClassName: "px-5 py-3 cursor-pointer",
-      cell: (e) => (
-        <div
-          className="flex items-center gap-3"
-          onClick={() => {
-            setSelectedEmployee(e);
-            setStartEmployeeInEditMode(false);
-            setShowEmployeeProfile(true);
-          }}
-        >
-          <div
-            className={`size-10 rounded-full border border-slate-200 dark:border-slate-700 bg-center bg-cover flex items-center justify-center text-xs font-semibold text-slate-700 dark:text-slate-200 ${
-              e.avatar ? "" : "bg-slate-100 dark:bg-slate-700"
-            }`}
-            style={{
-              backgroundImage: e.avatar ? `url('${e.avatar}')` : "none",
+  const employeeColumns = useMemo(
+    () => [
+      {
+        header: (
+          <input
+            type="checkbox"
+            checked={
+              selectedEmployees.length === employees.length &&
+              employees.length > 0
+            }
+            onChange={(e) => {
+              if (e.target.checked) setSelectedEmployees([...employees]);
+              else setSelectedEmployees([]);
             }}
-            aria-label={e.name ? `${e.name} avatar` : "Avatar"}
+            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+          />
+        ),
+        accessorKey: "select",
+        className: "w-12 px-5 py-3",
+        cellClassName: "px-5 py-3",
+        cell: (e) => (
+          <input
+            type="checkbox"
+            checked={selectedEmployees.some((emp) => emp.id === e.id)}
+            onChange={(ev) => {
+              ev.stopPropagation();
+              if (ev.target.checked)
+                setSelectedEmployees([...selectedEmployees, e]);
+              else
+                setSelectedEmployees(
+                  selectedEmployees.filter((emp) => emp.id !== e.id),
+                );
+            }}
+            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+          />
+        ),
+      },
+      {
+        header: "Employee",
+        accessorKey: "employee",
+        className: "px-5 py-3",
+        cellClassName: "px-5 py-3 cursor-pointer",
+        cell: (e) => (
+          <div
+            className="flex items-center gap-3"
+            onClick={() => {
+              setSelectedEmployee(e);
+              setStartEmployeeInEditMode(false);
+              setShowEmployeeProfile(true);
+            }}
           >
-            {!e.avatar && (e.name ? e.name.charAt(0) : "?")}
+            <div
+              className={`size-10 rounded-full border border-slate-200 dark:border-slate-700 bg-center bg-cover flex items-center justify-center text-xs font-semibold text-slate-700 dark:text-slate-200 ${
+                e.avatar ? "" : "bg-slate-100 dark:bg-slate-700"
+              }`}
+              style={{
+                backgroundImage: e.avatar ? `url('${e.avatar}')` : "none",
+              }}
+              aria-label={e.name ? `${e.name} avatar` : "Avatar"}
+            >
+              {!e.avatar && (e.name ? e.name.charAt(0) : "?")}
+            </div>
+            <div>
+              <p className="font-semibold text-slate-900 dark:text-white">
+                {e.name}
+              </p>
+              <p className="text-xs text-slate-500">{e.email}</p>
+            </div>
           </div>
-          <div>
-            <p className="font-semibold text-slate-900 dark:text-white">
-              {e.name}
-            </p>
-            <p className="text-xs text-slate-500">{e.email}</p>
-          </div>
-        </div>
-      ),
-    },
-    {
-      header: "Role",
-      accessorKey: "role",
-      className: "px-5 py-3",
-      cellClassName: "px-5 py-3 text-slate-600 dark:text-slate-300",
-    },
-    {
-      header: "Department",
-      accessorKey: "department",
-      className: "px-5 py-3 hidden sm:table-cell",
-      cellClassName:
-        "px-5 py-3 text-slate-600 dark:text-slate-300 hidden sm:table-cell",
-    },
-    {
-      header: "Status",
-      accessorKey: "status",
-      className: "px-5 py-3",
-      cellClassName: "px-5 py-3",
-      cell: (e) => (
-        <span
-          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-            e.status === "Active"
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
-              : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-          }`}
-        >
+        ),
+      },
+      {
+        header: "Role",
+        accessorKey: "role",
+        className: "px-5 py-3",
+        cellClassName: "px-5 py-3 text-slate-600 dark:text-slate-300",
+      },
+      {
+        header: "Department",
+        accessorKey: "department",
+        className: "px-5 py-3 hidden sm:table-cell",
+        cellClassName:
+          "px-5 py-3 text-slate-600 dark:text-slate-300 hidden sm:table-cell",
+      },
+      {
+        header: "Status",
+        accessorKey: "status",
+        className: "px-5 py-3",
+        cellClassName: "px-5 py-3",
+        cell: (e) => (
           <span
-            className={`size-1.5 rounded-full ${
-              e.status === "Active" ? "bg-emerald-500" : "bg-amber-500"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+              e.status === "Active"
+                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
             }`}
-          ></span>{" "}
-          {e.status}
-        </span>
-      ),
-    },
-    {
-      header: "Action",
-      accessorKey: "action",
-      className: "px-5 py-3 text-right w-16",
-      cellClassName: "px-5 py-3 text-right",
-      cell: (e) => (
-        <details className="relative inline-block text-left group" onClick={(ev) => ev.stopPropagation()}>
-          <summary
-            className="list-none cursor-pointer inline-flex items-center justify-center w-8 h-8 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-            title="Actions"
           >
-            <i className="fa-solid fa-ellipsis-vertical"></i>
-          </summary>
-          <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-50 overflow-hidden">
-            <button
-              onClick={() => {
-                setSelectedEmployee(e);
-                setStartEmployeeInEditMode(false);
-                setShowEmployeeProfile(true);
-              }}
-              className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            <span
+              className={`size-1.5 rounded-full ${
+                e.status === "Active" ? "bg-emerald-500" : "bg-amber-500"
+              }`}
+            ></span>{" "}
+            {e.status}
+          </span>
+        ),
+      },
+      {
+        header: "Action",
+        accessorKey: "action",
+        className: "px-5 py-3 text-right w-16",
+        cellClassName: "px-5 py-3 text-right",
+        cell: (e) => (
+          <details
+            className="relative inline-block text-left group"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <summary
+              className="list-none cursor-pointer inline-flex items-center justify-center w-8 h-8 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              title="Actions"
             >
-              View Profile
-            </button>
-            <button
-              onClick={() => {
-                setSelectedEmployee(e);
-                setStartEmployeeInEditMode(true);
-                setShowEmployeeProfile(true);
-              }}
-              className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-            >
-              Edit Employee
-            </button>
-          </div>
-        </details>
-      ),
-    },
-  ], [selectedEmployees, employees]);
-
-  // The active dropdown employee derived from state
-  const activeDropdownEmployee = employees.find(
-    (e) => (e.id || e._id?.toString()) === activeDropdown
+              <i className="fa-solid fa-ellipsis-vertical"></i>
+            </summary>
+            <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-50 overflow-hidden">
+              <button
+                onClick={() => {
+                  setSelectedEmployee(e);
+                  setStartEmployeeInEditMode(false);
+                  setShowEmployeeProfile(true);
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                View Profile
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedEmployee(e);
+                  setStartEmployeeInEditMode(true);
+                  setShowEmployeeProfile(true);
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                Edit Employee
+              </button>
+            </div>
+          </details>
+        ),
+      },
+    ],
+    [selectedEmployees, employees],
   );
 
   // Department CRUD handlers
@@ -714,7 +701,9 @@ const HRM = () => {
                             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
                           >
                             <i className="fa-solid fa-pen-to-square mr-2"></i>
-                            {selectedEmployees.length === 1 ? "Edit Employee" : "Bulk Edit"}
+                            {selectedEmployees.length === 1
+                              ? "Edit Employee"
+                              : "Bulk Edit"}
                           </button>
                           <button
                             onClick={() => setSelectedEmployees([])}
@@ -754,7 +743,6 @@ const HRM = () => {
                       keyExtractor={(item) => item.id || item._id?.toString()}
                     />
                   </div>
-
                 </div>
 
                 {/* Recruitment */}
@@ -1738,6 +1726,7 @@ const HRM = () => {
 
                   <div className="modal-content flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
                     <form
+                      id="leave-allocation-form"
                       className="space-y-6"
                       onSubmit={async (e) => {
                         e.preventDefault();
@@ -1762,8 +1751,14 @@ const HRM = () => {
                           });
                           fetchAll();
                         } catch (error) {
+                          const serverMessage =
+                            error?.serverData?.error ||
+                            error?.response?.data?.error ||
+                            error?.response?.data?.message;
                           toast.error(
-                            error.message || "Failed to allocate leave",
+                            serverMessage ||
+                              error.message ||
+                              "Failed to allocate leave",
                           );
                         } finally {
                           setLeaveAllocationLoading(false);
@@ -1921,7 +1916,9 @@ const HRM = () => {
                     </button>
                     <button
                       onClick={() => {
-                        const form = document.querySelector("form");
+                        const form = document.getElementById(
+                          "leave-allocation-form",
+                        );
                         form?.dispatchEvent(
                           new Event("submit", { bubbles: true }),
                         );
