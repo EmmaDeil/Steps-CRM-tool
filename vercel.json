@@ -2,6 +2,13 @@
   "version": 2,
   "builds": [
     {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
       "src": "server/index.js",
       "use": "@vercel/node",
       "config": {
@@ -15,8 +22,11 @@
       "dest": "server/index.js"
     },
     {
+      "handle": "filesystem"
+    },
+    {
       "src": "/(.*)",
-      "dest": "server/index.js"
+      "dest": "/index.html"
     }
   ],
   "env": {

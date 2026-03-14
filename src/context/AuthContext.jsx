@@ -281,7 +281,6 @@ export const AuthProvider = ({ children }) => {
     user,
     loading,
     isAuthenticated,
-    sessionConfig,
     login,
     verifyMfa,
     signup,

@@ -4,6 +4,7 @@ import { formatCurrency } from "../../services/currency";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/useAuth";
+import { useDepartments } from "../../context/useDepartments";
 import { validateEmployeeProfile, validateFile } from "../../utils/validation";
 
 const EmployeeProfile = ({
@@ -12,7 +13,8 @@ const EmployeeProfile = ({
   employeeData = null,
   initialEditMode = false,
 }) => {
-  const { currentUser } = useAuth();
+  const { user: currentUser } = useAuth();
+  const { departments, loading: departmentsLoading } = useDepartments();
   const [activeTab, setActiveTab] = useState("overview");
   const [employee, setEmployee] = useState(null);
   const [editingEmployee, setEditingEmployee] = useState(null);
@@ -24,6 +26,9 @@ const EmployeeProfile = ({
   const [validationErrors, setValidationErrors] = useState({});
   const [activityLog, setActivityLog] = useState([]);
   const [showActivityLog, setShowActivityLog] = useState(false);
+  const [leaveAllocation, setLeaveAllocation] = useState(null);
+  const [managerOptions, setManagerOptions] = useState([]);
+  const [locationOptions, setLocationOptions] = useState([]);
 
   // MFA state
   const [mfaStatus, setMfaStatus] = useState(null);
@@ -74,6 +79,25 @@ const EmployeeProfile = ({
             setEditingEmployee({ ...response.data });
             setIsEditing(true);
           }
+
+          // Fetch leave allocation for current year
+          // Use the resolved employee _id (not the original empId which may be a User _id)
+          try {
+            const year = new Date().getFullYear();
+            const resolvedEmpId =
+              response.data._id || response.data.id || empId;
+            const allocRes = await apiService.get(
+              `/api/hr/leave-allocations?employeeId=${resolvedEmpId}&year=${year}`,
+            );
+            const allocData = allocRes?.data;
+            if (Array.isArray(allocData) && allocData.length > 0) {
+              setLeaveAllocation(allocData[0]);
+            } else if (allocData && !Array.isArray(allocData)) {
+              setLeaveAllocation(allocData);
+            }
+          } catch (allocErr) {
+            console.error("Error fetching leave allocation:", allocErr);
+          }
         } else {
           setEmployee(null);
           toast.error("Employee data not found");
@@ -111,6 +135,36 @@ const EmployeeProfile = ({
       fetchActivityLog();
     }
   }, [employee?._id, showActivityLog]);
+
+  useEffect(() => {
+    const fetchEditOptions = async () => {
+      try {
+        const [employeesRes, locationsRes] = await Promise.all([
+          apiService.get("/api/hr/employees"),
+          apiService.get("/api/store-locations"),
+        ]);
+
+        setManagerOptions(
+          Array.isArray(employeesRes?.data) ? employeesRes.data : [],
+        );
+        setLocationOptions(Array.isArray(locationsRes) ? locationsRes : []);
+      } catch (error) {
+        console.error("Error fetching profile edit options:", error);
+      }
+    };
+
+    if (isHR) {
+      fetchEditOptions();
+    }
+  }, [isHR]);
+
+  const departmentOptions = departments.map((dept) => dept.name || dept.code);
+  const availableManagerOptions = managerOptions.filter(
+    (option) => (option?._id || option?.id) !== (employee?._id || employee?.id),
+  );
+  const availableLocationOptions = locationOptions.map(
+    (location) => location.name || location.code,
+  );
 
   // Different breadcrumb configurations based on context
   const breadcrumbItems = fromProfile
@@ -208,6 +262,15 @@ const EmployeeProfile = ({
         formData.append("jobTitle", editingEmployee.jobTitle || "");
         formData.append("status", editingEmployee.status || "Active");
         formData.append("salary", editingEmployee.salary || 0);
+        formData.append("startDate", editingEmployee.startDate || "");
+        formData.append("employmentType", editingEmployee.employmentType || "");
+        formData.append("managerId", editingEmployee.managerId || "");
+        formData.append("managerName", editingEmployee.managerName || "");
+        formData.append("location", editingEmployee.location || "");
+        formData.append(
+          "workArrangement",
+          editingEmployee.workArrangement || "",
+        );
       }
 
       // Handle profile picture upload if changed
@@ -858,15 +921,24 @@ const EmployeeProfile = ({
                   </div>
                   <div className="space-y-3 flex-1">
                     {(() => {
-                      const balance =
-                        employee?.timeOffBalance ||
-                        employee?.leaveBalance ||
-                        {};
-                      const annual = balance.annualLeave ?? balance.annual ?? 0;
-                      const sick = balance.sickLeave ?? balance.sick ?? 0;
+                      if (!leaveAllocation) {
+                        return (
+                          <p className="text-sm text-gray-400 dark:text-gray-500 italic">
+                            No leave allocation found for{" "}
+                            {new Date().getFullYear()}.
+                          </p>
+                        );
+                      }
+                      const annual =
+                        (leaveAllocation.annualLeave ?? 0) -
+                        (leaveAllocation.annualLeaveUsed ?? 0);
+                      const sick =
+                        (leaveAllocation.sickLeave ?? 0) -
+                        (leaveAllocation.sickLeaveUsed ?? 0);
                       const personal =
-                        balance.personalLeave ?? balance.personal ?? 0;
-                      const unpaid = balance.unpaidLeave ?? balance.unpaid ?? 0;
+                        (leaveAllocation.personalLeave ?? 0) -
+                        (leaveAllocation.personalLeaveUsed ?? 0);
+                      const unpaid = leaveAllocation.unpaidLeave ?? 0;
                       return (
                         <>
                           <div className="flex items-center justify-between">
@@ -874,7 +946,7 @@ const EmployeeProfile = ({
                               Annual Leave
                             </span>
                             <span className="text-gray-900 dark:text-gray-200 font-semibold">
-                              {annual} days
+                              {annual} / {leaveAllocation.annualLeave ?? 0} days
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
@@ -882,7 +954,7 @@ const EmployeeProfile = ({
                               Sick Leave
                             </span>
                             <span className="text-gray-900 dark:text-gray-200 font-semibold">
-                              {sick} days
+                              {sick} / {leaveAllocation.sickLeave ?? 0} days
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
@@ -890,7 +962,8 @@ const EmployeeProfile = ({
                               Personal Leave
                             </span>
                             <span className="text-gray-900 dark:text-gray-200 font-semibold">
-                              {personal} days
+                              {personal} / {leaveAllocation.personalLeave ?? 0}{" "}
+                              days
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
@@ -1325,8 +1398,7 @@ const EmployeeProfile = ({
                         Department
                       </p>
                       {isEditing && isHR ? (
-                        <input
-                          type="text"
+                        <select
                           name="department"
                           value={editingEmployee?.department || ""}
                           onChange={(e) =>
@@ -1336,7 +1408,19 @@ const EmployeeProfile = ({
                             })
                           }
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white"
-                        />
+                          disabled={departmentsLoading}
+                        >
+                          <option value="">
+                            {departmentsLoading
+                              ? "Loading departments..."
+                              : "Select department"}
+                          </option>
+                          {departmentOptions.map((departmentName) => (
+                            <option key={departmentName} value={departmentName}>
+                              {departmentName}
+                            </option>
+                          ))}
+                        </select>
                       ) : (
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                           {employee?.department || "Not set"}
@@ -1469,23 +1553,39 @@ const EmployeeProfile = ({
                         Manager
                       </p>
                       {isEditing && isHR ? (
-                        <input
-                          type="text"
+                        <select
                           name="manager"
-                          value={
-                            editingEmployee?.managerName ||
-                            editingEmployee?.manager ||
-                            ""
-                          }
+                          value={editingEmployee?.managerId || ""}
                           onChange={(e) =>
-                            setEditingEmployee({
-                              ...editingEmployee,
-                              managerName: e.target.value,
-                              manager: e.target.value,
+                            setEditingEmployee((prev) => {
+                              const selectedManager =
+                                availableManagerOptions.find(
+                                  (option) =>
+                                    (option._id || option.id) ===
+                                    e.target.value,
+                                );
+                              return {
+                                ...prev,
+                                managerId: e.target.value,
+                                managerName: selectedManager?.name || "",
+                                manager: selectedManager?.name || "",
+                              };
                             })
                           }
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white"
-                        />
+                        >
+                          <option value="">Select manager</option>
+                          {availableManagerOptions.map((option) => {
+                            const optionId = option._id || option.id;
+                            const optionName =
+                              option.name || option.email || optionId;
+                            return (
+                              <option key={optionId} value={optionId}>
+                                {optionName}
+                              </option>
+                            );
+                          })}
+                        </select>
                       ) : (
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                           {employee?.managerName ||
@@ -1501,8 +1601,7 @@ const EmployeeProfile = ({
                           Work Location
                         </p>
                         {isEditing && isHR ? (
-                          <input
-                            type="text"
+                          <select
                             name="location"
                             value={editingEmployee?.location || ""}
                             onChange={(e) =>
@@ -1512,7 +1611,22 @@ const EmployeeProfile = ({
                               })
                             }
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white"
-                          />
+                          >
+                            <option value="">Select work location</option>
+                            {availableLocationOptions.map((locationName) => (
+                              <option key={locationName} value={locationName}>
+                                {locationName}
+                              </option>
+                            ))}
+                            {editingEmployee?.location &&
+                            !availableLocationOptions.includes(
+                              editingEmployee.location,
+                            ) ? (
+                              <option value={editingEmployee.location}>
+                                {editingEmployee.location}
+                              </option>
+                            ) : null}
+                          </select>
                         ) : (
                           <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                             {employee?.location || "Not set"}

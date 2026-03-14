@@ -57,7 +57,10 @@ const Navbar = ({ user }) => {
     <nav className="sticky top-0 z-50 w-full bg-white border-b border-[#dbe0e6]">
       <div className="px-6 py-3 flex items-center justify-between">
         {/* Left: App Name */}
-        <div className="flex items-center gap-3">
+        <div
+          className="flex items-center gap-3 cursor-pointer"
+          onClick={() => navigate("/home")}
+        >
           <img src={stepsLogo} alt="Netlink ERP Logo" className="w-8 h-8" />
           <h1 className="text-lg font-bold text-[#111418]">NETLINK</h1>
         </div>

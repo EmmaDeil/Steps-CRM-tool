@@ -127,18 +127,32 @@ const http = require('http');
 
 const app = express();
 const httpServer = http.createServer(app);
+const isServerlessRuntime = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
+let startupPromise = null;
 
 // Security Middleware
 app.use(helmet()); // Secure HTTP headers
 app.use(mongoSanitize()); // Sanitize MongoDB queries
 
 // CORS configuration (MUST BE BEFORE RATE LIMITER OR CORS WILL FAIL ON 429)
-if (!process.env.FRONTEND_URL) {
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean);
+
+if (allowedOrigins.length === 0 && !isServerlessRuntime) {
   console.error('FRONTEND_URL not set in .env file');
   process.exit(1);
 }
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
   credentials: true,
   optionsSuccessStatus: 200,
 }));
@@ -214,78 +228,85 @@ const validateBase64File = (base64String, maxSizeMB, allowedTypes) => {
 const MONGODB_URI = process.env.MONGODB_URI;
 if (!MONGODB_URI) {
   console.error('MONGODB_URI not set in .env file');
-  process.exit(1);
+  if (!isServerlessRuntime) {
+    process.exit(1);
+  }
 }
 
 async function start() {
-  try {
-    await mongoose.connect(MONGODB_URI, {
-      serverSelectionTimeoutMS: 30000, // Increased to 30 seconds
-      socketTimeoutMS: 45000,
-      family: 4, // Use IPv4, skip trying IPv6
-      maxPoolSize: 10,
-      minPoolSize: 2,
-      tls: true, // Enable TLS/SSL
-      tlsAllowInvalidCertificates: false,
-      retryWrites: true,
-      w: 'majority',
-    });
-    console.log('✓ Connected to MongoDB');
+  if (mongoose.connection.readyState !== 1) {
+    try {
+      await mongoose.connect(MONGODB_URI, {
+        serverSelectionTimeoutMS: 30000, // Increased to 30 seconds
+        socketTimeoutMS: 45000,
+        family: 4, // Use IPv4, skip trying IPv6
+        maxPoolSize: 10,
+        minPoolSize: 2,
+        tls: true, // Enable TLS/SSL
+        tlsAllowInvalidCertificates: false,
+        retryWrites: true,
+        w: 'majority',
+      });
+      console.log('✓ Connected to MongoDB');
 
-    // Handle MongoDB connection events
-    mongoose.connection.on('error', (err) => {
-      console.error('MongoDB connection error:', err);
-    });
+      // Handle MongoDB connection events
+      mongoose.connection.on('error', (err) => {
+        console.error('MongoDB connection error:', err);
+      });
 
-    mongoose.connection.on('disconnected', () => {
-      console.warn('MongoDB disconnected. Attempting to reconnect...');
-    });
+      mongoose.connection.on('disconnected', () => {
+        console.warn('MongoDB disconnected. Attempting to reconnect...');
+      });
 
-    mongoose.connection.on('reconnected', () => {
-      console.log('✓ MongoDB reconnected');
-    });
+      mongoose.connection.on('reconnected', () => {
+        console.log('✓ MongoDB reconnected');
+      });
 
-    // Basic seed data for modules (minimal auto-seeding)
-    const seedModules = [
-      { id: 1, name: "Approval", componentName: "Approval" },
-      { id: 2, name: "Inventory", componentName: "Inventory" },
-      { id: 3, name: "HRM", componentName: "HRM" },
-      { id: 4, name: "FM", componentName: "FM" },
-      { id: 5, name: "Finance", componentName: "Finance" },
-      { id: 6, name: "Security", componentName: "Security" },
-      { id: 7, name: "Admin", componentName: "Admin" },
-      { id: 8, name: "Attendance", componentName: "Attendance" },
-      { id: 9, name: "DocSign", componentName: "DocSign" },
-      { id: 10, name: "Material Requests", componentName: "MaterialRequests" },
-      { id: 11, name: "Purchase Orders", componentName: "PurchaseOrders" },
-      { id: 12, name: "Analytics", componentName: "Analytics" },
-      { id: 13, name: "Policy", componentName: "Policy" },
-    ];
+      // Basic seed data for modules (minimal auto-seeding)
+      const seedModules = [
+        { id: 1, name: "Approval", componentName: "Approval" },
+        { id: 2, name: "Inventory", componentName: "Inventory" },
+        { id: 3, name: "HRM", componentName: "HRM" },
+        { id: 4, name: "FM", componentName: "FM" },
+        { id: 5, name: "Finance", componentName: "Finance" },
+        { id: 6, name: "Security", componentName: "Security" },
+        { id: 7, name: "Admin", componentName: "Admin" },
+        { id: 8, name: "Attendance", componentName: "Attendance" },
+        { id: 9, name: "DocSign", componentName: "DocSign" },
+        { id: 10, name: "Material Requests", componentName: "MaterialRequests" },
+        { id: 11, name: "Purchase Orders", componentName: "PurchaseOrders" },
+        { id: 12, name: "Analytics", componentName: "Analytics" },
+        { id: 13, name: "Policy", componentName: "Policy" },
+      ];
 
-    // Seed modules if empty or update with new modules
-    const moduleCount = await ModuleModel.countDocuments();
-    if (moduleCount === 0) {
-      await ModuleModel.insertMany(seedModules);
-      console.log('Seeded modules');
-    } else {
-      // Upsert modules: update existing ones and add new ones
-      for (const module of seedModules) {
-        await ModuleModel.findOneAndUpdate(
-          { id: module.id },
-          module,
-          { upsert: true, new: true }
-        );
+      // Seed modules if empty or update with new modules
+      const moduleCount = await ModuleModel.countDocuments();
+      if (moduleCount === 0) {
+        await ModuleModel.insertMany(seedModules);
+        console.log('Seeded modules');
+      } else {
+        // Upsert modules: update existing ones and add new ones
+        for (const module of seedModules) {
+          await ModuleModel.findOneAndUpdate(
+            { id: module.id },
+            module,
+            { upsert: true, new: true }
+          );
+        }
+        // Remove any stale modules not in the current seed list
+        const validIds = seedModules.map((m) => m.id);
+        await ModuleModel.deleteMany({ id: { $nin: validIds } });
+        console.log('Updated modules to match seed data');
       }
-      // Remove any stale modules not in the current seed list
-      const validIds = seedModules.map((m) => m.id);
-      await ModuleModel.deleteMany({ id: { $nin: validIds } });
-      console.log('Updated modules to match seed data');
+    } catch (err) {
+      console.error('✗ Failed to connect to MongoDB');
+      console.error('  Error:', err.message);
+      console.error('  Please ensure MongoDB is running and MONGODB_URI is set correctly in .env');
+      if (!isServerlessRuntime) {
+        process.exit(1);
+      }
+      throw err;
     }
-  } catch (err) {
-    console.error('✗ Failed to connect to MongoDB');
-    console.error('  Error:', err.message);
-    console.error('  Please ensure MongoDB is running and MONGODB_URI is set correctly in .env');
-    process.exit(1);
   }
 
   // API endpoints using centralized server API helpers
@@ -4552,7 +4573,50 @@ async function start() {
         return res.status(400).json({ success: false, message: 'Invalid employee ID' });
       }
 
-      const employee = await EmployeeModel.findById(id).select('-__v').lean();
+      let employee = await EmployeeModel.findById(id).select('-__v').lean();
+      let fallbackUser = null;
+
+      // Fallback chain: caller may have passed a User _id instead of an Employee _id
+      // (e.g. when viewing own profile from the avatar menu).
+      if (!employee) {
+        // 1. Employee.userRef → User._id
+        employee = await EmployeeModel.findOne({ userRef: id }).select('-__v').lean();
+      }
+      if (!employee) {
+        // 2. User.employeeRef → Employee._id (most reliable when Employee lacks userRef)
+        fallbackUser = await UserModel.findById(id).select('employeeRef email firstName lastName fullName role department jobTitle status profilePicture phoneNumber').lean();
+        if (fallbackUser?.employeeRef) {
+          employee = await EmployeeModel.findById(fallbackUser.employeeRef).select('-__v').lean();
+        }
+        // 3. Email match as last resort
+        if (!employee && fallbackUser?.email) {
+          employee = await EmployeeModel.findOne({ email: fallbackUser.email }).select('-__v').lean();
+        }
+      }
+
+      // 4. Final fallback: synthesize a profile from the User record itself
+      if (!employee && fallbackUser) {
+        const u = fallbackUser;
+        const synthetic = {
+          id: u._id.toString(),
+          _id: u._id,
+          name: u.fullName || [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email,
+          email: u.email,
+          phone: u.phoneNumber || '',
+          department: u.department || '',
+          role: u.role || 'Employee',
+          jobTitle: u.jobTitle || u.role || 'Employee',
+          status: u.status || 'Active',
+          avatar: u.profilePicture || '',
+          salary: 0,
+          address: '',
+          emergencyContact: { name: '', relationship: '', phone: '' },
+          employeeId: null,
+          managerId: null,
+          _synthetic: true,
+        };
+        return res.json({ success: true, data: synthetic });
+      }
 
       if (!employee) {
         return res.status(404).json({ success: false, message: 'Employee not found' });
@@ -4577,6 +4641,10 @@ async function start() {
         emergencyContact: employee.emergencyContact || { name: '', relationship: '', phone: '' },
         employeeId: employee.employeeId,
         managerId: employee.managerId,
+        managerName: employee.managerName || '',
+        location: employee.location || '',
+        workArrangement: employee.workArrangement || '',
+        employmentType: employee.employmentType || '',
       };
 
       res.json({ success: true, data: response });
@@ -4657,7 +4725,26 @@ async function start() {
   app.put('/api/hr/employees/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, email, phone, dateOfBirth, department, jobTitle, status, salary, address, emergencyContact, avatar, updatedBy } = req.body;
+      const {
+        name,
+        email,
+        phone,
+        dateOfBirth,
+        department,
+        jobTitle,
+        status,
+        salary,
+        address,
+        emergencyContact,
+        avatar,
+        updatedBy,
+        startDate,
+        employmentType,
+        managerId,
+        managerName,
+        location,
+        workArrangement,
+      } = req.body;
       const ObjectId = require('mongoose').Types.ObjectId;
       
       // Check if ID is valid MongoDB ObjectId
@@ -4737,6 +4824,35 @@ async function start() {
         updateData.salary = parseFloat(salary);
         changes.push({ field: 'salary', oldValue: oldEmployee.salary, newValue: parseFloat(salary) });
       }
+      if (startDate !== undefined) {
+        const normalizedStartDate = startDate ? new Date(startDate) : null;
+        const oldStartDate = oldEmployee.startDate ? new Date(oldEmployee.startDate).toISOString() : null;
+        const newStartDate = normalizedStartDate ? normalizedStartDate.toISOString() : null;
+        if (oldStartDate !== newStartDate) {
+          updateData.startDate = normalizedStartDate;
+          changes.push({ field: 'startDate', oldValue: oldEmployee.startDate, newValue: normalizedStartDate });
+        }
+      }
+      if (employmentType !== undefined && employmentType !== oldEmployee.employmentType) {
+        updateData.employmentType = employmentType || undefined;
+        changes.push({ field: 'employmentType', oldValue: oldEmployee.employmentType, newValue: employmentType || undefined });
+      }
+      if (managerId !== undefined && managerId !== oldEmployee.managerId) {
+        updateData.managerId = managerId || '';
+        changes.push({ field: 'managerId', oldValue: oldEmployee.managerId, newValue: managerId || '' });
+      }
+      if (managerName !== undefined && managerName !== oldEmployee.managerName) {
+        updateData.managerName = managerName || '';
+        changes.push({ field: 'managerName', oldValue: oldEmployee.managerName, newValue: managerName || '' });
+      }
+      if (location !== undefined && location !== oldEmployee.location) {
+        updateData.location = location || '';
+        changes.push({ field: 'location', oldValue: oldEmployee.location, newValue: location || '' });
+      }
+      if (workArrangement !== undefined && workArrangement !== oldEmployee.workArrangement) {
+        updateData.workArrangement = workArrangement || undefined;
+        changes.push({ field: 'workArrangement', oldValue: oldEmployee.workArrangement, newValue: workArrangement || undefined });
+      }
 
       const employee = await EmployeeModel.findByIdAndUpdate(
         id,
@@ -4805,6 +4921,10 @@ async function start() {
         emergencyContact: employee.emergencyContact || { name: '', relationship: '', phone: '' },
         employeeId: employee.employeeId,
         managerId: employee.managerId,
+        managerName: employee.managerName || '',
+        location: employee.location || '',
+        workArrangement: employee.workArrangement || '',
+        employmentType: employee.employmentType || '',
       };
 
       res.json({ success: true, data: response, message: 'Employee updated successfully' });
@@ -6163,10 +6283,13 @@ async function start() {
 
   await initializeSystemData();
 
-  const server = httpServer.listen(port, () => {
-    console.log(`Steps backend listening on http://localhost:${port}`);
-    console.log('WebSocket server ready for real-time updates');
-  });
+  let server = null;
+  if (!isServerlessRuntime) {
+    server = httpServer.listen(port, () => {
+      console.log(`Steps backend listening on http://localhost:${port}`);
+      console.log('WebSocket server ready for real-time updates');
+    });
+  }
 
   // ============ AUTOMATED LOG ARCHIVAL SCHEDULER ============
   
@@ -6268,10 +6391,14 @@ async function start() {
   };
 
   // Start the auto-archive scheduler
-  scheduleAutoArchive();
+  if (!isServerlessRuntime) {
+    scheduleAutoArchive();
+  }
 
   // Also run auto-archive on startup if needed (optional)
-  autoArchiveLogs().catch(err => console.error('Error running initial auto-archive:', err));
+  if (!isServerlessRuntime) {
+    autoArchiveLogs().catch(err => console.error('Error running initial auto-archive:', err));
+  }
 
   // Graceful shutdown
   const shutdown = async (signal) => {
@@ -6295,8 +6422,12 @@ async function start() {
     }, 10000);
   };
 
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
+  if (!isServerlessRuntime) {
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+  }
+
+  return app;
 }
 
 // Global error handlers
@@ -6313,15 +6444,37 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Monitor memory usage
-setInterval(() => {
-  const used = process.memoryUsage();
-  const mb = (bytes) => Math.round(bytes / 1024 / 1024);
-  if (mb(used.heapUsed) > 500) { // Alert if heap exceeds 500MB
-    console.warn(`⚠️ High memory usage: ${mb(used.heapUsed)}MB heap / ${mb(used.rss)}MB RSS`);
-  }
-}, 60000); // Check every minute
+if (!isServerlessRuntime) {
+  setInterval(() => {
+    const used = process.memoryUsage();
+    const mb = (bytes) => Math.round(bytes / 1024 / 1024);
+    if (mb(used.heapUsed) > 500) { // Alert if heap exceeds 500MB
+      console.warn(`⚠️ High memory usage: ${mb(used.heapUsed)}MB heap / ${mb(used.rss)}MB RSS`);
+    }
+  }, 60000); // Check every minute
+}
 
-start().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+function ensureStarted() {
+  if (!startupPromise) {
+    startupPromise = start();
+  }
+  return startupPromise;
+}
+
+if (require.main === module) {
+  ensureStarted().catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+} else {
+  module.exports = async (req, res) => {
+    try {
+      await ensureStarted();
+      return app(req, res);
+    } catch (err) {
+      console.error('Failed to initialize serverless request:', err);
+      return res.status(500).json({ success: false, error: 'Server initialization failed' });
+    }
+  };
+  module.exports.app = app;
+}

@@ -11,16 +11,19 @@ import VisitorSignIn from "./components/VisitorSignIn";
 import { Toaster } from "react-hot-toast";
 import Navbar from "./components/Navbar";
 
-function App() {
+// Defined outside App so React never sees a new component type on re-renders,
+// preventing unmount/remount of child routes when App re-renders.
+const PageWithNavbar = ({ children }) => {
   const { user } = useAuth();
-
-  const PageWithNavbar = ({ children }) => (
+  return (
     <div className="min-h-screen d-flex flex-column">
       <Navbar user={user} />
       <div className="flex-grow-1">{children}</div>
     </div>
   );
+};
 
+function App() {
   return (
     <>
       <Toaster position="top-right" />

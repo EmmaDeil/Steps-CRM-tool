@@ -20,7 +20,19 @@ const EmployeeSchema = new mongoose.Schema({
     phone: { type: String }
   },
   managerId: { type: String },
+  managerName: { type: String },
   role: { type: String }, // Used in UI for role descriptor
+  location: { type: String },
+  workArrangement: {
+    type: String,
+    enum: ['On-site', 'Hybrid', 'Remote'],
+    default: undefined,
+  },
+  employmentType: {
+    type: String,
+    enum: ['Full-time', 'Part-time', 'Contract', 'Intern'],
+    default: undefined,
+  },
   userRef: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
