@@ -201,8 +201,10 @@ router.post('/', authMiddleware, async (req, res) => {
       });
     }
 
+    const newItemId = await generateNextId();
+
     const newItem = await InventoryItem.create({
-      itemId,
+      itemId:       newItemId,
       name:         req.body.name.trim(),
       category:     req.body.category,
       quantity:     Number(req.body.quantity),
@@ -236,7 +238,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
     // Build a safe update object — never allow direct quantity change here
     // (quantity changes must go through /restock or /adjust)
-    const allowedFields = ['name', 'category', 'maxStock', 'reorderPoint', 'location'];
+    const allowedFields = ['name', 'category', 'maxStock', 'reorderPoint', 'location', 'description', 'unit'];
     const updates = {};
     allowedFields.forEach(f => {
       if (req.body[f] !== undefined) {
@@ -245,12 +247,28 @@ router.put('/:id', authMiddleware, async (req, res) => {
     });
     updates.lastUpdated = new Date();
 
-    const updated = await InventoryItem.findOneAndUpdate(
+    let updated = await InventoryItem.findOneAndUpdate(
       { _id: req.params.id, isDeleted: false },
       updates,
       { new: true, runValidators: true }
     );
     if (!updated) return res.status(404).json({ message: 'Item not found' });
+
+    // Sync root changes to the first stock level if it is a single-location item to maintain consistency
+    if (updated.stockLevels && updated.stockLevels.length === 1) {
+      const StoreLocation = require('../models/StoreLocation');
+      let locId = updated.stockLevels[0].locationId;
+      if (req.body.location) {
+        const storeLoc = await StoreLocation.findOne({ name: new RegExp(`^${req.body.location.trim()}$`, 'i') });
+        if (storeLoc) locId = storeLoc._id;
+      }
+      
+      updated.stockLevels[0].locationName = updated.location;
+      updated.stockLevels[0].locationId = locId;
+      updated.stockLevels[0].maxStock = updated.maxStock;
+      updated.stockLevels[0].reorderPoint = updated.reorderPoint;
+      await updated.save();
+    }
 
     res.json({ message: 'Item updated successfully', data: updated });
   } catch (err) {
@@ -271,8 +289,17 @@ router.post('/:id/restock', authMiddleware, async (req, res) => {
     if (!item) return res.status(404).json({ message: 'Item not found' });
 
     const previousQty = item.quantity;
-    const newQty = Math.min(item.quantity + addQty, item.maxStock); // cap at maxStock
-    const actualAdded = newQty - previousQty;
+    const newQty = item.quantity + addQty; // no longer capped at maxStock
+    const actualAdded = addQty;
+
+    // Automatically bump up maxStock if the user's restock amount exceeds it
+    if (newQty > item.maxStock) {
+      item.maxStock = newQty;
+      // also update the first stock level to match if it's a single location item
+      if (item.stockLevels && item.stockLevels.length === 1) {
+        item.stockLevels[0].maxStock = newQty;
+      }
+    }
 
     item.quantity    = newQty;
     item.lastUpdated = new Date();

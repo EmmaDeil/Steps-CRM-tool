@@ -162,9 +162,9 @@ const Inventory = () => {
     setModalMode(mode);
     setActiveItem(item);
     if (mode === "add") {
-      setFormData({ name: "", category: "Electronics", maxStock: 100, reorderPoint: 20, location: "", description: "", unit: "pcs", addQuantity: 0, notes: "", issueTo: "", issueToType: "department" });
+      setFormData({ name: "", category: "Electronics", maxStock: 100, reorderPoint: 20, location: locations.length > 0 ? locations[0].name : "General Store", description: "", unit: "pcs", addQuantity: 0, notes: "", issueTo: "", issueToType: "department", destinationName: "" });
     } else if (item) {
-      setFormData({ name: item.name, category: item.category, maxStock: item.maxStock, reorderPoint: item.reorderPoint ?? 20, location: item.location, description: item.description || "", unit: item.unit || "pcs", addQuantity: 1, notes: "", issueTo: "", issueToType: "department" });
+      setFormData({ name: item.name, category: item.category, maxStock: item.maxStock, reorderPoint: item.reorderPoint ?? 20, location: item.location || (locations.length > 0 ? locations[0].name : "General Store"), description: item.description || "", unit: item.unit || "pcs", addQuantity: 1, notes: "", issueTo: "", issueToType: "department", destinationName: "" });
     }
     setIsModalOpen(true);
   };
@@ -533,13 +533,13 @@ const Inventory = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {modalMode === "issue" ? "Units to Issue" : modalMode === "transfer" ? "Units to Transfer" : "Units to Add"} <span className="text-xs text-green-600 font-normal">({modalMode === "issue" || modalMode === "transfer" ? "deducted from" : "added to"} current stock)</span>
+                      {modalMode === "issue" ? "Units to Issue" : modalMode === "transfer" ? "Units to Transfer" : modalMode === "restock" ? "Units to Restock" : "Units to Add"} <span className="text-xs text-green-600 font-normal">({modalMode === "issue" || modalMode === "transfer" ? "deducted from" : "added to"} current stock)</span>
                     </label>
                     <input type="number" name="addQuantity" min="1"
-                      max={modalMode === "issue" || modalMode === "transfer" ? activeItem?.quantity : activeItem ? activeItem.maxStock - activeItem.quantity : undefined}
+                      max={modalMode === "issue" || modalMode === "transfer" ? activeItem?.quantity : undefined}
                       value={formData.addQuantity} onChange={handleFormChange} required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                    {activeItem && modalMode === "restock" && <p className="text-xs text-gray-400 mt-1">Max refit: {activeItem.maxStock - activeItem.quantity} {activeItem.unit || "pcs"}</p>}
+
                     {activeItem && (modalMode === "issue" || modalMode === "transfer") && (
                       <p className="text-xs text-gray-400 mt-1">
                         Available after {modalMode}: <strong className="text-blue-600">{Math.max(0, activeItem.quantity - (Number(formData.addQuantity) || 0))}</strong> {activeItem.unit || "pcs"}
@@ -579,16 +579,22 @@ const Inventory = () => {
                         {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
+                      <select name="location" value={formData.location} onChange={handleFormChange} required
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white cursor-pointer">
+                        <option value="" disabled>Select a location</option>
+                        {locations.length === 0 && <option value="General Store">General Store</option>}
+                        {locations.map(loc => (
+                          <option key={loc._id} value={loc.name}>{loc.name} {loc.code ? `(${loc.code})` : ""}</option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="w-24">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
                       <input type="text" name="unit" value={formData.unit} onChange={handleFormChange} placeholder="pcs"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Storage Location *</label>
-                    <input type="text" name="location" value={formData.location} onChange={handleFormChange} required placeholder="e.g. Warehouse A"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-1">

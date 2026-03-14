@@ -610,15 +610,6 @@ const MaterialRequests = () => {
       ),
     },
     {
-      header: "Required By",
-      accessorKey: "requiredBy",
-      cell: (req) => (
-        <span className="text-sm text-[#617589]">
-          {req.requiredBy ? new Date(req.requiredBy).toLocaleDateString() : "-"}
-        </span>
-      ),
-    },
-    {
       header: "Approver",
       accessorKey: "approver",
       cell: (req) => (
@@ -1550,13 +1541,18 @@ const MaterialRequests = () => {
                     type="button"
                     onClick={async () => {
                       try {
+                        if (!formData.requestType) {
+                          toast.error("Please select a request type before saving a draft");
+                          return;
+                        }
+
                         const requestData = {
                           ...formData,
                           lineItems: lineItems.filter(
                             (item) =>
-                              item.itemName ||
-                              item.quantity ||
-                              item.description,
+                              item.itemName &&
+                              item.quantity &&
+                              item.quantityType
                           ),
                           requestedBy:
                             user?.fullName ||
@@ -1582,6 +1578,11 @@ const MaterialRequests = () => {
                           ),
                           message: message,
                         };
+
+                        if (requestData.lineItems.length === 0) {
+                          toast.error("Please add at least one valid line item with name, quantity, and type");
+                          return;
+                        }
 
                         if (isEditMode && selectedRequest) {
                           await apiService.put(

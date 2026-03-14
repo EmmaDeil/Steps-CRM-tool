@@ -4,6 +4,7 @@ import { toast } from "react-hot-toast";
 
 const StoreLocations = () => {
   const [locations, setLocations] = useState([]);
+  const [inventoryItems, setInventoryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({ code: "", name: "", address: "", description: "" });
@@ -18,21 +19,25 @@ const StoreLocations = () => {
     return code;
   };
 
-  const fetchLocations = useCallback(async () => {
+  const fetchLocationsAndStock = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await apiService.get("/api/store-locations");
-      setLocations(res?.locations || res || []);
+      const [resLoc, resInv] = await Promise.all([
+        apiService.get("/api/store-locations"),
+        apiService.get("/api/inventory?limit=500"), // Fetching up to 500 items to calculate quantities
+      ]);
+      setLocations(resLoc?.locations || resLoc || []);
+      setInventoryItems(resInv?.items || []);
     } catch {
-      toast.error("Failed to load store locations");
+      toast.error("Failed to load store locations data");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchLocations();
-  }, [fetchLocations]);
+    fetchLocationsAndStock();
+  }, [fetchLocationsAndStock]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,12 +47,29 @@ const StoreLocations = () => {
       toast.success("Store location added");
       setFormData({ code: "", name: "", address: "", description: "" });
       setIsModalOpen(false);
-      fetchLocations();
+      fetchLocationsAndStock();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to add location");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const getLocationStats = (locId) => {
+    let quantity = 0;
+    let uniqueItems = 0;
+    inventoryItems.forEach(item => {
+      // Check for stock specific to this location if multi-location is supported
+      const stockLevel = item.stockLevels?.find(sl => sl.locationId === locId);
+      if (stockLevel) {
+        if (stockLevel.quantity > 0) uniqueItems++;
+        quantity += stockLevel.quantity;
+      } else if (item.locationId === locId || item.location === locations.find(l => l._id === locId)?.name) {
+        if (item.quantity > 0) uniqueItems++;
+        quantity += item.quantity;
+      }
+    });
+    return { quantity, uniqueItems };
   };
 
   return (
@@ -72,8 +94,10 @@ const StoreLocations = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {locations.map(loc => (
-              <div key={loc._id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors shadow-sm">
+            {locations.map(loc => {
+              const stats = getLocationStats(loc._id);
+              return (
+              <div key={loc._id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors shadow-sm flex flex-col">
                 <div className="flex justify-between items-start mb-2">
                   <h4 className="font-bold text-gray-800 flex items-center gap-2">
                     <i className="fa-solid fa-warehouse text-gray-500"></i>
@@ -81,13 +105,25 @@ const StoreLocations = () => {
                   </h4>
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 uppercase">{loc.code}</span>
                 </div>
-                {loc.address && <p className="text-sm text-gray-500 mb-2 whitespace-pre-wrap"><i className="fa-solid fa-location-dot mr-1"></i>{loc.address}</p>}
-                {loc.description && <p className="text-xs text-gray-400"><i className="fa-solid fa-circle-info mr-1"></i>{loc.description}</p>}
+                {loc.address && <p className="text-sm text-gray-500 mb-2 whitespace-pre-wrap"><i className="fa-solid fa-location-dot mr-1 text-gray-400"></i>{loc.address}</p>}
+                {loc.description && <p className="text-xs text-gray-400 mb-2"><i className="fa-solid fa-circle-info mr-1 text-gray-300"></i>{loc.description}</p>}
+                
+                <div className="mt-auto pt-3 flex gap-2">
+                   <div className="flex-1 bg-green-50 border border-green-100 rounded p-2 text-center">
+                      <p className="text-xl font-bold text-green-700">{stats.quantity}</p>
+                      <p className="text-[10px] text-green-600 font-medium uppercase tracking-wide">Total Units</p>
+                   </div>
+                   <div className="flex-1 bg-blue-50 border border-blue-100 rounded p-2 text-center">
+                      <p className="text-xl font-bold text-blue-700">{stats.uniqueItems}</p>
+                      <p className="text-[10px] text-blue-600 font-medium uppercase tracking-wide">Unique Items</p>
+                   </div>
+                </div>
+
                 <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500">
                   <span>ID: <code className="bg-gray-50 px-1 rounded">{loc._id.toString().slice(-6)}</code></span>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         )}
       </div>
