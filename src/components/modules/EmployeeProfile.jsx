@@ -10,6 +10,7 @@ const EmployeeProfile = ({
   onBack,
   fromProfile = false,
   employeeData = null,
+  initialEditMode = false,
 }) => {
   const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
@@ -69,6 +70,10 @@ const EmployeeProfile = ({
         if (response && response.data) {
           setEmployee(response.data);
           setPreviewUrl(response.data.avatar || response.data.profilePicture);
+          if (initialEditMode) {
+            setEditingEmployee({ ...response.data });
+            setIsEditing(true);
+          }
         } else {
           setEmployee(null);
           toast.error("Employee data not found");
@@ -83,7 +88,7 @@ const EmployeeProfile = ({
     };
 
     fetchEmployeeData();
-  }, [employeeData, fromProfile, currentUser?._id]);
+  }, [employeeData, fromProfile, currentUser?._id, initialEditMode]);
 
   // Fetch activity log for employee
   useEffect(() => {
@@ -274,7 +279,7 @@ const EmployeeProfile = ({
           <Breadcrumb items={breadcrumbItems} />
 
           {/* Profile Header Section */}
-          <div className="mx-auto max-w-7xl px-4 mb-8">
+          <div className="mx-auto max-w-7xl px-4 mt-6 mb-8">
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg p-6 md:p-8">
               <div className="flex gap-4 items-center">
                 <div className="relative group">

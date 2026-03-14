@@ -83,6 +83,10 @@ const MaterialRequests = () => {
   const [showViewMentionDropdown, setShowViewMentionDropdown] = useState(false);
   const [viewMentionSearch, setViewMentionSearch] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
   const viewCommentRef = useRef(null);
 
   const quantityTypeOptions = [
@@ -201,6 +205,7 @@ const MaterialRequests = () => {
       return;
     }
 
+    setIsApproving(true);
     try {
       const response = await apiService.post(
         `/api/material-requests/${selectedRequest._id}/approve`,
@@ -247,6 +252,8 @@ const MaterialRequests = () => {
       fetchRequests();
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to approve request");
+    } finally {
+      setIsApproving(false);
     }
   };
 
@@ -256,6 +263,7 @@ const MaterialRequests = () => {
       return;
     }
 
+    setIsRejecting(true);
     try {
       await apiService.post(
         `/api/material-requests/${selectedRequest._id}/reject`,
@@ -270,6 +278,8 @@ const MaterialRequests = () => {
       fetchRequests();
     } catch {
       toast.error("Failed to reject request");
+    } finally {
+      setIsRejecting(false);
     }
   };
 
@@ -406,6 +416,7 @@ const MaterialRequests = () => {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const requestData = {
         ...formData,
@@ -476,6 +487,8 @@ const MaterialRequests = () => {
       fetchRequests();
     } catch {
       toast.error("Failed to submit request");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1539,10 +1552,13 @@ const MaterialRequests = () => {
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                   <button
                     type="button"
+                    disabled={isSavingDraft || isSubmitting}
                     onClick={async () => {
+                      setIsSavingDraft(true);
                       try {
                         if (!formData.requestType) {
                           toast.error("Please select a request type before saving a draft");
+                          setIsSavingDraft(false);
                           return;
                         }
 
@@ -1581,6 +1597,7 @@ const MaterialRequests = () => {
 
                         if (requestData.lineItems.length === 0) {
                           toast.error("Please add at least one valid line item with name, quantity, and type");
+                          setIsSavingDraft(false);
                           return;
                         }
 
@@ -1622,19 +1639,22 @@ const MaterialRequests = () => {
                         fetchRequests();
                       } catch {
                         toast.error("Failed to save draft");
+                      } finally {
+                        setIsSavingDraft(false);
                       }
                     }}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg border border-gray-300 bg-white text-[#111418] text-sm font-bold hover:bg-gray-50 transition-colors"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg border border-gray-300 bg-white text-[#111418] text-sm font-bold hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <i className="fa-solid fa-floppy-disk text-base"></i>
-                    Save Draft
+                    {isSavingDraft ? <i className="fa-solid fa-circle-notch fa-spin text-base"></i> : <i className="fa-solid fa-floppy-disk text-base"></i>}
+                    {isSavingDraft ? "Saving..." : "Save Draft"}
                   </button>
                   <button
                     type="submit"
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-2.5 rounded-lg bg-[#137fec] hover:bg-[#0d6efd] text-white text-sm font-bold shadow-md hover:shadow-lg transition-all"
+                    disabled={isSubmitting || isSavingDraft}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-2.5 rounded-lg bg-[#137fec] hover:bg-[#0d6efd] text-white text-sm font-bold shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <i className="fa-solid fa-paper-plane text-base"></i>
-                    {isEditMode ? "Update Request" : "Submit Request"}
+                    {isSubmitting ? <i className="fa-solid fa-circle-notch fa-spin text-base"></i> : <i className="fa-solid fa-paper-plane text-base"></i>}
+                    {isSubmitting ? "Submitting..." : isEditMode ? "Update Request" : "Submit Request"}
                   </button>
                 </div>
               </div>
@@ -1896,22 +1916,25 @@ const MaterialRequests = () => {
                 type="button"
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleRejectRequest}
-                disabled={!rejectionReason.trim()}
+                disabled={!rejectionReason.trim() || isRejecting || isApproving}
               >
-                <i className="fa-solid fa-xmark"></i>
-                Reject Request
+                {isRejecting ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-xmark"></i>}
+                {isRejecting ? "Rejecting..." : "Reject Request"}
               </button>
               <button
                 type="button"
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleApproveRequest}
                 disabled={
-                  selectedRequest.requestType !== "Internal Transfer" &&
-                  !selectedVendor
+                  (selectedRequest.requestType !== "Internal Transfer" && !selectedVendor) ||
+                  isApproving ||
+                  isRejecting
                 }
               >
-                <i className="fa-solid fa-check"></i>
-                {selectedRequest.requestType === "Internal Transfer"
+                {isApproving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-check"></i>}
+                {isApproving 
+                  ? "Approving..." 
+                  : selectedRequest.requestType === "Internal Transfer"
                   ? "Approve & Fulfill from Inventory"
                   : "Approve & Create PO"}
               </button>

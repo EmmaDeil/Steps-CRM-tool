@@ -4584,6 +4584,73 @@ async function start() {
     }
   });
 
+  // Bulk update employees (HR only)
+  app.put('/api/hr/employees/bulk-update', async (req, res) => {
+    try {
+      const { employeeIds, updates, updatedBy } = req.body;
+      const ObjectId = require('mongoose').Types.ObjectId;
+      
+      if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
+        return res.status(400).json({ success: false, message: 'Employee IDs array is required' });
+      }
+
+      if (!updates || Object.keys(updates).length === 0) {
+        return res.status(400).json({ success: false, message: 'Updates object is required' });
+      }
+
+      // Validate all IDs (ObjectIds or string IDs like 'EMP0001')
+      const validIds = employeeIds.filter(id => id && (typeof id === 'string' || ObjectId.isValid(id)));
+      if (validIds.length !== employeeIds.length) {
+        return res.status(400).json({ success: false, message: 'Some employee IDs are invalid' });
+      }
+
+      // Build update object (only allow HR fields)
+      const updateData = {};
+      if (updates.department !== undefined) updateData.department = updates.department;
+      if (updates.status !== undefined) updateData.status = updates.status;
+      if (updates.jobTitle !== undefined) updateData.jobTitle = updates.jobTitle;
+
+      // Update multiple employees
+      const objectIds = validIds.filter(id => ObjectId.isValid(id));
+      const result = await EmployeeModel.updateMany(
+        { 
+          $or: [
+            { _id: { $in: objectIds } },
+            { employeeId: { $in: validIds } }
+          ]
+        },
+        { $set: updateData }
+      );
+
+      // Create audit log for bulk update
+      const logAction = updates.status === 'Terminated' || updates.status === 'Inactive' ? 'User Deleted' : 'User Updated';
+      await AuditLogModel.create({
+        actor: {
+          userId: updatedBy || 'system',
+          userName: 'System',
+        },
+        action: logAction,
+        description: `Bulk updated ${validIds.length} employees`,
+        metadata: {
+          employeeCount: validIds.length,
+          employeeIds: validIds,
+          updates: updateData,
+        },
+        ipAddress: req.ip || '127.0.0.1',
+        userAgent: req.get('user-agent') || 'system',
+      });
+
+      res.json({ 
+        success: true, 
+        message: `${result.modifiedCount} employees updated successfully`,
+        modifiedCount: result.modifiedCount 
+      });
+    } catch (err) {
+      console.error('Error bulk updating employees:', err);
+      res.status(500).json({ success: false, message: 'Failed to bulk update employees', error: err.message });
+    }
+  });
+
   // Update employee by ID with avatar upload
   app.put('/api/hr/employees/:id', async (req, res) => {
     try {
@@ -4745,62 +4812,7 @@ async function start() {
     }
   });
 
-  // Bulk update employees (HR only)
-  app.put('/api/hr/employees/bulk-update', async (req, res) => {
-    try {
-      const { employeeIds, updates, updatedBy } = req.body;
-      const ObjectId = require('mongoose').Types.ObjectId;
-      
-      if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
-        return res.status(400).json({ success: false, message: 'Employee IDs array is required' });
-      }
 
-      if (!updates || Object.keys(updates).length === 0) {
-        return res.status(400).json({ success: false, message: 'Updates object is required' });
-      }
-
-      // Validate all IDs
-      const validIds = employeeIds.filter(id => ObjectId.isValid(id));
-      if (validIds.length !== employeeIds.length) {
-        return res.status(400).json({ success: false, message: 'Some employee IDs are invalid' });
-      }
-
-      // Build update object (only allow HR fields)
-      const updateData = {};
-      if (updates.department !== undefined) updateData.department = updates.department;
-      if (updates.status !== undefined) updateData.status = updates.status;
-      if (updates.jobTitle !== undefined) updateData.jobTitle = updates.jobTitle;
-
-      // Update multiple employees
-      const result = await EmployeeModel.updateMany(
-        { _id: { $in: validIds } },
-        { $set: updateData }
-      );
-
-      // Create audit log for bulk update
-      await AuditLogModel.create({
-        userId: updatedBy || 'system',
-        action: 'BULK_UPDATE_EMPLOYEES',
-        resource: 'Employee',
-        resourceId: validIds.join(','),
-        details: {
-          employeeCount: validIds.length,
-          updates: updateData,
-        },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      });
-
-      res.json({ 
-        success: true, 
-        message: `${result.modifiedCount} employees updated successfully`,
-        modifiedCount: result.modifiedCount 
-      });
-    } catch (err) {
-      console.error('Error bulk updating employees:', err);
-      res.status(500).json({ success: false, message: 'Failed to bulk update employees', error: err.message });
-    }
-  });
 
   // Delete employee by ID
   app.delete('/api/hr/employees/:id', async (req, res) => {

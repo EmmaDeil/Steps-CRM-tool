@@ -104,6 +104,9 @@ const HRM = () => {
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
   const failureToastShownRef = useRef(false);
+  const [startEmployeeInEditMode, setStartEmployeeInEditMode] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
 
   // Leave allocations state
   const [leaveAllocations, setLeaveAllocations] = useState([]);
@@ -328,7 +331,30 @@ const HRM = () => {
     }
   };
 
-  const employeeColumns = [
+  const toggleDropdown = (id, event) => {
+    if (activeDropdown === id) {
+      setActiveDropdown(null);
+    } else {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      });
+      setActiveDropdown(id);
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (activeDropdown && !event.target.closest('.dropdown-container')) {
+        setActiveDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeDropdown]);
+
+  const employeeColumns = useMemo(() => [
     {
       header: (
         <input
@@ -374,6 +400,7 @@ const HRM = () => {
           className="flex items-center gap-3"
           onClick={() => {
             setSelectedEmployee(e);
+            setStartEmployeeInEditMode(false);
             setShowEmployeeProfile(true);
           }}
         >
@@ -435,24 +462,47 @@ const HRM = () => {
     {
       header: "Action",
       accessorKey: "action",
-      className: "px-5 py-3 text-right",
+      className: "px-5 py-3 text-right w-16",
       cellClassName: "px-5 py-3 text-right",
       cell: (e) => (
-        <div onClick={(event) => event.stopPropagation()}>
-          <button
-            onClick={() => {
-              setSelectedEmployee(e);
-              setShowEmployeeProfile(true);
-            }}
-            className="text-slate-400 hover:text-primary transition-colors"
-            title="View Profile"
+        <details className="relative inline-block text-left group" onClick={(ev) => ev.stopPropagation()}>
+          <summary
+            className="list-none cursor-pointer inline-flex items-center justify-center w-8 h-8 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            title="Actions"
           >
-            <i className="fa-solid fa-ellipsis-vertical text-[16px]"></i>
-          </button>
-        </div>
+            <i className="fa-solid fa-ellipsis-vertical"></i>
+          </summary>
+          <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-50 overflow-hidden">
+            <button
+              onClick={() => {
+                setSelectedEmployee(e);
+                setStartEmployeeInEditMode(false);
+                setShowEmployeeProfile(true);
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              View Profile
+            </button>
+            <button
+              onClick={() => {
+                setSelectedEmployee(e);
+                setStartEmployeeInEditMode(true);
+                setShowEmployeeProfile(true);
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              Edit Employee
+            </button>
+          </div>
+        </details>
       ),
     },
-  ];
+  ], [selectedEmployees, employees]);
+
+  // The active dropdown employee derived from state
+  const activeDropdownEmployee = employees.find(
+    (e) => (e.id || e._id?.toString()) === activeDropdown
+  );
 
   // Department CRUD handlers
   const handleOpenDeptModal = (mode, dept = null) => {
@@ -548,8 +598,10 @@ const HRM = () => {
         onBack={() => {
           setShowEmployeeProfile(false);
           setSelectedEmployee(null);
+          setStartEmployeeInEditMode(false);
         }}
         employeeData={selectedEmployee}
+        initialEditMode={startEmployeeInEditMode}
       />
     );
   }
@@ -635,7 +687,7 @@ const HRM = () => {
               {/* Main Column */}
               <div className="lg:col-span-2 xl:col-span-3 flex flex-col gap-6">
                 {/* Employee Directory */}
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
                   <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
                     <h3 className="text-slate-900 dark:text-white font-bold text-lg flex items-center gap-2">
                       <i className="fa-solid fa-people-group text-slate-400"></i>
@@ -650,11 +702,19 @@ const HRM = () => {
                       {selectedEmployees.length > 0 && (
                         <>
                           <button
-                            onClick={() => setShowBulkEditModal(true)}
+                            onClick={() => {
+                              if (selectedEmployees.length === 1) {
+                                setSelectedEmployee(selectedEmployees[0]);
+                                setStartEmployeeInEditMode(true);
+                                setShowEmployeeProfile(true);
+                              } else {
+                                setShowBulkEditModal(true);
+                              }
+                            }}
                             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
                           >
                             <i className="fa-solid fa-pen-to-square mr-2"></i>
-                            Bulk Edit
+                            {selectedEmployees.length === 1 ? "Edit Employee" : "Bulk Edit"}
                           </button>
                           <button
                             onClick={() => setSelectedEmployees([])}
@@ -672,15 +732,29 @@ const HRM = () => {
                       </button>
                     </div>
                   </div>
-                  <div className="overflow-x-auto">
+                  {/* Search row */}
+                  <div className="px-5 py-2 border-b border-slate-100 dark:border-slate-700">
+                    <div className="relative">
+                      <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                      <input
+                        type="text"
+                        placeholder="Search employees..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full pl-9 pr-4 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto overflow-y-visible">
                     <DataTable
                       columns={employeeColumns}
                       data={employees}
                       isLoading={employeesLoading}
                       emptyMessage="No employees found."
-                      keyExtractor={(item) => item.id}
+                      keyExtractor={(item) => item.id || item._id?.toString()}
                     />
                   </div>
+
                 </div>
 
                 {/* Recruitment */}

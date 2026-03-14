@@ -10,6 +10,7 @@ const SkuItemManager = () => {
   const [editItem, setEditItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteModal, setDeleteModal] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState(() => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let code = "ITEM-";
@@ -110,6 +111,7 @@ const SkuItemManager = () => {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       if (editItem) {
         await apiService.put(`/api/sku-items/${editItem._id}`, formData);
@@ -122,6 +124,8 @@ const SkuItemManager = () => {
       fetchItems();
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to save item");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -506,9 +510,13 @@ const SkuItemManager = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm font-bold text-white bg-[#137fec] hover:bg-blue-600 rounded-lg transition-colors"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-bold text-white bg-[#137fec] hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {editItem ? "Update Item" : "Create Item"}
+                  {isSubmitting && <i className="fa-solid fa-circle-notch fa-spin"></i>}
+                  {isSubmitting 
+                    ? (editItem ? "Updating..." : "Creating...") 
+                    : (editItem ? "Update Item" : "Create Item")}
                 </button>
               </div>
             </form>

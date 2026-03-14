@@ -43,6 +43,9 @@ const Admin = () => {
   const [filterStatus, setFilterStatus] = useState("");
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [isSavingUser, setIsSavingUser] = useState(false);
+  const [modulesLoading, setModulesLoading] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
   const [showConfigureRolesModal, setShowConfigureRolesModal] = useState(false);
@@ -85,7 +88,7 @@ const Admin = () => {
       if (searchQuery) params.append("search", searchQuery);
 
       const response = await apiService.get(`/api/users?${params.toString()}`);
-      setUsers(response.data || []);
+      setUsers(Array.isArray(response) ? response : (response?.data || []));
       // Reset error flag on success
       if (errorToastShownRef.current["users"]) {
         errorToastShownRef.current["users"] = false;
@@ -280,12 +283,21 @@ const Admin = () => {
     }
   }, [searchQuery, filterRole, filterStatus, activeView, fetchUsers]);
 
+  // Fetch modules when Edit User modal opens
+  useEffect(() => {
+    if (showEditUserModal) {
+      fetchModules();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showEditUserModal]);
+
   const handleAddUser = async () => {
     if (!newUser.fullName || !newUser.email) {
       toast.error("Please fill in all required fields");
       return;
     }
 
+    setIsAddingUser(true);
     try {
       const userData = {
         fullName: newUser.fullName,
@@ -302,6 +314,8 @@ const Admin = () => {
     } catch (error) {
       console.error("Error adding user:", error);
       toast.error(error.response?.data?.message || "Failed to add user");
+    } finally {
+      setIsAddingUser(false);
     }
   };
 
@@ -385,7 +399,7 @@ const Admin = () => {
 
   const handleUpdateUser = async () => {
     if (!selectedUser) return;
-
+    setIsSavingUser(true);
     try {
       const updateData = {
         fullName: selectedUser.fullName,
@@ -406,7 +420,48 @@ const Admin = () => {
     } catch (error) {
       console.error("Error updating user:", error);
       toast.error("Failed to update user");
+    } finally {
+      setIsSavingUser(false);
     }
+  };
+
+  const fetchModules = () => {
+    setModulesLoading(true);
+    // Use a static list of the app's known modules
+    const staticModules = [
+      { id: "hrm", name: "HR Management", icon: "fa-people-group" },
+      { id: "inventory", name: "Inventory", icon: "fa-boxes-stacked" },
+      { id: "finance", name: "Finance & Accounting", icon: "fa-chart-line" },
+      { id: "procurement", name: "Procurement", icon: "fa-cart-shopping" },
+      { id: "facility", name: "Facility Management", icon: "fa-building" },
+      { id: "documents", name: "Document Management", icon: "fa-file-alt" },
+      { id: "security", name: "Security & Audit", icon: "fa-shield-halved" },
+      { id: "budget", name: "Budget", icon: "fa-wallet" },
+      { id: "assets", name: "Asset Management", icon: "fa-server" },
+      { id: "crm", name: "CRM", icon: "fa-handshake" },
+      { id: "admin", name: "Admin Panel", icon: "fa-gear" },
+    ];
+    setAvailableModules(staticModules);
+    setModulesLoading(false);
+  };
+
+  const toggleModuleAccess = (moduleId) => {
+    setSelectedUser((prev) => {
+      if (!prev) return prev;
+      const current = prev.selectedModules || [];
+      const has = current.includes(moduleId);
+      return {
+        ...prev,
+        selectedModules: has
+          ? current.filter((id) => id !== moduleId)
+          : [...current, moduleId],
+      };
+    });
+  };
+
+  const hasModuleAccess = (moduleId) => {
+    if (!selectedUser) return false;
+    return (selectedUser.selectedModules || []).includes(moduleId);
   };
 
   const handleDeleteUser = (userId) => {
@@ -574,8 +629,10 @@ const Admin = () => {
   };
 
   const getInitials = (name) => {
+    if (!name) return "U";
     return name
       .split(" ")
+      .filter(n => n.length > 0)
       .map((n) => n[0])
       .join("")
       .toUpperCase()
@@ -1265,9 +1322,11 @@ const Admin = () => {
                 </button>
                 <button
                   onClick={handleAddUser}
-                  className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                  disabled={isAddingUser}
+                  className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Add User
+                  {isAddingUser && <i className="fa-solid fa-circle-notch fa-spin"></i>}
+                  {isAddingUser ? "Adding User..." : "Add User"}
                 </button>
               </div>
             </div>
@@ -1375,9 +1434,14 @@ const Admin = () => {
                     Module Access Permissions
                   </label>
                   <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
-                    {availableModules.length === 0 ? (
+                    {modulesLoading ? (
+                      <div className="p-6 text-center text-gray-500">
+                        <i className="fa-solid fa-spinner fa-spin text-blue-500 text-xl mb-2 block"></i>
+                        <p className="text-sm">Loading modules...</p>
+                      </div>
+                    ) : availableModules.length === 0 ? (
                       <div className="p-4 text-center text-gray-500">
-                        <p>Loading modules...</p>
+                        <p className="text-sm">No modules available</p>
                       </div>
                     ) : (
                       <div className="divide-y divide-gray-200">
@@ -1525,9 +1589,17 @@ const Admin = () => {
                 </button>
                 <button
                   onClick={handleUpdateUser}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                  disabled={isSavingUser}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
                 >
-                  Save Changes
+                  {isSavingUser ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin text-sm"></i>
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
                 </button>
               </div>
             </div>

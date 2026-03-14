@@ -58,7 +58,7 @@ const Navbar = ({ user }) => {
       <div className="px-6 py-3 flex items-center justify-between">
         {/* Left: App Name */}
         <div className="flex items-center gap-3">
-          <img src={stepsLogo} alt="StepsERP Logo" className="w-8 h-8" />
+          <img src={stepsLogo} alt="Netlink ERP Logo" className="w-8 h-8" />
           <h1 className="text-lg font-bold text-[#111418]">NETLINK</h1>
         </div>
 
