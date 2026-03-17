@@ -6457,7 +6457,7 @@ async function start() {
   });
 
   const port = process.env.PORT;
-  if (!port) {
+  if (!isServerlessRuntime && !port) {
     console.error('PORT not set in .env file');
     process.exit(1);
   }
