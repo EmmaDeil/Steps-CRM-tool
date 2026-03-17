@@ -7,10 +7,14 @@ const SkuItemManager = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteModal, setDeleteModal] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [isCategorySubmitting, setIsCategorySubmitting] = useState(false);
   const [formData, setFormData] = useState(() => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let code = "ITEM-";
@@ -40,23 +44,7 @@ const SkuItemManager = () => {
     "Square Meters",
   ];
 
-  const categoryOptions = [
-    "Office Supplies",
-    "Computer Equipment",
-    "Furniture",
-    "Cleaning Supplies",
-    "Safety Equipment",
-    "Tools",
-    "Electrical Components",
-    "Plumbing Materials",
-    "Building Materials",
-    "Laboratory Equipment",
-    "Stationery",
-    "Packaging",
-    "Raw Materials",
-    "Spare Parts",
-    "Other",
-  ];
+  const categoryOptions = categories.map((cat) => cat.name).filter(Boolean);
 
   const fetchItems = async () => {
     try {
@@ -70,8 +58,18 @@ const SkuItemManager = () => {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const response = await apiService.get("/api/sku-categories");
+      setCategories(response.data || response || []);
+    } catch {
+      toast.error("Failed to load categories");
+    }
+  };
+
   useEffect(() => {
     fetchItems();
+    fetchCategories();
   }, []);
 
   const handleChange = (e) => {
@@ -94,7 +92,7 @@ const SkuItemManager = () => {
     setFormData({
       name: "",
       sku: generateSku(),
-      category: "",
+      category: categoryOptions[0] || "",
       description: "",
       unitPrice: "",
       unit: "Pieces",
@@ -102,6 +100,30 @@ const SkuItemManager = () => {
     });
     setEditItem(null);
     setShowForm(false);
+  };
+
+  const handleCreateCategory = async (e) => {
+    e.preventDefault();
+    const name = newCategoryName.trim();
+    if (!name) {
+      toast.error("Category name is required");
+      return;
+    }
+
+    setIsCategorySubmitting(true);
+    try {
+      const created = await apiService.post("/api/sku-categories", { name });
+      const createdName = created?.name || name;
+      toast.success("Category created");
+      setShowCategoryForm(false);
+      setNewCategoryName("");
+      await fetchCategories();
+      setFormData((prev) => ({ ...prev, category: createdName }));
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to create category");
+    } finally {
+      setIsCategorySubmitting(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -159,22 +181,22 @@ const SkuItemManager = () => {
     try {
       const canvas = document.createElement("canvas");
       bwipjs.toCanvas(canvas, {
-        bcid: "code128",       // Barcode type
-        text: item.sku,        // Text to encode
-        scale: 3,              // 3x scaling factor
-        height: 12,            // Bar height, in millimeters
-        includetext: true,     // Show human-readable text
-        textxalign: "center",  // Always good to set this
+        bcid: "code128", // Barcode type
+        text: item.sku, // Text to encode
+        scale: 3, // 3x scaling factor
+        height: 12, // Bar height, in millimeters
+        includetext: true, // Show human-readable text
+        textxalign: "center", // Always good to set this
       });
-      
+
       const dataUrl = canvas.toDataURL("image/png");
-      
+
       const printWindow = window.open("", "_blank", "width=600,height=400");
       if (!printWindow) {
         toast.error("Please allow popups to print labels");
         return;
       }
-      
+
       printWindow.document.write(`
         <!DOCTYPE html>
         <html>
@@ -235,16 +257,25 @@ const SkuItemManager = () => {
             Manage items available for material requests
           </p>
         </div>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowForm(true);
-          }}
-          className="px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 font-medium text-sm"
-        >
-          <i className="fa-solid fa-plus"></i>
-          Add New Item
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowCategoryForm(true)}
+            className="px-4 py-2 bg-white text-[#137fec] border border-[#137fec] rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-2 font-medium text-sm"
+          >
+            <i className="fa-solid fa-tags"></i>
+            Create Category
+          </button>
+          <button
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+            className="px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 font-medium text-sm"
+          >
+            <i className="fa-solid fa-plus"></i>
+            Add New Item
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -513,10 +544,74 @@ const SkuItemManager = () => {
                   disabled={isSubmitting}
                   className="px-4 py-2 text-sm font-bold text-white bg-[#137fec] hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {isSubmitting && <i className="fa-solid fa-circle-notch fa-spin"></i>}
-                  {isSubmitting 
-                    ? (editItem ? "Updating..." : "Creating...") 
-                    : (editItem ? "Update Item" : "Create Item")}
+                  {isSubmitting && (
+                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                  )}
+                  {isSubmitting
+                    ? editItem
+                      ? "Updating..."
+                      : "Creating..."
+                    : editItem
+                      ? "Update Item"
+                      : "Create Item"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showCategoryForm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#111418]">
+                Create Category
+              </h3>
+              <button
+                onClick={() => {
+                  setShowCategoryForm(false);
+                  setNewCategoryName("");
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <i className="fa-solid fa-times text-lg"></i>
+              </button>
+            </div>
+            <form onSubmit={handleCreateCategory} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Category Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="e.g. Medical Supplies"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] outline-none"
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCategoryForm(false);
+                    setNewCategoryName("");
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCategorySubmitting}
+                  className="px-4 py-2 text-sm font-bold text-white bg-[#137fec] hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isCategorySubmitting && (
+                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                  )}
+                  Create
                 </button>
               </div>
             </form>

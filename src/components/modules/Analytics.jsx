@@ -70,6 +70,9 @@ const Analytics = () => {
 
   const [reportTypes, setReportTypes] = useState([]);
   const [loadingReportTypes, setLoadingReportTypes] = useState(true);
+  const [inventorySummary, setInventorySummary] = useState(null);
+  const [expiringInventory, setExpiringInventory] = useState([]);
+  const [loadingInventorySummary, setLoadingInventorySummary] = useState(true);
 
   // --- Dynamic Datasets for Charts ---
   const [datasets, setDatasets] = useState({
@@ -142,6 +145,27 @@ const Analytics = () => {
     };
     fetchReportTypes();
   }, [location.state?.defaultReport]);
+
+  useEffect(() => {
+    const fetchInventoryAnalytics = async () => {
+      try {
+        setLoadingInventorySummary(true);
+        const [summary, expiring] = await Promise.all([
+          apiService.get("/api/inventory/summary?days=30"),
+          apiService.get("/api/inventory/alerts/expiring?days=30"),
+        ]);
+
+        setInventorySummary(summary || null);
+        setExpiringInventory(expiring?.items || []);
+      } catch (err) {
+        console.error("Failed to load inventory summary data", err);
+      } finally {
+        setLoadingInventorySummary(false);
+      }
+    };
+
+    fetchInventoryAnalytics();
+  }, []);
 
   // Fetch reports from API
   useEffect(() => {
@@ -634,6 +658,84 @@ const Analytics = () => {
           </div>
         </div>
 
+        {/* Inventory Summary Cards (moved from Inventory Management) */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-[#111418]">
+              Inventory Overview
+            </h3>
+            <span className="text-xs text-gray-500">
+              Last 30-day expiry window
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            {[
+              {
+                label: "Total Items",
+                value: inventorySummary?.totalItems ?? 0,
+                icon: "fa-boxes-stacked",
+                color: "text-blue-600 bg-blue-100",
+              },
+              {
+                label: "Total Units",
+                value: inventorySummary?.totalUnits ?? 0,
+                icon: "fa-layer-group",
+                color: "text-green-600 bg-green-100",
+              },
+              {
+                label: "Low Stock Alerts",
+                value: inventorySummary?.lowStock ?? 0,
+                icon: "fa-triangle-exclamation",
+                color: "text-amber-600 bg-amber-100",
+              },
+              {
+                label: "Expiring Soon",
+                value: inventorySummary?.expiringSoon ?? 0,
+                icon: "fa-hourglass-end",
+                color: "text-red-600 bg-red-100",
+              },
+            ].map((card) => (
+              <div
+                key={card.label}
+                className="border border-gray-200 rounded-lg p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">{card.label}</p>
+                    <p className="text-2xl font-bold text-[#111418] mt-1">
+                      {loadingInventorySummary ? "..." : card.value}
+                    </p>
+                  </div>
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center ${card.color}`}
+                  >
+                    <i className={`fa-solid ${card.icon}`}></i>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {expiringInventory.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm font-semibold text-red-700 mb-2">
+                <i className="fa-solid fa-bell mr-2"></i>
+                Expiry Notification: {expiringInventory.length} item(s) have
+                stock expiring within 30 days.
+              </p>
+              <div className="space-y-1">
+                {expiringInventory.slice(0, 3).map((item) => (
+                  <p key={item._id} className="text-sm text-red-700">
+                    {item.name} ({item.itemId}) -{" "}
+                    {new Date(item.nextExpiry).toLocaleDateString()}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Dynamic Recharts Visualization */}
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6 shadow-sm">
           <h3 className="text-xl font-bold text-[#111418] mb-4">
@@ -994,8 +1096,11 @@ const Analytics = () => {
                     {loadingReportTypes ? (
                       <option>Loading report types...</option>
                     ) : (
-                      reportTypes.map((type) => (
-                        <option key={type.value} value={type.value}>
+                      reportTypes.map((type, idx) => (
+                        <option
+                          key={`${type.value || type.label || "report"}-${idx}`}
+                          value={type.value}
+                        >
                           {type.label}
                         </option>
                       ))
@@ -1040,8 +1145,11 @@ const Analytics = () => {
                     {departmentsLoading ? (
                       <option disabled>Loading departments...</option>
                     ) : (
-                      departments.map((dept) => (
-                        <option key={dept.id} value={dept.name}>
+                      departments.map((dept, idx) => (
+                        <option
+                          key={dept._id || dept.id || `${dept.name}-${idx}`}
+                          value={dept.name}
+                        >
                           {dept.name}
                         </option>
                       ))

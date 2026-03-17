@@ -9,6 +9,20 @@ const StockLevelSchema = new mongoose.Schema({
   reorderPoint: { type: Number, default: 20, min: 0 },
 }, { _id: false });
 
+/** FIFO batch entry for stock issuance and expiry tracking */
+const InventoryBatchSchema = new mongoose.Schema({
+  batchId: { type: String, required: true },
+  quantity: { type: Number, default: 0, min: 0 },
+  receivedDate: { type: Date, default: Date.now },
+  lotNumber: { type: String, default: '' },
+  refNumber: { type: String, default: '' },
+  productionDate: { type: Date, default: null },
+  manufacturingDate: { type: Date, default: null },
+  expiryDate: { type: Date, default: null },
+  locationId: { type: mongoose.Schema.Types.ObjectId, ref: 'StoreLocation', default: null },
+  locationName: { type: String, default: '' },
+}, { _id: false });
+
 const InventoryItemSchema = new mongoose.Schema(
   {
     itemId:   { type: String, required: true, unique: true, index: true },
@@ -16,17 +30,23 @@ const InventoryItemSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      enum: ['Electronics', 'Furniture', 'Supplies', 'Network'],
+      trim: true,
     },
     description: { type: String, default: '' },
     unit:        { type: String, default: 'pcs' },
     unitPrice:   { type: Number, default: 0, min: 0 },
+    lotNumber: { type: String, default: '' },
+    refNumber: { type: String, default: '' },
+    productionDate: { type: Date, default: null },
+    manufacturingDate: { type: Date, default: null },
+    expiryDate: { type: Date, default: null },
 
     /**
      * Per-location stock breakdown. The source of truth for multi-location tracking.
      * Use stockLevels for display; use top-level fields for legacy/aggregate queries.
      */
     stockLevels: { type: [StockLevelSchema], default: [] },
+    batches: { type: [InventoryBatchSchema], default: [] },
 
     // ── Aggregate / legacy fields (kept for backwards compatibility) ──────────
     /** Sum of quantity across all stockLevels. Updated on every transfer/restock. */

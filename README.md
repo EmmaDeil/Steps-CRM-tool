@@ -117,6 +117,8 @@ Create `.env` in `server/`:
 MONGODB_URI=mongodb://localhost:27017/steps-crm
 JWT_SECRET=your_jwt_secret
 PORT=4000
+INVENTORY_EXPIRY_ALERT_DAYS=30
+INVENTORY_ALERT_EMAILS=ops@company.com,warehouse@company.com
 ```
 
 5. **Start the server**

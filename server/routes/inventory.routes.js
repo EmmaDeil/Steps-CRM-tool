@@ -5,6 +5,12 @@ const mongoose = require('mongoose');
 const InventoryItem = require('../models/InventoryItem');
 const StoreLocation = require('../models/StoreLocation');
 const { authMiddleware } = require('../middleware/auth');
+const {
+  addBatch,
+  consumeBatchesFIFO,
+  parseOptionalDate,
+  syncItemQuantityAndDates,
+} = require('../utils/inventoryBatchUtils');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -37,9 +43,8 @@ function validateInventoryBody(body, requireAllFields = true) {
   }
 
   if (requireAllFields || body.category !== undefined) {
-    const allowed = ['Electronics', 'Furniture', 'Supplies', 'Network'];
-    if (!body.category || !allowed.includes(body.category)) {
-      errors.push(`category must be one of: ${allowed.join(', ')}`);
+    if (!body.category || typeof body.category !== 'string' || !body.category.trim()) {
+      errors.push('category is required and must be a non-empty string');
     }
   }
 
@@ -69,6 +74,15 @@ function validateInventoryBody(body, requireAllFields = true) {
       errors.push('reorderPoint must be a non-negative integer');
     }
   }
+
+  ['productionDate', 'manufacturingDate', 'expiryDate'].forEach((field) => {
+    if (body[field] !== undefined && body[field] !== null && body[field] !== '') {
+      const dt = new Date(body[field]);
+      if (Number.isNaN(dt.getTime())) {
+        errors.push(`${field} must be a valid date`);
+      }
+    }
+  });
 
   return errors;
 }
@@ -166,6 +180,90 @@ router.get('/alerts/low-stock', authMiddleware, async (req, res) => {
   }
 });
 
+// GET expiring inventory batches/items
+router.get('/alerts/expiring', authMiddleware, async (req, res) => {
+  try {
+    const days = Math.max(1, parseInt(req.query.days || 30, 10));
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
+
+    const items = await InventoryItem.find({ isDeleted: false });
+    const expiring = [];
+
+    items.forEach((item) => {
+      const batches = Array.isArray(item.batches) ? item.batches : [];
+      const activeBatches = batches.filter((b) => Number(b.quantity || 0) > 0 && b.expiryDate);
+      const matched = activeBatches.filter((b) => {
+        const expiry = new Date(b.expiryDate);
+        return expiry >= now && expiry <= cutoff;
+      });
+
+      if (matched.length > 0) {
+        const nextExpiry = matched
+          .map((b) => new Date(b.expiryDate))
+          .sort((a, b) => a - b)[0];
+        expiring.push({
+          _id: item._id,
+          itemId: item.itemId,
+          name: item.name,
+          category: item.category,
+          quantity: item.quantity,
+          nextExpiry,
+          batches: matched,
+        });
+      }
+    });
+
+    expiring.sort((a, b) => new Date(a.nextExpiry) - new Date(b.nextExpiry));
+    res.json({ count: expiring.length, days, items: expiring });
+  } catch (err) {
+    console.error('Error fetching expiring inventory alerts:', err);
+    res.status(500).json({ message: 'Failed to fetch expiring inventory alerts' });
+  }
+});
+
+// GET inventory summary for analytics dashboards
+router.get('/summary', authMiddleware, async (req, res) => {
+  try {
+    const days = Math.max(1, parseInt(req.query.days || 30, 10));
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
+
+    const items = await InventoryItem.find({ isDeleted: false }).select('quantity reorderPoint batches');
+    let totalUnits = 0;
+    let lowStock = 0;
+    let outOfStock = 0;
+    let expiringSoon = 0;
+
+    items.forEach((item) => {
+      totalUnits += Number(item.quantity || 0);
+      if (Number(item.quantity || 0) <= 0) outOfStock += 1;
+      else if (Number(item.quantity || 0) <= Number(item.reorderPoint || 20)) lowStock += 1;
+
+      const batches = Array.isArray(item.batches) ? item.batches : [];
+      const hasExpiringBatch = batches.some((batch) => {
+        if (Number(batch.quantity || 0) <= 0 || !batch.expiryDate) return false;
+        const expiry = new Date(batch.expiryDate);
+        return expiry >= now && expiry <= cutoff;
+      });
+
+      if (hasExpiringBatch) expiringSoon += 1;
+    });
+
+    res.json({
+      totalItems: items.length,
+      totalUnits,
+      lowStock,
+      outOfStock,
+      expiringSoon,
+      expiryWindowDays: days,
+    });
+  } catch (err) {
+    console.error('Error fetching inventory summary:', err);
+    res.status(500).json({ message: 'Failed to fetch inventory summary' });
+  }
+});
+
 // GET single inventory item
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
@@ -202,18 +300,38 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     const newItemId = await generateNextId();
+    const manufacturingDate = parseOptionalDate(req.body.manufacturingDate || req.body.productionDate);
 
     const newItem = await InventoryItem.create({
       itemId:       newItemId,
       name:         req.body.name.trim(),
       category:     req.body.category,
+      description:  req.body.description || '',
+      unit:         req.body.unit || 'pcs',
       quantity:     Number(req.body.quantity),
       maxStock:     Number(req.body.maxStock),
       reorderPoint: req.body.reorderPoint !== undefined ? Number(req.body.reorderPoint) : Math.floor(Number(req.body.maxStock) * 0.2),
       location:     locName,
       stockLevels,
+      lotNumber: typeof req.body.lotNumber === 'string' ? req.body.lotNumber.trim() : '',
+      refNumber: typeof req.body.refNumber === 'string' ? req.body.refNumber.trim() : '',
+      productionDate: manufacturingDate,
+      manufacturingDate,
+      expiryDate: parseOptionalDate(req.body.expiryDate),
       createdBy:    req.user?._id,
     });
+
+    addBatch(newItem, {
+      quantity: Number(req.body.quantity) || 0,
+      lotNumber: req.body.lotNumber,
+      refNumber: req.body.refNumber,
+      manufacturingDate: req.body.manufacturingDate || req.body.productionDate,
+      expiryDate: req.body.expiryDate,
+      locationId: storeLoc ? storeLoc._id : null,
+      locationName: locName,
+      receivedDate: new Date(),
+    });
+    await newItem.save();
 
     // Log initial stock movement
     await logMovement(newItem._id, 'initial', newItem.quantity, 0, req.user?._id, 'Item created');
@@ -238,13 +356,27 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
     // Build a safe update object — never allow direct quantity change here
     // (quantity changes must go through /restock or /adjust)
-    const allowedFields = ['name', 'category', 'maxStock', 'reorderPoint', 'location', 'description', 'unit'];
+    const allowedFields = ['name', 'category', 'maxStock', 'reorderPoint', 'location', 'description', 'unit', 'lotNumber', 'refNumber', 'productionDate', 'manufacturingDate', 'expiryDate'];
     const updates = {};
     allowedFields.forEach(f => {
       if (req.body[f] !== undefined) {
-        updates[f] = typeof req.body[f] === 'string' ? req.body[f].trim() : Number(req.body[f]);
+        if (['maxStock', 'reorderPoint'].includes(f)) {
+          updates[f] = Number(req.body[f]);
+        } else if (['productionDate', 'manufacturingDate', 'expiryDate'].includes(f)) {
+          updates[f] = parseOptionalDate(req.body[f]);
+        } else {
+          updates[f] = typeof req.body[f] === 'string' ? req.body[f].trim() : req.body[f];
+        }
       }
     });
+
+    // Keep production/manufacturing dates aligned as a single concept.
+    if (req.body.manufacturingDate !== undefined || req.body.productionDate !== undefined) {
+      const manufacturingDate = parseOptionalDate(req.body.manufacturingDate || req.body.productionDate);
+      updates.manufacturingDate = manufacturingDate;
+      updates.productionDate = manufacturingDate;
+    }
+
     updates.lastUpdated = new Date();
 
     let updated = await InventoryItem.findOneAndUpdate(
@@ -303,6 +435,24 @@ router.post('/:id/restock', authMiddleware, async (req, res) => {
 
     item.quantity    = newQty;
     item.lastUpdated = new Date();
+
+    const restockLocationName = req.body.locationName || item.location;
+    let locationId = null;
+    if (restockLocationName) {
+      const loc = await StoreLocation.findOne({ name: new RegExp(`^${String(restockLocationName).trim()}$`, 'i') }).select('_id');
+      locationId = loc?._id || null;
+    }
+    addBatch(item, {
+      quantity: addQty,
+      lotNumber: req.body.lotNumber,
+      refNumber: req.body.refNumber,
+      manufacturingDate: req.body.manufacturingDate || req.body.productionDate,
+      expiryDate: req.body.expiryDate,
+      receivedDate: new Date(),
+      locationId,
+      locationName: restockLocationName || '',
+    });
+    syncItemQuantityAndDates(item);
     await item.save();
 
     await logMovement(item._id, 'restock', actualAdded, previousQty, req.user?._id,
@@ -334,10 +484,18 @@ router.post('/:id/adjust', authMiddleware, async (req, res) => {
     if (!item) return res.status(404).json({ message: 'Item not found' });
 
     const previousQty = item.quantity;
-    const newQty = Math.max(0, item.quantity + delta);
+    if (delta < 0) {
+      const consumeResult = consumeBatchesFIFO(item, Math.abs(delta));
+      if (consumeResult.remaining > 0) {
+        return res.status(400).json({
+          message: `Insufficient stock for adjustment. Available: ${consumeResult.consumedQty}, requested: ${Math.abs(delta)}`,
+        });
+      }
+    } else {
+      addBatch(item, { quantity: delta, receivedDate: new Date(), locationName: item.location });
+    }
 
-    item.quantity    = newQty;
-    item.lastUpdated = new Date();
+    const newQty = item.quantity;
     await item.save();
 
     await logMovement(item._id, 'adjustment', delta, previousQty, req.user?._id, reason);

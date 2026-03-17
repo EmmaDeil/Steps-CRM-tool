@@ -11,6 +11,7 @@ const {
   generateWaybillNumber,
   buildWaybillHTML,
 } = require('../utils/stockTransferHelpers');
+const { consumeBatchesFIFO, addBatch, syncItemQuantityAndDates } = require('../utils/inventoryBatchUtils');
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -140,10 +141,35 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
       }
 
       const prevQty = item.quantity;
+
+      const consumeResult = consumeBatchesFIFO(item, li.requestedQty, {
+        locationName: transfer.fromLocationName,
+      });
+      if (consumeResult.remaining > 0) {
+        return res.status(400).json({
+          message: `Insufficient FIFO stock batches for "${item.name}" at ${transfer.fromLocationName}.`,
+        });
+      }
+
+      consumeResult.consumed.forEach((batch) => {
+        addBatch(item, {
+          quantity: batch.quantity,
+          lotNumber: batch.lotNumber,
+          refNumber: batch.refNumber,
+          manufacturingDate: batch.manufacturingDate || batch.productionDate,
+          expiryDate: batch.expiryDate,
+          receivedDate: batch.receivedDate || new Date(),
+          locationId: transfer.toLocationId,
+          locationName: transfer.toLocationName,
+        });
+      });
+
       // Deduct from source location
       updateStockLevel(item, transfer.fromLocationId, transfer.fromLocationName, -li.requestedQty);
       // Add to destination location
       updateStockLevel(item, transfer.toLocationId, transfer.toLocationName, +li.requestedQty);
+
+      syncItemQuantityAndDates(item);
 
       await item.save();
       li.transferredQty = li.requestedQty;

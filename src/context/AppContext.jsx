@@ -1,6 +1,7 @@
-import React, { createContext, useState, useEffect } from "react";
+import React, { createContext, useState, useEffect, useCallback } from "react";
 import PropTypes from "prop-types";
 import { useAuth } from "./useAuth";
+import { apiService } from "../services/api";
 
 const AppContext = createContext();
 
@@ -48,11 +49,46 @@ export const AppProvider = ({ children }) => {
   // (per project requirement that the currently-signed-in user has full admin rights).
   const { user, isAuthenticated, loading } = useAuth();
 
+  const fetchNotifications = useCallback(async () => {
+    if (!isAuthenticated) {
+      setNotifications([]);
+      return;
+    }
+
+    try {
+      const response = await apiService.get("/api/notifications?limit=50");
+      const list = Array.isArray(response?.notifications)
+        ? response.notifications.map((n) => ({
+            id: n._id,
+            title: n.title,
+            message: n.message,
+            type: n.type || "info",
+            timestamp: n.createdAt || new Date().toISOString(),
+            read: !!n.read,
+            category: n.category || "general",
+            metadata: n.metadata || {},
+          }))
+        : [];
+      setNotifications(list);
+    } catch {
+      // Keep UI usable even when notifications API is temporarily unavailable.
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
       setUserRole("admin");
     }
   }, [loading, isAuthenticated, user]);
+
+  useEffect(() => {
+    if (loading) return;
+    fetchNotifications();
+
+    if (!isAuthenticated) return;
+    const intervalId = setInterval(fetchNotifications, 60000);
+    return () => clearInterval(intervalId);
+  }, [loading, isAuthenticated, fetchNotifications]);
 
   // Persist retirement header values
   useEffect(() => {
@@ -62,14 +98,14 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem(
       "retirement.previousClosingBalance",
-      previousClosingBalance === "" ? "" : String(previousClosingBalance)
+      previousClosingBalance === "" ? "" : String(previousClosingBalance),
     );
   }, [previousClosingBalance]);
 
   useEffect(() => {
     localStorage.setItem(
       "retirement.inflowAmount",
-      inflowAmount === "" ? "" : String(inflowAmount)
+      inflowAmount === "" ? "" : String(inflowAmount),
     );
   }, [inflowAmount]);
 
@@ -93,13 +129,23 @@ export const AppProvider = ({ children }) => {
   // Mark notification as read
   const markAsRead = (id) => {
     setNotifications((prev) =>
-      prev.map((notif) => (notif.id === id ? { ...notif, read: true } : notif))
+      prev.map((notif) => (notif.id === id ? { ...notif, read: true } : notif)),
     );
+
+    if (!isAuthenticated || !id) return;
+    apiService.patch(`/api/notifications/${id}/read`).catch(() => {
+      // No-op: optimistic UI should not break on transient network issues.
+    });
   };
 
   // Clear all notifications
   const clearNotifications = () => {
     setNotifications([]);
+
+    if (!isAuthenticated) return;
+    apiService.post("/api/notifications/clear-all").catch(() => {
+      // No-op: local clear is still useful when offline.
+    });
   };
 
   // Check module access based on role

@@ -433,42 +433,38 @@ const HRM = () => {
       {
         header: "Action",
         accessorKey: "action",
-        className: "px-5 py-3 text-right w-16",
-        cellClassName: "px-5 py-3 text-right relative overflow-visible",
+        className: "px-5 py-3 text-right w-28",
+        cellClassName: "px-5 py-3 text-right",
         cell: (e) => (
-          <details
-            className="relative inline-block text-left group dropdown-container"
+          <div
+            className="inline-flex items-center gap-1"
             onClick={(ev) => ev.stopPropagation()}
           >
-            <summary
-              className="list-none cursor-pointer inline-flex items-center justify-center w-8 h-8 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-              title="Actions"
+            <button
+              onClick={() => {
+                setSelectedEmployee(e);
+                setStartEmployeeInEditMode(false);
+                setShowEmployeeProfile(true);
+              }}
+              className="inline-flex items-center justify-center w-8 h-8 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              title="View Profile"
+              aria-label="View Profile"
             >
-              <i className="fa-solid fa-ellipsis-vertical"></i>
-            </summary>
-            <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-50 overflow-hidden">
-              <button
-                onClick={() => {
-                  setSelectedEmployee(e);
-                  setStartEmployeeInEditMode(false);
-                  setShowEmployeeProfile(true);
-                }}
-                className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-              >
-                View Profile
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedEmployee(e);
-                  setStartEmployeeInEditMode(true);
-                  setShowEmployeeProfile(true);
-                }}
-                className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-              >
-                Edit Employee
-              </button>
-            </div>
-          </details>
+              <i className="fa-solid fa-eye"></i>
+            </button>
+            <button
+              onClick={() => {
+                setSelectedEmployee(e);
+                setStartEmployeeInEditMode(true);
+                setShowEmployeeProfile(true);
+              }}
+              className="inline-flex items-center justify-center w-8 h-8 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              title="Edit Employee"
+              aria-label="Edit Employee"
+            >
+              <i className="fa-solid fa-pen-to-square"></i>
+            </button>
+          </div>
         ),
       },
     ],

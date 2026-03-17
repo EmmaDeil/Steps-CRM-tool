@@ -5,6 +5,7 @@ const InventoryIssue = require('../models/InventoryIssue');
 const InventoryItem  = require('../models/InventoryItem');
 const Invoice        = require('../models/Invoice');
 const { authMiddleware } = require('../middleware/auth');
+const { consumeBatchesFIFO, syncItemQuantityAndDates } = require('../utils/inventoryBatchUtils');
 
 // ── GET all issues (paginated, filterable) ──────────────────────────────────
 router.get('/', authMiddleware, async (req, res) => {
@@ -61,11 +62,12 @@ router.post('/', authMiddleware, async (req, res) => {
     for (const li of lineItems) {
       const item = await InventoryItem.findById(li.inventoryItemId);
       if (!item) return res.status(404).json({ message: `Item ${li.inventoryItemId} not found` });
-      if (item.quantity < li.qty) {
-        return res.status(400).json({ message: `Insufficient stock for "${item.name}": ${item.quantity} available, ${li.qty} requested` });
+      const availableBefore = item.quantity;
+      const consumeResult = consumeBatchesFIFO(item, li.qty);
+      if (consumeResult.remaining > 0) {
+        return res.status(400).json({ message: `Insufficient stock for "${item.name}": ${availableBefore} available, ${li.qty} requested` });
       }
-      item.quantity = Math.max(0, item.quantity - li.qty);
-      item.lastUpdated = new Date();
+      syncItemQuantityAndDates(item);
       await item.save();
 
       const unitPrice  = li.unitPrice ?? item.unitPrice ?? 0;

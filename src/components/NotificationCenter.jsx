@@ -77,11 +77,13 @@ const NotificationCenter = () => {
                 <div className="divide-y divide-gray-200">
                   {notifications.map((notification) => (
                     <div
-                      key={notification.id}
+                      key={notification.id || notification._id}
                       className={`p-4 cursor-pointer transition-colors hover:bg-gray-50 ${
                         !notification.read ? "bg-blue-50" : "bg-white"
                       }`}
-                      onClick={() => handleMarkAsRead(notification.id)}
+                      onClick={() =>
+                        handleMarkAsRead(notification.id || notification._id)
+                      }
                     >
                       <div className="flex justify-between items-start gap-2 mb-1">
                         <h6 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
@@ -90,7 +92,7 @@ const NotificationCenter = () => {
                         </h6>
                         <small className="text-xs text-gray-500 whitespace-nowrap">
                           {new Date(
-                            notification.timestamp
+                            notification.timestamp || notification.createdAt,
                           ).toLocaleTimeString()}
                         </small>
                       </div>

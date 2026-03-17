@@ -525,6 +525,85 @@ async function sendSignatureRequestEmail(documentData, recipientEmail, recipient
   }
 }
 
+// Send inventory expiry summary email
+async function sendInventoryExpiryAlertEmail(recipientEmails, alertData) {
+  if (!recipientEmails || recipientEmails.length === 0) {
+    throw new Error('At least one recipient email is required');
+  }
+
+  const safeItems = Array.isArray(alertData?.items) ? alertData.items : [];
+  const rows = safeItems
+    .slice(0, 25)
+    .map((item) => {
+      const expiry = item.nextExpiry ? new Date(item.nextExpiry).toLocaleDateString() : 'N/A';
+      const batches = Array.isArray(item.batches) ? item.batches.length : 0;
+      return `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${item.name || 'Unknown'}</td>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${item.itemId || 'N/A'}</td>
+          <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: right;">${item.quantity || 0}</td>
+          <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: center;">${batches}</td>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${expiry}</td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  const subject = `Inventory Expiry Alert: ${safeItems.length} item(s) expiring within ${alertData.days || 30} days`;
+  const viewLink = `${frontendUrl}/home`;
+
+  const mailOptions = {
+    from: emailUser,
+    to: recipientEmails.join(', '),
+    subject,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 760px; margin: 0 auto;">
+        <h2 style="color: #b91c1c;">Inventory Expiry Alert</h2>
+        <p>
+          ${safeItems.length} inventory item(s) have stock batches expiring within
+          <strong>${alertData.days || 30} days</strong>.
+        </p>
+
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+          <thead>
+            <tr style="background: #fee2e2; color: #7f1d1d;">
+              <th style="padding: 10px; border: 1px solid #fecaca; text-align: left;">Item</th>
+              <th style="padding: 10px; border: 1px solid #fecaca; text-align: left;">SKU</th>
+              <th style="padding: 10px; border: 1px solid #fecaca; text-align: right;">Qty</th>
+              <th style="padding: 10px; border: 1px solid #fecaca; text-align: center;">Batches</th>
+              <th style="padding: 10px; border: 1px solid #fecaca; text-align: left;">Next Expiry</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows || '<tr><td colspan="5" style="padding: 12px; border: 1px solid #e5e7eb;">No expiring items.</td></tr>'}
+          </tbody>
+        </table>
+
+        <p style="margin-top: 12px;">
+          <a href="${viewLink}" style="display: inline-block; background: #2563eb; color: #fff; padding: 10px 18px; text-decoration: none; border-radius: 6px;">
+            Open Dashboard
+          </a>
+        </p>
+        <p style="color: #6b7280; font-size: 12px;">Automated inventory monitoring notification.</p>
+      </div>
+    `,
+  };
+
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📧 Inventory expiry email would be sent to:', recipientEmails);
+      console.log('Expiring items:', safeItems.length);
+      return { success: true, message: 'Email logged (dev mode)' };
+    }
+
+    await transporter.sendMail(mailOptions);
+    return { success: true, message: 'Inventory expiry alert email sent successfully' };
+  } catch (error) {
+    console.error('Error sending inventory expiry alert email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendApprovalEmail,
   sendPOReviewEmail,
@@ -532,5 +611,6 @@ module.exports = {
   sendSecurityAlertEmail,
   sendNotificationRuleEmail,
   sendSignatureRequestEmail,
+  sendInventoryExpiryAlertEmail,
   transporter,
 };

@@ -35,6 +35,8 @@ const TrainingModel = require('./models/Training');
 const DepartmentModel = require('./models/Department');
 const JobTitleModel = require('./models/JobTitle');
 const RoleModel = require('./models/Role');
+const InventoryItemModel = require('./models/InventoryItem');
+const NotificationModel = require('./models/Notification');
 const { validatePassword, getPasswordPolicy } = require('./utils/passwordValidator');
 
 // Static lists used to seed the DB when empty
@@ -119,7 +121,7 @@ const DEFAULT_JOB_TITLES = [
 ];
 const VendorModel = require('./models/Vendor');
 const approvalRuleRoutes = require('./routes/approvalRule.routes');
-const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP } = require('./utils/emailService');
+const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP, sendInventoryExpiryAlertEmail } = require('./utils/emailService');
 const { sendSMSOTP } = require('./utils/smsService');
 const { buildApprovalChain } = require('./utils/approvalRuleHelper');
 const { Server } = require('socket.io');
@@ -764,6 +766,86 @@ async function start() {
 
   // ==================== END AUTHENTICATION ROUTES ====================
 
+  // ==================== NOTIFICATION CENTER ROUTES ====================
+  app.get('/api/notifications', authMiddleware, async (req, res) => {
+    try {
+      const limitRaw = Number(req.query.limit || 50);
+      const limit = Math.max(1, Math.min(100, Number.isNaN(limitRaw) ? 50 : limitRaw));
+      const userId = req.user._id;
+      const now = new Date();
+
+      const docs = await NotificationModel.find({
+        $or: [{ targetUser: null }, { targetUser: userId }],
+        $and: [
+          { $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }] },
+          { dismissedBy: { $ne: userId } },
+        ],
+      })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+
+      const notifications = docs.map((n) => ({
+        _id: n._id,
+        title: n.title,
+        message: n.message,
+        type: n.type,
+        category: n.category,
+        source: n.source,
+        metadata: n.metadata || {},
+        createdAt: n.createdAt,
+        read: Array.isArray(n.readBy)
+          ? n.readBy.some((id) => id && id.toString() === userId.toString())
+          : false,
+      }));
+
+      res.json({ notifications });
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
+      res.status(500).json({ message: 'Failed to fetch notifications' });
+    }
+  });
+
+  app.patch('/api/notifications/:id/read', authMiddleware, async (req, res) => {
+    try {
+      const userId = req.user._id;
+      const notification = await NotificationModel.findOneAndUpdate(
+        { _id: req.params.id },
+        { $addToSet: { readBy: userId }, $pull: { dismissedBy: userId } },
+        { new: true },
+      );
+
+      if (!notification) {
+        return res.status(404).json({ message: 'Notification not found' });
+      }
+
+      res.json({ message: 'Notification marked as read' });
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
+      res.status(500).json({ message: 'Failed to mark notification as read' });
+    }
+  });
+
+  app.post('/api/notifications/clear-all', authMiddleware, async (req, res) => {
+    try {
+      const userId = req.user._id;
+      await NotificationModel.updateMany(
+        {
+          $or: [{ targetUser: null }, { targetUser: userId }],
+          dismissedBy: { $ne: userId },
+        },
+        {
+          $addToSet: { readBy: userId, dismissedBy: userId },
+        },
+      );
+
+      res.json({ message: 'Notifications cleared' });
+    } catch (err) {
+      console.error('Error clearing notifications:', err);
+      res.status(500).json({ message: 'Failed to clear notifications' });
+    }
+  });
+
   app.get('/api/modules', async (req, res) => {
     const mods = await api.getModules();
     res.json(mods);
@@ -886,6 +968,45 @@ async function start() {
 
   // ============ SKU ITEMS ROUTES ============
   const SkuItemModel = require('./models/SkuItem');
+  const SkuCategoryModel = require('./models/SkuCategory');
+
+  // Get SKU categories (active by default)
+  app.get('/api/sku-categories', async (req, res) => {
+    try {
+      const activeOnly = req.query.activeOnly !== 'false';
+      const filter = activeOnly ? { isActive: true } : {};
+      const categories = await SkuCategoryModel.find(filter).sort({ name: 1 });
+      res.json(categories);
+    } catch (err) {
+      console.error('Error fetching SKU categories:', err);
+      res.status(500).json({ message: 'Failed to fetch SKU categories' });
+    }
+  });
+
+  // Create SKU category
+  app.post('/api/sku-categories', async (req, res) => {
+    try {
+      const name = String(req.body?.name || '').trim();
+      if (!name) {
+        return res.status(400).json({ message: 'Category name is required' });
+      }
+
+      const existing = await SkuCategoryModel.findOne({ name: new RegExp(`^${name}$`, 'i') });
+      if (existing) {
+        if (!existing.isActive) {
+          existing.isActive = true;
+          await existing.save();
+        }
+        return res.status(200).json(existing);
+      }
+
+      const category = await SkuCategoryModel.create({ name, isActive: true });
+      res.status(201).json(category);
+    } catch (err) {
+      console.error('Error creating SKU category:', err);
+      res.status(500).json({ message: 'Failed to create SKU category' });
+    }
+  });
 
   // Get all SKU items (optionally filter by active)
   app.get('/api/sku-items', async (req, res) => {
@@ -902,6 +1023,15 @@ async function start() {
   // Create SKU item
   app.post('/api/sku-items', async (req, res) => {
     try {
+      const categoryName = String(req.body?.category || '').trim();
+      if (categoryName) {
+        await SkuCategoryModel.findOneAndUpdate(
+          { name: new RegExp(`^${categoryName}$`, 'i') },
+          { $setOnInsert: { name: categoryName }, $set: { isActive: true } },
+          { upsert: true, new: true },
+        );
+      }
+
       const item = await SkuItemModel.create(req.body);
       res.status(201).json(item);
     } catch (err) {
@@ -916,6 +1046,15 @@ async function start() {
   // Update SKU item
   app.put('/api/sku-items/:id', async (req, res) => {
     try {
+      const categoryName = String(req.body?.category || '').trim();
+      if (categoryName) {
+        await SkuCategoryModel.findOneAndUpdate(
+          { name: new RegExp(`^${categoryName}$`, 'i') },
+          { $setOnInsert: { name: categoryName }, $set: { isActive: true } },
+          { upsert: true, new: true },
+        );
+      }
+
       const item = await SkuItemModel.findByIdAndUpdate(req.params.id, req.body, { new: true });
       if (!item) return res.status(404).json({ message: 'SKU item not found' });
       res.json(item);
@@ -6485,6 +6624,118 @@ async function start() {
   // Also run auto-archive on startup if needed (optional)
   if (!isServerlessRuntime) {
     autoArchiveLogs().catch(err => console.error('Error running initial auto-archive:', err));
+  }
+
+  // ============ DAILY INVENTORY EXPIRY ALERT SCHEDULER ============
+  const runInventoryExpiryAlertJob = async () => {
+    try {
+      const defaultDays = Number(process.env.INVENTORY_EXPIRY_ALERT_DAYS || 30);
+      const days = Number.isInteger(defaultDays) && defaultDays > 0 ? defaultDays : 30;
+      const now = new Date();
+      const cutoff = new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
+
+      const items = await InventoryItemModel.find({ isDeleted: false }).select('itemId name quantity category batches');
+      const expiring = [];
+
+      items.forEach((item) => {
+        const batches = Array.isArray(item.batches) ? item.batches : [];
+        const matched = batches.filter((b) => {
+          if (Number(b.quantity || 0) <= 0 || !b.expiryDate) return false;
+          const expiry = new Date(b.expiryDate);
+          return expiry >= now && expiry <= cutoff;
+        });
+
+        if (matched.length > 0) {
+          const nextExpiry = matched
+            .map((b) => new Date(b.expiryDate))
+            .sort((a, b) => a - b)[0];
+
+          expiring.push({
+            _id: item._id,
+            itemId: item.itemId,
+            name: item.name,
+            category: item.category,
+            quantity: item.quantity,
+            nextExpiry,
+            batches: matched,
+          });
+        }
+      });
+
+      if (expiring.length === 0) {
+        console.log('📦 Inventory expiry job: no expiring items found');
+        return;
+      }
+
+      const settings = await SystemSettingsModel.findOne().select('contactEmail');
+      const envRecipients = (process.env.INVENTORY_ALERT_EMAILS || '')
+        .split(',')
+        .map((e) => e.trim())
+        .filter(Boolean);
+      const recipients = [...new Set([settings?.contactEmail, ...envRecipients].filter(Boolean))];
+
+      if (recipients.length === 0) {
+        console.warn('⚠️ Inventory expiry job: no recipients configured (set SystemSettings.contactEmail or INVENTORY_ALERT_EMAILS)');
+        return;
+      }
+
+      const result = await sendInventoryExpiryAlertEmail(recipients, { days, items: expiring });
+      if (result?.success) {
+        console.log(`📧 Inventory expiry alert sent to ${recipients.join(', ')} (${expiring.length} item(s))`);
+      } else {
+        console.error('❌ Inventory expiry email send failed:', result?.error || 'Unknown error');
+      }
+
+      const dayStamp = new Date().toISOString().slice(0, 10);
+      const sourceKey = `inventory-expiry-${dayStamp}`;
+      const existing = await NotificationModel.findOne({ sourceKey });
+      if (!existing) {
+        const soonest = expiring
+          .map((x) => new Date(x.nextExpiry))
+          .sort((a, b) => a - b)[0];
+
+        await NotificationModel.create({
+          title: `Inventory expiry alert (${expiring.length})`,
+          message: `${expiring.length} item(s) have batches expiring within ${days} days.`,
+          type: 'warning',
+          category: 'inventory',
+          source: 'inventory-expiry-job',
+          sourceKey,
+          metadata: {
+            count: expiring.length,
+            days,
+            nextExpiry: soonest || null,
+            sample: expiring.slice(0, 5).map((i) => ({
+              itemId: i.itemId,
+              name: i.name,
+              nextExpiry: i.nextExpiry,
+            })),
+          },
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error running inventory expiry alert job:', error);
+    }
+  };
+
+  const scheduleInventoryExpiryAlertJob = () => {
+    const now = new Date();
+    const nextRun = new Date();
+    nextRun.setHours(8, 0, 0, 0); // 8:00 AM daily server time
+    if (now > nextRun) nextRun.setDate(nextRun.getDate() + 1);
+
+    const delay = nextRun.getTime() - now.getTime();
+    setTimeout(() => {
+      runInventoryExpiryAlertJob();
+      setInterval(runInventoryExpiryAlertJob, 24 * 60 * 60 * 1000);
+    }, delay);
+
+    console.log(`📅 Inventory expiry alerts scheduled daily at 8:00 AM (next run: ${nextRun.toLocaleString()})`);
+  };
+
+  if (!isServerlessRuntime) {
+    scheduleInventoryExpiryAlertJob();
+    runInventoryExpiryAlertJob().catch((err) => console.error('Error running initial inventory expiry alert job:', err));
   }
 
   // Graceful shutdown

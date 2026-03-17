@@ -62,7 +62,7 @@ const Navbar = ({ user }) => {
           onClick={() => navigate("/home")}
         >
           <img src={stepsLogo} alt="Netlink ERP Logo" className="w-8 h-8" />
-          <h1 className="text-lg font-bold text-[#111418]">NETLINK</h1>
+          <h1 className="text-lg font-bold text-[#111418]">INTRANET</h1>
         </div>
 
         {/* Right: Notification & User */}
