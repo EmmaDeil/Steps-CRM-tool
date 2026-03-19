@@ -1557,7 +1557,9 @@ const MaterialRequests = () => {
                       setIsSavingDraft(true);
                       try {
                         if (!formData.requestType) {
-                          toast.error("Please select a request type before saving a draft");
+                          toast.error(
+                            "Please select a request type before saving a draft",
+                          );
                           setIsSavingDraft(false);
                           return;
                         }
@@ -1568,7 +1570,7 @@ const MaterialRequests = () => {
                             (item) =>
                               item.itemName &&
                               item.quantity &&
-                              item.quantityType
+                              item.quantityType,
                           ),
                           requestedBy:
                             user?.fullName ||
@@ -1596,7 +1598,9 @@ const MaterialRequests = () => {
                         };
 
                         if (requestData.lineItems.length === 0) {
-                          toast.error("Please add at least one valid line item with name, quantity, and type");
+                          toast.error(
+                            "Please add at least one valid line item with name, quantity, and type",
+                          );
                           setIsSavingDraft(false);
                           return;
                         }
@@ -1645,7 +1649,11 @@ const MaterialRequests = () => {
                     }}
                     className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg border border-gray-300 bg-white text-[#111418] text-sm font-bold hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isSavingDraft ? <i className="fa-solid fa-circle-notch fa-spin text-base"></i> : <i className="fa-solid fa-floppy-disk text-base"></i>}
+                    {isSavingDraft ? (
+                      <i className="fa-solid fa-circle-notch fa-spin text-base"></i>
+                    ) : (
+                      <i className="fa-solid fa-floppy-disk text-base"></i>
+                    )}
                     {isSavingDraft ? "Saving..." : "Save Draft"}
                   </button>
                   <button
@@ -1653,8 +1661,16 @@ const MaterialRequests = () => {
                     disabled={isSubmitting || isSavingDraft}
                     className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-2.5 rounded-lg bg-[#137fec] hover:bg-[#0d6efd] text-white text-sm font-bold shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isSubmitting ? <i className="fa-solid fa-circle-notch fa-spin text-base"></i> : <i className="fa-solid fa-paper-plane text-base"></i>}
-                    {isSubmitting ? "Submitting..." : isEditMode ? "Update Request" : "Submit Request"}
+                    {isSubmitting ? (
+                      <i className="fa-solid fa-circle-notch fa-spin text-base"></i>
+                    ) : (
+                      <i className="fa-solid fa-paper-plane text-base"></i>
+                    )}
+                    {isSubmitting
+                      ? "Submitting..."
+                      : isEditMode
+                        ? "Update Request"
+                        : "Submit Request"}
                   </button>
                 </div>
               </div>
@@ -1918,7 +1934,11 @@ const MaterialRequests = () => {
                 onClick={handleRejectRequest}
                 disabled={!rejectionReason.trim() || isRejecting || isApproving}
               >
-                {isRejecting ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-xmark"></i>}
+                {isRejecting ? (
+                  <i className="fa-solid fa-circle-notch fa-spin"></i>
+                ) : (
+                  <i className="fa-solid fa-xmark"></i>
+                )}
                 {isRejecting ? "Rejecting..." : "Reject Request"}
               </button>
               <button
@@ -1926,17 +1946,22 @@ const MaterialRequests = () => {
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleApproveRequest}
                 disabled={
-                  (selectedRequest.requestType !== "Internal Transfer" && !selectedVendor) ||
+                  (selectedRequest.requestType !== "Internal Transfer" &&
+                    !selectedVendor) ||
                   isApproving ||
                   isRejecting
                 }
               >
-                {isApproving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-check"></i>}
-                {isApproving 
-                  ? "Approving..." 
+                {isApproving ? (
+                  <i className="fa-solid fa-circle-notch fa-spin"></i>
+                ) : (
+                  <i className="fa-solid fa-check"></i>
+                )}
+                {isApproving
+                  ? "Approving..."
                   : selectedRequest.requestType === "Internal Transfer"
-                  ? "Approve & Fulfill from Inventory"
-                  : "Approve & Create PO"}
+                    ? "Approve & Fulfill from Inventory"
+                    : "Approve & Create PO"}
               </button>
             </div>
           </div>
@@ -2121,9 +2146,23 @@ const MaterialRequests = () => {
 
             {/* Main Content */}
             <div className="flex-1 w-full max-w-[1200px] mx-auto p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div
+                className={`grid grid-cols-1 gap-6 ${
+                  isUserApprover(selectedRequest) &&
+                  selectedRequest.status === "pending"
+                    ? ""
+                    : "lg:grid-cols-3"
+                }`}
+              >
                 {/* Left Column - Main Details */}
-                <div className="lg:col-span-2 flex flex-col gap-6">
+                <div
+                  className={`flex flex-col gap-6 ${
+                    isUserApprover(selectedRequest) &&
+                    selectedRequest.status === "pending"
+                      ? ""
+                      : "lg:col-span-2"
+                  }`}
+                >
                   {/* Request Overview */}
                   <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
