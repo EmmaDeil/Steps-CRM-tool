@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import Breadcrumb from "../Breadcrumb";
 import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
@@ -125,10 +124,10 @@ const makeEmptyLine = (year) => ({
 
 // ─── Main Component ───────────────────────────────────────
 const Budget = ({ onBack, parentModule }) => {
-  const navigate = useNavigate();
-
   // data state
   const [categories, setCategories] = useState([]);
+  const [categoryNameOptions, setCategoryNameOptions] = useState([]);
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const periods = makePeriods(selectedYear);
@@ -161,7 +160,12 @@ const Budget = ({ onBack, parentModule }) => {
       const res = await apiService.get(
         `/api/budget/categories?period=${encodeURIComponent(period)}`,
       );
-      setCategories(res.data || []);
+      const rows = Array.isArray(res)
+        ? res
+        : Array.isArray(res?.data)
+          ? res.data
+          : [];
+      setCategories(rows);
     } catch {
       toast.error("Failed to load budget categories");
       setCategories([]);
@@ -170,9 +174,32 @@ const Budget = ({ onBack, parentModule }) => {
     }
   }, []);
 
+  const fetchCategoryNameOptions = useCallback(async () => {
+    try {
+      const res = await apiService.get("/api/budget/categories");
+      const rows = Array.isArray(res)
+        ? res
+        : Array.isArray(res?.data)
+          ? res.data
+          : [];
+      const names = [
+        ...new Set(
+          rows.map((r) => String(r.name || "").trim()).filter(Boolean),
+        ),
+      ].sort((a, b) => a.localeCompare(b));
+      setCategoryNameOptions(names);
+    } catch {
+      setCategoryNameOptions([]);
+    }
+  }, []);
+
   useEffect(() => {
     fetchCategories(activePeriod);
   }, [activePeriod, fetchCategories]);
+
+  useEffect(() => {
+    fetchCategoryNameOptions();
+  }, [fetchCategoryNameOptions]);
 
   // When year changes, reset activePeriod to Q1 of that year
   const handleYearChange = (yr) => {
@@ -200,9 +227,12 @@ const Budget = ({ onBack, parentModule }) => {
         `/api/budget/export?period=${encodeURIComponent(activePeriod)}&format=${format}`,
         { responseType: "blob" },
       );
-      const blob = new Blob([res.data], {
-        type: format === "csv" ? "text/csv" : "application/json",
-      });
+      const blob =
+        res instanceof Blob
+          ? res
+          : new Blob([res], {
+              type: format === "csv" ? "text/csv" : "application/json",
+            });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -218,6 +248,7 @@ const Budget = ({ onBack, parentModule }) => {
   // ── Add / Edit ────────────────────────────────────────
   const openAdd = () => {
     setEditTarget(null);
+    setIsCustomCategory(false);
     setNewLine({ ...makeEmptyLine(selectedYear), period: activePeriod });
     setShowAddModal(true);
   };
@@ -225,6 +256,7 @@ const Budget = ({ onBack, parentModule }) => {
   const openEdit = (cat) => {
     const iconIdx = ICON_OPTIONS.findIndex((o) => o.icon === cat.icon) ?? 0;
     setEditTarget(cat);
+    setIsCustomCategory(!categoryNameOptions.includes(cat.name));
     setNewLine({
       name: cat.name,
       allocated: cat.allocated,
@@ -241,6 +273,21 @@ const Budget = ({ onBack, parentModule }) => {
     if (!newLine.name.trim() || newLine.allocated === "") {
       return toast.error("Name and allocated amount are required");
     }
+
+    const isDuplicateNameInPeriod = categories.some(
+      (c) =>
+        c._id !== editTarget?._id &&
+        String(c.period || "").trim() === String(newLine.period || "").trim() &&
+        String(c.name || "")
+          .trim()
+          .toLowerCase() === newLine.name.trim().toLowerCase(),
+    );
+    if (isDuplicateNameInPeriod) {
+      return toast.error(
+        "A budget line with this category name already exists for this period",
+      );
+    }
+
     setSaving(true);
     const chosen = ICON_OPTIONS[newLine.iconIdx] || ICON_OPTIONS[0];
     const payload = {
@@ -266,6 +313,7 @@ const Budget = ({ onBack, parentModule }) => {
       }
       setShowAddModal(false);
       fetchCategories(activePeriod);
+      fetchCategoryNameOptions();
     } catch {
       toast.error(
         editTarget ? "Failed to update" : "Failed to add budget line",
@@ -281,6 +329,7 @@ const Budget = ({ onBack, parentModule }) => {
       await apiService.delete(`/api/budget/categories/${cat._id}`);
       toast.success("Deleted");
       fetchCategories(activePeriod);
+      fetchCategoryNameOptions();
     } catch {
       toast.error("Failed to delete");
     }
@@ -323,16 +372,24 @@ const Budget = ({ onBack, parentModule }) => {
         period: activePeriod,
         replace: replaceMode,
       });
-      toast.success(`Imported ${res.data.imported} categories`);
+      const importedCount =
+        (typeof res?.imported === "number" ? res.imported : null) ??
+        (typeof res?.data?.imported === "number" ? res.data.imported : 0);
+      toast.success(`Imported ${importedCount} categories`);
       setShowUploadModal(false);
       setUploadFile(null);
       fetchCategories(activePeriod);
-    } catch (err) {
+      fetchCategoryNameOptions();
+    } catch (_err) {
       toast.error("Import failed — check file format");
     } finally {
       setUploading(false);
     }
   };
+
+  const categoryDropdownOptions = [...new Set(categoryNameOptions)].sort(
+    (a, b) => a.localeCompare(b),
+  );
 
   // ─────────────────────────────────────────────────────
   return (
@@ -761,16 +818,44 @@ const Budget = ({ onBack, parentModule }) => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Category Name <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={newLine.name}
-                    onChange={(e) =>
-                      setNewLine({ ...newLine, name: e.target.value })
-                    }
-                    placeholder="e.g. R&D, Legal"
+                  <select
+                    value={isCustomCategory ? "__custom__" : newLine.name}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setIsCustomCategory(true);
+                        setNewLine({ ...newLine, name: "" });
+                        return;
+                      }
+                      setIsCustomCategory(false);
+                      setNewLine({ ...newLine, name: e.target.value });
+                    }}
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-sm"
                     required
-                  />
+                  >
+                    <option value="" disabled>
+                      {categoryDropdownOptions.length > 0
+                        ? "Select category"
+                        : "No categories available"}
+                    </option>
+                    {categoryDropdownOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                    <option value="__custom__">Custom category...</option>
+                  </select>
+                  {isCustomCategory && (
+                    <input
+                      type="text"
+                      value={newLine.name}
+                      onChange={(e) =>
+                        setNewLine({ ...newLine, name: e.target.value })
+                      }
+                      placeholder="Enter new category name"
+                      className="mt-2 w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-sm"
+                      required
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
