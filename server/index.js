@@ -479,7 +479,7 @@ async function start() {
           await user.save();
         } else {
           const count = await EmployeeModel.countDocuments();
-          const employeeId = `EMP${String(count + 1).padStart(4, '0')}`;
+          const employeeId = `EMP${String(count + 1).padStart(5, '0')}`;
           employee = await EmployeeModel.create({
             firstName,
             lastName,
@@ -2622,7 +2622,7 @@ async function start() {
           await user.save();
         } else {
           const count = await EmployeeModel.countDocuments();
-          const empId = `EMP${String(count + 1).padStart(4, '0')}`;
+          const empId = `EMP${String(count + 1).padStart(5, '0')}`;
           const newEmp = await EmployeeModel.create({
             firstName,
             lastName,
@@ -4615,6 +4615,64 @@ async function start() {
     try {
       const { search } = req.query;
       let query = {};
+
+      const toEmployeeStatus = (userStatus) => {
+        if (userStatus === 'Inactive') return 'Terminated';
+        return 'Active';
+      };
+
+      // Keep HR directory and Admin user list aligned by ensuring each user has a linked employee.
+      try {
+        const users = await UserModel.find({}).select('firstName lastName fullName email role status department jobTitle phoneNumber employeeRef').lean();
+        for (const user of users) {
+          if (!user.email) continue;
+
+          let employee = null;
+          if (user.employeeRef) {
+            employee = await EmployeeModel.findById(user.employeeRef);
+          }
+
+          if (!employee) {
+            employee = await EmployeeModel.findOne({ email: user.email.toLowerCase() });
+          }
+
+          if (employee) {
+            const employeeUpdates = {};
+            if (!employee.userRef || String(employee.userRef) !== String(user._id)) {
+              employeeUpdates.userRef = user._id;
+            }
+            if ((!user.employeeRef || String(user.employeeRef) !== String(employee._id))) {
+              await UserModel.findByIdAndUpdate(user._id, { employeeRef: employee._id });
+            }
+            if (Object.keys(employeeUpdates).length > 0) {
+              employeeUpdates.updatedAt = new Date();
+              await EmployeeModel.findByIdAndUpdate(employee._id, employeeUpdates);
+            }
+            continue;
+          }
+
+          const count = await EmployeeModel.countDocuments();
+          const employeeId = `EMP${String(count + 1).padStart(5, '0')}`;
+          const firstName = user.firstName || user.fullName?.split(' ')[0] || 'Unknown';
+          const lastName = user.lastName || user.fullName?.split(' ').slice(1).join(' ') || 'User';
+          const newEmployee = await EmployeeModel.create({
+            firstName,
+            lastName,
+            email: user.email.toLowerCase(),
+            phone: user.phoneNumber || '',
+            department: user.department || null,
+            role: user.role || 'user',
+            jobTitle: user.jobTitle || user.role || 'Employee',
+            status: toEmployeeStatus(user.status),
+            employeeId,
+            userRef: user._id,
+          });
+
+          await UserModel.findByIdAndUpdate(user._id, { employeeRef: newEmployee._id });
+        }
+      } catch (syncErr) {
+        console.error('Error syncing users into HR employee directory:', syncErr);
+      }
       
       if (search) {
         const searchRegex = new RegExp(search, 'i');
@@ -4676,7 +4734,7 @@ async function start() {
 
       // Generate employee ID
       const count = await EmployeeModel.countDocuments();
-      const employeeId = `EMP${String(count + 1).padStart(4, '0')}`;
+      const employeeId = `EMP-${String(count + 1).padStart(5, '0')}`;
 
       const newEmployee = new EmployeeModel({
         name,
