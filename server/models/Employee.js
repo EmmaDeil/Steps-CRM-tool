@@ -19,6 +19,17 @@ const EmployeeSchema = new mongoose.Schema({
     relationship: { type: String },
     phone: { type: String }
   },
+  documents: [
+    {
+      name: { type: String, required: true },
+      type: { type: String, default: 'File' },
+      fileData: { type: String },
+      url: { type: String },
+      fileSize: { type: Number, default: 0 },
+      uploadedAt: { type: Date, default: Date.now },
+      uploadedBy: { type: String, default: '' },
+    },
+  ],
   managerId: { type: String },
   managerName: { type: String },
   role: { type: String }, // Used in UI for role descriptor

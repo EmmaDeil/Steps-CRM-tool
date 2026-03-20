@@ -24,7 +24,7 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(
     !!localStorage.getItem("authToken"),
   );
-  const [sessionConfig, setSessionConfig] = useState(SESSION_CONFIG);
+  const [_sessionConfig, setSessionConfig] = useState(SESSION_CONFIG);
 
   // Update last activity timestamp
   const updateActivity = useCallback(() => {
@@ -210,16 +210,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = async (skipConfirmation = false) => {
+  const logout = async (_skipConfirmation = false) => {
     try {
-      // Optional: Add confirmation for explicit logout
-      if (!skipConfirmation && sessionConfig.rememberMe) {
-        const confirmed = window.confirm(
-          "Are you sure you want to logout? You will need to login again.",
-        );
-        if (!confirmed) return { cancelled: true };
-      }
-
       // Notify backend of logout
       await apiService.post("/api/auth/logout");
 

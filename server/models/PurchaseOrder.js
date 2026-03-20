@@ -37,7 +37,19 @@ const purchaseOrderSchema = new mongoose.Schema(
       ],
       default: 'draft',
     },
+    currency: {
+      type: String,
+      default: 'NGN',
+    },
+    exchangeRateToNgn: {
+      type: Number,
+      default: 1,
+    },
     totalAmount: {
+      type: Number,
+      default: 0,
+    },
+    totalAmountNgn: {
       type: Number,
       default: 0,
     },

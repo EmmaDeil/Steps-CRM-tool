@@ -4860,6 +4860,7 @@ async function start() {
           emergencyContact: { name: '', relationship: '', phone: '' },
           employeeId: null,
           managerId: null,
+          documents: [],
           _synthetic: true,
         };
         return res.json({ success: true, data: synthetic });
@@ -4889,6 +4890,7 @@ async function start() {
         employeeId: employee.employeeId,
         managerId: employee.managerId,
         managerName: employee.managerName || '',
+        documents: employee.documents || [],
         location: employee.location || '',
         workArrangement: employee.workArrangement || '',
         employmentType: employee.employmentType || '',
@@ -4989,6 +4991,7 @@ async function start() {
         employmentType,
         managerId,
         managerName,
+        documents,
         location,
         workArrangement,
       } = req.body;
@@ -5187,6 +5190,24 @@ async function start() {
         updateData.workArrangement = workArrangement || undefined;
         changes.push({ field: 'workArrangement', oldValue: oldEmployee.workArrangement, newValue: workArrangement || undefined });
       }
+      if (documents !== undefined) {
+        const normalizedDocuments = Array.isArray(documents)
+          ? documents
+              .filter((doc) => doc && (doc.name || doc.title))
+              .map((doc) => ({
+                name: String(doc.name || doc.title || '').trim(),
+                type: String(doc.type || doc.category || 'File').trim(),
+                fileData: doc.fileData || doc.url || '',
+                url: doc.url || doc.fileData || '',
+                fileSize: Number(doc.fileSize || 0),
+                uploadedAt: doc.uploadedAt ? new Date(doc.uploadedAt) : new Date(),
+                uploadedBy: String(doc.uploadedBy || updatedBy || 'system'),
+              }))
+          : [];
+
+        updateData.documents = normalizedDocuments;
+        changes.push({ field: 'documents', oldValue: `count:${(oldEmployee.documents || []).length}`, newValue: `count:${normalizedDocuments.length}` });
+      }
 
       const employee = await EmployeeModel.findByIdAndUpdate(
         targetEmployeeId,
@@ -5256,6 +5277,7 @@ async function start() {
         employeeId: employee.employeeId,
         managerId: employee.managerId,
         managerName: employee.managerName || '',
+        documents: employee.documents || [],
         location: employee.location || '',
         workArrangement: employee.workArrangement || '',
         employmentType: employee.employmentType || '',

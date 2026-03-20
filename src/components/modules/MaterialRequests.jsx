@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../../context/useAuth";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiService } from "../../services/api";
@@ -29,6 +29,8 @@ const MaterialRequests = () => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [budgetCategories, setBudgetCategories] = useState([]);
   const [budgetLoading, setBudgetLoading] = useState(false);
+  const [currencyOptions, setCurrencyOptions] = useState([]);
+  const [currencyLoading, setCurrencyLoading] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
 
@@ -173,6 +175,29 @@ const MaterialRequests = () => {
     }
   };
 
+  const fetchCurrencies = useCallback(async () => {
+    setCurrencyLoading(true);
+    try {
+      const response = await apiService.get("/api/budget/currencies");
+      const rows = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.data)
+          ? response.data
+          : [];
+      setCurrencyOptions(rows);
+    } catch {
+      setCurrencyOptions([
+        {
+          code: appCurrency || "NGN",
+          label: appCurrency || "Nigerian Naira",
+          symbol: getCurrencySymbol(appCurrency || "NGN"),
+        },
+      ]);
+    } finally {
+      setCurrencyLoading(false);
+    }
+  }, [appCurrency]);
+
   const fetchSkuItems = async () => {
     try {
       const response = await apiService.get("/api/sku-items?activeOnly=true");
@@ -309,6 +334,7 @@ const MaterialRequests = () => {
     fetchRequests();
     fetchUsers();
     fetchBudgetCategories();
+    fetchCurrencies();
     fetchSkuItems();
 
     // Restore state from localStorage on mount
@@ -326,7 +352,7 @@ const MaterialRequests = () => {
         // Ignore parsing errors for localStorage
       }
     }
-  }, []);
+  }, [fetchCurrencies]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1153,26 +1179,18 @@ const MaterialRequests = () => {
                           }}
                           className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
                         >
-                          <option value="NGN">NGN - Nigerian Naira (₦)</option>
-                          <option value="USD">USD - US Dollar ($)</option>
-                          <option value="EUR">EUR - Euro (€)</option>
-                          <option value="GBP">GBP - British Pound (£)</option>
-                          <option value="JPY">JPY - Japanese Yen (¥)</option>
-                          <option value="CAD">
-                            CAD - Canadian Dollar (CA$)
-                          </option>
-                          <option value="AUD">
-                            AUD - Australian Dollar (A$)
-                          </option>
-                          <option value="ZAR">
-                            ZAR - South African Rand (R)
-                          </option>
-                          <option value="GHS">GHS - Ghanaian Cedi (₵)</option>
-                          <option value="KES">
-                            KES - Kenyan Shilling (KSh)
-                          </option>
-                          <option value="INR">INR - Indian Rupee (₹)</option>
-                          <option value="CNY">CNY - Chinese Yuan (¥)</option>
+                          {currencyLoading ? (
+                            <option value={appCurrency || "NGN"}>
+                              Loading currencies...
+                            </option>
+                          ) : (
+                            currencyOptions.map((currency) => (
+                              <option key={currency.code} value={currency.code}>
+                                {currency.code} - {currency.label}
+                                {currency.symbol ? ` (${currency.symbol})` : ""}
+                              </option>
+                            ))
+                          )}
                         </select>
                         {/* <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i> */}
                       </div>
@@ -1188,8 +1206,8 @@ const MaterialRequests = () => {
                           <i className="fa-solid fa-chart-line absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
                           <input
                             type="number"
-                            min="0.000001"
-                            step="0.000001"
+                            min="0.00000"
+                            step="0.00000"
                             name="exchangeRate"
                             value={formData.exchangeRate || ""}
                             onChange={handleFormChange}

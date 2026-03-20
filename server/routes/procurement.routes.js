@@ -344,7 +344,10 @@ router.post('/material-requests/:id/approve', async (req, res) => {
     }
 
     // 3. For other request types, generate corresponding Purchase Order
-    const totalAmount = request.lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const totalAmount = request.lineItems.reduce(
+      (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.amount) || 0),
+      0,
+    );
     
     // Map line items to PO line items
     const poLineItems = request.lineItems.map(item => ({
@@ -358,7 +361,10 @@ router.post('/material-requests/:id/approve', async (req, res) => {
     const newPO = new PurchaseOrder({
         vendor: vendor || request.preferredVendor || 'Unknown Vendor',
         status: 'draft',
+      currency: request.currency || 'NGN',
+      exchangeRateToNgn: request.exchangeRateToNgn || 1,
         totalAmount: totalAmount,
+      totalAmountNgn: totalAmount * (request.exchangeRateToNgn || 1),
         linkedMaterialRequestId: updatedRequest._id,
         lineItems: poLineItems
     });
@@ -452,6 +458,7 @@ router.get('/purchase-orders', async (req, res) => {
 
     const [orders, total] = await Promise.all([
       PurchaseOrder.find(query)
+        .populate('linkedMaterialRequestId', 'currency')
         .sort({ orderDate: -1, createdAt: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -502,7 +509,20 @@ router.post('/purchase-orders', async (req, res) => {
     
     // Auto calculate total if not provided but lineItems exist
     if (!req.body.totalAmount && req.body.lineItems && req.body.lineItems.length > 0) {
-        newOrder.totalAmount = req.body.lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+        newOrder.totalAmount = req.body.lineItems.reduce(
+          (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.amount) || 0),
+          0,
+        );
+    }
+
+    if (!req.body.currency) {
+      newOrder.currency = 'NGN';
+    }
+    if (!req.body.exchangeRateToNgn) {
+      newOrder.exchangeRateToNgn = 1;
+    }
+    if (!req.body.totalAmountNgn) {
+      newOrder.totalAmountNgn = (Number(newOrder.totalAmount) || 0) * (Number(newOrder.exchangeRateToNgn) || 1);
     }
     
     const savedOrder = await newOrder.save();
@@ -529,7 +549,11 @@ router.post('/purchase-orders/:id/review', async (req, res) => {
     
     // Calculate new total from line items
     if (po.lineItems && po.lineItems.length > 0) {
-      po.totalAmount = po.lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+      po.totalAmount = po.lineItems.reduce(
+        (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.amount) || 0),
+        0,
+      );
+      po.totalAmountNgn = (Number(po.totalAmount) || 0) * (Number(po.exchangeRateToNgn) || 1);
     }
     
     // Update status to reviewed (ready for payment)
@@ -565,7 +589,19 @@ router.put('/purchase-orders/:id', async (req, res) => {
     // If updating line items, might need to recalculate total
     const updates = { ...req.body };
     if (updates.lineItems && !updates.totalAmount) {
-        updates.totalAmount = updates.lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+        updates.totalAmount = updates.lineItems.reduce(
+          (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.amount) || 0),
+          0,
+        );
+    }
+    if (!updates.currency) {
+      updates.currency = 'NGN';
+    }
+    if (!updates.exchangeRateToNgn) {
+      updates.exchangeRateToNgn = 1;
+    }
+    if (updates.totalAmount !== undefined && updates.totalAmountNgn === undefined) {
+      updates.totalAmountNgn = (Number(updates.totalAmount) || 0) * (Number(updates.exchangeRateToNgn) || 1);
     }
 
     const updatedOrder = await PurchaseOrder.findByIdAndUpdate(

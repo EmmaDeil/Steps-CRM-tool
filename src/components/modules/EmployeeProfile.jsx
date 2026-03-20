@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 import { apiService } from "../../services/api";
@@ -29,6 +29,9 @@ const EmployeeProfile = ({
   const [leaveAllocation, setLeaveAllocation] = useState(null);
   const [managerOptions, setManagerOptions] = useState([]);
   const [locationOptions, setLocationOptions] = useState([]);
+  const [orgEmployees, setOrgEmployees] = useState([]);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const documentInputRef = useRef(null);
 
   // MFA state
   const [mfaStatus, setMfaStatus] = useState(null);
@@ -158,12 +161,39 @@ const EmployeeProfile = ({
     }
   }, [isHR]);
 
+  useEffect(() => {
+    const fetchOrgEmployees = async () => {
+      try {
+        const employeesRes = await apiService.get("/api/hr/employees");
+        setOrgEmployees(
+          Array.isArray(employeesRes?.data) ? employeesRes.data : [],
+        );
+      } catch (error) {
+        console.error("Error fetching organogram employees:", error);
+        setOrgEmployees([]);
+      }
+    };
+
+    if (employee?._id) {
+      fetchOrgEmployees();
+    }
+  }, [employee?._id]);
+
   const departmentOptions = departments.map((dept) => dept.name || dept.code);
   const availableManagerOptions = managerOptions.filter(
     (option) => (option?._id || option?.id) !== (employee?._id || employee?.id),
   );
   const availableLocationOptions = locationOptions.map(
     (location) => location.name || location.code,
+  );
+  const currentEmployeeId = String(employee?._id || employee?.id || "");
+  const currentManager = orgEmployees.find(
+    (option) =>
+      String(option?._id || option?.id || "") ===
+      String(employee?.managerId || ""),
+  );
+  const directReports = orgEmployees.filter(
+    (option) => String(option?.managerId || "") === currentEmployeeId,
   );
 
   // Different breadcrumb configurations based on context
@@ -216,6 +246,68 @@ const EmployeeProfile = ({
 
       // Show success feedback
       toast.success("Image selected successfully");
+    }
+  };
+
+  const handleDocumentUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !employee?._id) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Document must be smaller than 10MB");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      setUploadingDocument(true);
+
+      const fileData = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const existingDocuments = Array.isArray(employee.documents)
+        ? employee.documents
+        : [];
+      const newDocument = {
+        name: file.name,
+        type: file.type || "File",
+        fileData,
+        url: fileData,
+        fileSize: file.size,
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: currentUser?._id || "system",
+      };
+      const updatedDocuments = [newDocument, ...existingDocuments];
+
+      const response = await apiService.put(
+        `/api/hr/employees/${employee._id}`,
+        {
+          documents: updatedDocuments,
+          updatedBy: currentUser?._id || "system",
+        },
+      );
+
+      const updatedEmployee = response?.data || response;
+      if (updatedEmployee?._id || updatedEmployee?.id) {
+        setEmployee(updatedEmployee);
+      } else {
+        setEmployee((prev) => ({
+          ...prev,
+          documents: updatedDocuments,
+        }));
+      }
+
+      toast.success("Document uploaded successfully");
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      toast.error("Failed to upload document");
+    } finally {
+      setUploadingDocument(false);
+      event.target.value = "";
     }
   };
 
@@ -983,9 +1075,39 @@ const EmployeeProfile = ({
                     <h3 className="text-gray-900 dark:text-white text-lg font-bold">
                       Documents
                     </h3>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      Latest uploaded documents
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        Latest uploaded documents
+                      </span>
+                      {(isHR || isOwnProfile) && (
+                        <>
+                          <input
+                            ref={documentInputRef}
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png"
+                            onChange={handleDocumentUpload}
+                          />
+                          <button
+                            type="button"
+                            disabled={uploadingDocument}
+                            onClick={() => documentInputRef.current?.click()}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {uploadingDocument ? (
+                              <i className="fa-solid fa-circle-notch fa-spin"></i>
+                            ) : (
+                              <i className="fa-solid fa-upload"></i>
+                            )}
+                            <span>
+                              {uploadingDocument
+                                ? "Uploading..."
+                                : "Upload Document"}
+                            </span>
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                   {employee?.documents && employee.documents.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -1034,6 +1156,71 @@ const EmployeeProfile = ({
                       No documents uploaded yet.
                     </div>
                   )}
+                </div>
+
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5 flex flex-col h-full card-animate lg:col-span-3">
+                  <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-gray-700 pb-2">
+                    <h3 className="text-gray-900 dark:text-white text-lg font-bold">
+                      Organogram
+                    </h3>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Reporting line
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-4 py-2">
+                    <div className="w-full max-w-sm rounded-xl border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-4 text-center">
+                      <p className="text-[11px] uppercase tracking-wider text-blue-700 dark:text-blue-300 font-semibold mb-1">
+                        Manager
+                      </p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">
+                        {currentManager?.name ||
+                          employee?.managerName ||
+                          employee?.manager ||
+                          "Not Assigned"}
+                      </p>
+                    </div>
+
+                    <div className="h-6 w-px bg-gray-300 dark:bg-gray-600"></div>
+
+                    <div className="w-full max-w-sm rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-900/20 p-4 text-center">
+                      <p className="text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-300 font-semibold mb-1">
+                        Employee
+                      </p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">
+                        {employee?.name || "Current Employee"}
+                      </p>
+                    </div>
+
+                    <div className="h-6 w-px bg-gray-300 dark:bg-gray-600"></div>
+
+                    <div className="w-full">
+                      <p className="text-xs text-center text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 font-semibold">
+                        Direct Reports
+                      </p>
+                      {directReports.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {directReports.map((report) => (
+                            <div
+                              key={report._id || report.id}
+                              className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3"
+                            >
+                              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                {report.name || "Unnamed Employee"}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                {report.jobTitle || report.role || "Employee"}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-center text-gray-500 dark:text-gray-400 italic">
+                          No direct reports assigned.
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
