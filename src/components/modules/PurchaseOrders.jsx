@@ -87,6 +87,14 @@ const PurchaseOrders = () => {
     fetchVendors();
   }, []);
 
+  useEffect(() => {
+    const poSearch = sessionStorage.getItem("purchaseOrdersSearch");
+    if (poSearch) {
+      setSearchQuery(poSearch);
+      sessionStorage.removeItem("purchaseOrdersSearch");
+    }
+  }, []);
+
   const fetchVendors = async () => {
     try {
       const response = await apiService.get("/api/vendors", {

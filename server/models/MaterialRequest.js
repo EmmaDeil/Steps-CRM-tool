@@ -76,6 +76,14 @@ const materialRequestSchema = new mongoose.Schema(
       type: String,
       default: 'NGN',
     },
+    exchangeRateToNgn: {
+      type: Number,
+      default: 1,
+    },
+    totalAmountNgn: {
+      type: Number,
+      default: 0,
+    },
     date: {
       type: String,
       required: true,
@@ -94,6 +102,8 @@ const materialRequestSchema = new mongoose.Schema(
         quantity: Number,
         quantityType: String,
         amount: Number,
+        amountNgn: Number,
+        lineTotalNgn: Number,
         description: String,
       },
     ],
@@ -115,11 +125,26 @@ const materialRequestSchema = new mongoose.Schema(
       mentions: [String],
     }],
     activities: [{
-      type: { type: String, enum: ['comment', 'status_change', 'approval', 'rejection', 'created'], default: 'comment' },
+      type: {
+        type: String,
+        enum: [
+          'comment',
+          'status_change',
+          'approval',
+          'rejection',
+          'created',
+          'po_created',
+        ],
+        default: 'comment'
+      },
       author: { type: String, required: true },
       authorId: { type: String },
       text: { type: String, required: true },
       timestamp: { type: Date, default: Date.now },
+      poId: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder' },
+      poNumber: { type: String },
+      approvalLevel: { type: Number },
+      pendingApprover: { type: String },
     }],
   },
   {

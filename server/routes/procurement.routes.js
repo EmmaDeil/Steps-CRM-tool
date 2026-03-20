@@ -44,7 +44,52 @@ router.get('/material-requests/:id', async (req, res) => {
 // POST new Material Request
 router.post('/material-requests', async (req, res) => {
   try {
-    const newRequest = new MaterialRequest(req.body);
+    // Generate request ID with format MR-YYYY-MM-DD-COUNT
+    const count = await MaterialRequest.countDocuments();
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const requestId = `MR-${year}-${month}-${day}-${String(count + 1).padStart(3, '0')}`;
+
+    const payload = {
+      ...req.body,
+      requestId,
+      date: req.body?.date || now.toISOString().split('T')[0],
+    };
+
+    const newRequest = new MaterialRequest(payload);
+
+    // Ensure activity timeline starts with creation + initial comment.
+    const requestAuthor = payload.requestedBy || 'Unknown User';
+    newRequest.activities = Array.isArray(newRequest.activities) ? newRequest.activities : [];
+    newRequest.comments = Array.isArray(newRequest.comments) ? newRequest.comments : [];
+
+    newRequest.activities.push({
+      type: 'created',
+      author: requestAuthor,
+      authorId: req.user?._id,
+      text: `Request ${requestId} was created`,
+      timestamp: new Date(),
+    });
+
+    if (payload.message && String(payload.message).trim()) {
+      const cleanMessage = String(payload.message).trim();
+      newRequest.comments.push({
+        author: requestAuthor,
+        authorId: req.user?._id,
+        text: cleanMessage,
+        timestamp: new Date(),
+      });
+      newRequest.activities.push({
+        type: 'comment',
+        author: requestAuthor,
+        authorId: req.user?._id,
+        text: cleanMessage,
+        timestamp: new Date(),
+      });
+    }
+
     const savedRequest = await newRequest.save();
     res.status(201).json(savedRequest);
   } catch (err) {
@@ -78,11 +123,76 @@ router.post('/material-requests/:id/approve', async (req, res) => {
     const request = await MaterialRequest.findById(req.params.id);
     if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
     
-    if (request.status === 'approved') {
+    if (request.status === 'approved' || request.status === 'fulfilled') {
         return res.status(400).json({ success: false, message: 'Already approved' });
+    }
+
+    const actorName =
+      req.user?.fullName || req.user?.email || req.body?.approver || 'Approver';
+    const actorId = req.user?._id;
+
+    request.activities = Array.isArray(request.activities) ? request.activities : [];
+
+    // Multi-level approval progression: approve current step, move to next pending if any.
+    if (Array.isArray(request.approvalChain) && request.approvalChain.length > 0) {
+      let currentIdx = request.approvalChain.findIndex((s) => s.status === 'pending');
+      if (currentIdx === -1) {
+        currentIdx = request.approvalChain.findIndex((s) => s.status === 'awaiting');
+        if (currentIdx >= 0) request.approvalChain[currentIdx].status = 'pending';
+      }
+
+      if (currentIdx >= 0) {
+        const currentStep = request.approvalChain[currentIdx];
+        currentStep.status = 'approved';
+        currentStep.approvedAt = new Date();
+        if (req.body?.comment) currentStep.comments = String(req.body.comment);
+
+        request.activities.push({
+          type: 'approval',
+          author: actorName,
+          authorId: actorId,
+          text: `Approved level ${currentStep.level || currentIdx + 1}`,
+          timestamp: new Date(),
+          approvalLevel: currentStep.level || currentIdx + 1,
+        });
+
+        const nextIdx = request.approvalChain.findIndex(
+          (s, idx) => idx > currentIdx && (s.status === 'awaiting' || s.status === 'pending'),
+        );
+
+        if (nextIdx >= 0) {
+          const nextStep = request.approvalChain[nextIdx];
+          nextStep.status = 'pending';
+          request.currentApprovalLevel = nextStep.level || nextIdx + 1;
+          request.approver = nextStep.approverName || request.approver;
+          request.status = 'pending';
+          request.activities.push({
+            type: 'status_change',
+            author: 'System',
+            text: `Pending ${nextStep.approverName || 'next approver'} at level ${nextStep.level || nextIdx + 1}`,
+            timestamp: new Date(),
+            approvalLevel: nextStep.level || nextIdx + 1,
+            pendingApprover: nextStep.approverName || '',
+          });
+          await request.save();
+          return res.json({
+            success: true,
+            message: 'Approval recorded and moved to next approver',
+            request,
+            type: 'approval_progress',
+          });
+        }
+      }
     }
     
     request.status = 'approved';
+    request.activities.push({
+      type: 'approval',
+      author: actorName,
+      authorId: actorId,
+      text: 'Request approved',
+      timestamp: new Date(),
+    });
     const updatedRequest = await request.save();
 
     // 2. Check if this is an Internal Transfer - pull from inventory (location-aware)
@@ -199,6 +309,12 @@ router.post('/material-requests/:id/approve', async (req, res) => {
         }
 
         request.status = 'fulfilled';
+        request.activities.push({
+          type: 'status_change',
+          author: 'System',
+          text: 'Request fulfilled from inventory',
+          timestamp: new Date(),
+        });
         await request.save();
 
         return res.json({
@@ -211,6 +327,12 @@ router.post('/material-requests/:id/approve', async (req, res) => {
         });
       } else {
         request.status = 'approved';
+        request.activities.push({
+          type: 'status_change',
+          author: 'System',
+          text: 'Approved with partial fulfillment due to insufficient stock',
+          timestamp: new Date(),
+        });
         await request.save();
         return res.json({
           success: true,
@@ -243,6 +365,16 @@ router.post('/material-requests/:id/approve', async (req, res) => {
 
     await newPO.save();
 
+    request.activities.push({
+      type: 'po_created',
+      author: 'System',
+      text: `Purchase Order ${newPO.poNumber} created`,
+      timestamp: new Date(),
+      poId: newPO._id,
+      poNumber: newPO.poNumber,
+    });
+    await request.save();
+
     res.json({ 
         success: true, 
         message: 'Request approved and PO generated', 
@@ -260,18 +392,31 @@ router.post('/material-requests/:id/approve', async (req, res) => {
 router.post('/material-requests/:id/reject', async (req, res) => {
   try {
     const { reason } = req.body;
-    const request = await MaterialRequest.findByIdAndUpdate(
-        req.params.id,
-        { 
-            $set: { 
-                status: 'rejected',
-                rejectionReason: reason || 'No reason provided'
-            } 
-        },
-        { new: true }
-    );
+    const request = await MaterialRequest.findById(req.params.id);
     
     if (!request) return res.status(404).json({ success: false, message: 'Not found' });
+    const rejectionText = reason || 'No reason provided';
+    request.status = 'rejected';
+    request.rejectionReason = rejectionText;
+
+    if (Array.isArray(request.approvalChain) && request.approvalChain.length > 0) {
+      const pendingIdx = request.approvalChain.findIndex((s) => s.status === 'pending');
+      if (pendingIdx >= 0) {
+        request.approvalChain[pendingIdx].status = 'rejected';
+        request.approvalChain[pendingIdx].comments = rejectionText;
+      }
+    }
+
+    request.activities = Array.isArray(request.activities) ? request.activities : [];
+    request.activities.push({
+      type: 'rejection',
+      author: req.user?.fullName || req.user?.email || 'Approver',
+      authorId: req.user?._id,
+      text: `Request rejected: ${rejectionText}`,
+      timestamp: new Date(),
+    });
+
+    await request.save();
     res.json(request);
   } catch (err) {
     console.error('Error rejecting request:', err);

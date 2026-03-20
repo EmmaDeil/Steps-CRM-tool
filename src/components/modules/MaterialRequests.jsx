@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/useAuth";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import Navbar from "../Navbar";
 import { useDepartments } from "../../context/useDepartments";
 import { NumericFormat } from "react-number-format";
-import { formatCurrency } from "../../services/currency";
+import { formatCurrency, getCurrencySymbol } from "../../services/currency";
 import { useCurrency } from "../../context/useCurrency";
 import DataTable from "../common/DataTable";
 
 const MaterialRequests = () => {
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -26,8 +27,6 @@ const MaterialRequests = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [rejectionReason, setRejectionReason] = useState("");
-  const [selectedVendor, setSelectedVendor] = useState("");
-  const [vendors, setVendors] = useState([]);
   const [budgetCategories, setBudgetCategories] = useState([]);
   const [budgetLoading, setBudgetLoading] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
@@ -43,8 +42,8 @@ const MaterialRequests = () => {
     requiredByDate: "",
     budgetCode: "",
     reason: "",
-    preferredVendor: "",
     currency: "",
+    exchangeRate: "",
   });
 
   // Line items state
@@ -108,31 +107,67 @@ const MaterialRequests = () => {
 
   const previousStateRef = useRef(null);
 
-  const fetchVendors = async () => {
-    try {
-      const response = await apiService.get("/api/vendors");
-      if (response && response.data && Array.isArray(response.data.vendors)) {
-        setVendors(response.data.vendors);
-      } else if (response && Array.isArray(response.data)) {
-        setVendors(response.data);
-      } else if (Array.isArray(response)) {
-        setVendors(response);
-      } else {
-        setVendors([]);
-      }
-    } catch {
-      // Silently fail - vendors are optional
-      setVendors([]);
-    }
+  const getAttachmentName = (file) => {
+    if (!file) return "Attachment";
+    if (typeof file === "string") return file;
+    return file.fileName || file.name || "Attachment";
   };
+
+  const normalizePickedAttachments = (files) =>
+    files.map((f) => ({
+      fileName: f.name,
+      fileType: f.type,
+      fileSize: f.size,
+      rawFile: f,
+    }));
+
+  const serializeAttachments = async (items) =>
+    Promise.all(
+      items.map(async (f) => {
+        if (typeof f === "string") {
+          return { fileName: f, fileData: null, fileType: "", fileSize: 0 };
+        }
+
+        if (f.fileData) {
+          return {
+            fileName: f.fileName || f.name,
+            fileData: f.fileData,
+            fileType: f.fileType || f.type || "",
+            fileSize: f.fileSize || f.size || 0,
+          };
+        }
+
+        const source = f.rawFile || f;
+        const base64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(source);
+        });
+
+        return {
+          fileName: f.fileName || source.name,
+          fileData: base64,
+          fileType: f.fileType || source.type || "",
+          fileSize: f.fileSize || source.size || 0,
+        };
+      }),
+    );
 
   const fetchBudgetCategories = async () => {
     setBudgetLoading(true);
     try {
       const response = await apiService.get("/api/budget/categories");
-      setBudgetCategories(response.data || []);
+      const rows = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response?.data?.categories)
+            ? response.data.categories
+            : [];
+      setBudgetCategories(rows);
     } catch {
       // Fall back silently — dropdown will show empty
+      setBudgetCategories([]);
     } finally {
       setBudgetLoading(false);
     }
@@ -174,7 +209,6 @@ const MaterialRequests = () => {
       if (request) {
         setSelectedRequest(request);
         setShowApprovalModal(true);
-        fetchVendors();
       } else {
         toast.error("Request not found");
       }
@@ -196,22 +230,11 @@ const MaterialRequests = () => {
   }, [location.search, fetchRequestForApproval]);
 
   const handleApproveRequest = async () => {
-    // Only validate vendor for non-Internal Transfer requests
-    if (
-      selectedRequest.requestType !== "Internal Transfer" &&
-      !selectedVendor
-    ) {
-      toast.error("Please select a vendor");
-      return;
-    }
-
     setIsApproving(true);
     try {
       const response = await apiService.post(
         `/api/material-requests/${selectedRequest._id}/approve`,
-        {
-          vendor: selectedVendor,
-        },
+        {},
       );
 
       // Handle different response types
@@ -248,7 +271,6 @@ const MaterialRequests = () => {
 
       setShowApprovalModal(false);
       setSelectedRequest(null);
-      setSelectedVendor("");
       fetchRequests();
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to approve request");
@@ -398,6 +420,11 @@ const MaterialRequests = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const selectedCurrency = formData.currency || appCurrency || "NGN";
+    const isForeignCurrency = selectedCurrency !== "NGN";
+    const exchangeRateToNgn = parseFloat(formData.exchangeRate);
+    const effectiveRateToNgn =
+      isForeignCurrency && exchangeRateToNgn > 0 ? exchangeRateToNgn : 1;
 
     // Validate that at least one line item has required fields
     const validLineItems = lineItems.filter(
@@ -416,35 +443,48 @@ const MaterialRequests = () => {
       return;
     }
 
+    if (isForeignCurrency && !(exchangeRateToNgn > 0)) {
+      toast.error("Please enter a valid exchange rate to convert to NGN");
+      return;
+    }
+
+    const normalizedLineItems = validLineItems.map((item) => {
+      const quantity = parseFloat(item.quantity) || 0;
+      const amount = parseFloat(item.amount) || 0;
+      return {
+        ...item,
+        quantity,
+        amount,
+        amountNgn: amount * effectiveRateToNgn,
+        lineTotalNgn: quantity * amount * effectiveRateToNgn,
+      };
+    });
+
     setIsSubmitting(true);
     try {
       const requestData = {
         ...formData,
-        lineItems: validLineItems,
+        currency: selectedCurrency,
+        exchangeRate: isForeignCurrency ? String(exchangeRateToNgn) : "",
+        exchangeRateToNgn: effectiveRateToNgn,
+        lineItems: normalizedLineItems,
+        totalAmountNgn: normalizedLineItems.reduce(
+          (sum, item) => sum + item.lineTotalNgn,
+          0,
+        ),
         requestedBy:
           user?.fullName ||
           user?.primaryEmailAddress?.emailAddress ||
           "Unknown User",
         date: new Date().toISOString().split("T")[0],
         status: "pending",
-        attachments: await Promise.all(
-          attachments.map(async (f) => {
-            if (f.fileData) return f;
-            const base64 = await new Promise((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result);
-              reader.readAsDataURL(f);
-            });
-            return {
-              fileName: f.name,
-              fileData: base64,
-              fileType: f.type,
-              fileSize: f.size,
-            };
-          }),
-        ),
+        attachments: await serializeAttachments(attachments),
         message: message,
       };
+
+      if (isEditMode && selectedRequest?.status === "draft") {
+        requestData.status = "pending";
+      }
 
       if (isEditMode && selectedRequest) {
         // Update existing request
@@ -468,6 +508,7 @@ const MaterialRequests = () => {
         approver: "",
         department: "",
         currency: appCurrency,
+        exchangeRate: "",
       });
       setLineItems([
         {
@@ -501,12 +542,23 @@ const MaterialRequests = () => {
   const handleEditRequest = (request) => {
     setSelectedRequest(request);
     setFormData({
-      requestType: request.requestType,
-      approver: request.approver,
-      department: request.department,
+      requestType: request.requestType || "",
+      approver: request.approver || "",
+      department: request.department || "",
+      requestTitle: request.requestTitle || "",
+      requiredByDate: request.requiredByDate
+        ? new Date(request.requiredByDate).toISOString().split("T")[0]
+        : "",
+      budgetCode: request.budgetCode || "",
+      reason: request.reason || "",
       currency: request.currency || appCurrency,
+      exchangeRate:
+        request.currency && request.currency !== "NGN"
+          ? String(request.exchangeRateToNgn || request.exchangeRate || "")
+          : "",
     });
     setLineItems(request.lineItems || []);
+    setAttachments(request.attachments || []);
     setMessage(request.message || "");
     setIsEditMode(true);
     setShowForm(true);
@@ -516,7 +568,6 @@ const MaterialRequests = () => {
   const handleApproveClick = (request) => {
     setSelectedRequest(request);
     setShowApprovalModal(true);
-    fetchVendors();
     fetchBudgetCategories();
     setActiveDropdown(null);
   };
@@ -538,6 +589,38 @@ const MaterialRequests = () => {
     const isRequester = user?.fullName === request.requestedBy;
     const isPending = request.status === "pending";
     return isRequester && isPending;
+  };
+
+  const canCompleteDraft = (request) => {
+    const isRequester = user?.fullName === request.requestedBy;
+    const isDraft = request.status === "draft";
+    return isRequester && isDraft;
+  };
+
+  const openPurchaseOrderFromActivity = async (poNumber) => {
+    try {
+      const modsRes = await apiService.get("/api/modules");
+      const modules = Array.isArray(modsRes)
+        ? modsRes
+        : Array.isArray(modsRes?.data)
+          ? modsRes.data
+          : [];
+      const poModule = modules.find(
+        (m) => String(m.name || "").toLowerCase() === "purchase orders",
+      );
+
+      if (!poModule?.id) {
+        toast.error("Purchase Orders module not found");
+        return;
+      }
+
+      if (poNumber) {
+        sessionStorage.setItem("purchaseOrdersSearch", poNumber);
+      }
+      navigate(`/home/${poModule.id}`);
+    } catch {
+      toast.error("Unable to open Purchase Orders module");
+    }
   };
 
   if (loading) {
@@ -682,6 +765,18 @@ const MaterialRequests = () => {
               <i className="fa-solid fa-pen-to-square"></i>
             </button>
           )}
+          {canCompleteDraft(req) && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEditRequest(req);
+              }}
+              className="p-1 text-[#617589] hover:text-[#137fec] transition-colors"
+              title="Complete draft & submit"
+            >
+              <i className="fa-solid fa-paper-plane"></i>
+            </button>
+          )}
           {isUserApprover(req) && req.status === "pending" && (
             <>
               <button
@@ -754,7 +849,11 @@ const MaterialRequests = () => {
               </div>
               <button
                 onClick={() => {
-                  setFormData((prev) => ({ ...prev, currency: appCurrency }));
+                  setFormData((prev) => ({
+                    ...prev,
+                    currency: appCurrency,
+                    exchangeRate: "",
+                  }));
                   setShowForm(true);
                 }}
                 className="px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-[#0d6efd] transition-colors flex items-center gap-2 font-medium"
@@ -790,6 +889,7 @@ const MaterialRequests = () => {
                   >
                     <option value="all">All Status</option>
                     <option value="pending">Pending</option>
+                    <option value="draft">Draft</option>
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
                     <option value="fulfilled">Fulfilled</option>
@@ -944,7 +1044,7 @@ const MaterialRequests = () => {
                             Stock Replenishment
                           </option>
                         </select>
-                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
+                        {/* <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i> */}
                       </div>
                       {formData.requestType === "Internal Transfer" && (
                         <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
@@ -993,13 +1093,13 @@ const MaterialRequests = () => {
                             </option>
                           ))}
                         </select>
-                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
+                        {/* <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i> */}
                       </div>
                     </label>
 
                     <label className="flex flex-col gap-2 sm:col-span-2">
                       <span className="text-sm font-medium text-[#111418]">
-                        Budget Code / Category
+                        Budget Category
                       </span>
                       <div className="relative">
                         <i className="fa-solid fa-wallet absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
@@ -1014,13 +1114,22 @@ const MaterialRequests = () => {
                             <option disabled>Loading categories...</option>
                           ) : (
                             budgetCategories.map((cat) => (
-                              <option key={cat.id} value={cat.name}>
-                                {cat.name}
+                              <option
+                                key={
+                                  cat._id ||
+                                  cat.id ||
+                                  `${cat.name}-${cat.period}`
+                                }
+                                value={cat.name}
+                              >
+                                {cat.period
+                                  ? `${cat.name} (${cat.period})`
+                                  : cat.name}
                               </option>
                             ))
                           )}
                         </select>
-                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
+                        {/* <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i> */}
                       </div>
                     </label>
 
@@ -1033,7 +1142,15 @@ const MaterialRequests = () => {
                         <select
                           name="currency"
                           value={formData.currency || appCurrency}
-                          onChange={handleFormChange}
+                          onChange={(e) => {
+                            handleFormChange(e);
+                            if (e.target.value === "NGN") {
+                              setFormData((prev) => ({
+                                ...prev,
+                                exchangeRate: "",
+                              }));
+                            }
+                          }}
                           className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
                         >
                           <option value="NGN">NGN - Nigerian Naira (₦)</option>
@@ -1057,9 +1174,36 @@ const MaterialRequests = () => {
                           <option value="INR">INR - Indian Rupee (₹)</option>
                           <option value="CNY">CNY - Chinese Yuan (¥)</option>
                         </select>
-                        <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
+                        {/* <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i> */}
                       </div>
                     </label>
+
+                    {(formData.currency || appCurrency) !== "NGN" && (
+                      <label className="flex flex-col gap-2">
+                        <span className="text-sm font-medium text-[#111418]">
+                          Exchange Rate to NGN{" "}
+                          <span className="text-red-500">*</span>
+                        </span>
+                        <div className="relative">
+                          <i className="fa-solid fa-chart-line absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
+                          <input
+                            type="number"
+                            min="0.000001"
+                            step="0.000001"
+                            name="exchangeRate"
+                            value={formData.exchangeRate || ""}
+                            onChange={handleFormChange}
+                            placeholder="e.g. 1600"
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-4 py-2.5"
+                            required
+                          />
+                        </div>
+                        <p className="text-xs text-[#617589]">
+                          1 {formData.currency || appCurrency} ={" "}
+                          {formData.exchangeRate || "..."} NGN
+                        </p>
+                      </label>
+                    )}
                   </div>
                 </div>
 
@@ -1280,15 +1424,9 @@ const MaterialRequests = () => {
                             decimalScale={2}
                             fixedDecimalScale
                             placeholder="0.00"
-                            prefix={
-                              formData.currency === "NGN"
-                                ? "₦"
-                                : formData.currency === "GBP"
-                                  ? "£"
-                                  : formData.currency === "EUR"
-                                    ? "€"
-                                    : "$"
-                            }
+                            prefix={getCurrencySymbol(
+                              formData.currency || appCurrency || "NGN",
+                            )}
                             onValueChange={(values) => {
                               handleLineItemChange(
                                 index,
@@ -1303,13 +1441,30 @@ const MaterialRequests = () => {
                             Line Total
                           </span>
                           <div className="flex items-center h-[42px] px-3 rounded-lg bg-gray-50 border border-gray-200">
-                            <span className="text-sm font-bold text-[#111418]">
-                              {formatCurrency(
-                                (parseFloat(item.quantity) || 0) *
-                                  (parseFloat(item.amount) || 0),
-                                { currency: formData.currency || appCurrency },
-                              )}
-                            </span>
+                            <div className="flex flex-col leading-tight">
+                              <span className="text-sm font-bold text-[#111418]">
+                                {formatCurrency(
+                                  (parseFloat(item.quantity) || 0) *
+                                    (parseFloat(item.amount) || 0),
+                                  {
+                                    currency: formData.currency || appCurrency,
+                                  },
+                                )}
+                              </span>
+                              {(formData.currency || appCurrency) !== "NGN" &&
+                                parseFloat(formData.exchangeRate) > 0 && (
+                                  <span className="text-[11px] text-[#617589]">
+                                    ≈{" "}
+                                    {formatCurrency(
+                                      (parseFloat(item.quantity) || 0) *
+                                        (parseFloat(item.amount) || 0) *
+                                        (parseFloat(formData.exchangeRate) ||
+                                          1),
+                                      { currency: "NGN" },
+                                    )}
+                                  </span>
+                                )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1329,21 +1484,39 @@ const MaterialRequests = () => {
                       Add Another Item
                     </button>
                     <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-lg border border-gray-200 shadow-sm">
-                      <span className="text-sm text-[#617589] font-medium">
-                        Grand Total
-                      </span>
-                      <span className="text-xl font-bold text-[#111418]">
-                        {formatCurrency(
-                          lineItems.reduce(
-                            (sum, item) =>
-                              sum +
-                              (parseFloat(item.quantity) || 0) *
-                                (parseFloat(item.amount) || 0),
-                            0,
-                          ),
-                          { currency: formData.currency || appCurrency },
-                        )}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-sm text-[#617589] font-medium">
+                          Grand Total
+                        </span>
+                        <span className="text-xl font-bold text-[#111418]">
+                          {formatCurrency(
+                            lineItems.reduce(
+                              (sum, item) =>
+                                sum +
+                                (parseFloat(item.quantity) || 0) *
+                                  (parseFloat(item.amount) || 0),
+                              0,
+                            ),
+                            { currency: formData.currency || appCurrency },
+                          )}
+                        </span>
+                        {(formData.currency || appCurrency) !== "NGN" &&
+                          parseFloat(formData.exchangeRate) > 0 && (
+                            <span className="text-xs text-[#617589]">
+                              ≈{" "}
+                              {formatCurrency(
+                                lineItems.reduce(
+                                  (sum, item) =>
+                                    sum +
+                                    (parseFloat(item.quantity) || 0) *
+                                      (parseFloat(item.amount) || 0),
+                                  0,
+                                ) * (parseFloat(formData.exchangeRate) || 1),
+                                { currency: "NGN" },
+                              )}
+                            </span>
+                          )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1456,7 +1629,10 @@ const MaterialRequests = () => {
                         id="mr-attachment-input"
                         onChange={(e) => {
                           const files = Array.from(e.target.files);
-                          setAttachments((prev) => [...prev, ...files]);
+                          setAttachments((prev) => [
+                            ...prev,
+                            ...normalizePickedAttachments(files),
+                          ]);
                           e.target.value = null;
                         }}
                       />
@@ -1488,14 +1664,14 @@ const MaterialRequests = () => {
                           >
                             <i className="fa-solid fa-file text-[#617589] text-xs"></i>
                             <span className="text-[#111418] text-xs">
-                              {file.name}
+                              {getAttachmentName(file)}
                             </span>
                             <button
                               type="button"
                               className="text-red-400 hover:text-red-600 ml-1"
                               onClick={() =>
-                                setAttachments(
-                                  attachments.filter((_, i) => i !== index),
+                                setAttachments((prev) =>
+                                  prev.filter((_, i) => i !== index),
                                 )
                               }
                             >
@@ -1506,33 +1682,6 @@ const MaterialRequests = () => {
                       </div>
                     )}
                   </div>
-
-                  <label className="flex flex-col gap-2">
-                    <span className="text-sm font-medium text-[#111418]">
-                      Preferred Vendor
-                    </span>
-                    <div className="relative">
-                      <i className="fa-solid fa-store absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
-                      <select
-                        name="preferredVendor"
-                        value={selectedVendor}
-                        onChange={(e) => setSelectedVendor(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
-                      >
-                        <option value="">Select a vendor...</option>
-                        {vendors.map((vendor) => (
-                          <option
-                            key={vendor.id || vendor._id}
-                            value={vendor.name}
-                          >
-                            {vendor.name}{" "}
-                            {vendor.category && `- ${vendor.category}`}
-                          </option>
-                        ))}
-                      </select>
-                      <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i>
-                    </div>
-                  </label>
                 </div>
               </div>
 
@@ -1556,6 +1705,17 @@ const MaterialRequests = () => {
                     onClick={async () => {
                       setIsSavingDraft(true);
                       try {
+                        const selectedCurrency =
+                          formData.currency || appCurrency || "NGN";
+                        const isForeignCurrency = selectedCurrency !== "NGN";
+                        const exchangeRateToNgn = parseFloat(
+                          formData.exchangeRate,
+                        );
+                        const effectiveRateToNgn =
+                          isForeignCurrency && exchangeRateToNgn > 0
+                            ? exchangeRateToNgn
+                            : 1;
+
                         if (!formData.requestType) {
                           toast.error(
                             "Please select a request type before saving a draft",
@@ -1564,13 +1724,45 @@ const MaterialRequests = () => {
                           return;
                         }
 
+                        if (isForeignCurrency && !(exchangeRateToNgn > 0)) {
+                          toast.error(
+                            "Please enter a valid exchange rate to convert to NGN",
+                          );
+                          setIsSavingDraft(false);
+                          return;
+                        }
+
+                        const validLineItems = lineItems.filter(
+                          (item) =>
+                            item.itemName && item.quantity && item.quantityType,
+                        );
+
+                        const normalizedLineItems = validLineItems.map(
+                          (item) => {
+                            const quantity = parseFloat(item.quantity) || 0;
+                            const amount = parseFloat(item.amount) || 0;
+                            return {
+                              ...item,
+                              quantity,
+                              amount,
+                              amountNgn: amount * effectiveRateToNgn,
+                              lineTotalNgn:
+                                quantity * amount * effectiveRateToNgn,
+                            };
+                          },
+                        );
+
                         const requestData = {
                           ...formData,
-                          lineItems: lineItems.filter(
-                            (item) =>
-                              item.itemName &&
-                              item.quantity &&
-                              item.quantityType,
+                          currency: selectedCurrency,
+                          exchangeRate: isForeignCurrency
+                            ? String(exchangeRateToNgn)
+                            : "",
+                          exchangeRateToNgn: effectiveRateToNgn,
+                          lineItems: normalizedLineItems,
+                          totalAmountNgn: normalizedLineItems.reduce(
+                            (sum, item) => sum + item.lineTotalNgn,
+                            0,
                           ),
                           requestedBy:
                             user?.fullName ||
@@ -1578,22 +1770,7 @@ const MaterialRequests = () => {
                             "Unknown User",
                           date: new Date().toISOString().split("T")[0],
                           status: "draft",
-                          attachments: await Promise.all(
-                            attachments.map(async (f) => {
-                              if (f.fileData) return f;
-                              const base64 = await new Promise((resolve) => {
-                                const reader = new FileReader();
-                                reader.onloadend = () => resolve(reader.result);
-                                reader.readAsDataURL(f);
-                              });
-                              return {
-                                fileName: f.name,
-                                fileData: base64,
-                                fileType: f.type,
-                                fileSize: f.size,
-                              };
-                            }),
-                          ),
+                          attachments: await serializeAttachments(attachments),
                           message: message,
                         };
 
@@ -1626,7 +1803,12 @@ const MaterialRequests = () => {
                           requestType: "",
                           approver: "",
                           department: "",
+                          requestTitle: "",
+                          requiredByDate: "",
+                          budgetCode: "",
+                          reason: "",
                           currency: appCurrency,
+                          exchangeRate: "",
                         });
                         setLineItems([
                           {
@@ -1669,7 +1851,9 @@ const MaterialRequests = () => {
                     {isSubmitting
                       ? "Submitting..."
                       : isEditMode
-                        ? "Update Request"
+                        ? selectedRequest?.status === "draft"
+                          ? "Complete Draft & Submit"
+                          : "Update Request"
                         : "Submit Request"}
                   </button>
                 </div>
@@ -1693,8 +1877,7 @@ const MaterialRequests = () => {
                 className="text-white hover:text-gray-200 transition-colors"
                 onClick={() => {
                   setShowApprovalModal(false);
-                  setSelectedRequest(null);
-                  setSelectedVendor("");
+                  setShowViewModal(true);
                   setRejectionReason("");
                 }}
               >
@@ -1860,7 +2043,7 @@ const MaterialRequests = () => {
                 Approval Action
               </h6>
 
-              {selectedRequest.requestType === "Internal Transfer" ? (
+              {selectedRequest.requestType === "Internal Transfer" && (
                 <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-start gap-3">
                     <i className="fa-solid fa-warehouse text-blue-600 text-xl mt-1"></i>
@@ -1875,29 +2058,6 @@ const MaterialRequests = () => {
                       </p>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Vendor <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={selectedVendor}
-                    onChange={(e) => setSelectedVendor(e.target.value)}
-                    required
-                  >
-                    <option value="">Choose vendor...</option>
-                    {vendors.map((vendor) => (
-                      <option key={vendor.id} value={vendor.name}>
-                        {vendor.name} - {vendor.category}
-                      </option>
-                    ))}
-                  </select>
-                  <small className="text-gray-500 text-sm mt-1 block">
-                    A Purchase Order will be created with this vendor upon
-                    approval
-                  </small>
                 </div>
               )}
 
@@ -1920,8 +2080,7 @@ const MaterialRequests = () => {
                 className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium flex items-center justify-center gap-2"
                 onClick={() => {
                   setShowApprovalModal(false);
-                  setSelectedRequest(null);
-                  setSelectedVendor("");
+                  setShowViewModal(true);
                   setRejectionReason("");
                 }}
               >
@@ -1945,12 +2104,7 @@ const MaterialRequests = () => {
                 type="button"
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleApproveRequest}
-                disabled={
-                  (selectedRequest.requestType !== "Internal Transfer" &&
-                    !selectedVendor) ||
-                  isApproving ||
-                  isRejecting
-                }
+                disabled={isApproving || isRejecting}
               >
                 {isApproving ? (
                   <i className="fa-solid fa-circle-notch fa-spin"></i>
@@ -1961,7 +2115,7 @@ const MaterialRequests = () => {
                   ? "Approving..."
                   : selectedRequest.requestType === "Internal Transfer"
                     ? "Approve & Fulfill from Inventory"
-                    : "Approve & Create PO"}
+                    : "Approve Request"}
               </button>
             </div>
           </div>
@@ -1991,7 +2145,7 @@ const MaterialRequests = () => {
                   },
                   {
                     label: `Request #${selectedRequest.requestId || selectedRequest._id}`,
-                    icon: "fa-eye",
+                    // icon: "fa-eye",
                   },
                 ]}
               />
@@ -1999,7 +2153,7 @@ const MaterialRequests = () => {
 
             {/* Header Section */}
             <div className="bg-white border-b border-gray-200 px-6 py-4">
-              <div className="max-w-[1200px] mx-auto">
+              <div className="max-w-[1590px] mx-auto">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-3">
@@ -2145,24 +2299,10 @@ const MaterialRequests = () => {
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 w-full max-w-[1200px] mx-auto p-6">
-              <div
-                className={`grid grid-cols-1 gap-6 ${
-                  isUserApprover(selectedRequest) &&
-                  selectedRequest.status === "pending"
-                    ? ""
-                    : "lg:grid-cols-3"
-                }`}
-              >
+            <div className="flex-1 w-full max-w-[1590px] mx-auto p-6">
+              <div className="grid grid-cols-1 gap-6">
                 {/* Left Column - Main Details */}
-                <div
-                  className={`flex flex-col gap-6 ${
-                    isUserApprover(selectedRequest) &&
-                    selectedRequest.status === "pending"
-                      ? ""
-                      : "lg:col-span-2"
-                  }`}
-                >
+                <div className="flex flex-col gap-6">
                   {/* Request Overview */}
                   <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
@@ -2221,14 +2361,6 @@ const MaterialRequests = () => {
                           {selectedRequest.currency || "NGN"}
                         </p>
                       </div>
-                      {selectedRequest.message && (
-                        <div className="md:col-span-2 flex flex-col gap-1 pt-2">
-                          <p className="text-[#617589] text-sm">Comment</p>
-                          <p className="text-[#111418] text-sm leading-relaxed">
-                            {selectedRequest.message}
-                          </p>
-                        </div>
-                      )}
                     </div>
                   </div>
 
@@ -2323,6 +2455,119 @@ const MaterialRequests = () => {
                     </div>
                   </div>
 
+                  {/* Approval History (show here first for pending approver flow) */}
+                  {isUserApprover(selectedRequest) &&
+                    selectedRequest.status === "pending" && (
+                      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
+                          <i className="fa-solid fa-clock-rotate-left text-gray-500"></i>
+                          <h3 className="text-lg font-bold text-[#111418]">
+                            Approval History
+                          </h3>
+                        </div>
+                        <div className="p-6">
+                          <div className="relative pl-4 border-l-2 border-gray-200 space-y-8">
+                            {/* Request Submitted */}
+                            <div className="relative">
+                              <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-green-500 ring-4 ring-white"></div>
+                              <div className="flex flex-col gap-1">
+                                <p className="text-sm font-bold text-[#111418]">
+                                  Request Submitted
+                                </p>
+                                <p className="text-xs text-[#617589]">
+                                  {new Date(
+                                    selectedRequest.date ||
+                                      selectedRequest.createdAt,
+                                  ).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <div className="bg-gray-200 text-gray-600 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold">
+                                    {selectedRequest.requestedBy
+                                      ?.charAt(0)
+                                      ?.toUpperCase() || "U"}
+                                  </div>
+                                  <span className="text-sm text-[#111418]">
+                                    {selectedRequest.requestedBy}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Current Status */}
+                            {selectedRequest.status === "pending" && (
+                              <div className="relative">
+                                <div className="absolute -left-[23px] top-0 h-4 w-4 rounded-full border-2 border-[#137fec] bg-white animate-pulse"></div>
+                                <div className="flex flex-col gap-1">
+                                  <p className="text-sm font-bold text-[#137fec]">
+                                    Pending Review
+                                  </p>
+                                  <p className="text-xs text-[#617589]">
+                                    Awaiting Action
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-sm text-[#617589]">
+                                      Assigned to:{" "}
+                                      {selectedRequest.approver ||
+                                        "Not assigned"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {selectedRequest.status === "approved" && (
+                              <div className="relative">
+                                <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-green-500 ring-4 ring-white"></div>
+                                <div className="flex flex-col gap-1">
+                                  <p className="text-sm font-bold text-[#111418]">
+                                    Approved
+                                  </p>
+                                  <p className="text-xs text-[#617589]">
+                                    {selectedRequest.approvedDate
+                                      ? new Date(
+                                          selectedRequest.approvedDate,
+                                        ).toLocaleDateString()
+                                      : "Recently"}
+                                  </p>
+                                  <span className="ml-auto text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded w-fit">
+                                    Approved
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {selectedRequest.status === "rejected" &&
+                              selectedRequest.rejectionReason && (
+                                <div className="relative">
+                                  <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-red-500 ring-4 ring-white"></div>
+                                  <div className="flex flex-col gap-1">
+                                    <p className="text-sm font-bold text-[#111418]">
+                                      Rejected
+                                    </p>
+                                    <p className="text-xs text-[#617589]">
+                                      {selectedRequest.rejectedDate
+                                        ? new Date(
+                                            selectedRequest.rejectedDate,
+                                          ).toLocaleDateString()
+                                        : "Recently"}
+                                    </p>
+                                    <div className="mt-2 rounded bg-gray-50 p-2 text-xs italic text-gray-600 border border-gray-100">
+                                      "{selectedRequest.rejectionReason}"
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                   {/* Activity & Comments */}
                   <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
                     <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
@@ -2354,9 +2599,41 @@ const MaterialRequests = () => {
                             _time: new Date(c.timestamp).getTime(),
                           }),
                         );
-                        const combined = [...activities, ...comments].sort(
-                          (a, b) => a._time - b._time,
+                        const hasInitialCommentInComments = comments.some(
+                          (c) =>
+                            String(c.text || "").trim() ===
+                              String(selectedRequest.message || "").trim() &&
+                            String(c.author || "").trim() ===
+                              String(selectedRequest.requestedBy || "").trim(),
                         );
+
+                        const initialCommentEntry =
+                          selectedRequest.message &&
+                          !hasInitialCommentInComments
+                            ? [
+                                {
+                                  _type: "comment",
+                                  author:
+                                    selectedRequest.requestedBy || "Requester",
+                                  text: selectedRequest.message,
+                                  timestamp:
+                                    selectedRequest.createdAt ||
+                                    selectedRequest.date ||
+                                    new Date().toISOString(),
+                                  _time: new Date(
+                                    selectedRequest.createdAt ||
+                                      selectedRequest.date ||
+                                      Date.now(),
+                                  ).getTime(),
+                                },
+                              ]
+                            : [];
+
+                        const combined = [
+                          ...activities,
+                          ...comments,
+                          ...initialCommentEntry,
+                        ].sort((a, b) => a._time - b._time);
                         if (combined.length === 0) {
                           return (
                             <p className="text-sm text-[#617589] text-center py-4">
@@ -2374,6 +2651,7 @@ const MaterialRequests = () => {
                               status_change: "fa-arrows-rotate text-blue-500",
                               approval: "fa-circle-check text-green-600",
                               rejection: "fa-circle-xmark text-red-500",
+                              po_created: "fa-file-invoice text-indigo-600",
                             };
                             const icon =
                               iconMap[entry.type] ||
@@ -2392,6 +2670,20 @@ const MaterialRequests = () => {
                                       {entry.author}
                                     </span>{" "}
                                     {entry.text}
+                                    {entry.type === "po_created" &&
+                                      entry.poNumber && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            openPurchaseOrderFromActivity(
+                                              entry.poNumber,
+                                            )
+                                          }
+                                          className="ml-2 text-[#137fec] hover:text-[#0d6efd] underline font-semibold"
+                                        >
+                                          {entry.poNumber}
+                                        </button>
+                                      )}
                                   </p>
                                   <span className="text-[11px] text-[#617589]">
                                     {new Date(entry.timestamp).toLocaleString()}
@@ -2437,6 +2729,61 @@ const MaterialRequests = () => {
                           );
                         });
                       })()}
+
+                      {Array.isArray(selectedRequest.approvalChain) &&
+                        selectedRequest.approvalChain.length > 0 && (
+                          <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <i className="fa-solid fa-diagram-project text-gray-500"></i>
+                              <h4 className="text-sm font-bold text-[#111418]">
+                                Approval Flow Status
+                              </h4>
+                            </div>
+                            <div className="space-y-2">
+                              {selectedRequest.approvalChain.map(
+                                (step, idx) => {
+                                  const stepStatus = step.status || "awaiting";
+                                  const statusClasses =
+                                    stepStatus === "approved"
+                                      ? "bg-green-100 text-green-700"
+                                      : stepStatus === "pending"
+                                        ? "bg-yellow-100 text-yellow-700"
+                                        : stepStatus === "rejected"
+                                          ? "bg-red-100 text-red-700"
+                                          : "bg-gray-100 text-gray-700";
+                                  return (
+                                    <div
+                                      key={`${step.level || idx}-${step.approverName || idx}`}
+                                      className="flex items-center justify-between gap-3 p-2 rounded bg-white border border-gray-100"
+                                    >
+                                      <div className="flex flex-col">
+                                        <span className="text-xs font-semibold text-[#111418]">
+                                          Level {step.level || idx + 1}:{" "}
+                                          {step.approverName || "Approver"}
+                                        </span>
+                                        <span className="text-[11px] text-[#617589]">
+                                          {stepStatus === "approved" &&
+                                          step.approvedAt
+                                            ? `Approved ${new Date(step.approvedAt).toLocaleString()}`
+                                            : stepStatus === "pending"
+                                              ? "Awaiting action"
+                                              : stepStatus === "awaiting"
+                                                ? "Waiting previous approval"
+                                                : step.comments || "Rejected"}
+                                        </span>
+                                      </div>
+                                      <span
+                                        className={`px-2 py-0.5 rounded text-[11px] font-semibold uppercase ${statusClasses}`}
+                                      >
+                                        {stepStatus}
+                                      </span>
+                                    </div>
+                                  );
+                                },
+                              )}
+                            </div>
+                          </div>
+                        )}
                     </div>
 
                     {/* Add Comment Section */}
@@ -2705,116 +3052,121 @@ const MaterialRequests = () => {
                     )}
                 </div>
 
-                {/* Right Column - Sidebar */}
-                <div className="flex flex-col gap-6">
+                {/* Right Column - Sidebar (Hidden) */}
+                <div className="hidden flex-col gap-6">
                   {/* Approval History */}
-                  <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
-                      <i className="fa-solid fa-clock-rotate-left text-gray-500"></i>
-                      <h3 className="text-lg font-bold text-[#111418]">
-                        Approval History
-                      </h3>
-                    </div>
-                    <div className="p-6">
-                      <div className="relative pl-4 border-l-2 border-gray-200 space-y-8">
-                        {/* Request Submitted */}
-                        <div className="relative">
-                          <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-green-500 ring-4 ring-white"></div>
-                          <div className="flex flex-col gap-1">
-                            <p className="text-sm font-bold text-[#111418]">
-                              Request Submitted
-                            </p>
-                            <p className="text-xs text-[#617589]">
-                              {new Date(
-                                selectedRequest.date ||
-                                  selectedRequest.createdAt,
-                              ).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <div className="bg-gray-200 text-gray-600 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold">
-                                {selectedRequest.requestedBy
-                                  ?.charAt(0)
-                                  ?.toUpperCase() || "U"}
-                              </div>
-                              <span className="text-sm text-[#111418]">
-                                {selectedRequest.requestedBy}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Current Status */}
-                        {selectedRequest.status === "pending" && (
-                          <div className="relative">
-                            <div className="absolute -left-[23px] top-0 h-4 w-4 rounded-full border-2 border-[#137fec] bg-white animate-pulse"></div>
-                            <div className="flex flex-col gap-1">
-                              <p className="text-sm font-bold text-[#137fec]">
-                                Pending Review
-                              </p>
-                              <p className="text-xs text-[#617589]">
-                                Awaiting Action
-                              </p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-sm text-[#617589]">
-                                  Assigned to:{" "}
-                                  {selectedRequest.approver || "Not assigned"}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {selectedRequest.status === "approved" && (
+                  {!(
+                    isUserApprover(selectedRequest) &&
+                    selectedRequest.status === "pending"
+                  ) && (
+                    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
+                        <i className="fa-solid fa-clock-rotate-left text-gray-500"></i>
+                        <h3 className="text-lg font-bold text-[#111418]">
+                          Approval History
+                        </h3>
+                      </div>
+                      <div className="p-6">
+                        <div className="relative pl-4 border-l-2 border-gray-200 space-y-8">
+                          {/* Request Submitted */}
                           <div className="relative">
                             <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-green-500 ring-4 ring-white"></div>
                             <div className="flex flex-col gap-1">
                               <p className="text-sm font-bold text-[#111418]">
-                                Approved
+                                Request Submitted
                               </p>
                               <p className="text-xs text-[#617589]">
-                                {selectedRequest.approvedDate
-                                  ? new Date(
-                                      selectedRequest.approvedDate,
-                                    ).toLocaleDateString()
-                                  : "Recently"}
+                                {new Date(
+                                  selectedRequest.date ||
+                                    selectedRequest.createdAt,
+                                ).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
                               </p>
-                              <span className="ml-auto text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded w-fit">
-                                Approved
-                              </span>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="bg-gray-200 text-gray-600 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold">
+                                  {selectedRequest.requestedBy
+                                    ?.charAt(0)
+                                    ?.toUpperCase() || "U"}
+                                </div>
+                                <span className="text-sm text-[#111418]">
+                                  {selectedRequest.requestedBy}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        )}
 
-                        {selectedRequest.status === "rejected" &&
-                          selectedRequest.rejectionReason && (
+                          {/* Current Status */}
+                          {selectedRequest.status === "pending" && (
                             <div className="relative">
-                              <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-red-500 ring-4 ring-white"></div>
+                              <div className="absolute -left-[23px] top-0 h-4 w-4 rounded-full border-2 border-[#137fec] bg-white animate-pulse"></div>
                               <div className="flex flex-col gap-1">
-                                <p className="text-sm font-bold text-[#111418]">
-                                  Rejected
+                                <p className="text-sm font-bold text-[#137fec]">
+                                  Pending Review
                                 </p>
                                 <p className="text-xs text-[#617589]">
-                                  {selectedRequest.rejectedDate
-                                    ? new Date(
-                                        selectedRequest.rejectedDate,
-                                      ).toLocaleDateString()
-                                    : "Recently"}
+                                  Awaiting Action
                                 </p>
-                                <div className="mt-2 rounded bg-gray-50 p-2 text-xs italic text-gray-600 border border-gray-100">
-                                  "{selectedRequest.rejectionReason}"
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-sm text-[#617589]">
+                                    Assigned to:{" "}
+                                    {selectedRequest.approver || "Not assigned"}
+                                  </span>
                                 </div>
                               </div>
                             </div>
                           )}
+
+                          {selectedRequest.status === "approved" && (
+                            <div className="relative">
+                              <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-green-500 ring-4 ring-white"></div>
+                              <div className="flex flex-col gap-1">
+                                <p className="text-sm font-bold text-[#111418]">
+                                  Approved
+                                </p>
+                                <p className="text-xs text-[#617589]">
+                                  {selectedRequest.approvedDate
+                                    ? new Date(
+                                        selectedRequest.approvedDate,
+                                      ).toLocaleDateString()
+                                    : "Recently"}
+                                </p>
+                                <span className="ml-auto text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded w-fit">
+                                  Approved
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {selectedRequest.status === "rejected" &&
+                            selectedRequest.rejectionReason && (
+                              <div className="relative">
+                                <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-red-500 ring-4 ring-white"></div>
+                                <div className="flex flex-col gap-1">
+                                  <p className="text-sm font-bold text-[#111418]">
+                                    Rejected
+                                  </p>
+                                  <p className="text-xs text-[#617589]">
+                                    {selectedRequest.rejectedDate
+                                      ? new Date(
+                                          selectedRequest.rejectedDate,
+                                        ).toLocaleDateString()
+                                      : "Recently"}
+                                  </p>
+                                  <div className="mt-2 rounded bg-gray-50 p-2 text-xs italic text-gray-600 border border-gray-100">
+                                    "{selectedRequest.rejectionReason}"
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Attachments */}
                   {selectedRequest.attachments &&
@@ -2834,113 +3186,24 @@ const MaterialRequests = () => {
                               : ""}
                           </span>
                         </div>
-                        <div className="p-4 flex flex-col gap-2">
-                          {selectedRequest.attachments.map((file, idx) => {
-                            const fileName =
-                              typeof file === "string" ? file : file.fileName;
-                            const fileData =
-                              typeof file === "string" ? null : file.fileData;
-                            const fileSize =
-                              typeof file === "string" ? 0 : file.fileSize || 0;
-                            const ext =
-                              fileName?.split(".").pop()?.toLowerCase() || "";
-                            const iconMap = {
-                              pdf: {
-                                icon: "fa-file-pdf",
-                                color: "text-red-600 bg-red-50",
-                              },
-                              doc: {
-                                icon: "fa-file-word",
-                                color: "text-blue-600 bg-blue-50",
-                              },
-                              docx: {
-                                icon: "fa-file-word",
-                                color: "text-blue-600 bg-blue-50",
-                              },
-                              xls: {
-                                icon: "fa-file-excel",
-                                color: "text-green-600 bg-green-50",
-                              },
-                              xlsx: {
-                                icon: "fa-file-excel",
-                                color: "text-green-600 bg-green-50",
-                              },
-                              csv: {
-                                icon: "fa-file-csv",
-                                color: "text-green-600 bg-green-50",
-                              },
-                              jpg: {
-                                icon: "fa-file-image",
-                                color: "text-purple-600 bg-purple-50",
-                              },
-                              jpeg: {
-                                icon: "fa-file-image",
-                                color: "text-purple-600 bg-purple-50",
-                              },
-                              png: {
-                                icon: "fa-file-image",
-                                color: "text-purple-600 bg-purple-50",
-                              },
-                            };
-                            const { icon: fileIcon, color: fileColor } =
-                              iconMap[ext] || {
-                                icon: "fa-file",
-                                color: "text-gray-600 bg-gray-50",
-                              };
-                            const formatSize = (bytes) => {
-                              if (!bytes) return "";
-                              if (bytes < 1024) return bytes + " B";
-                              if (bytes < 1048576)
-                                return (bytes / 1024).toFixed(1) + " KB";
-                              return (bytes / 1048576).toFixed(1) + " MB";
-                            };
-                            return (
-                              <div
-                                key={idx}
-                                className="flex items-center gap-3 rounded-lg border border-gray-100 p-3 hover:bg-gray-50 transition-all group"
-                              >
+                        <div className="p-6">
+                          <div className="space-y-2">
+                            {selectedRequest.attachments.map((file, idx) => {
+                              const fileName =
+                                typeof file === "string" ? file : file.fileName;
+                              const fileData =
+                                typeof file === "string" ? null : file.fileData;
+                              return (
                                 <div
-                                  className={`flex h-10 w-10 items-center justify-center rounded-lg ${fileColor}`}
+                                  key={idx}
+                                  className="flex items-center justify-between rounded-lg border border-gray-100 p-3"
                                 >
-                                  <i className={`fa-solid ${fileIcon}`}></i>
-                                </div>
-                                <div className="flex flex-col overflow-hidden flex-1 min-w-0">
-                                  <p className="truncate text-sm font-medium text-[#111418]">
-                                    {fileName}
-                                  </p>
-                                  <p className="text-xs text-[#617589]">
-                                    {ext.toUpperCase()}
-                                    {fileSize
-                                      ? ` • ${formatSize(fileSize)}`
-                                      : ""}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  {fileData &&
-                                    ["jpg", "jpeg", "png", "pdf"].includes(
-                                      ext,
-                                    ) && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const win = window.open();
-                                          if (ext === "pdf") {
-                                            win.document.write(
-                                              `<iframe src="${fileData}" style="width:100%;height:100%;border:none;position:fixed;inset:0" />`,
-                                            );
-                                          } else {
-                                            win.document.write(
-                                              `<img src="${fileData}" style="max-width:100%;margin:auto;display:block" />`,
-                                            );
-                                          }
-                                          win.document.title = fileName;
-                                        }}
-                                        className="p-1.5 text-gray-400 hover:text-[#137fec] hover:bg-blue-50 rounded-md transition-colors"
-                                        title="View"
-                                      >
-                                        <i className="fa-solid fa-eye text-sm"></i>
-                                      </button>
-                                    )}
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <i className="fa-solid fa-file text-gray-400"></i>
+                                    <span className="truncate text-sm text-[#111418]">
+                                      {fileName}
+                                    </span>
+                                  </div>
                                   {fileData && (
                                     <button
                                       type="button"
@@ -2957,9 +3220,9 @@ const MaterialRequests = () => {
                                     </button>
                                   )}
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     )}

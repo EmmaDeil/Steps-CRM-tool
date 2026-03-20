@@ -7,6 +7,7 @@ const BudgetCategorySchema = new mongoose.Schema({
   bar: { type: String, default: 'bg-blue-500' },
   allocated: { type: Number, required: true, default: 0 },
   spent: { type: Number, default: 0 },
+  currency: { type: String, default: 'NGN' },
   period: { type: String, default: 'Q1 2025' },
   description: { type: String, default: '' },
   createdBy: { type: String, default: '' },

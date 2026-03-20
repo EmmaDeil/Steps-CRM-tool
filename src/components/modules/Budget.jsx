@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import Breadcrumb from "../Breadcrumb";
 import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
+import { getCurrencySymbol } from "../../services/currency";
 
 // ─── Helpers ─────────────────────────────────────────────
 const fmt = (n) =>
-  new Intl.NumberFormat("en-US", {
+  new Intl.NumberFormat("en-NG", {
     style: "currency",
-    currency: "USD",
+    currency: "NGN",
     maximumFractionDigits: 0,
   }).format(n || 0);
 
@@ -117,6 +118,7 @@ const makeEmptyLine = (year) => ({
   name: "",
   allocated: "",
   spent: "",
+  currency: "NGN",
   period: `Q1 ${year}`,
   description: "",
   iconIdx: 0,
@@ -127,6 +129,8 @@ const Budget = ({ onBack, parentModule }) => {
   // data state
   const [categories, setCategories] = useState([]);
   const [categoryNameOptions, setCategoryNameOptions] = useState([]);
+  const [currencyOptions, setCurrencyOptions] = useState([]);
+  const [currencyLoading, setCurrencyLoading] = useState(false);
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -193,6 +197,28 @@ const Budget = ({ onBack, parentModule }) => {
     }
   }, []);
 
+  const fetchCurrencies = useCallback(async () => {
+    setCurrencyLoading(true);
+    try {
+      const res = await apiService.get("/api/budget/currencies");
+      const rows = Array.isArray(res)
+        ? res
+        : Array.isArray(res?.data)
+          ? res.data
+          : [];
+      setCurrencyOptions(rows);
+    } catch {
+      setCurrencyOptions([
+        { code: "NGN", label: "Nigerian Naira", symbol: "₦" },
+        { code: "USD", label: "US Dollar", symbol: "$" },
+        { code: "EUR", label: "Euro", symbol: "€" },
+        { code: "GBP", label: "British Pound", symbol: "£" },
+      ]);
+    } finally {
+      setCurrencyLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchCategories(activePeriod);
   }, [activePeriod, fetchCategories]);
@@ -200,6 +226,10 @@ const Budget = ({ onBack, parentModule }) => {
   useEffect(() => {
     fetchCategoryNameOptions();
   }, [fetchCategoryNameOptions]);
+
+  useEffect(() => {
+    fetchCurrencies();
+  }, [fetchCurrencies]);
 
   // When year changes, reset activePeriod to Q1 of that year
   const handleYearChange = (yr) => {
@@ -261,6 +291,7 @@ const Budget = ({ onBack, parentModule }) => {
       name: cat.name,
       allocated: cat.allocated,
       spent: cat.spent,
+      currency: cat.currency || "NGN",
       period: cat.period,
       description: cat.description || "",
       iconIdx: iconIdx >= 0 ? iconIdx : 0,
@@ -294,6 +325,7 @@ const Budget = ({ onBack, parentModule }) => {
       name: newLine.name.trim(),
       allocated: parseFloat(newLine.allocated) || 0,
       spent: parseFloat(newLine.spent) || 0,
+      currency: newLine.currency || "NGN",
       period: newLine.period,
       description: newLine.description,
       icon: chosen.icon,
@@ -876,14 +908,37 @@ const Budget = ({ onBack, parentModule }) => {
               </div>
 
               {/* Allocated + Spent */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Allocated ($) <span className="text-red-500">*</span>
+                    Currency
+                  </label>
+                  <select
+                    value={newLine.currency || "NGN"}
+                    onChange={(e) =>
+                      setNewLine({ ...newLine, currency: e.target.value })
+                    }
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors text-sm"
+                  >
+                    {currencyLoading ? (
+                      <option value="NGN">Loading currencies...</option>
+                    ) : (
+                      currencyOptions.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} - {c.label}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Allocated ({getCurrencySymbol(newLine.currency || "NGN")}){" "}
+                    <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                      $
+                      {getCurrencySymbol(newLine.currency || "NGN")}
                     </span>
                     <input
                       type="number"
@@ -900,11 +955,12 @@ const Budget = ({ onBack, parentModule }) => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Spent so far ($)
+                    Spent so far ({getCurrencySymbol(newLine.currency || "NGN")}
+                    )
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                      $
+                      {getCurrencySymbol(newLine.currency || "NGN")}
                     </span>
                     <input
                       type="number"
@@ -974,7 +1030,7 @@ const Budget = ({ onBack, parentModule }) => {
                     </p>
                     <p className="text-xs text-gray-400">
                       {newLine.allocated
-                        ? `$${Number(newLine.allocated).toLocaleString()} allocated`
+                        ? `${getCurrencySymbol(newLine.currency || "NGN")}${Number(newLine.allocated).toLocaleString()} allocated`
                         : "Enter amount above"}{" "}
                       · {newLine.period}
                     </p>
