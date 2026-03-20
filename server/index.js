@@ -743,8 +743,10 @@ async function start() {
       await user.save();
 
       // Send reset email
-      const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
-      await sendPasswordResetEmail(user.email, resetUrl);
+      const emailResult = await sendPasswordResetEmail(user, resetToken);
+      if (!emailResult?.success) {
+        throw new Error(emailResult?.error || 'Failed to send password reset email');
+      }
 
       res.json({
         success: true,

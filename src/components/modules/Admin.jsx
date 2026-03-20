@@ -9,6 +9,50 @@ import ApprovalSettings from "./ApprovalSettings";
 import SystemSettings from "./SystemSettings";
 import SkuItemManager from "./SkuItemManager";
 import StoreLocations from "./StoreLocations";
+
+const DEFAULT_ROLE_PERMISSIONS = {
+  userManagement: {
+    viewUsers: false,
+    editUsers: false,
+    inviteUsers: false,
+  },
+  billingFinance: {
+    viewInvoices: false,
+    manageSubscription: false,
+  },
+  systemSettings: {
+    globalConfiguration: false,
+  },
+  security: {
+    viewLogs: false,
+    exportLogs: false,
+    manageSettings: false,
+    manageNotifications: false,
+    viewAnalytics: false,
+    manageSessions: false,
+    generateReports: false,
+  },
+};
+
+const withDefaultPermissions = (permissions = {}) => ({
+  userManagement: {
+    ...DEFAULT_ROLE_PERMISSIONS.userManagement,
+    ...(permissions.userManagement || {}),
+  },
+  billingFinance: {
+    ...DEFAULT_ROLE_PERMISSIONS.billingFinance,
+    ...(permissions.billingFinance || {}),
+  },
+  systemSettings: {
+    ...DEFAULT_ROLE_PERMISSIONS.systemSettings,
+    ...(permissions.systemSettings || {}),
+  },
+  security: {
+    ...DEFAULT_ROLE_PERMISSIONS.security,
+    ...(permissions.security || {}),
+  },
+});
+
 const Admin = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -49,6 +93,8 @@ const Admin = () => {
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [statusUpdatingByUser, setStatusUpdatingByUser] = useState({});
+  const [passwordResettingByUser, setPasswordResettingByUser] = useState({});
   const [showConfigureRolesModal, setShowConfigureRolesModal] = useState(false);
   const [showPasswordField, setShowPasswordField] = useState(false);
   const [selectedRoleTab, setSelectedRoleTab] = useState("Admin");
@@ -74,9 +120,9 @@ const Admin = () => {
 
   const [dbRoles, setDbRoles] = useState([]);
   const [rolePermissions, setRolePermissions] = useState({
-    Admin: {},
-    Editor: {},
-    Viewer: {},
+    Admin: withDefaultPermissions(),
+    Editor: withDefaultPermissions(),
+    Viewer: withDefaultPermissions(),
   });
 
   const fetchUsers = useCallback(async () => {
@@ -181,18 +227,22 @@ const Admin = () => {
   const fetchRoles = useCallback(async () => {
     try {
       const res = await apiService.get("/api/admin/roles");
-      const rolesArray = res.data || [];
+      const rolesArray = Array.isArray(res)
+        ? res
+        : Array.isArray(res?.data)
+          ? res.data
+          : [];
       setDbRoles(rolesArray);
 
       const permissionsMap = {};
       rolesArray.forEach((r) => {
-        permissionsMap[r.name] = r.permissions;
+        permissionsMap[r.name] = withDefaultPermissions(r.permissions);
       });
       // Fallback for UI if db doesn't have default roles seeded yet
       setRolePermissions({
-        Admin: permissionsMap.Admin || {},
-        Editor: permissionsMap.Editor || {},
-        Viewer: permissionsMap.Viewer || {},
+        Admin: permissionsMap.Admin || withDefaultPermissions(),
+        Editor: permissionsMap.Editor || withDefaultPermissions(),
+        Viewer: permissionsMap.Viewer || withDefaultPermissions(),
       });
     } catch (error) {
       console.error("Error fetching roles:", error);
@@ -503,6 +553,7 @@ const Admin = () => {
           ? "Active"
           : "Active";
 
+    setStatusUpdatingByUser((prev) => ({ ...prev, [userId]: true }));
     try {
       await apiService.patch(`/api/users/${userId}/status`, {
         status: newStatus,
@@ -512,6 +563,8 @@ const Admin = () => {
     } catch (error) {
       console.error("Error changing status:", error);
       toast.error("Failed to change user status");
+    } finally {
+      setStatusUpdatingByUser((prev) => ({ ...prev, [userId]: false }));
     }
   };
 
@@ -519,12 +572,15 @@ const Admin = () => {
     const user = users.find((u) => u._id === userId);
     if (!user) return;
 
+    setPasswordResettingByUser((prev) => ({ ...prev, [userId]: true }));
     try {
       await apiService.post(`/api/users/${userId}/reset-password`);
       toast.success(`Password reset link sent to ${user.email}`);
     } catch (error) {
       console.error("Error resetting password:", error);
       toast.error("Failed to send password reset email");
+    } finally {
+      setPasswordResettingByUser((prev) => ({ ...prev, [userId]: false }));
     }
   };
 
@@ -1135,19 +1191,39 @@ const Admin = () => {
                           </button>
                           <button
                             onClick={() => handleChangeStatus(user._id)}
-                            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors flex items-center gap-1.5"
+                            disabled={!!statusUpdatingByUser[user._id]}
+                            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                           >
-                            <i className="fa-solid fa-toggle-on"></i>
-                            {user.status === "Active"
-                              ? "Deactivate"
-                              : "Activate"}
+                            {statusUpdatingByUser[user._id] ? (
+                              <>
+                                <i className="fa-solid fa-spinner fa-spin"></i>
+                                Updating...
+                              </>
+                            ) : (
+                              <>
+                                <i className="fa-solid fa-toggle-on"></i>
+                                {user.status === "Active"
+                                  ? "Deactivate"
+                                  : "Activate"}
+                              </>
+                            )}
                           </button>
                           <button
                             onClick={() => handleResetPassword(user._id)}
-                            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors flex items-center gap-1.5"
+                            disabled={!!passwordResettingByUser[user._id]}
+                            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                           >
-                            <i className="fa-solid fa-key"></i>
-                            Reset Password
+                            {passwordResettingByUser[user._id] ? (
+                              <>
+                                <i className="fa-solid fa-spinner fa-spin"></i>
+                                Sending...
+                              </>
+                            ) : (
+                              <>
+                                <i className="fa-solid fa-key"></i>
+                                Reset Password
+                              </>
+                            )}
                           </button>
                           <button
                             onClick={() => handleDeleteUser(user._id)}
