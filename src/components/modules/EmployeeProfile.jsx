@@ -393,7 +393,8 @@ const EmployeeProfile = ({
 
     if (!isValid) {
       setValidationErrors(errors);
-      toast.error("Please fix the validation errors");
+      const firstError = Object.values(errors)[0];
+      toast.error(firstError || "Please fix the validation errors");
       // Add shake animation to error fields
       Object.keys(errors).forEach((field) => {
         const element = document.querySelector(`[name="${field}"]`);

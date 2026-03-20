@@ -2,8 +2,10 @@ import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
 import { useCurrency } from "../../context/useCurrency";
+import { useAuth } from "../../context/useAuth";
 
 const SystemSettings = () => {
+  const { user } = useAuth();
   const { setCurrency } = useCurrency();
   const [generalSettings, setGeneralSettings] = useState({
     companyName: "Acme Corp",
@@ -25,30 +27,43 @@ const SystemSettings = () => {
   });
 
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [userStandardSettings, setUserStandardSettings] = useState({
+    theme: "system",
+    language: "en",
+    timezone: "UTC",
+    dateFormat: "MM/DD/YYYY",
+    currency: "NGN",
+    emailNotifications: true,
+    inAppNotifications: true,
+    weeklyDigest: false,
+  });
+
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingUserSettings, setIsSavingUserSettings] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchSettings = async () => {
       try {
         const response = await apiService.get("/api/admin/system-settings");
-        if (response.data) {
+        if (response) {
           setGeneralSettings({
-            companyName: response.data.companyName || "Acme Corp",
-            contactEmail: response.data.contactEmail || "admin@acmecorp.com",
-            timezone: response.data.timezone || "UTC",
-            dateFormat: response.data.dateFormat || "MM/DD/YYYY",
-            currency: response.data.currency || "NGN",
+            companyName: response.companyName || "Acme Corp",
+            contactEmail: response.contactEmail || "admin@acmecorp.com",
+            timezone: response.timezone || "UTC",
+            dateFormat: response.dateFormat || "MM/DD/YYYY",
+            currency: response.currency || "NGN",
           });
           setThemeSettings({
-            primaryColor: response.data.primaryColor || "#137fec",
-            logoUrl: response.data.logoUrl || "",
+            primaryColor: response.primaryColor || "#137fec",
+            logoUrl: response.logoUrl || "",
           });
           setIntegrations({
-            slackEnabled: response.data.slackEnabled || false,
-            emailSmtp: response.data.emailSmtp || "smtp.mailtrap.io",
-            attendanceApiKey: response.data.attendanceApiKey || "",
+            slackEnabled: response.slackEnabled || false,
+            emailSmtp: response.emailSmtp || "smtp.mailtrap.io",
+            attendanceApiKey: response.attendanceApiKey || "",
           });
+          setMaintenanceMode(Boolean(response.maintenanceMode));
         }
       } catch (error) {
         console.error("Error fetching system settings:", error);
@@ -57,8 +72,26 @@ const SystemSettings = () => {
         setIsLoading(false);
       }
     };
+
+    const fetchUserSettings = async () => {
+      if (!user?._id) return;
+
+      try {
+        const response = await apiService.get(`/api/user/settings/${user._id}`);
+        if (response?.data?.preferences) {
+          setUserStandardSettings((prev) => ({
+            ...prev,
+            ...response.data.preferences,
+          }));
+        }
+      } catch (error) {
+        console.error("Error fetching user settings:", error);
+      }
+    };
+
     fetchSettings();
-  }, []);
+    fetchUserSettings();
+  }, [user?._id]);
 
   // Handlers
   const handleGeneralChange = (e) => {
@@ -79,6 +112,14 @@ const SystemSettings = () => {
     }));
   };
 
+  const handleUserSettingChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setUserStandardSettings((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
+
   const handleSaveAll = async () => {
     setIsSaving(true);
     try {
@@ -86,6 +127,7 @@ const SystemSettings = () => {
         ...generalSettings,
         ...themeSettings,
         ...integrations,
+        maintenanceMode,
       };
       await apiService.patch("/api/admin/system-settings", payload);
       setCurrency(generalSettings.currency);
@@ -95,6 +137,28 @@ const SystemSettings = () => {
       toast.error("Failed to save settings");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSaveUserSettings = async () => {
+    if (!user?._id) {
+      toast.error("Unable to identify current user");
+      return;
+    }
+
+    setIsSavingUserSettings(true);
+    try {
+      await apiService.patch(`/api/user/settings/${user._id}`, {
+        preferences: userStandardSettings,
+      });
+
+      setCurrency(userStandardSettings.currency || generalSettings.currency);
+      toast.success("Your settings were saved successfully");
+    } catch (error) {
+      console.error("Error saving user settings:", error);
+      toast.error(error?.serverData?.error || "Failed to save user settings");
+    } finally {
+      setIsSavingUserSettings(false);
     }
   };
 
@@ -223,6 +287,152 @@ const SystemSettings = () => {
                   This currency will be used across all modules in the
                   application.
                 </p>
+              </div>
+            </div>
+          </section>
+
+          {/* User Standard Settings Section */}
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <i className="fa-solid fa-user-gear text-gray-400"></i>
+                User Standard Settings
+              </h3>
+              <button
+                onClick={handleSaveUserSettings}
+                disabled={isSavingUserSettings}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSavingUserSettings ? (
+                  <i className="fa-solid fa-spinner fa-spin"></i>
+                ) : (
+                  <i className="fa-solid fa-floppy-disk"></i>
+                )}
+                Save My Settings
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-6 rounded-xl border border-gray-100">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Theme
+                </label>
+                <select
+                  name="theme"
+                  value={userStandardSettings.theme}
+                  onChange={handleUserSettingChange}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500 transition-shadow"
+                >
+                  <option value="system">System Default</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Language
+                </label>
+                <select
+                  name="language"
+                  value={userStandardSettings.language}
+                  onChange={handleUserSettingChange}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500 transition-shadow"
+                >
+                  <option value="en">English</option>
+                  <option value="fr">French</option>
+                  <option value="es">Spanish</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Timezone
+                </label>
+                <select
+                  name="timezone"
+                  value={userStandardSettings.timezone}
+                  onChange={handleUserSettingChange}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500 transition-shadow"
+                >
+                  <option value="UTC">UTC</option>
+                  <option value="Africa/Lagos">Africa/Lagos</option>
+                  <option value="America/New_York">America/New_York</option>
+                  <option value="Europe/London">Europe/London</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date Format
+                </label>
+                <select
+                  name="dateFormat"
+                  value={userStandardSettings.dateFormat}
+                  onChange={handleUserSettingChange}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500 transition-shadow"
+                >
+                  <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                  <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Preferred Currency
+                </label>
+                <select
+                  name="currency"
+                  value={userStandardSettings.currency}
+                  onChange={handleUserSettingChange}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500 transition-shadow"
+                >
+                  <option value="NGN">NGN</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                  <option value="KES">KES</option>
+                  <option value="GHS">GHS</option>
+                </select>
+              </div>
+
+              <div className="space-y-3 md:col-span-2">
+                <label className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    name="emailNotifications"
+                    checked={userStandardSettings.emailNotifications}
+                    onChange={handleUserSettingChange}
+                  />
+                  <span className="text-sm text-gray-700">
+                    Email notifications
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    name="inAppNotifications"
+                    checked={userStandardSettings.inAppNotifications}
+                    onChange={handleUserSettingChange}
+                  />
+                  <span className="text-sm text-gray-700">
+                    In-app notifications
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    name="weeklyDigest"
+                    checked={userStandardSettings.weeklyDigest}
+                    onChange={handleUserSettingChange}
+                  />
+                  <span className="text-sm text-gray-700">
+                    Weekly digest summary
+                  </span>
+                </label>
               </div>
             </div>
           </section>

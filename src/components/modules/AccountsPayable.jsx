@@ -330,7 +330,7 @@ const AccountsPayable = ({ onBack }) => {
                     </th>
                     <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 cursor-pointer hover:text-primary group">
                       <div className="flex items-center gap-1">
-                        Vendor
+                        Request Title
                         <i className="fa-solid fa-sort text-xs text-slate-400 group-hover:text-primary"></i>
                       </div>
                     </th>
@@ -401,14 +401,14 @@ const AccountsPayable = ({ onBack }) => {
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
                             <div className="size-8 rounded bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                              {invoice.vendor?.charAt(0) || "V"}
+                              {invoice.requestTitle?.charAt(0) || "R"}
                             </div>
                             <div>
                               <div className="font-medium text-slate-900">
-                                {invoice.vendor || "Unknown Vendor"}
+                                {invoice.requestTitle || "Untitled Request"}
                               </div>
                               <div className="text-xs text-slate-500">
-                                {invoice.category || "General"}
+                                {invoice.vendor || "Unknown Vendor"}
                               </div>
                             </div>
                           </div>
@@ -452,7 +452,7 @@ const AccountsPayable = ({ onBack }) => {
                             onClick={() => handleViewInvoiceDetails(invoice)}
                             className="text-slate-400 hover:text-primary transition-colors"
                           >
-                            <i className="fa-solid fa-chevron-right text-lg"></i>
+                            <i className="fa-solid fa-ellipsis-vertical text-lg"></i>
                           </button>
                         </td>
                       </tr>

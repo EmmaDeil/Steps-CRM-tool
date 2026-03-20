@@ -6,9 +6,13 @@ export const validateEmail = (email) => {
 };
 
 export const validatePhone = (phone) => {
-  // Allows various phone formats: (123) 456-7890, 123-456-7890, 1234567890, +1234567890
-  const phoneRegex = /^[+]?[(]?[0-9]{3}[)]?[-\s.]?[0-9]{3}[-\s.]?[0-9]{4,6}$/;
-  return phoneRegex.test(phone);
+  // Accept international numbers (E.164-ish) while allowing spaces, dashes and parentheses.
+  const value = String(phone || '').trim();
+  if (!value) return true;
+
+  const normalized = value.replace(/[\s().-]/g, '');
+  const phoneRegex = /^\+?[0-9]{7,15}$/;
+  return phoneRegex.test(normalized);
 };
 
 export const validateRequired = (value) => {

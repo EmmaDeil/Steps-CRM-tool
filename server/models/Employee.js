@@ -9,7 +9,7 @@ const EmployeeSchema = new mongoose.Schema({
   department: { type: String },
   jobTitle: { type: String },
   startDate: { type: Date },
-  status: { type: String, default: 'Active', enum: ['Active', 'On Leave', 'Terminated'] },
+  status: { type: String, default: 'Active', enum: ['Active', 'On Leave', 'Inactive', 'Terminated'] },
   avatar: { type: String, default: '' }, // Stores base64 data URL (data:image/png;base64,...)
   employeeId: { type: String },
   salary: { type: Number, default: 0 },

@@ -14,6 +14,39 @@ import Breadcrumb from "../components/Breadcrumb";
 import { apiService } from "../services/api";
 import Footer from "../components/Footer";
 import PurchaseOrders from "../components/modules/PurchaseOrders";
+import Finance from "../components/modules/Finance";
+
+const ModuleLoadingState = ({ moduleName = "Module", subtitle }) => {
+  const safeName = moduleName || "Module";
+
+  return (
+    <div className="flex-1 flex items-center justify-center px-4 py-10">
+      <div className="text-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mb-4"></div>
+        <h3 className="text-lg font-semibold mb-1 text-[#111418]">
+          Loading {safeName} module
+        </h3>
+        {subtitle ? <p className="text-sm text-[#617589]">{subtitle}</p> : null}
+      </div>
+    </div>
+  );
+};
+
+const ModuleEntryGate = ({ moduleId, moduleName, children }) => {
+  const [isEntering, setIsEntering] = useState(true);
+
+  useEffect(() => {
+    setIsEntering(true);
+    const timer = setTimeout(() => setIsEntering(false), 220);
+    return () => clearTimeout(timer);
+  }, [moduleId, moduleName]);
+
+  if (isEntering) {
+    return <ModuleLoadingState moduleName={moduleName} />;
+  }
+
+  return children;
+};
 
 // Custom Error Boundary for Module Loading
 class ModuleErrorBoundary extends React.Component {
@@ -42,17 +75,10 @@ class ModuleErrorBoundary extends React.Component {
     if (this.state.hasError) {
       if (!this.state.reloadAttempted) {
         return (
-          <div className="flex-1 flex items-center justify-center px-4 py-10">
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-              <h3 className="text-lg font-bold mb-2 text-[#111418]">
-                Module Loading Error
-              </h3>
-              <p className="text-sm text-[#617589] mb-2">
-                Reloading to find the module...
-              </p>
-            </div>
-          </div>
+          <ModuleLoadingState
+            moduleName={this.props.moduleName || "Module"}
+            subtitle="Recovering from a loading error..."
+          />
         );
       }
 
@@ -95,6 +121,7 @@ const loadModuleComponent = (componentName) => {
 
   const eagerComponents = {
     PurchaseOrders,
+    Finance,
   };
 
   if (eagerComponents[finalComponentName]) {
@@ -140,6 +167,7 @@ const iconMap = {
 };
 
 const legacyModuleById = {
+  5: { id: 5, name: "Finance", componentName: "Finance" },
   11: { id: 11, name: "Purchase Orders", componentName: "PurchaseOrders" },
 };
 
@@ -188,11 +216,22 @@ export default function Home() {
   }, []);
 
   const handleOpenModule = (moduleId) => {
-    // Special handling for DocSign module - navigate to main module
+    // Special handling for specific modules with hard fallback routes
     const module = modules.find(
       (m) => getModuleRouteId(m) === String(moduleId),
     );
 
+    // Finance module - force to ID 5
+    if (
+      module &&
+      ((module.componentName || "").toLowerCase() === "finance" ||
+        (module.name || "").toLowerCase() === "finance")
+    ) {
+      navigate("/home/5");
+      return;
+    }
+
+    // Purchase Orders module - force to ID 11
     if (
       module &&
       ((module.componentName || "").toLowerCase() === "purchaseorders" ||
@@ -230,6 +269,18 @@ export default function Home() {
     return loadModuleComponent(found.componentName || found.name);
   }, [found]);
 
+  const requestedModuleName = useMemo(() => {
+    if (found?.name) return found.name;
+    if (moduleRouteId && legacyModuleById[moduleRouteId]?.name) {
+      return legacyModuleById[moduleRouteId].name;
+    }
+
+    const matchedModule = (modules || []).find(
+      (m) => getModuleRouteId(m) === moduleRouteId,
+    );
+    return matchedModule?.name || "Module";
+  }, [found, moduleRouteId, modules, getModuleRouteId]);
+
   // Auto-retry fetching modules when server comes back online
   useEffect(() => {
     if (!error || !id) return;
@@ -251,34 +302,17 @@ export default function Home() {
 
   // ===== MODULE DETAIL VIEW =====
   if (id) {
-    // Hard fallback for unstable module metadata/loading path.
-    if (String(id) === "11") {
-      return (
-        <div className="min-h-screen flex flex-col">
-          <Navbar user={user} />
-          <div className="flex-1">
-            <PurchaseOrders />
-          </div>
-        </div>
-      );
-    }
-
     // Still loading or server error — show spinner instead of "not found"
     if (loading || (error && modules.length === 0)) {
       return (
         <div className="min-h-screen flex flex-col">
           <Navbar user={user} />
-          <div className="flex-1 flex items-center justify-center px-4 py-10">
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mb-4"></div>
-              <h3 className="text-lg font-semibold mb-1 text-[#111418]">
-                Loading Module...
-              </h3>
-              <p className="text-sm text-[#617589]">
-                {error ? "Waiting for server connection..." : "Please wait"}
-              </p>
-            </div>
-          </div>
+          <ModuleLoadingState
+            moduleName={requestedModuleName}
+            subtitle={
+              error ? "Waiting for server connection..." : "Please wait"
+            }
+          />
         </div>
       );
     }
@@ -341,6 +375,7 @@ export default function Home() {
           <Navbar user={user} />
           <div className="flex-1">
             <ModuleErrorBoundary
+              moduleName={found.name}
               fallback={
                 <div className="flex-1 flex items-center justify-center px-4 py-10">
                   <div className="text-center max-w-md">
@@ -374,11 +409,11 @@ export default function Home() {
             >
               <Suspense
                 key={id}
-                fallback={
-                  <div className="p-4 text-center">Loading module...</div>
-                }
+                fallback={<ModuleLoadingState moduleName={found.name} />}
               >
-                <ModuleComp />
+                <ModuleEntryGate moduleId={id} moduleName={found.name}>
+                  <ModuleComp />
+                </ModuleEntryGate>
               </Suspense>
             </ModuleErrorBoundary>
           </div>

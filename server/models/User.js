@@ -130,6 +130,41 @@ const userSchema = new mongoose.Schema({
     enum: ['email', 'sms'],
     select: false,
   },
+  preferences: {
+    theme: {
+      type: String,
+      enum: ['system', 'light', 'dark'],
+      default: 'system',
+    },
+    language: {
+      type: String,
+      default: 'en',
+    },
+    timezone: {
+      type: String,
+      default: 'UTC',
+    },
+    dateFormat: {
+      type: String,
+      default: 'MM/DD/YYYY',
+    },
+    currency: {
+      type: String,
+      default: 'NGN',
+    },
+    emailNotifications: {
+      type: Boolean,
+      default: true,
+    },
+    inAppNotifications: {
+      type: Boolean,
+      default: true,
+    },
+    weeklyDigest: {
+      type: Boolean,
+      default: false,
+    },
+  },
 }, {
   timestamps: true,
 });

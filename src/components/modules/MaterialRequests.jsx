@@ -403,6 +403,25 @@ const MaterialRequests = () => {
       ? requests
       : requests.filter((req) => req.status === filterStatus);
 
+  const resolveApproverDisplay = useCallback((request) => {
+    if (!request) return "-";
+
+    const directApprover = String(request.approver || "").trim();
+    if (directApprover) return directApprover;
+
+    const pendingApprover = request.approvalChain?.find(
+      (entry) => entry?.status === "pending",
+    )?.approverName;
+    if (pendingApprover) return pendingApprover;
+
+    const firstChainApprover = request.approvalChain?.find(
+      (entry) => entry?.approverName,
+    )?.approverName;
+    if (firstChainApprover) return firstChainApprover;
+
+    return "-";
+  }, []);
+
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -694,8 +713,14 @@ const MaterialRequests = () => {
 
   if (loading) {
     return (
-      <div className="w-full p-4">
-        <div className="text-center">Loading material requests...</div>
+      <div className="w-full min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mb-4"></div>
+          <h3 className="text-lg font-semibold mb-1 text-[#111418]">
+            Loading Material Requests module
+          </h3>
+          <p className="text-sm text-[#617589]">Please wait...</p>
+        </div>
       </div>
     );
   }
@@ -727,9 +752,9 @@ const MaterialRequests = () => {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-[#111418]">
-              {req.lineItems && req.lineItems.length > 0
-                ? req.lineItems[0].itemName
-                : req.requestTitle || "Material Request"}
+              {req.requestTitle ||
+                req.lineItems?.[0]?.itemName ||
+                "Material Request"}
             </span>
             {req.requestType === "Internal Transfer" && (
               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
@@ -745,9 +770,11 @@ const MaterialRequests = () => {
             )}
           </div>
           <span className="text-xs text-[#617589]">
-            {req.lineItems &&
-              req.lineItems.length > 1 &&
-              `+${req.lineItems.length - 1} more items`}
+            {req.reason ||
+              req.lineItems?.[0]?.description ||
+              (req.lineItems?.length > 1
+                ? `+${req.lineItems.length - 1} more items`
+                : "No description")}
             {req.department && ` • ${req.department}`}
           </span>
         </div>
@@ -778,7 +805,9 @@ const MaterialRequests = () => {
       header: "Approver",
       accessorKey: "approver",
       cell: (req) => (
-        <span className="text-sm text-[#617589]">{req.approver || "-"}</span>
+        <span className="text-sm text-[#617589]">
+          {resolveApproverDisplay(req)}
+        </span>
       ),
     },
     {
@@ -1035,7 +1064,7 @@ const MaterialRequests = () => {
                         .includes(searchQuery.toLowerCase()),
                     ),
                 )}
-                isLoading={loading}
+                isLoading={false}
                 emptyMessage={
                   searchQuery || filterStatus !== "all"
                     ? "No material requests found. Try adjusting your filters."

@@ -10,7 +10,8 @@ const systemSettingsSchema = new mongoose.Schema({
   logoUrl: { type: String, default: '' },
   slackEnabled: { type: Boolean, default: false },
   emailSmtp: { type: String, default: 'smtp.mailtrap.io' },
-  attendanceApiKey: { type: String, default: '' }
+  attendanceApiKey: { type: String, default: '' },
+  maintenanceMode: { type: Boolean, default: false }
 }, { timestamps: true });
 
 module.exports = mongoose.model('SystemSettings', systemSettingsSchema);

@@ -17,6 +17,19 @@ const {
 } = require('../utils/stockTransferHelpers');
 const { buildApprovalChain } = require('../utils/approvalRuleHelper');
 
+const REQUEST_TYPE_MAP = {
+  'internal transfer': 'Internal Transfer',
+  rfq: 'RFQ',
+  'purchase request': 'Purchase Request',
+  'emergency purchase': 'Emergency Purchase',
+  'stock replenishment': 'Stock Replenishment',
+};
+
+const normalizeRequestType = (requestType) => {
+  const normalized = String(requestType || '').trim().toLowerCase();
+  return REQUEST_TYPE_MAP[normalized] || 'Purchase Request';
+};
+
 // ==========================================
 // MATERIAL REQUESTS API
 // ==========================================
@@ -46,17 +59,18 @@ router.get('/material-requests/:id', async (req, res) => {
 // POST new Material Request
 router.post('/material-requests', async (req, res) => {
   try {
-    // Generate request ID with format MR-YYYY-MM-DD-COUNT
+    // Generate request ID with format MR-MMDDYYYY-COUNT
     const count = await MaterialRequest.countDocuments();
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
-    const requestId = `MR-${year}-${month}-${day}-${String(count + 1).padStart(3, '0')}`;
+    const requestId = `MR-${month}${day}${year}-${String(count + 1).padStart(3, '0')}`;
 
     const payload = {
       ...req.body,
       requestId,
+      requestType: normalizeRequestType(req.body?.requestType),
       date: req.body?.date || now.toISOString().split('T')[0],
     };
 
@@ -103,9 +117,16 @@ router.post('/material-requests', async (req, res) => {
 // PUT update Material Request
 router.put('/material-requests/:id', async (req, res) => {
   try {
+    const updatePayload = {
+      ...req.body,
+      ...(req.body?.requestType
+        ? { requestType: normalizeRequestType(req.body.requestType) }
+        : {}),
+    };
+
     const updatedRequest = await MaterialRequest.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      { $set: updatePayload },
       { new: true, runValidators: true }
     );
     if (!updatedRequest) return res.status(404).json({ success: false, message: 'Not found' });
@@ -120,10 +141,16 @@ router.put('/material-requests/:id', async (req, res) => {
 router.post('/material-requests/:id/approve', async (req, res) => {
   try {
     const { vendor } = req.body; // Frontend passes selected vendor
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid request id' });
+    }
     
     // 1. Find and update the request
     const request = await MaterialRequest.findById(req.params.id);
     if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
+
+    // Normalize legacy values like "rfq" before saving to enum-constrained schema.
+    request.requestType = normalizeRequestType(request.requestType);
     
     if (request.status === 'approved' || request.status === 'fulfilled') {
         return res.status(400).json({ success: false, message: 'Already approved' });
@@ -421,10 +448,15 @@ router.post('/material-requests/:id/approve', async (req, res) => {
 // POST Reject Material Request
 router.post('/material-requests/:id/reject', async (req, res) => {
   try {
-    const { reason } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid request id' });
+    }
+
+    const { reason } = req.body || {};
     const request = await MaterialRequest.findById(req.params.id);
     
     if (!request) return res.status(404).json({ success: false, message: 'Not found' });
+    request.requestType = normalizeRequestType(request.requestType);
     const rejectionText = reason || 'No reason provided';
     request.status = 'rejected';
     request.rejectionReason = rejectionText;

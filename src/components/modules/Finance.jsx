@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Pagination from "../Pagination";
 import Skeleton from "../Skeleton";
 import EmptyState from "../EmptyState";
@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 import { useAuth } from "../../context/useAuth";
+import { apiService } from "../../services/api";
 import Reconcile from "./Reconcile";
 import AccountsPayable from "./AccountsPayable";
 import JournalHistory from "./JournalHistory";
@@ -16,13 +17,14 @@ import Invoicing from "./Invoicing";
 
 const Finance = () => {
   const { user } = useAuth();
-  const [recentInvoices] = useState([]);
+  const [recentPOs, setRecentPOs] = useState([]);
+  const [poFilter, setPoFilter] = useState("all"); // all, approved, pending
+  const [poLoading, setPoLoading] = useState(true);
   const [accountBalance, setAccountBalance] = useState({
     total: 0,
     receivables: 0,
     payables: 0,
   });
-  const [loading, setLoading] = useState(true);
   const [showReconcile, setShowReconcile] = useState(false);
   const [showAccountsPayable, setShowAccountsPayable] = useState(false);
   const [showJournalHistory, setShowJournalHistory] = useState(false);
@@ -35,13 +37,8 @@ const Finance = () => {
   const displayName =
     user?.firstName || user?.fullName?.split(" ")[0] || "User";
 
-  useEffect(() => {
-    fetchFinanceData();
-  }, []);
-
   const fetchFinanceData = async () => {
     try {
-      setLoading(true);
       // Data will be fetched directly in each module
       setAccountBalance({
         total: 0,
@@ -50,9 +47,57 @@ const Finance = () => {
       });
     } catch (err) {
       console.error("Error fetching finance data:", err);
-    } finally {
-      setLoading(false);
     }
+  };
+
+  const fetchRecentPOs = useCallback(async () => {
+    try {
+      setPoLoading(true);
+      // Fetch all POs that are approved, locked, and ready for payment (payment_pending status)
+      const response = await apiService.get("/api/purchase-orders", {
+        params: {
+          status: "all",
+          limit: 10,
+          page: 1,
+        },
+      });
+
+      if (response.success && response.data) {
+        // Filter for approved, locked POs ready for AP
+        const filtered =
+          response.data.purchaseOrders?.filter(
+            (po) =>
+              (po.status === "approved" || po.status === "payment_pending") &&
+              po.isLocked,
+          ) || [];
+
+        setRecentPOs(filtered.slice(0, 10));
+      }
+    } catch (err) {
+      console.error("Error fetching recent POs:", err);
+    } finally {
+      setPoLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFinanceData();
+  }, []);
+
+  useEffect(() => {
+    fetchRecentPOs();
+  }, [fetchRecentPOs]);
+
+  const getFilteredPOs = () => {
+    if (poFilter === "approved") {
+      // Approved and locked, waiting for payment
+      return recentPOs.filter((po) => po.status === "approved" && po.isLocked);
+    } else if (poFilter === "pending") {
+      // Already scheduled/sent to payment (payment_pending status)
+      return recentPOs.filter((po) => po.status === "payment_pending");
+    }
+    // All approved and locked
+    return recentPOs;
   };
 
   if (showBudget) {
@@ -69,7 +114,12 @@ const Finance = () => {
             <Breadcrumb
               items={[
                 { label: "Home", href: "/home", icon: "fa-house" },
-                { label: "Finance", onClick: () => setShowInvoicing(false), icon: "fa-coins", cursor: "pointer" },
+                {
+                  label: "Finance",
+                  onClick: () => setShowInvoicing(false),
+                  icon: "fa-coins",
+                  cursor: "pointer",
+                },
                 { label: "Invoicing", icon: "fa-file-invoice-dollar" },
               ]}
             />
@@ -452,27 +502,56 @@ const Finance = () => {
                       Recent Purchase Orders
                     </h3>
                     <div className="flex gap-2">
-                      <button className="text-xs font-medium bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full text-slate-900 dark:text-white">
+                      <button
+                        onClick={() => setPoFilter("all")}
+                        className={`text-xs font-medium px-3 py-1 rounded-full transition-colors ${
+                          poFilter === "all"
+                            ? "bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white"
+                            : "hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400"
+                        }`}
+                      >
                         All
                       </button>
-                      <button className="text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700 px-3 py-1 rounded-full text-slate-500 dark:text-slate-400">
+                      <button
+                        onClick={() => setPoFilter("approved")}
+                        className={`text-xs font-medium px-3 py-1 rounded-full transition-colors ${
+                          poFilter === "approved"
+                            ? "bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white"
+                            : "hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400"
+                        }`}
+                      >
                         Approved
                       </button>
-                      <button className="text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700 px-3 py-1 rounded-full text-slate-500 dark:text-slate-400">
-                        Pending
+                      <button
+                        onClick={() => setPoFilter("pending")}
+                        className={`text-xs font-medium px-3 py-1 rounded-full transition-colors ${
+                          poFilter === "pending"
+                            ? "bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white"
+                            : "hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400"
+                        }`}
+                      >
+                        Scheduled for Payment
                       </button>
                     </div>
                   </div>
-                  {loading ? (
+                  {poLoading ? (
                     <div className="p-6">
                       <Skeleton count={3} height={50} />
                     </div>
-                  ) : recentInvoices.length === 0 ? (
+                  ) : getFilteredPOs().length === 0 ? (
                     <div className="p-8">
                       <EmptyState
-                        icon="📄"
-                        title="No recent invoices"
-                        description="Purchase orders will appear here once they are created"
+                        icon="📋"
+                        title={
+                          poFilter === "pending"
+                            ? "No Purchase Orders Scheduled for Payment"
+                            : "No Approved Purchase Orders Ready for Payment"
+                        }
+                        description={
+                          poFilter === "pending"
+                            ? "POs scheduled for payment will appear here"
+                            : "Approved and locked POs ready to schedule for payment will appear here"
+                        }
                       />
                     </div>
                   ) : (
@@ -499,39 +578,41 @@ const Finance = () => {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {recentInvoices.map((invoice) => (
+                            {getFilteredPOs().map((po) => (
                               <tr
-                                key={invoice._id}
+                                key={po._id}
                                 className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                               >
-                                <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
-                                  {invoice.poNumber}
+                                <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400 font-mono">
+                                  {po.poNumber}
                                 </td>
                                 <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">
-                                  {invoice.vendor}
+                                  {po.vendor}
                                 </td>
                                 <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
-                                  {invoice.orderDate
+                                  {po.orderDate
                                     ? new Date(
-                                        invoice.orderDate,
+                                        po.orderDate,
                                       ).toLocaleDateString()
                                     : "N/A"}
                                 </td>
                                 <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">
-                                  {formatCurrency(invoice.totalAmount || 0)}
+                                  {formatCurrency(po.totalAmount || 0)}
                                 </td>
                                 <td className="px-6 py-4">
-                                  {invoice.status === "approved" ? (
+                                  {po.status === "approved" ? (
                                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200">
-                                      Approved
+                                      <i className="fa-solid fa-circle-check mr-1 text-[10px]"></i>
+                                      Approved & Locked
                                     </span>
-                                  ) : invoice.status === "pending" ? (
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200">
-                                      Pending
+                                  ) : po.status === "payment_pending" ? (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200">
+                                      <i className="fa-solid fa-clock mr-1 text-[10px]"></i>
+                                      Scheduled for Payment
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200">
-                                      {invoice.status}
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-200">
+                                      {po.status}
                                     </span>
                                   )}
                                 </td>
@@ -541,8 +622,11 @@ const Finance = () => {
                         </table>
                       </div>
                       <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex justify-center">
-                        <button className="text-sm font-medium text-slate-500 hover:text-primary flex items-center gap-1">
-                          View All Purchase Orders{" "}
+                        <button
+                          onClick={() => setShowAccountsPayable(true)}
+                          className="text-sm font-medium text-slate-500 hover:text-primary flex items-center gap-1 transition-colors"
+                        >
+                          View All in Accounts Payable{" "}
                           <i className="fa-solid fa-arrow-right text-[14px]"></i>
                         </button>
                       </div>

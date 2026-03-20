@@ -2007,9 +2007,22 @@ async function start() {
   // Approve material request and create PO
   app.post('/api/material-requests/:id/approve', async (req, res) => {
     try {
-      const materialRequest = await MaterialRequestModel.findById(req.params.id);
+      const { id } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Invalid request id' });
+      }
+
+      const materialRequest = await MaterialRequestModel.findById(id);
       if (!materialRequest) {
         return res.status(404).json({ message: 'Request not found' });
+      }
+
+      if (materialRequest.status === 'approved') {
+        return res.status(400).json({ message: 'Request is already approved' });
+      }
+
+      if (materialRequest.status === 'rejected') {
+        return res.status(400).json({ message: 'Rejected request cannot be approved' });
       }
 
       // Update material request status
@@ -2025,26 +2038,37 @@ async function start() {
         itemName: item.itemName,
         description: item.description || '',
         quantity: parseFloat(item.quantity) || 0,
-        unit: item.quantityType || 'pcs',
-        unitPrice: parseFloat(item.amount) || 0,
-        total: (parseFloat(item.quantity) || 0) * (parseFloat(item.amount) || 0),
+        quantityType: item.quantityType || 'Units',
+        amount: parseFloat(item.amount) || 0,
       }));
 
-      const totalAmount = lineItems.reduce((sum, item) => sum + item.total, 0);
+      const totalAmount = lineItems.reduce(
+        (sum, item) => sum + (item.quantity * item.amount),
+        0,
+      );
 
       const purchaseOrder = await PurchaseOrderModel.create({
         poNumber,
-        requester: materialRequest.requestedBy,
-        approver: materialRequest.approver,
         vendor: req.body.vendor || 'To be assigned',
         orderDate: new Date().toISOString().split('T')[0],
-        deliveryDate: '',
+        expectedDelivery: materialRequest.requiredByDate || null,
         status: 'draft',
         lineItems,
+        currency: materialRequest.currency || 'NGN',
+        exchangeRateToNgn: Number(materialRequest.exchangeRateToNgn) || 1,
         totalAmount,
-        message: materialRequest.message || '',
-        attachments: materialRequest.attachments || [],
-        materialRequestId: materialRequest._id,
+        totalAmountNgn:
+          totalAmount * (Number(materialRequest.exchangeRateToNgn) || 1),
+        notes: materialRequest.message || '',
+        linkedMaterialRequestId: materialRequest._id,
+        activities: [
+          {
+            type: 'created',
+            author: materialRequest.requestedBy || 'System',
+            text: `Purchase Order ${poNumber} auto-created from Material Request ${materialRequest.requestId}`,
+            timestamp: new Date(),
+          },
+        ],
       });
 
       // PO created for procurement team review (no email sent)
@@ -2056,23 +2080,29 @@ async function start() {
       });
     } catch (err) {
       console.error('Error approving material request:', err);
-      res.status(500).json({ message: 'Failed to approve request' });
+      res.status(500).json({ message: 'Failed to approve request', error: err.message });
     }
   });
 
   // Reject material request
   app.post('/api/material-requests/:id/reject', async (req, res) => {
     try {
+      const { id } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Invalid request id' });
+      }
+
+      const reason = (req.body && req.body.reason) ? req.body.reason : '';
       const updated = await MaterialRequestModel.findByIdAndUpdate(
-        req.params.id,
-        { status: 'rejected', rejectionReason: req.body.reason },
+        id,
+        { status: 'rejected', rejectionReason: reason },
         { new: true }
       );
       if (!updated) return res.status(404).json({ message: 'Request not found' });
       res.json({ message: 'Request rejected', data: updated });
     } catch (err) {
       console.error('Error rejecting material request:', err);
-      res.status(500).json({ message: 'Failed to reject request' });
+      res.status(500).json({ message: 'Failed to reject request', error: err.message });
     }
   });
 
@@ -5223,16 +5253,25 @@ async function start() {
       // Create audit log entry
       if (changes.length > 0) {
         await AuditLogModel.create({
-          userId: updatedBy || 'system',
-          action: 'UPDATE_EMPLOYEE',
-          resource: 'Employee',
-          resourceId: targetEmployeeId,
-          details: {
-            employeeName: employee.name,
-            changes: changes,
+          actor: {
+            userId: String(updatedBy || 'system'),
+            userName: req.user?.fullName || req.user?.email || 'System',
+            userEmail: req.user?.email || '',
+            initials: String(req.user?.fullName || req.user?.email || 'SY')
+              .substring(0, 2)
+              .toUpperCase(),
           },
+          action: 'User Updated',
+          actionColor: 'blue',
           ipAddress: req.ip,
           userAgent: req.get('user-agent'),
+          description: `Employee ${employee.name || employee.email} updated (${changes.length} change(s))`,
+          status: 'Success',
+          metadata: {
+            employeeId: targetEmployeeId,
+            employeeName: employee.name,
+            changes,
+          },
         });
       }
 
@@ -6017,6 +6056,76 @@ async function start() {
     }
   });
 
+  // Get user settings/preferences
+  app.get('/api/user/settings/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await UserModel.findById(id)
+        .select('preferences email fullName department jobTitle')
+        .lean();
+
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          profile: {
+            fullName: user.fullName || '',
+            email: user.email || '',
+            department: user.department || '',
+            jobTitle: user.jobTitle || '',
+          },
+          preferences: user.preferences || {},
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching user settings:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Update user settings/preferences
+  app.patch('/api/user/settings/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { preferences = {} } = req.body || {};
+
+      const allowedPreferences = {
+        theme: preferences.theme,
+        language: preferences.language,
+        timezone: preferences.timezone,
+        dateFormat: preferences.dateFormat,
+        currency: preferences.currency,
+        emailNotifications: preferences.emailNotifications,
+        inAppNotifications: preferences.inAppNotifications,
+        weeklyDigest: preferences.weeklyDigest,
+      };
+
+      const cleanedPreferences = Object.fromEntries(
+        Object.entries(allowedPreferences).filter(([, value]) => value !== undefined),
+      );
+
+      const updated = await UserModel.findByIdAndUpdate(
+        id,
+        { $set: { preferences: cleanedPreferences } },
+        { new: true, runValidators: true },
+      )
+        .select('preferences')
+        .lean();
+
+      if (!updated) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+
+      res.json({ success: true, data: updated.preferences || {} });
+    } catch (error) {
+      console.error('Error updating user settings:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ==================== FINANCE RECONCILIATION ROUTES ====================
 
   // Get reconciliation data
@@ -6160,7 +6269,7 @@ async function start() {
 
       const [rows, total] = await Promise.all([
         PurchaseOrderModel.find(query)
-          .populate('linkedMaterialRequestId', 'department requestId')
+          .populate('linkedMaterialRequestId', 'department requestId requestTitle')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
@@ -6171,6 +6280,10 @@ async function start() {
       const invoices = rows.map((po) => ({
         _id: po._id,
         vendor: po.vendor,
+        requestTitle:
+          po?.linkedMaterialRequestId?.requestTitle ||
+          po?.linkedMaterialRequestId?.requestId ||
+          '',
         invoiceNumber: po.poNumber,
         issueDate: po.orderDate || po.createdAt,
         dueDate: po.expectedDelivery || po.orderDate || po.createdAt,
