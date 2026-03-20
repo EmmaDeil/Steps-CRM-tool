@@ -48,10 +48,10 @@ const Admin = () => {
   const [modulesLoading, setModulesLoading] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [showConfigureRolesModal, setShowConfigureRolesModal] = useState(false);
   const [showPasswordField, setShowPasswordField] = useState(false);
   const [selectedRoleTab, setSelectedRoleTab] = useState("Admin");
-  const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [availableModules, setAvailableModules] = useState([]);
   const errorToastShownRef = useRef({});
@@ -436,7 +436,6 @@ const Admin = () => {
       });
       setShowEditUserModal(true);
     }
-    setActiveDropdown(null);
   };
 
   const handleUpdateUser = async () => {
@@ -473,12 +472,12 @@ const Admin = () => {
       setSelectedUser(user);
       setShowDeleteUserModal(true);
     }
-    setActiveDropdown(null);
   };
 
   const confirmDeleteUser = async () => {
     if (!selectedUser) return;
 
+    setIsDeletingUser(true);
     try {
       await apiService.delete(`/api/users/${selectedUser._id}`);
       toast.success("User deleted successfully");
@@ -488,6 +487,8 @@ const Admin = () => {
     } catch (error) {
       console.error("Error deleting user:", error);
       toast.error("Failed to delete user");
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -512,7 +513,6 @@ const Admin = () => {
       console.error("Error changing status:", error);
       toast.error("Failed to change user status");
     }
-    setActiveDropdown(null);
   };
 
   const handleResetPassword = async (userId) => {
@@ -526,7 +526,6 @@ const Admin = () => {
       console.error("Error resetting password:", error);
       toast.error("Failed to send password reset email");
     }
-    setActiveDropdown(null);
   };
 
   const toggleModuleAccess = (moduleId) => {
@@ -577,21 +576,6 @@ const Admin = () => {
     setShowFilterModal(false);
     fetchUsers();
   };
-
-  const toggleDropdown = (userId) => {
-    setActiveDropdown(activeDropdown === userId ? null : userId);
-  };
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (activeDropdown && !event.target.closest(".dropdown-container")) {
-        setActiveDropdown(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [activeDropdown]);
 
   const filteredUsers = users;
 
@@ -735,7 +719,7 @@ const Admin = () => {
             { label: "Store Locations", icon: "fa-warehouse" },
           ]}
         />
-        <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1 flex flex-col w-[80%]">
+        <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1 flex flex-col">
           <StoreLocations />
         </div>
         <Footer variant="admin" />
@@ -1140,53 +1124,38 @@ const Admin = () => {
                       <td className="px-6 py-4">
                         {getStatusBadge(user.status)}
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="relative dropdown-container">
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap justify-end gap-2">
                           <button
-                            onClick={() => toggleDropdown(user._id)}
-                            className="text-gray-600 hover:text-gray-900 px-3 py-1 rounded hover:bg-gray-100 transition-colors"
+                            onClick={() => handleEditUser(user._id)}
+                            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors flex items-center gap-1.5"
                           >
-                            <i className="fa-solid fa-ellipsis-vertical"></i>
+                            <i className="fa-solid fa-pen-to-square"></i>
+                            Edit
                           </button>
-
-                          {/* Dropdown Menu */}
-                          {activeDropdown === user._id && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                              <div className="py-1">
-                                <button
-                                  onClick={() => handleEditUser(user._id)}
-                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                >
-                                  <i className="fa-solid fa-pen-to-square w-4"></i>
-                                  Edit User
-                                </button>
-                                <button
-                                  onClick={() => handleChangeStatus(user._id)}
-                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                >
-                                  <i className="fa-solid fa-toggle-on w-4"></i>
-                                  {user.status === "Active"
-                                    ? "Deactivate"
-                                    : "Activate"}
-                                </button>
-                                <button
-                                  onClick={() => handleResetPassword(user._id)}
-                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                >
-                                  <i className="fa-solid fa-key w-4"></i>
-                                  Reset Password
-                                </button>
-                                <div className="border-t border-gray-200 my-1"></div>
-                                <button
-                                  onClick={() => handleDeleteUser(user._id)}
-                                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                >
-                                  <i className="fa-solid fa-trash w-4"></i>
-                                  Delete User
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                          <button
+                            onClick={() => handleChangeStatus(user._id)}
+                            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors flex items-center gap-1.5"
+                          >
+                            <i className="fa-solid fa-toggle-on"></i>
+                            {user.status === "Active"
+                              ? "Deactivate"
+                              : "Activate"}
+                          </button>
+                          <button
+                            onClick={() => handleResetPassword(user._id)}
+                            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors flex items-center gap-1.5"
+                          >
+                            <i className="fa-solid fa-key"></i>
+                            Reset Password
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(user._id)}
+                            className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors flex items-center gap-1.5"
+                          >
+                            <i className="fa-solid fa-trash"></i>
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1644,15 +1613,24 @@ const Admin = () => {
                 <div className="flex gap-3">
                   <button
                     onClick={() => setShowDeleteUserModal(false)}
-                    className="flex-1 px-4 py-2 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors"
+                    disabled={isDeletingUser}
+                    className="flex-1 px-4 py-2 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={confirmDeleteUser}
-                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+                    disabled={isDeletingUser}
+                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:bg-red-400 disabled:cursor-not-allowed"
                   >
-                    Delete User
+                    {isDeletingUser ? (
+                      <span className="inline-flex items-center gap-2">
+                        <i className="fa-solid fa-spinner fa-spin text-sm"></i>
+                        Deleting...
+                      </span>
+                    ) : (
+                      "Delete User"
+                    )}
                   </button>
                 </div>
               </div>
@@ -2107,14 +2085,9 @@ const Admin = () => {
               const toastId = toast.loading("Starting backup...");
               setBackingUp(true);
               try {
-                const token = localStorage.getItem("authToken");
-                const baseUrl =
-                  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
-                const res = await fetch(`${baseUrl}/api/admin/backup`, {
-                  headers: { Authorization: `Bearer ${token}` },
+                const blob = await apiService.get("/api/admin/backup", {
+                  responseType: "blob",
                 });
-                if (!res.ok) throw new Error("Backup request failed");
-                const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
@@ -2541,21 +2514,10 @@ const Admin = () => {
                       throw new Error("Invalid backup file format");
                     }
 
-                    const token = localStorage.getItem("authToken");
-                    const baseUrl =
-                      import.meta.env.VITE_API_BASE_URL ||
-                      "http://localhost:4000";
-                    const res = await fetch(`${baseUrl}/api/admin/restore`, {
-                      method: "POST",
-                      headers: {
-                        Authorization: `Bearer ${token}`,
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify(backup),
-                    });
-                    const data = await res.json();
-                    if (!res.ok)
-                      throw new Error(data.message || "Restore failed");
+                    const data = await apiService.post(
+                      "/api/admin/restore",
+                      backup,
+                    );
 
                     toast.success(
                       `Restored ${data.restored.length} collections successfully!`,
