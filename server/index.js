@@ -371,7 +371,16 @@ async function start() {
       const lastName = (req.body.lastName || '').toString().trim();
       const email = (req.body.email || '').toString().trim().toLowerCase();
       const password = (req.body.password || '').toString();
-      const role = (req.body.role || 'user').toString().trim();
+      const rawRole = (req.body.role || 'user').toString().trim();
+      const roleMap = {
+        admin: 'Admin',
+        'security admin': 'Security Admin',
+        'security analyst': 'Security Analyst',
+        editor: 'Editor',
+        viewer: 'Viewer',
+        user: 'user',
+      };
+      const role = roleMap[rawRole.toLowerCase()] || 'user';
       const department = (req.body.department || '').toString().trim() || null;
       const jobTitle = (req.body.jobTitle || '').toString().trim() || null;
 
@@ -450,6 +459,45 @@ async function start() {
       });
 
       await user.save();
+
+      // Ensure signup creates/links an individual employee profile for this user.
+      try {
+        let employee = await EmployeeModel.findOne({ email: email.toLowerCase() });
+        if (employee) {
+          const employeeUpdates = {
+            userRef: user._id,
+            firstName,
+            lastName,
+            department: user.department || employee.department,
+            jobTitle: user.jobTitle || employee.jobTitle,
+            role: user.role,
+            status: user.status === 'Inactive' ? 'Terminated' : 'Active',
+            updatedAt: new Date(),
+          };
+          await EmployeeModel.findByIdAndUpdate(employee._id, employeeUpdates, { new: true });
+          user.employeeRef = employee._id;
+          await user.save();
+        } else {
+          const count = await EmployeeModel.countDocuments();
+          const employeeId = `EMP${String(count + 1).padStart(4, '0')}`;
+          employee = await EmployeeModel.create({
+            firstName,
+            lastName,
+            email: email.toLowerCase(),
+            employeeId,
+            department: user.department || null,
+            jobTitle: user.jobTitle || null,
+            role: user.role,
+            status: 'Active',
+            userRef: user._id,
+          });
+
+          user.employeeRef = employee._id;
+          await user.save();
+        }
+      } catch (employeeLinkError) {
+        console.error('Signup employee link error:', employeeLinkError);
+      }
 
       // Generate token with role
       const token = generateToken(user._id, user.role);

@@ -6,7 +6,7 @@ import { apiService } from "../services/api";
 const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-  const [userRole, setUserRole] = useState("user"); // Default role
+  const [userRole, setUserRole] = useState("user");
   const [notifications, setNotifications] = useState([]);
   const [searchHistory, setSearchHistory] = useState(() => {
     const saved = localStorage.getItem("searchHistory");
@@ -45,9 +45,17 @@ export const AppProvider = ({ children }) => {
     localStorage.setItem("searchHistory", JSON.stringify(newHistory));
   };
 
-  // If a user is signed in via custom auth, treat them as admin for this project
-  // (per project requirement that the currently-signed-in user has full admin rights).
   const { user, isAuthenticated, loading } = useAuth();
+
+  const normalizeRole = (role) => {
+    const raw = (role || "").toString().trim().toLowerCase();
+    if (!raw) return "user";
+    if (raw === "admin" || raw === "security admin") return "admin";
+    if (raw === "editor") return "manager";
+    if (raw === "viewer" || raw === "security analyst" || raw === "user")
+      return "user";
+    return "user";
+  };
 
   const fetchNotifications = useCallback(async () => {
     if (!isAuthenticated) {
@@ -76,9 +84,14 @@ export const AppProvider = ({ children }) => {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!loading && isAuthenticated && user) {
-      setUserRole("admin");
+    if (loading) return;
+
+    if (!isAuthenticated || !user) {
+      setUserRole("user");
+      return;
     }
+
+    setUserRole(normalizeRole(user.role));
   }, [loading, isAuthenticated, user]);
 
   useEffect(() => {
