@@ -375,14 +375,14 @@ export default function Home() {
         </div>
 
         {/* Modules Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-6xl">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-6xl rounded-2xl border border-[#dbe0e6] p-6 bg-white shadow-sm">
           {loading &&
             Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
-                className="relative flex flex-col items-center p-8 bg-white rounded-2xl border border-[#dbe0e6] shadow-sm h-[260px]"
+                className="relative flex flex-col items-center p-8 bg-transparent rounded-2xl border border-[#dbe0e6] shadow-sm h-[260px]"
               >
-                <div className="size-24 rounded-2xl bg-gray-100 mb-6" />
+                <div className="size-24 rounded-full bg-gray-100 mb-6" />
                 <div className="h-4 w-40 bg-gray-200 rounded-full mb-2" />
                 <div className="h-3 w-24 bg-gray-200 rounded-full" />
               </div>
@@ -435,10 +435,10 @@ export default function Home() {
                   key={m.id}
                   onClick={() => handleOpenModule(m.id)}
                   aria-label={`Open ${m.name} module`}
-                  className="group relative flex flex-col items-center p-8 bg-white rounded-2xl border border-[#dbe0e6] shadow-sm h-[260px] hover:shadow-xl transition-shadow"
+                  className="group relative flex flex-col items-center p-8 bg-transparent rounded-r-full border border-[#dbe0e6] shadow-sm h-[260px] hover:shadow-xl transition-shadow"
                 >
                   <div
-                    className={`size-24 rounded-2xl bg-gradient-to-br ${colorClass} flex items-center justify-center mb-6 shadow-sm border`}
+                    className={`size-20 bg-gradient-to-br ${colorClass} flex items-center justify-center mb-6 shadow-sm border rounded-full border-transparent group-hover:border-current transition-colors`}
                   >
                     <i className={`fa-solid ${icon.icon} text-5xl p-3`}></i>
                   </div>
@@ -446,9 +446,9 @@ export default function Home() {
                     {m.name}
                   </h3>
                   <p className="text-sm text-[#617589] text-center">
-                    Click to access this module
+                    {/* Click to access this module */}
                   </p>
-                  <div className="mt-2 py-1 px-3 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full">
+                  <div className="mt-4 py-1 px-3 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full">
                     Explore
                   </div>
                 </button>
