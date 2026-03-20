@@ -31,6 +31,7 @@ const EmployeeProfile = ({
   const [locationOptions, setLocationOptions] = useState([]);
   const [orgEmployees, setOrgEmployees] = useState([]);
   const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [deletingDocumentIndex, setDeletingDocumentIndex] = useState(null);
   const documentInputRef = useRef(null);
 
   // MFA state
@@ -308,6 +309,79 @@ const EmployeeProfile = ({
     } finally {
       setUploadingDocument(false);
       event.target.value = "";
+    }
+  };
+
+  const getDocumentUrl = (doc) => doc?.url || doc?.fileData || "";
+
+  const handleViewDocument = (doc) => {
+    const url = getDocumentUrl(doc);
+    if (!url) {
+      toast.error("Document URL is not available");
+      return;
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const handleDownloadDocument = (doc, index) => {
+    const url = getDocumentUrl(doc);
+    if (!url) {
+      toast.error("Document URL is not available");
+      return;
+    }
+
+    const fileName = doc?.name || doc?.title || `document-${index + 1}`;
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDeleteDocument = async (indexToDelete) => {
+    if (!employee?._id) return;
+
+    const existingDocuments = Array.isArray(employee.documents)
+      ? employee.documents
+      : [];
+    if (indexToDelete < 0 || indexToDelete >= existingDocuments.length) {
+      return;
+    }
+
+    try {
+      setDeletingDocumentIndex(indexToDelete);
+      const updatedDocuments = existingDocuments.filter(
+        (_, index) => index !== indexToDelete,
+      );
+
+      const response = await apiService.put(
+        `/api/hr/employees/${employee._id}`,
+        {
+          documents: updatedDocuments,
+          updatedBy: currentUser?._id || "system",
+        },
+      );
+
+      const updatedEmployee = response?.data || response;
+      if (updatedEmployee?._id || updatedEmployee?.id) {
+        setEmployee(updatedEmployee);
+      } else {
+        setEmployee((prev) => ({
+          ...prev,
+          documents: updatedDocuments,
+        }));
+      }
+
+      toast.success("Document deleted successfully");
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      toast.error("Failed to delete document");
+    } finally {
+      setDeletingDocumentIndex(null);
     }
   };
 
@@ -1131,22 +1205,50 @@ const EmployeeProfile = ({
                           </div>
                           <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                             <span>
-                              {doc.updatedAt
-                                ? new Date(doc.updatedAt).toLocaleDateString()
-                                : doc.createdAt
-                                  ? new Date(doc.createdAt).toLocaleDateString()
-                                  : "Unknown date"}
+                              {doc.uploadedAt
+                                ? new Date(doc.uploadedAt).toLocaleDateString()
+                                : doc.updatedAt
+                                  ? new Date(doc.updatedAt).toLocaleDateString()
+                                  : doc.createdAt
+                                    ? new Date(
+                                        doc.createdAt,
+                                      ).toLocaleDateString()
+                                    : "Unknown date"}
                             </span>
-                            {doc.url && (
-                              <a
-                                href={doc.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-blue-600 dark:text-blue-400 font-semibold hover:underline"
-                              >
-                                View
-                              </a>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {getDocumentUrl(doc) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewDocument(doc)}
+                                  className="text-slate-600 dark:text-slate-300 font-semibold hover:underline"
+                                >
+                                  View
+                                </button>
+                              )}
+                              {getDocumentUrl(doc) && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDownloadDocument(doc, idx)
+                                  }
+                                  className="text-blue-600 dark:text-blue-400 font-semibold hover:underline"
+                                >
+                                  Download
+                                </button>
+                              )}
+                              {(isHR || isOwnProfile) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDocument(idx)}
+                                  disabled={deletingDocumentIndex === idx}
+                                  className="text-red-600 dark:text-red-400 font-semibold hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {deletingDocumentIndex === idx
+                                    ? "Deleting..."
+                                    : "Delete"}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}

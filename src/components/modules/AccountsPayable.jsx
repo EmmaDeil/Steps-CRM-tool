@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import Pagination from "../Pagination";
-import apiService from "../../services/api";
+import { apiService } from "../../services/api";
 
 const AccountsPayable = ({ onBack }) => {
   const [loading, setLoading] = useState(true);
@@ -24,7 +24,12 @@ const AccountsPayable = ({ onBack }) => {
     try {
       setLoading(true);
       const response = await apiService.get("/api/finance/accounts-payable", {
-        params: { page: currentPage, ...filters },
+        params: {
+          page: currentPage,
+          vendor: filters.vendor || undefined,
+          status: filters.status || undefined,
+          search: searchQuery || undefined,
+        },
       });
       if (response.success) {
         setInvoices(response.data.invoices);
@@ -36,7 +41,7 @@ const AccountsPayable = ({ onBack }) => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, filters]);
+  }, [currentPage, filters, searchQuery]);
 
   useEffect(() => {
     fetchInvoices();
@@ -100,9 +105,7 @@ const AccountsPayable = ({ onBack }) => {
 
   const getStatusBadge = (status) => {
     const badges = {
-      Approved: "bg-green-100 text-green-800 border-green-200",
       Pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
-      Overdue: "bg-red-100 text-red-800 border-red-200",
       Draft: "bg-slate-100 text-slate-800 border-slate-200",
       Paid: "bg-blue-100 text-blue-800 border-blue-200",
     };
@@ -211,10 +214,8 @@ const AccountsPayable = ({ onBack }) => {
                 className="appearance-none bg-white border border-slate-200 hover:border-primary/50 text-slate-700 pl-3 pr-8 py-1.5 rounded-md text-sm focus:ring-1 focus:ring-primary cursor-pointer shadow-sm"
               >
                 <option value="">All Statuses</option>
-                <option value="pending">Pending Approval</option>
-                <option value="approved">Approved</option>
+                <option value="pending">Pending Payment</option>
                 <option value="paid">Paid</option>
-                <option value="overdue">Overdue</option>
               </select>
               <i className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 fa-solid fa-chevron-down text-xs text-slate-400"></i>
             </div>
@@ -340,7 +341,7 @@ const AccountsPayable = ({ onBack }) => {
                       <tr
                         key={invoice._id}
                         className={`hover:bg-slate-50 transition-colors group ${
-                          invoice.status === "Overdue" ? "bg-red-50/30" : ""
+                          invoice.status === "Pending" ? "bg-yellow-50/30" : ""
                         }`}
                       >
                         <td className="py-3 px-4">
@@ -376,8 +377,8 @@ const AccountsPayable = ({ onBack }) => {
                         </td>
                         <td
                           className={`py-3 px-4 ${
-                            invoice.status === "Overdue"
-                              ? "text-red-600 font-medium"
+                            invoice.status === "Pending"
+                              ? "text-yellow-700 font-medium"
                               : "text-slate-600"
                           }`}
                         >
@@ -386,7 +387,7 @@ const AccountsPayable = ({ onBack }) => {
                             : "N/A"}
                         </td>
                         <td className="py-3 px-4 text-right font-medium text-slate-900 tabular-nums">
-                          ${invoice.amount?.toFixed(2) || "0.00"}
+                          ${Number(invoice.amount || 0).toFixed(2)}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span

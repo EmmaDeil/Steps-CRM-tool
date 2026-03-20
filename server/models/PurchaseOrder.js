@@ -27,6 +27,7 @@ const purchaseOrderSchema = new mongoose.Schema(
       type: String,
       enum: [
         'draft',
+        'pending',
         'issued',
         'approved',
         'payment_pending',
@@ -56,9 +57,70 @@ const purchaseOrderSchema = new mongoose.Schema(
     expectedDelivery: {
       type: Date,
     },
+    isLocked: {
+      type: Boolean,
+      default: false,
+    },
+    lockedAt: {
+      type: Date,
+      default: null,
+    },
+    lockedBy: {
+      userId: { type: String, default: '' },
+      name: { type: String, default: '' },
+    },
     notes: {
       type: String,
     },
+    usesRuleBasedApproval: {
+      type: Boolean,
+      default: false,
+    },
+    approvalRuleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ApprovalRule',
+    },
+    currentApprovalLevel: {
+      type: Number,
+      default: 1,
+    },
+    approvalChain: [
+      {
+        level: Number,
+        approverRole: String,
+        approverId: String,
+        approverName: String,
+        approverEmail: String,
+        status: {
+          type: String,
+          enum: ['pending', 'approved', 'rejected', 'awaiting'],
+          default: 'awaiting',
+        },
+        approvedAt: Date,
+        comments: String,
+      },
+    ],
+    activities: [
+      {
+        type: {
+          type: String,
+          enum: [
+            'created',
+            'lock',
+            'unlock',
+            'approval',
+            'rejection',
+            'status_change',
+            'comment',
+          ],
+          default: 'comment',
+        },
+        author: { type: String, required: true },
+        authorId: { type: String },
+        text: { type: String, required: true },
+        timestamp: { type: Date, default: Date.now },
+      },
+    ],
     linkedMaterialRequestId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'MaterialRequest',

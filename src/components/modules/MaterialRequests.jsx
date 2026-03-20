@@ -623,7 +623,7 @@ const MaterialRequests = () => {
     return isRequester && isDraft;
   };
 
-  const openPurchaseOrderFromActivity = async (poNumber) => {
+  const openPurchaseOrderFromActivity = async (poNumber, poId) => {
     try {
       const modsRes = await apiService.get("/api/modules");
       const modules = Array.isArray(modsRes)
@@ -631,11 +631,25 @@ const MaterialRequests = () => {
         : Array.isArray(modsRes?.data)
           ? modsRes.data
           : [];
-      const poModule = modules.find(
-        (m) => String(m.name || "").toLowerCase() === "purchase orders",
-      );
+      const normalize = (value) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
 
-      if (!poModule?.id) {
+      const poModule = modules.find((m) => {
+        const normalizedName = normalize(m.name);
+        const normalizedComponent = normalize(m.componentName);
+        return (
+          normalizedName === "purchaseorders" ||
+          normalizedName === "purchaseorder" ||
+          normalizedComponent === "purchaseorders" ||
+          normalizedComponent === "purchaseorder"
+        );
+      });
+
+      const poModuleId = poModule?.id ?? 11;
+
+      if (!poModuleId) {
         toast.error("Purchase Orders module not found");
         return;
       }
@@ -643,11 +657,40 @@ const MaterialRequests = () => {
       if (poNumber) {
         sessionStorage.setItem("purchaseOrdersSearch", poNumber);
       }
-      navigate(`/home/${poModule.id}`);
+      if (poId) {
+        sessionStorage.setItem("purchaseOrdersOpenPoId", String(poId));
+      } else if (poNumber) {
+        sessionStorage.setItem("purchaseOrdersOpenPoNumber", String(poNumber));
+      }
+      navigate(`/home/${poModuleId}`);
     } catch {
       toast.error("Unable to open Purchase Orders module");
     }
   };
+
+  useEffect(() => {
+    if (loading || requests.length === 0) return;
+
+    const requestIdToOpen = sessionStorage.getItem(
+      "materialRequestsOpenRequestId",
+    );
+    if (!requestIdToOpen) return;
+
+    const matchedRequest = requests.find(
+      (request) =>
+        String(request._id || request.id || "") === String(requestIdToOpen),
+    );
+
+    sessionStorage.removeItem("materialRequestsOpenRequestId");
+
+    if (!matchedRequest) {
+      toast.error("Material request not found");
+      return;
+    }
+
+    setSelectedRequest(matchedRequest);
+    setShowViewModal(true);
+  }, [loading, requests]);
 
   if (loading) {
     return (
@@ -2695,6 +2738,7 @@ const MaterialRequests = () => {
                                           onClick={() =>
                                             openPurchaseOrderFromActivity(
                                               entry.poNumber,
+                                              entry.poId,
                                             )
                                           }
                                           className="ml-2 text-[#137fec] hover:text-[#0d6efd] underline font-semibold"

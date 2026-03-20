@@ -6131,17 +6131,60 @@ async function start() {
   // Get accounts payable invoices
   app.get('/api/finance/accounts-payable', async (req, res) => {
     try {
-      const { vendor, status, page = 1 } = req.query;
-      
-      // TODO: Fetch actual data from database
-      const invoices = [];
-      
+      const { vendor, status, page = 1, search = '' } = req.query;
+      const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+      const limit = 20;
+      const skip = (pageNum - 1) * limit;
+
+      const query = {
+        status: { $in: ['payment_pending', 'paid'] },
+      };
+
+      if (vendor) {
+        query.vendor = vendor;
+      }
+
+      if (status) {
+        const normalized = String(status).toLowerCase();
+        if (normalized === 'paid') query.status = 'paid';
+        if (normalized === 'pending' || normalized === 'payment_pending') query.status = 'payment_pending';
+      }
+
+      if (search) {
+        query.$or = [
+          { poNumber: { $regex: String(search), $options: 'i' } },
+          { vendor: { $regex: String(search), $options: 'i' } },
+        ];
+      }
+
+      const [rows, total] = await Promise.all([
+        PurchaseOrderModel.find(query)
+          .populate('linkedMaterialRequestId', 'department requestId')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        PurchaseOrderModel.countDocuments(query),
+      ]);
+
+      const invoices = rows.map((po) => ({
+        _id: po._id,
+        vendor: po.vendor,
+        invoiceNumber: po.poNumber,
+        issueDate: po.orderDate || po.createdAt,
+        dueDate: po.expectedDelivery || po.orderDate || po.createdAt,
+        amount: Number(po.totalAmount || 0),
+        status: po.status === 'paid' ? 'Paid' : 'Pending',
+        department: po?.linkedMaterialRequestId?.department || 'General',
+      }));
+
       res.json({
         success: true,
         data: {
           invoices,
-          totalPages: 0,
-          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          currentPage: pageNum,
+          total,
         },
       });
     } catch (error) {
@@ -6159,14 +6202,25 @@ async function start() {
         return res.status(400).json({ success: false, error: 'No invoices selected' });
       }
       
-      // TODO: Process payments through payment gateway
-      // For now, return success
+      const result = await PurchaseOrderModel.updateMany(
+        {
+          _id: { $in: invoiceIds },
+          status: 'payment_pending',
+        },
+        {
+          $set: {
+            status: 'paid',
+            paidDate: new Date(),
+          },
+        },
+      );
       
       res.json({
         success: true,
-        message: `Successfully processed payment for ${invoiceIds.length} invoice(s)`,
+        message: `Successfully processed payment for ${result.modifiedCount} invoice(s)`,
         data: {
           paidInvoices: invoiceIds,
+          modifiedCount: result.modifiedCount,
           timestamp: new Date(),
         },
       });

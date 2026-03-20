@@ -14,6 +14,7 @@ const {
   updateStockLevel,
   getStockAtLocation,
 } = require('../utils/stockTransferHelpers');
+const { buildApprovalChain } = require('../utils/approvalRuleHelper');
 
 // ==========================================
 // MATERIAL REQUESTS API
@@ -358,6 +359,13 @@ router.post('/material-requests/:id/approve', async (req, res) => {
         description: item.description
     }));
 
+    const poApprovalInfo = await buildApprovalChain('Purchase Orders', {
+      department: request.department,
+      totalAmount,
+      requestedBy: request.requestedBy,
+      requestType: request.requestType,
+    });
+
     const newPO = new PurchaseOrder({
         vendor: vendor || request.preferredVendor || 'Unknown Vendor',
         status: 'draft',
@@ -366,7 +374,22 @@ router.post('/material-requests/:id/approve', async (req, res) => {
         totalAmount: totalAmount,
       totalAmountNgn: totalAmount * (request.exchangeRateToNgn || 1),
         linkedMaterialRequestId: updatedRequest._id,
-        lineItems: poLineItems
+        lineItems: poLineItems,
+        usesRuleBasedApproval: !!poApprovalInfo?.usesRuleBasedApproval,
+        approvalRuleId: poApprovalInfo?.rule?._id,
+        currentApprovalLevel: poApprovalInfo?.currentApprovalLevel || 1,
+        approvalChain: Array.isArray(poApprovalInfo?.approvalChain)
+          ? poApprovalInfo.approvalChain
+          : [],
+        activities: [
+          {
+            type: 'created',
+            author: req.user?.fullName || req.user?.email || 'System',
+            authorId: req.user?._id,
+            text: 'Purchase order generated from approved material request',
+            timestamp: new Date(),
+          },
+        ],
     });
 
     await newPO.save();
@@ -583,11 +606,198 @@ router.post('/purchase-orders/:id/mark-paid', async (req, res) => {
   }
 });
 
+// POST Lock/Unlock Purchase Order
+router.post('/purchase-orders/:id/lock', async (req, res) => {
+  try {
+    const po = await PurchaseOrder.findById(req.params.id);
+    if (!po) {
+      return res.status(404).json({ success: false, message: 'Purchase order not found' });
+    }
+
+    const shouldLock = req.body?.locked !== false;
+    po.activities = Array.isArray(po.activities) ? po.activities : [];
+    const actorName = req.user?.fullName || req.user?.email || 'System';
+    const actorId = req.user?._id;
+
+    if (shouldLock) {
+      po.isLocked = true;
+      po.lockedAt = new Date();
+      po.lockedBy = { userId: String(actorId || ''), name: actorName };
+
+      const hasApprovalChain = Array.isArray(po.approvalChain) && po.approvalChain.length > 0;
+      if (hasApprovalChain) {
+        const allApproved = po.approvalChain.every((step) => step.status === 'approved');
+        const hasPending = po.approvalChain.some((step) => step.status === 'pending');
+        if (!allApproved && !hasPending) {
+          const firstAwaiting = po.approvalChain.find((step) => step.status === 'awaiting');
+          if (firstAwaiting) {
+            firstAwaiting.status = 'pending';
+            po.currentApprovalLevel = firstAwaiting.level || 1;
+          }
+        }
+        po.status = allApproved ? 'payment_pending' : 'issued';
+      } else {
+        po.status = 'payment_pending';
+      }
+
+      po.activities.push({
+        type: 'lock',
+        author: actorName,
+        authorId: actorId,
+        text: 'Purchase order locked for approvals/payment',
+        timestamp: new Date(),
+      });
+    } else {
+      po.isLocked = false;
+      po.lockedAt = null;
+      po.lockedBy = { userId: '', name: '' };
+
+      if (Array.isArray(po.approvalChain) && po.approvalChain.length > 0) {
+        po.approvalChain = po.approvalChain.map((step, idx) => ({
+          ...step,
+          status: idx === 0 ? 'pending' : 'awaiting',
+          approvedAt: undefined,
+          comments: '',
+        }));
+        po.currentApprovalLevel = 1;
+      }
+
+      if (po.status !== 'paid') {
+        po.status = 'draft';
+      }
+
+      po.activities.push({
+        type: 'unlock',
+        author: actorName,
+        authorId: actorId,
+        text: 'Purchase order unlocked for editing',
+        timestamp: new Date(),
+      });
+    }
+
+    await po.save();
+    return res.json({ success: true, data: po });
+  } catch (err) {
+    console.error('Error locking/unlocking purchase order:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update lock state', error: err.message });
+  }
+});
+
+// POST Approve/Reject Purchase Order step
+router.post('/purchase-orders/:id/approve', async (req, res) => {
+  try {
+    const { approved = true, comment = '' } = req.body || {};
+    const po = await PurchaseOrder.findById(req.params.id);
+    if (!po) {
+      return res.status(404).json({ success: false, message: 'Purchase order not found' });
+    }
+
+    if (!po.isLocked) {
+      return res.status(400).json({ success: false, message: 'Lock the purchase order before approval' });
+    }
+
+    po.activities = Array.isArray(po.activities) ? po.activities : [];
+    const actorName = req.user?.fullName || req.user?.email || 'Approver';
+    const actorId = req.user?._id;
+
+    if (!Array.isArray(po.approvalChain) || po.approvalChain.length === 0) {
+      po.status = approved ? 'payment_pending' : 'cancelled';
+      po.activities.push({
+        type: approved ? 'approval' : 'rejection',
+        author: actorName,
+        authorId: actorId,
+        text: approved
+          ? 'Purchase order approved and sent to Accounts Payable'
+          : `Purchase order rejected${comment ? `: ${comment}` : ''}`,
+        timestamp: new Date(),
+      });
+      await po.save();
+      return res.json({ success: true, data: po });
+    }
+
+    let currentIdx = po.approvalChain.findIndex((step) => step.status === 'pending');
+    if (currentIdx === -1) {
+      currentIdx = po.approvalChain.findIndex((step) => step.status === 'awaiting');
+      if (currentIdx >= 0) {
+        po.approvalChain[currentIdx].status = 'pending';
+      }
+    }
+
+    if (currentIdx === -1) {
+      return res.status(400).json({ success: false, message: 'No pending approval step found' });
+    }
+
+    const currentStep = po.approvalChain[currentIdx];
+
+    if (approved) {
+      currentStep.status = 'approved';
+      currentStep.approvedAt = new Date();
+      currentStep.comments = comment || currentStep.comments;
+
+      const nextIdx = po.approvalChain.findIndex(
+        (step, idx) => idx > currentIdx && (step.status === 'awaiting' || step.status === 'pending'),
+      );
+
+      if (nextIdx >= 0) {
+        po.approvalChain[nextIdx].status = 'pending';
+        po.currentApprovalLevel = po.approvalChain[nextIdx].level || nextIdx + 1;
+        po.status = 'issued';
+        po.activities.push({
+          type: 'approval',
+          author: actorName,
+          authorId: actorId,
+          text: `Approval granted at level ${currentStep.level || currentIdx + 1}. Next approver notified.`,
+          timestamp: new Date(),
+        });
+      } else {
+        po.status = 'payment_pending';
+        po.activities.push({
+          type: 'approval',
+          author: actorName,
+          authorId: actorId,
+          text: 'Final approval complete. Purchase order moved to Accounts Payable.',
+          timestamp: new Date(),
+        });
+      }
+    } else {
+      currentStep.status = 'rejected';
+      currentStep.approvedAt = new Date();
+      currentStep.comments = comment || 'Rejected';
+      po.status = 'cancelled';
+      po.isLocked = false;
+      po.activities.push({
+        type: 'rejection',
+        author: actorName,
+        authorId: actorId,
+        text: `Purchase order rejected${comment ? `: ${comment}` : ''}`,
+        timestamp: new Date(),
+      });
+    }
+
+    await po.save();
+    return res.json({ success: true, data: po });
+  } catch (err) {
+    console.error('Error processing purchase order approval:', err);
+    return res.status(500).json({ success: false, message: 'Failed to process approval', error: err.message });
+  }
+});
+
 // PUT Update Purchase Order
 router.put('/purchase-orders/:id', async (req, res) => {
   try {
     // If updating line items, might need to recalculate total
     const updates = { ...req.body };
+    const existingOrder = await PurchaseOrder.findById(req.params.id);
+    if (!existingOrder) return res.status(404).json({ success: false, message: 'Not found' });
+
+    if (existingOrder.isLocked) {
+      const lockProtectedFields = ['vendor', 'lineItems', 'expectedDelivery', 'notes', 'currency', 'exchangeRateToNgn', 'totalAmount'];
+      const attemptingProtectedEdit = lockProtectedFields.some((field) => Object.prototype.hasOwnProperty.call(updates, field));
+      if (attemptingProtectedEdit) {
+        return res.status(400).json({ success: false, message: 'Purchase order is locked. Unlock before editing.' });
+      }
+    }
+
     if (updates.lineItems && !updates.totalAmount) {
         updates.totalAmount = updates.lineItems.reduce(
           (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.amount) || 0),

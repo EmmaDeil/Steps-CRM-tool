@@ -1,10 +1,14 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
 import DataTable from "../common/DataTable";
+import { useNavigate } from "react-router-dom";
 
 const PurchaseOrders = () => {
+  const navigate = useNavigate();
+  const pendingOpenPoRef = useRef({ id: "", number: "" });
+  const commentInputRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedVendor, setSelectedVendor] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
@@ -12,16 +16,29 @@ const PurchaseOrders = () => {
   const [selectedPo, setSelectedPo] = useState(null);
   const [loadingPoDetails, setLoadingPoDetails] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isTogglingLock, setIsTogglingLock] = useState(false);
+  const [isSubmittingApproval, setIsSubmittingApproval] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState({
+    workflow: false,
+    activity: false,
+    lineItems: false,
+    attachments: false,
+    comment: false,
+  });
   const [editForm, setEditForm] = useState({
     vendor: "",
     status: "draft",
     expectedDelivery: "",
-    notes: "",
+    comment: "",
   });
 
   // API Data States
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [activeUsers, setActiveUsers] = useState([]);
+  const [showCommentMentionDropdown, setShowCommentMentionDropdown] =
+    useState(false);
+  const [commentMentionSearch, setCommentMentionSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -94,13 +111,26 @@ const PurchaseOrders = () => {
   // Fetch vendors on component mount
   useEffect(() => {
     fetchVendors();
+    fetchActiveUsers();
   }, []);
 
   useEffect(() => {
     const poSearch = sessionStorage.getItem("purchaseOrdersSearch");
+    const poOpenId = sessionStorage.getItem("purchaseOrdersOpenPoId");
+    const poOpenNumber = sessionStorage.getItem("purchaseOrdersOpenPoNumber");
+
     if (poSearch) {
       setSearchQuery(poSearch);
       sessionStorage.removeItem("purchaseOrdersSearch");
+    }
+
+    if (poOpenId || poOpenNumber) {
+      pendingOpenPoRef.current = {
+        id: poOpenId || "",
+        number: poOpenNumber || "",
+      };
+      sessionStorage.removeItem("purchaseOrdersOpenPoId");
+      sessionStorage.removeItem("purchaseOrdersOpenPoNumber");
     }
   }, []);
 
@@ -122,6 +152,22 @@ const PurchaseOrders = () => {
       console.error("Error fetching vendors:", err);
       toast.error("Failed to load vendors");
       setVendors([]);
+    }
+  };
+
+  const fetchActiveUsers = async () => {
+    try {
+      const response = await apiService.get("/api/users", {
+        params: { status: "Active" },
+      });
+      const users = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response)
+          ? response
+          : [];
+      setActiveUsers(users);
+    } catch {
+      setActiveUsers([]);
     }
   };
 
@@ -232,6 +278,163 @@ const PurchaseOrders = () => {
   const getAttachmentHref = (attachment) =>
     attachment?.fileData || attachment?.url || attachment?.path || "";
 
+  const getMaterialRequestLinkMeta = () => {
+    const linkedRequest = selectedPo?.linkedMaterialRequestId;
+    if (!linkedRequest) {
+      return { id: "", label: "Not linked" };
+    }
+
+    if (typeof linkedRequest === "string") {
+      return { id: linkedRequest, label: linkedRequest };
+    }
+
+    return {
+      id: linkedRequest._id || linkedRequest.id || "",
+      label: linkedRequest.requestId || linkedRequest._id || "Not linked",
+    };
+  };
+
+  const openMaterialRequestDetails = async (requestId) => {
+    if (!requestId) return;
+    try {
+      const modsRes = await apiService.get("/api/modules");
+      const modules = Array.isArray(modsRes)
+        ? modsRes
+        : Array.isArray(modsRes?.data)
+          ? modsRes.data
+          : [];
+      const mrModule = modules.find(
+        (m) => String(m.name || "").toLowerCase() === "material requests",
+      );
+
+      if (!mrModule?.id) {
+        toast.error("Material Requests module not found");
+        return;
+      }
+
+      sessionStorage.setItem(
+        "materialRequestsOpenRequestId",
+        String(requestId),
+      );
+      navigate(`/home/${mrModule.id}`);
+    } catch {
+      toast.error("Unable to open Material Requests module");
+    }
+  };
+
+  const openPurchaseOrderByNumber = useCallback(
+    async (poNumber) => {
+      if (!poNumber) return;
+
+      const inCurrentPage = purchaseOrders.find(
+        (po) =>
+          String(po.poNumber || "").toLowerCase() ===
+          String(poNumber).toLowerCase(),
+      );
+      if (inCurrentPage) {
+        await openPurchaseOrderDetails(inCurrentPage);
+        return;
+      }
+
+      try {
+        const response = await apiService.get("/api/purchase-orders", {
+          params: {
+            page: 1,
+            limit: 50,
+            search: poNumber,
+          },
+        });
+        const rows = Array.isArray(response?.orders)
+          ? response.orders
+          : Array.isArray(response)
+            ? response
+            : [];
+        const exactMatch = rows.find(
+          (po) =>
+            String(po.poNumber || "").toLowerCase() ===
+            String(poNumber).toLowerCase(),
+        );
+
+        if (!exactMatch) {
+          toast.error(`Purchase order ${poNumber} not found`);
+          return;
+        }
+
+        await openPurchaseOrderDetails(exactMatch);
+      } catch {
+        toast.error("Failed to open purchase order");
+      }
+    },
+    [purchaseOrders],
+  );
+
+  useEffect(() => {
+    const runPendingOpen = async () => {
+      const { id, number } = pendingOpenPoRef.current;
+      if (!id && !number) return;
+
+      if (id) {
+        await openPurchaseOrderDetails({ _id: id });
+        pendingOpenPoRef.current = { id: "", number: "" };
+        return;
+      }
+
+      if (number) {
+        await openPurchaseOrderByNumber(number);
+        pendingOpenPoRef.current = { id: "", number: "" };
+      }
+    };
+
+    if (!loading) {
+      runPendingOpen();
+    }
+  }, [loading, purchaseOrders, openPurchaseOrderByNumber]);
+
+  const filteredMentionUsers = activeUsers
+    .map((user) => user?.fullName || user?.name || "")
+    .filter(Boolean)
+    .filter((name) =>
+      name.toLowerCase().includes(commentMentionSearch.toLowerCase()),
+    )
+    .slice(0, 6);
+
+  const insertCommentMention = (name) => {
+    const textarea = commentInputRef.current;
+    const mentionValue = `@${name}`;
+    const currentText = editForm.comment || "";
+
+    if (!textarea) {
+      setEditForm((prev) => ({
+        ...prev,
+        comment: `${currentText} ${mentionValue}`.trim(),
+      }));
+      setShowCommentMentionDropdown(false);
+      setCommentMentionSearch("");
+      return;
+    }
+
+    const cursor = textarea.selectionStart ?? currentText.length;
+    const beforeCursor = currentText.slice(0, cursor);
+    const afterCursor = currentText.slice(cursor);
+
+    const replacedBefore = beforeCursor.replace(
+      /(^|\s)@[a-zA-Z0-9._-]*$/,
+      (match, leadingSpace) => `${leadingSpace}${mentionValue}`,
+    );
+
+    const nextText = `${replacedBefore} ${afterCursor}`;
+    const nextCursor = replacedBefore.length + 1;
+
+    setEditForm((prev) => ({ ...prev, comment: nextText }));
+    setShowCommentMentionDropdown(false);
+    setCommentMentionSearch("");
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
   const openPurchaseOrderDetails = async (po) => {
     try {
       const poId = po?._id || po?.id;
@@ -256,8 +459,10 @@ const PurchaseOrders = () => {
         expectedDelivery: poData.expectedDelivery
           ? new Date(poData.expectedDelivery).toISOString().split("T")[0]
           : "",
-        notes: poData.notes || "",
+        comment: poData.notes || poData.comment || "",
       });
+      setShowCommentMentionDropdown(false);
+      setCommentMentionSearch("");
     } catch (err) {
       console.error("Error loading purchase order:", err);
       toast.error("Failed to open purchase order");
@@ -269,6 +474,10 @@ const PurchaseOrders = () => {
   const handleSavePoEdit = async () => {
     try {
       if (!selectedPo?._id && !selectedPo?.id) return;
+      if (selectedPo?.isLocked) {
+        toast.error("Unlock this purchase order before editing");
+        return;
+      }
       setIsSavingEdit(true);
 
       const poId = selectedPo._id || selectedPo.id;
@@ -276,7 +485,7 @@ const PurchaseOrders = () => {
         vendor: editForm.vendor.trim(),
         status: editForm.status,
         expectedDelivery: editForm.expectedDelivery || null,
-        notes: editForm.notes?.trim() || "",
+        notes: editForm.comment?.trim() || "",
       };
 
       const updateResponse = await apiService.put(
@@ -297,6 +506,67 @@ const PurchaseOrders = () => {
     }
   };
 
+  const handleToggleLock = async (shouldLock) => {
+    try {
+      if (!selectedPo?._id && !selectedPo?.id) return;
+      setIsTogglingLock(true);
+
+      const poId = selectedPo._id || selectedPo.id;
+      const response = await apiService.post(
+        `/api/purchase-orders/${poId}/lock`,
+        {
+          locked: shouldLock,
+        },
+      );
+
+      const updatedPo = response?.data || response;
+      if (updatedPo?._id || updatedPo?.id) {
+        setSelectedPo(updatedPo);
+      }
+      await fetchPurchaseOrders();
+      toast.success(
+        shouldLock ? "Purchase order locked" : "Purchase order unlocked",
+      );
+    } catch (error) {
+      console.error("Error toggling PO lock state:", error);
+      toast.error(
+        error?.serverData?.message ||
+          error?.response?.data?.message ||
+          "Failed to update lock state",
+      );
+    } finally {
+      setIsTogglingLock(false);
+    }
+  };
+
+  const handleApprovalDecision = async (approved) => {
+    try {
+      if (!selectedPo?._id && !selectedPo?.id) return;
+      setIsSubmittingApproval(true);
+
+      const poId = selectedPo._id || selectedPo.id;
+      const response = await apiService.post(
+        `/api/purchase-orders/${poId}/approve`,
+        {
+          approved,
+          comment: editForm.comment?.trim() || "",
+        },
+      );
+
+      const updatedPo = response?.data || response;
+      if (updatedPo?._id || updatedPo?.id) {
+        setSelectedPo(updatedPo);
+      }
+      await fetchPurchaseOrders();
+      toast.success(approved ? "Approval submitted" : "Rejection submitted");
+    } catch (error) {
+      console.error("Error submitting PO approval:", error);
+      toast.error("Failed to submit approval decision");
+    } finally {
+      setIsSubmittingApproval(false);
+    }
+  };
+
   const statusCounts = {
     all: total,
     draft:
@@ -308,6 +578,20 @@ const PurchaseOrders = () => {
     received:
       purchaseOrders?.filter((po) => po.status?.toLowerCase() === "received")
         ?.length || 0,
+  };
+
+  const getApprovalProgressLabel = (po) => {
+    const chain = Array.isArray(po?.approvalChain) ? po.approvalChain : [];
+    if (chain.length === 0) return "No approval chain";
+    const approved = chain.filter((step) => step.status === "approved").length;
+    return `${approved}/${chain.length} approved`;
+  };
+
+  const toggleSection = (sectionKey) => {
+    setCollapsedSections((prev) => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey],
+    }));
   };
 
   // Pagination handlers
@@ -538,6 +822,23 @@ const PurchaseOrders = () => {
                 <p className="text-[#617589] text-sm mt-1">
                   Full purchase order details and source request context.
                 </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100">
+                    Status: {getStatusInfo(selectedPo?.status).label}
+                  </span>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                      selectedPo?.isLocked
+                        ? "bg-orange-50 text-orange-700 border-orange-100"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                    }`}
+                  >
+                    {selectedPo?.isLocked ? "Locked" : "Unlocked"}
+                  </span>
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200">
+                    Approval: {getApprovalProgressLabel(selectedPo)}
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -551,16 +852,32 @@ const PurchaseOrders = () => {
                 <button
                   type="button"
                   onClick={handleSavePoEdit}
-                  disabled={isSavingEdit || !editForm.vendor.trim()}
+                  disabled={
+                    isSavingEdit ||
+                    !editForm.vendor.trim() ||
+                    selectedPo?.isLocked
+                  }
                   className="px-4 py-2 rounded-lg bg-[#137fec] text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSavingEdit ? "Saving..." : "Save PO Changes"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleLock(!selectedPo?.isLocked)}
+                  disabled={isTogglingLock || selectedPo?.status === "paid"}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-[#111418] hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isTogglingLock
+                    ? "Updating..."
+                    : selectedPo?.isLocked
+                      ? "Unlock PO"
+                      : "Lock PO"}
                 </button>
               </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
+              <div className="lg:col-span-2 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-visible">
                 <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50">
                   <h3 className="text-lg font-bold text-[#111418]">
                     Purchase Order Details
@@ -571,17 +888,41 @@ const PurchaseOrders = () => {
                     <span className="text-sm font-medium text-[#111418]">
                       Vendor
                     </span>
-                    <input
-                      type="text"
+                    <select
                       value={editForm.vendor}
+                      disabled={selectedPo?.isLocked}
                       onChange={(e) =>
                         setEditForm((prev) => ({
                           ...prev,
                           vendor: e.target.value,
                         }))
                       }
-                      className="w-full rounded-lg border border-[#dbe0e6] h-10 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#137fec]/50 focus:border-[#137fec]"
-                    />
+                      className="w-full rounded-lg border border-[#dbe0e6] h-10 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#137fec]/50 focus:border-[#137fec] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Select vendor</option>
+                      {vendors.map((vendor) => {
+                        const vendorName =
+                          vendor.companyName || vendor.name || "Unknown Vendor";
+                        return (
+                          <option
+                            key={vendor._id || vendor.id || vendorName}
+                            value={vendorName}
+                          >
+                            {vendorName}
+                          </option>
+                        );
+                      })}
+                      {editForm.vendor &&
+                        !vendors.some(
+                          (vendor) =>
+                            (vendor.companyName || vendor.name || "") ===
+                            editForm.vendor,
+                        ) && (
+                          <option value={editForm.vendor}>
+                            {editForm.vendor}
+                          </option>
+                        )}
+                    </select>
                   </label>
 
                   <label className="flex flex-col gap-1.5">
@@ -590,13 +931,14 @@ const PurchaseOrders = () => {
                     </span>
                     <select
                       value={editForm.status}
+                      disabled={selectedPo?.isLocked}
                       onChange={(e) =>
                         setEditForm((prev) => ({
                           ...prev,
                           status: e.target.value,
                         }))
                       }
-                      className="w-full rounded-lg border border-[#dbe0e6] h-10 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#137fec]/50 focus:border-[#137fec]"
+                      className="w-full rounded-lg border border-[#dbe0e6] h-10 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#137fec]/50 focus:border-[#137fec] disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="draft">Draft</option>
                       <option value="issued">Issued</option>
@@ -637,13 +979,14 @@ const PurchaseOrders = () => {
                     <input
                       type="date"
                       value={editForm.expectedDelivery}
+                      disabled={selectedPo?.isLocked}
                       onChange={(e) =>
                         setEditForm((prev) => ({
                           ...prev,
                           expectedDelivery: e.target.value,
                         }))
                       }
-                      className="w-full rounded-lg border border-[#dbe0e6] h-10 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#137fec]/50 focus:border-[#137fec]"
+                      className="w-full rounded-lg border border-[#dbe0e6] h-10 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#137fec]/50 focus:border-[#137fec] disabled:bg-gray-100 disabled:cursor-not-allowed"
                     />
                   </label>
 
@@ -655,181 +998,386 @@ const PurchaseOrders = () => {
                       {formatDate(selectedPo.orderDate || selectedPo.createdAt)}
                     </div>
                   </div>
-
-                  <div className="md:col-span-2 flex flex-col gap-1.5">
-                    <span className="text-sm font-medium text-[#111418]">
-                      Source Material Request ID
-                    </span>
-                    <div className="h-10 px-3 rounded-lg border border-[#dbe0e6] bg-gray-50 flex items-center text-sm font-semibold text-[#111418]">
-                      {selectedPo?.linkedMaterialRequestId?.requestId ||
-                        selectedPo?.linkedMaterialRequestId?._id ||
-                        selectedPo?.linkedMaterialRequestId ||
-                        "Not linked"}
-                    </div>
-                  </div>
-
-                  <label className="md:col-span-2 flex flex-col gap-1.5">
-                    <span className="text-sm font-medium text-[#111418]">
-                      Notes
-                    </span>
-                    <textarea
-                      rows="4"
-                      value={editForm.notes}
-                      onChange={(e) =>
-                        setEditForm((prev) => ({
-                          ...prev,
-                          notes: e.target.value,
-                        }))
-                      }
-                      className="w-full rounded-lg border border-[#dbe0e6] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#137fec]/50 focus:border-[#137fec]"
-                    />
-                  </label>
                 </div>
               </div>
 
               <div className="rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50">
-                  <h3 className="text-lg font-bold text-[#111418]">
-                    Source Request Summary
-                  </h3>
+                <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50 flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-[#111418]">Workflow</h3>
+                  <button
+                    type="button"
+                    onClick={() => toggleSection("workflow")}
+                    className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
+                  >
+                    {collapsedSections.workflow ? "Expand" : "Collapse"}
+                  </button>
                 </div>
-                <div className="p-6 space-y-3 text-sm">
-                  <div>
-                    <p className="text-[#617589]">Request Title</p>
-                    <p className="text-[#111418] font-semibold">
-                      {selectedPo?.linkedMaterialRequestId?.requestTitle ||
-                        "N/A"}
-                    </p>
+                {!collapsedSections.workflow && (
+                  <div className="p-6 space-y-3 text-sm">
+                    <div>
+                      <p className="text-[#617589]">PO Lock Status</p>
+                      <p className="text-[#111418] font-semibold">
+                        {selectedPo?.isLocked ? "Locked" : "Unlocked"}
+                      </p>
+                    </div>
+                    {Array.isArray(selectedPo?.approvalChain) &&
+                    selectedPo.approvalChain.length > 0 ? (
+                      <div>
+                        <p className="text-[#617589] mb-1">Approval Steps</p>
+                        <div className="space-y-2">
+                          {selectedPo.approvalChain.map((step, idx) => (
+                            <div
+                              key={`${step.level || idx}-${step.approverName || step.approverRole || "approver"}`}
+                              className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50"
+                            >
+                              <p className="text-sm font-semibold text-[#111418]">
+                                Level {step.level || idx + 1}:{" "}
+                                {step.approverName ||
+                                  step.approverRole ||
+                                  "Approver"}
+                              </p>
+                              <p className="text-xs text-[#617589] capitalize">
+                                {step.status || "awaiting"}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[#617589] text-sm">
+                        No explicit approval chain configured.
+                      </p>
+                    )}
+
+                    {selectedPo?.isLocked &&
+                      selectedPo?.status !== "payment_pending" &&
+                      selectedPo?.status !== "paid" && (
+                        <div className="pt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApprovalDecision(true)}
+                            disabled={isSubmittingApproval}
+                            className="px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold disabled:opacity-50"
+                          >
+                            Approve Step
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApprovalDecision(false)}
+                            disabled={isSubmittingApproval}
+                            className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
+
+                    <hr className="my-3" />
+
+                    <div>
+                      <p className="text-[#617589]">Request Title</p>
+                      <p className="text-[#111418] font-semibold">
+                        {selectedPo?.linkedMaterialRequestId?.requestTitle ||
+                          "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[#617589]">
+                        Source Material Request ID
+                      </p>
+                      {(() => {
+                        const materialRequestMeta =
+                          getMaterialRequestLinkMeta();
+                        return materialRequestMeta.id ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openMaterialRequestDetails(materialRequestMeta.id)
+                            }
+                            className="text-[#137fec] font-semibold hover:underline"
+                          >
+                            {materialRequestMeta.label}
+                          </button>
+                        ) : (
+                          <p className="text-[#111418] font-semibold">
+                            {materialRequestMeta.label}
+                          </p>
+                        );
+                      })()}
+                    </div>
+                    <div>
+                      <p className="text-[#617589]">Requested By</p>
+                      <p className="text-[#111418] font-semibold">
+                        {selectedPo?.linkedMaterialRequestId?.requestedBy ||
+                          "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[#617589]">Department</p>
+                      <p className="text-[#111418] font-semibold">
+                        {selectedPo?.linkedMaterialRequestId?.department ||
+                          "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[#617589]">Request Type</p>
+                      <p className="text-[#111418] font-semibold">
+                        {selectedPo?.linkedMaterialRequestId?.requestType ||
+                          "N/A"}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[#617589]">Requested By</p>
-                    <p className="text-[#111418] font-semibold">
-                      {selectedPo?.linkedMaterialRequestId?.requestedBy ||
-                        "N/A"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[#617589]">Department</p>
-                    <p className="text-[#111418] font-semibold">
-                      {selectedPo?.linkedMaterialRequestId?.department || "N/A"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[#617589]">Request Type</p>
-                    <p className="text-[#111418] font-semibold">
-                      {selectedPo?.linkedMaterialRequestId?.requestType ||
-                        "N/A"}
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
             <div className="mt-6 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50">
+              <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-[#111418]">Activity</h3>
+                <button
+                  type="button"
+                  onClick={() => toggleSection("activity")}
+                  className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
+                >
+                  {collapsedSections.activity ? "Expand" : "Collapse"}
+                </button>
+              </div>
+              {!collapsedSections.activity && (
+                <div className="p-6 space-y-3">
+                  {Array.isArray(selectedPo?.activities) &&
+                  selectedPo.activities.length > 0 ? (
+                    selectedPo.activities
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          new Date(a.timestamp || 0).getTime() -
+                          new Date(b.timestamp || 0).getTime(),
+                      )
+                      .map((entry, idx) => (
+                        <div
+                          key={`${entry.type || "activity"}-${idx}`}
+                          className="flex items-start gap-3"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                            <i className="fa-solid fa-clock text-xs text-[#617589]"></i>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm text-[#111418]">
+                              <span className="font-semibold">
+                                {entry.author || "System"}
+                              </span>{" "}
+                              {entry.text || "Updated purchase order"}
+                            </p>
+                            <p className="text-xs text-[#617589] mt-0.5">
+                              {entry.timestamp
+                                ? new Date(entry.timestamp).toLocaleString()
+                                : "Unknown time"}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                  ) : (
+                    <p className="text-sm text-[#617589]">No activity yet.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50 flex items-center justify-between">
                 <h3 className="text-lg font-bold text-[#111418]">
                   PO Line Items
                 </h3>
+                <button
+                  type="button"
+                  onClick={() => toggleSection("lineItems")}
+                  className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
+                >
+                  {collapsedSections.lineItems ? "Expand" : "Collapse"}
+                </button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
-                        Item
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
-                        Qty
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
-                        Unit
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
-                        Unit Cost
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
-                        Line Total
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {(selectedPo.lineItems || []).map((item, idx) => (
-                      <tr key={`${item.itemName || "item"}-${idx}`}>
-                        <td className="px-4 py-3 text-sm font-medium text-[#111418]">
-                          {item.itemName || "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-[#111418]">
-                          {item.quantity || 0}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-[#617589]">
-                          {item.quantityType || "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-[#111418] text-right">
-                          {formatPoCurrency(
-                            item.amount || 0,
-                            resolvePoCurrency(selectedPo),
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-[#111418] text-right">
-                          {formatPoCurrency(
-                            (Number(item.quantity) || 0) *
-                              (Number(item.amount) || 0),
-                            resolvePoCurrency(selectedPo),
-                          )}
-                        </td>
+              {!collapsedSections.lineItems && (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
+                          Item
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
+                          Qty
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
+                          Unit
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
+                          Unit Cost
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
+                          Line Total
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {(selectedPo.lineItems || []).map((item, idx) => (
+                        <tr key={`${item.itemName || "item"}-${idx}`}>
+                          <td className="px-4 py-3 text-sm font-medium text-[#111418]">
+                            {item.itemName || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-[#111418]">
+                            {item.quantity || 0}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-[#617589]">
+                            {item.quantityType || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-[#111418] text-right">
+                            {formatPoCurrency(
+                              item.amount || 0,
+                              resolvePoCurrency(selectedPo),
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-[#111418] text-right">
+                            {formatPoCurrency(
+                              (Number(item.quantity) || 0) *
+                                (Number(item.amount) || 0),
+                              resolvePoCurrency(selectedPo),
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50">
+              <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50 flex items-center justify-between">
                 <h3 className="text-lg font-bold text-[#111418]">
                   Source Request Attachments
                 </h3>
+                <button
+                  type="button"
+                  onClick={() => toggleSection("attachments")}
+                  className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
+                >
+                  {collapsedSections.attachments ? "Expand" : "Collapse"}
+                </button>
               </div>
-              <div className="p-6">
-                {Array.isArray(
-                  selectedPo?.linkedMaterialRequestId?.attachments,
-                ) &&
-                selectedPo.linkedMaterialRequestId.attachments.length > 0 ? (
-                  <div className="flex flex-wrap gap-3">
-                    {selectedPo.linkedMaterialRequestId.attachments.map(
-                      (file, idx) => {
-                        const attachmentHref = getAttachmentHref(file);
-                        const attachmentName = getAttachmentName(file, idx);
-                        return attachmentHref ? (
-                          <a
-                            key={`${attachmentName}-${idx}`}
-                            href={attachmentHref}
-                            target="_blank"
-                            rel="noreferrer"
-                            download={attachmentName}
-                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-[#111418] text-sm hover:bg-gray-100"
-                          >
-                            <i className="fa-solid fa-paperclip text-[#617589]"></i>
-                            <span>{attachmentName}</span>
-                          </a>
-                        ) : (
-                          <div
-                            key={`${attachmentName}-${idx}`}
-                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-[#111418] text-sm"
-                          >
-                            <i className="fa-solid fa-file text-[#617589]"></i>
-                            <span>{attachmentName}</span>
-                          </div>
+              {!collapsedSections.attachments && (
+                <div className="p-6">
+                  {Array.isArray(
+                    selectedPo?.linkedMaterialRequestId?.attachments,
+                  ) &&
+                  selectedPo.linkedMaterialRequestId.attachments.length > 0 ? (
+                    <div className="flex flex-wrap gap-3">
+                      {selectedPo.linkedMaterialRequestId.attachments.map(
+                        (file, idx) => {
+                          const attachmentHref = getAttachmentHref(file);
+                          const attachmentName = getAttachmentName(file, idx);
+                          return attachmentHref ? (
+                            <a
+                              key={`${attachmentName}-${idx}`}
+                              href={attachmentHref}
+                              target="_blank"
+                              rel="noreferrer"
+                              download={attachmentName}
+                              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-[#111418] text-sm hover:bg-gray-100"
+                            >
+                              <i className="fa-solid fa-paperclip text-[#617589]"></i>
+                              <span>{attachmentName}</span>
+                            </a>
+                          ) : (
+                            <div
+                              key={`${attachmentName}-${idx}`}
+                              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-[#111418] text-sm"
+                            >
+                              <i className="fa-solid fa-file text-[#617589]"></i>
+                              <span>{attachmentName}</span>
+                            </div>
+                          );
+                        },
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[#617589]">
+                      No attachments on source request.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-visible">
+              <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-[#111418]">Comment</h3>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-[#617589]">
+                    Use @ to mention active users
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => toggleSection("comment")}
+                    className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
+                  >
+                    {collapsedSections.comment ? "Expand" : "Collapse"}
+                  </button>
+                </div>
+              </div>
+              {!collapsedSections.comment && (
+                <div className="p-6">
+                  <label className="flex flex-col gap-1.5 relative">
+                    <textarea
+                      ref={commentInputRef}
+                      rows="4"
+                      value={editForm.comment}
+                      disabled={selectedPo?.isLocked}
+                      onChange={(e) => {
+                        const nextValue = e.target.value;
+                        setEditForm((prev) => ({
+                          ...prev,
+                          comment: nextValue,
+                        }));
+
+                        const cursor =
+                          e.target.selectionStart ?? nextValue.length;
+                        const beforeCursor = nextValue.slice(0, cursor);
+                        const mentionMatch = beforeCursor.match(
+                          /(?:^|\s)@([a-zA-Z0-9._-]*)$/,
                         );
-                      },
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-[#617589]">
-                    No attachments on source request.
-                  </p>
-                )}
-              </div>
+
+                        if (mentionMatch) {
+                          setCommentMentionSearch(mentionMatch[1] || "");
+                          setShowCommentMentionDropdown(true);
+                        } else {
+                          setShowCommentMentionDropdown(false);
+                        }
+                      }}
+                      placeholder={
+                        selectedPo?.isLocked
+                          ? "Unlock purchase order to edit comments"
+                          : "Add context or @mention teammates..."
+                      }
+                      className="w-full rounded-lg border border-[#dbe0e6] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#137fec]/50 focus:border-[#137fec] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
+                    {showCommentMentionDropdown &&
+                      filteredMentionUsers.length > 0 && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#dbe0e6] rounded-lg shadow-lg z-50 max-h-44 overflow-y-auto">
+                          {filteredMentionUsers.map((name) => (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => insertCommentMention(name)}
+                              className="w-full text-left px-3 py-2 text-sm text-[#111418] hover:bg-gray-50"
+                            >
+                              @{name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                  </label>
+                </div>
+              )}
             </div>
           </>
         ) : (
