@@ -171,7 +171,7 @@ const Policy = () => {
       }
 
       const response = await apiService.get(
-        `/api/policies?${params.toString()}`
+        `/api/policies?${params.toString()}`,
       );
       if (response.data) {
         setPolicies(response.data);
@@ -214,7 +214,7 @@ const Policy = () => {
 
     // Count existing policies for this department
     const departmentPolicies = policies.filter(
-      (p) => p.category === department
+      (p) => p.category === department,
     );
     const nextNumber = String(departmentPolicies.length + 1).padStart(3, "0");
 
@@ -488,7 +488,7 @@ const Policy = () => {
         },
       });
       toast.success(
-        `Version ${versionToRestore.version} restored successfully`
+        `Version ${versionToRestore.version} restored successfully`,
       );
       setVersionHistoryModal(null);
       setActionMenuOpen(null);
@@ -683,7 +683,10 @@ const Policy = () => {
                 <option disabled>Loading departments...</option>
               ) : (
                 departments.map((dept) => (
-                  <option key={dept.id} value={dept.name}>
+                  <option
+                    key={dept.id || dept._id || dept.code || dept.name}
+                    value={dept.name}
+                  >
                     {dept.name}
                   </option>
                 ))
@@ -799,12 +802,12 @@ const Policy = () => {
                       <div className="flex items-center gap-3">
                         <div
                           className={`w-10 h-10 ${getCategoryColor(
-                            policy.category
+                            policy.category,
                           )} rounded-lg flex items-center justify-center`}
                         >
                           <i
                             className={`fa-solid ${getCategoryIcon(
-                              policy.category
+                              policy.category,
                             )}`}
                           ></i>
                         </div>
@@ -832,7 +835,7 @@ const Policy = () => {
                               month: "short",
                               day: "2-digit",
                               year: "numeric",
-                            }
+                            },
                           )}
                         </p>
                         <p className="text-xs text-gray-500">
@@ -841,7 +844,7 @@ const Policy = () => {
                             {
                               hour: "2-digit",
                               minute: "2-digit",
-                            }
+                            },
                           )}
                         </p>
                       </div>
@@ -859,7 +862,7 @@ const Policy = () => {
                     <td className="px-6 py-4">
                       <span
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                          policy.status
+                          policy.status,
                         )}`}
                       >
                         <i
@@ -872,7 +875,7 @@ const Policy = () => {
                       <button
                         onClick={() =>
                           setActionMenuOpen(
-                            actionMenuOpen === policy._id ? null : policy._id
+                            actionMenuOpen === policy._id ? null : policy._id,
                           )
                         }
                         className="text-gray-600 hover:text-gray-900 px-3 py-1 rounded hover:bg-gray-100 transition-colors"
@@ -1173,12 +1176,12 @@ const Policy = () => {
                     <span className="text-gray-300">•</span>
                     <span
                       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                        viewPolicyModal.status
+                        viewPolicyModal.status,
                       )}`}
                     >
                       <i
                         className={`fa-solid ${getStatusIcon(
-                          viewPolicyModal.status
+                          viewPolicyModal.status,
                         )}`}
                       ></i>
                       {viewPolicyModal.status}
@@ -1246,8 +1249,8 @@ const Policy = () => {
                           viewPolicyModal.documentType?.includes("pdf")
                             ? "fa-file-pdf text-red-500"
                             : viewPolicyModal.documentType?.includes("word")
-                            ? "fa-file-word text-blue-500"
-                            : "fa-file text-gray-500"
+                              ? "fa-file-word text-blue-500"
+                              : "fa-file text-gray-500"
                         } text-lg`}
                       ></i>
                       <span className="text-sm font-medium text-gray-900">
@@ -1681,7 +1684,7 @@ const Policy = () => {
                                       month: "short",
                                       day: "2-digit",
                                       year: "numeric",
-                                    }
+                                    },
                                   )}{" "}
                                   at{" "}
                                   {new Date(version.date).toLocaleTimeString(
@@ -1689,7 +1692,7 @@ const Policy = () => {
                                     {
                                       hour: "2-digit",
                                       minute: "2-digit",
-                                    }
+                                    },
                                   )}
                                 </p>
                               </div>
@@ -1698,7 +1701,7 @@ const Policy = () => {
                                   onClick={() =>
                                     handleRestoreVersion(
                                       versionHistoryModal._id,
-                                      version
+                                      version,
                                     )
                                   }
                                   className="px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
@@ -1750,7 +1753,7 @@ const Policy = () => {
                                     link.click();
                                     document.body.removeChild(link);
                                     toast.success(
-                                      `Downloading ${version.version}...`
+                                      `Downloading ${version.version}...`,
                                     );
                                   } else {
                                     toast.error("Document not available");
@@ -1764,7 +1767,7 @@ const Policy = () => {
                             </div>
                           </div>
                         </div>
-                      )
+                      ),
                     )}
                   </div>
                 ) : (

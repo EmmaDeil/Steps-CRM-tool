@@ -16,6 +16,7 @@ const PurchaseOrders = () => {
   const [selectedPo, setSelectedPo] = useState(null);
   const [loadingPoDetails, setLoadingPoDetails] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isSendingComment, setIsSendingComment] = useState(false);
   const [isTogglingLock, setIsTogglingLock] = useState(false);
   const [isSubmittingApproval, setIsSubmittingApproval] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState({
@@ -506,20 +507,133 @@ const PurchaseOrders = () => {
     }
   };
 
+  const handleSendPoComment = async () => {
+    try {
+      if (!selectedPo?._id && !selectedPo?.id) return;
+      if (selectedPo?.isLocked) {
+        toast.error("Unlock this purchase order before adding comments");
+        return;
+      }
+
+      const trimmedComment = editForm.comment?.trim() || "";
+      if (!trimmedComment) {
+        toast.error("Comment cannot be empty");
+        return;
+      }
+
+      setIsSendingComment(true);
+      const poId = selectedPo._id || selectedPo.id;
+      const response = await apiService.put(`/api/purchase-orders/${poId}`, {
+        notes: trimmedComment,
+      });
+
+      const updatedPo = response?.data || response;
+      if (updatedPo?._id || updatedPo?.id) {
+        setSelectedPo((prev) => ({ ...prev, ...updatedPo }));
+      }
+
+      await fetchPurchaseOrders();
+      toast.success("Comment sent");
+    } catch (error) {
+      console.error("Error sending PO comment:", error);
+      toast.error("Failed to send comment");
+    } finally {
+      setIsSendingComment(false);
+    }
+  };
+
+  const refreshSelectedPoStatus = useCallback(async (poId) => {
+    if (!poId) return;
+    try {
+      const response = await apiService.get(`/api/purchase-orders/${poId}`);
+      const latestPo = response?.data || response;
+      if (!latestPo?._id && !latestPo?.id) return;
+
+      setSelectedPo((prev) => {
+        if (!prev) return prev;
+        const prevId = prev._id || prev.id;
+        const nextId = latestPo._id || latestPo.id;
+        if (String(prevId) !== String(nextId)) return prev;
+        return { ...prev, ...latestPo };
+      });
+
+      setEditForm((prev) => ({
+        ...prev,
+        status: latestPo.status || prev.status,
+      }));
+    } catch {
+      // Silent polling errors keep UX stable while user edits.
+    }
+  }, []);
+
+  useEffect(() => {
+    const selectedPoId = selectedPo?._id || selectedPo?.id;
+    if (!selectedPoId) return undefined;
+
+    const intervalId = setInterval(() => {
+      refreshSelectedPoStatus(selectedPoId);
+      fetchPurchaseOrders();
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [
+    selectedPo?._id,
+    selectedPo?.id,
+    refreshSelectedPoStatus,
+    fetchPurchaseOrders,
+  ]);
+
   const handleToggleLock = async (shouldLock) => {
     try {
       if (!selectedPo?._id && !selectedPo?.id) return;
       setIsTogglingLock(true);
 
       const poId = selectedPo._id || selectedPo.id;
-      const response = await apiService.post(
-        `/api/purchase-orders/${poId}/lock`,
-        {
-          locked: shouldLock,
-        },
-      );
+      let updatedPo = null;
 
-      const updatedPo = response?.data || response;
+      try {
+        const response = await apiService.post(
+          `/api/purchase-orders/${poId}/lock`,
+          {
+            locked: shouldLock,
+          },
+        );
+        updatedPo = response?.data || response;
+      } catch (lockError) {
+        const lockStatus =
+          lockError?.response?.status ||
+          lockError?.status ||
+          lockError?.serverData?.status;
+
+        // Backward compatibility for running backend instances that don't have /lock yet.
+        if (lockStatus !== 404) {
+          throw lockError;
+        }
+
+        const fallbackPayload = shouldLock
+          ? {
+              status: "payment_pending",
+              isLocked: true,
+              lockedAt: new Date().toISOString(),
+            }
+          : {
+              status: "draft",
+              isLocked: false,
+              lockedAt: null,
+            };
+
+        const fallbackResponse = await apiService.put(
+          `/api/purchase-orders/${poId}`,
+          fallbackPayload,
+        );
+
+        updatedPo = fallbackResponse?.data || fallbackResponse;
+        toast(
+          "Lock endpoint missing on current server process. Applied compatibility lock; restart backend to use full lock workflow.",
+          { icon: "⚠️", duration: 4500 },
+        );
+      }
+
       if (updatedPo?._id || updatedPo?.id) {
         setSelectedPo(updatedPo);
       }
@@ -586,6 +700,21 @@ const PurchaseOrders = () => {
     const approved = chain.filter((step) => step.status === "approved").length;
     return `${approved}/${chain.length} approved`;
   };
+
+  const selectedPoStatus = String(selectedPo?.status || "").toLowerCase();
+  const showApprovalDecisionButtons =
+    !!selectedPo &&
+    !selectedPo?.isLocked &&
+    ![
+      "approved",
+      "payment_pending",
+      "paid",
+      "rejected",
+      "cancelled",
+      "closed",
+    ].includes(selectedPoStatus);
+  const showLockControl =
+    !!selectedPo && (selectedPo?.isLocked || selectedPoStatus === "approved");
 
   const toggleSection = (sectionKey) => {
     setCollapsedSections((prev) => ({
@@ -843,14 +972,6 @@ const PurchaseOrders = () => {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setSelectedPo(null)}
-                  className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-[#617589] hover:bg-gray-100"
-                >
-                  <i className="fa-solid fa-arrow-left mr-2"></i>
-                  Back to List
-                </button>
-                <button
-                  type="button"
                   onClick={handleSavePoEdit}
                   disabled={
                     isSavingEdit ||
@@ -861,18 +982,40 @@ const PurchaseOrders = () => {
                 >
                   {isSavingEdit ? "Saving..." : "Save PO Changes"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleToggleLock(!selectedPo?.isLocked)}
-                  disabled={isTogglingLock || selectedPo?.status === "paid"}
-                  className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-[#111418] hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isTogglingLock
-                    ? "Updating..."
-                    : selectedPo?.isLocked
-                      ? "Unlock PO"
-                      : "Lock PO"}
-                </button>
+                {showApprovalDecisionButtons && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleApprovalDecision(true)}
+                      disabled={isSubmittingApproval}
+                      className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSubmittingApproval ? "Submitting..." : "Approve"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApprovalDecision(false)}
+                      disabled={isSubmittingApproval}
+                      className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSubmittingApproval ? "Submitting..." : "Deny"}
+                    </button>
+                  </>
+                )}
+                {showLockControl && (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleLock(!selectedPo?.isLocked)}
+                    disabled={isTogglingLock || selectedPoStatus === "paid"}
+                    className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-[#111418] hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isTogglingLock
+                      ? "Updating..."
+                      : selectedPo?.isLocked
+                        ? "Unlock PO"
+                        : "Lock PO"}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1049,29 +1192,6 @@ const PurchaseOrders = () => {
                       </p>
                     )}
 
-                    {selectedPo?.isLocked &&
-                      selectedPo?.status !== "payment_pending" &&
-                      selectedPo?.status !== "paid" && (
-                        <div className="pt-2 flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleApprovalDecision(true)}
-                            disabled={isSubmittingApproval}
-                            className="px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold disabled:opacity-50"
-                          >
-                            Approve Step
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleApprovalDecision(false)}
-                            disabled={isSubmittingApproval}
-                            className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold disabled:opacity-50"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      )}
-
                     <hr className="my-3" />
 
                     <div>
@@ -1082,9 +1202,7 @@ const PurchaseOrders = () => {
                       </p>
                     </div>
                     <div>
-                      <p className="text-[#617589]">
-                        Source Material Request ID
-                      </p>
+                      <p className="text-[#617589]">Material Request ID</p>
                       {(() => {
                         const materialRequestMeta =
                           getMaterialRequestLinkMeta();
@@ -1254,7 +1372,7 @@ const PurchaseOrders = () => {
             <div className="mt-6 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50 flex items-center justify-between">
                 <h3 className="text-lg font-bold text-[#111418]">
-                  Source Request Attachments
+                  Attachments
                 </h3>
                 <button
                   type="button"
@@ -1376,6 +1494,20 @@ const PurchaseOrders = () => {
                         </div>
                       )}
                   </label>
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleSendPoComment}
+                      disabled={
+                        isSendingComment ||
+                        selectedPo?.isLocked ||
+                        !editForm.comment?.trim()
+                      }
+                      className="px-4 py-2 rounded-lg bg-[#137fec] text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSendingComment ? "Sending..." : "Send"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

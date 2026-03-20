@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const MaterialRequest = require('../models/MaterialRequest');
 const PurchaseOrder = require('../models/PurchaseOrder');
+const BudgetCategory = require('../models/BudgetCategory');
 const InventoryItem = require('../models/InventoryItem');
 const InventoryIssue = require('../models/InventoryIssue');
 const StockTransfer = require('../models/StockTransfer');
@@ -593,13 +594,66 @@ router.post('/purchase-orders/:id/review', async (req, res) => {
 // POST Mark PO as paid - Specific action route
 router.post('/purchase-orders/:id/mark-paid', async (req, res) => {
   try {
-    const po = await PurchaseOrder.findByIdAndUpdate(
-      req.params.id,
-      { status: 'paid', paidDate: new Date() },
-      { new: true }
-    );
-    if (!po) return res.status(404).json({ success: false, message: 'Purchase order not found' });
-    res.json({ success: true, message: 'Payment recorded', data: po });
+    const po = await PurchaseOrder.findById(req.params.id)
+      .populate('linkedMaterialRequestId', 'budgetCode');
+
+    if (!po) {
+      return res.status(404).json({ success: false, message: 'Purchase order not found' });
+    }
+
+    if (po.status === 'paid') {
+      return res.json({
+        success: true,
+        message: 'Purchase order was already paid',
+        data: po,
+      });
+    }
+
+    if (po.status !== 'payment_pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only payment pending purchase orders can be marked as paid',
+      });
+    }
+
+    po.status = 'paid';
+    po.paidDate = new Date();
+    await po.save();
+
+    let budgetUpdate = null;
+    const budgetCode = String(po?.linkedMaterialRequestId?.budgetCode || '').trim();
+
+    if (budgetCode) {
+      let updatedBudget = null;
+      const spendAmount = Number(po.totalAmount) || 0;
+
+      if (spendAmount > 0) {
+        if (mongoose.Types.ObjectId.isValid(budgetCode)) {
+          updatedBudget = await BudgetCategory.findByIdAndUpdate(
+            budgetCode,
+            { $inc: { spent: spendAmount } },
+            { new: true },
+          );
+        }
+
+        if (!updatedBudget) {
+          const escapedBudgetCode = budgetCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          updatedBudget = await BudgetCategory.findOneAndUpdate(
+            { name: { $regex: `^${escapedBudgetCode}$`, $options: 'i' } },
+            { $inc: { spent: spendAmount } },
+            { new: true },
+          );
+        }
+
+        budgetUpdate = {
+          budgetCode,
+          amount: spendAmount,
+          updated: Boolean(updatedBudget),
+        };
+      }
+    }
+
+    res.json({ success: true, message: 'Payment recorded', data: po, budgetUpdate });
   } catch (err) {
     console.error('Error marking PO as paid:', err);
     res.status(500).json({ success: false, message: 'Failed to update payment status', error: err.message });
@@ -692,22 +746,18 @@ router.post('/purchase-orders/:id/approve', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Purchase order not found' });
     }
 
-    if (!po.isLocked) {
-      return res.status(400).json({ success: false, message: 'Lock the purchase order before approval' });
-    }
-
     po.activities = Array.isArray(po.activities) ? po.activities : [];
     const actorName = req.user?.fullName || req.user?.email || 'Approver';
     const actorId = req.user?._id;
 
     if (!Array.isArray(po.approvalChain) || po.approvalChain.length === 0) {
-      po.status = approved ? 'payment_pending' : 'cancelled';
+      po.status = approved ? 'approved' : 'cancelled';
       po.activities.push({
         type: approved ? 'approval' : 'rejection',
         author: actorName,
         authorId: actorId,
         text: approved
-          ? 'Purchase order approved and sent to Accounts Payable'
+          ? 'Purchase order approved. Lock to move it to Accounts Payable.'
           : `Purchase order rejected${comment ? `: ${comment}` : ''}`,
         timestamp: new Date(),
       });
@@ -750,12 +800,12 @@ router.post('/purchase-orders/:id/approve', async (req, res) => {
           timestamp: new Date(),
         });
       } else {
-        po.status = 'payment_pending';
+        po.status = 'approved';
         po.activities.push({
           type: 'approval',
           author: actorName,
           authorId: actorId,
-          text: 'Final approval complete. Purchase order moved to Accounts Payable.',
+          text: 'Final approval complete. Lock purchase order to move it to Accounts Payable.',
           timestamp: new Date(),
         });
       }

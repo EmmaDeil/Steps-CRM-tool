@@ -3,11 +3,16 @@ import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import Pagination from "../Pagination";
 import { apiService } from "../../services/api";
+import { formatCurrency } from "../../services/currency";
+import { useCurrency } from "../../context/useCurrency";
 
 const AccountsPayable = ({ onBack }) => {
+  const { currency } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [invoices, setInvoices] = useState([]);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
+  const [selectedInvoiceDetail, setSelectedInvoiceDetail] = useState(null);
+  const [isPaying, setIsPaying] = useState(false);
   const [filters, setFilters] = useState({
     vendor: "",
     status: "",
@@ -61,6 +66,37 @@ const AccountsPayable = ({ onBack }) => {
         ? prev.filter((id) => id !== invoiceId)
         : [...prev, invoiceId],
     );
+  };
+
+  const handleViewInvoiceDetails = (invoice) => {
+    setSelectedInvoiceDetail(invoice);
+  };
+
+  const handleCloseDetail = () => {
+    setSelectedInvoiceDetail(null);
+  };
+
+  const handlePaySingleInvoice = async () => {
+    if (!selectedInvoiceDetail) return;
+
+    try {
+      setIsPaying(true);
+      const response = await apiService.post(
+        `/api/finance/accounts-payable/${selectedInvoiceDetail._id}/pay`,
+        {},
+      );
+
+      if (response.success) {
+        toast.success("Invoice paid successfully");
+        setSelectedInvoiceDetail(null);
+        fetchInvoices();
+      }
+    } catch (error) {
+      console.error("Error paying invoice:", error);
+      toast.error(error.response?.data?.error || "Failed to pay invoice");
+    } finally {
+      setIsPaying(false);
+    }
   };
 
   const handlePaySelected = async () => {
@@ -232,7 +268,17 @@ const AccountsPayable = ({ onBack }) => {
               />
             </div>
             <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-md px-2 py-1.5 shadow-sm">
-              <span className="text-xs font-semibold text-slate-400">$</span>
+              <span className="text-xs font-semibold text-slate-400">
+                {currency === "NGN"
+                  ? "₦"
+                  : currency === "USD"
+                    ? "$"
+                    : currency === "EUR"
+                      ? "€"
+                      : currency === "GBP"
+                        ? "£"
+                        : "$"}
+              </span>
               <input
                 className="border-none p-0 text-sm bg-transparent focus:ring-0 w-16 placeholder-slate-400 text-slate-700"
                 placeholder="Min"
@@ -387,7 +433,7 @@ const AccountsPayable = ({ onBack }) => {
                             : "N/A"}
                         </td>
                         <td className="py-3 px-4 text-right font-medium text-slate-900 tabular-nums">
-                          ${Number(invoice.amount || 0).toFixed(2)}
+                          {formatCurrency(invoice.amount || 0, { currency })}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span
@@ -402,8 +448,11 @@ const AccountsPayable = ({ onBack }) => {
                           {invoice.department || "General"}
                         </td>
                         <td className="py-3 px-4 text-right">
-                          <button className="text-slate-400 hover:text-primary transition-colors">
-                            <i className="fa-solid fa-ellipsis-vertical text-lg"></i>
+                          <button
+                            onClick={() => handleViewInvoiceDetails(invoice)}
+                            className="text-slate-400 hover:text-primary transition-colors"
+                          >
+                            <i className="fa-solid fa-chevron-right text-lg"></i>
                           </button>
                         </td>
                       </tr>
@@ -486,6 +535,173 @@ const AccountsPayable = ({ onBack }) => {
           </div>
         </div>
       </footer>
+
+      {/* Invoice Detail Modal */}
+      {selectedInvoiceDetail && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/20">
+          <div className="bg-white rounded-t-2xl md:rounded-xl w-full md:max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-900">
+                Invoice Details
+              </h2>
+              <button
+                onClick={handleCloseDetail}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <i className="fa-solid fa-times text-xl"></i>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-6 space-y-6">
+              {/* Invoice Header */}
+              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-slate-500 uppercase font-semibold mb-1">
+                      Invoice Number
+                    </p>
+                    <p className="text-lg font-bold text-slate-900">
+                      {selectedInvoiceDetail.invoiceNumber}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 uppercase font-semibold mb-1">
+                      Status
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusBadge(
+                          selectedInvoiceDetail.status,
+                        )}`}
+                      >
+                        {selectedInvoiceDetail.status}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vendor Information */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                  <i className="fa-solid fa-building text-primary"></i>
+                  Vendor Information
+                </h3>
+                <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                      {selectedInvoiceDetail.vendor?.charAt(0) || "V"}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {selectedInvoiceDetail.vendor || "Unknown Vendor"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {selectedInvoiceDetail.category || "General Category"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Amount Information */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                  <i className="fa-solid fa-receipt text-primary"></i>
+                  Amount
+                </h3>
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-6">
+                  <p className="text-xs text-slate-600 mb-1">
+                    Total Amount Due
+                  </p>
+                  <p className="text-3xl font-bold text-blue-900">
+                    {formatCurrency(selectedInvoiceDetail.amount || 0, {
+                      currency,
+                    })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Date Information */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                  <i className="fa-solid fa-calendar text-primary"></i>
+                  Dates
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white border border-slate-200 rounded-lg p-4">
+                    <p className="text-xs text-slate-500 uppercase font-semibold mb-2">
+                      Issue Date
+                    </p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {selectedInvoiceDetail.issueDate
+                        ? new Date(
+                            selectedInvoiceDetail.issueDate,
+                          ).toLocaleDateString()
+                        : "N/A"}
+                    </p>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-lg p-4">
+                    <p className="text-xs text-slate-500 uppercase font-semibold mb-2">
+                      Due Date
+                    </p>
+                    <p
+                      className={`text-sm font-medium ${
+                        selectedInvoiceDetail.status === "Pending"
+                          ? "text-yellow-700"
+                          : "text-slate-900"
+                      }`}
+                    >
+                      {selectedInvoiceDetail.dueDate
+                        ? new Date(
+                            selectedInvoiceDetail.dueDate,
+                          ).toLocaleDateString()
+                        : "N/A"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Department */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                  <i className="fa-solid fa-sitemap text-primary"></i>
+                  Department
+                </h3>
+                <div className="bg-white border border-slate-200 rounded-lg p-4">
+                  <p className="text-sm font-medium text-slate-900">
+                    {selectedInvoiceDetail.department || "General"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-between gap-3">
+              <button
+                onClick={handleCloseDetail}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors"
+              >
+                Close
+              </button>
+              {selectedInvoiceDetail.status === "Pending" && (
+                <button
+                  onClick={handlePaySingleInvoice}
+                  disabled={isPaying}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-primary hover:bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <i
+                    className={`fa-solid ${isPaying ? "fa-spinner fa-spin" : "fa-credit-card"} text-sm`}
+                  ></i>
+                  {isPaying ? "Processing..." : "Pay Invoice"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,4 +1,11 @@
-import React, { useEffect, useMemo, useState, Suspense, lazy } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  Suspense,
+  lazy,
+} from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { useAppContext } from "../context/useAppContext";
@@ -6,6 +13,7 @@ import Navbar from "../components/Navbar";
 import Breadcrumb from "../components/Breadcrumb";
 import { apiService } from "../services/api";
 import Footer from "../components/Footer";
+import PurchaseOrders from "../components/modules/PurchaseOrders";
 
 // Custom Error Boundary for Module Loading
 class ModuleErrorBoundary extends React.Component {
@@ -59,6 +67,10 @@ class ModuleErrorBoundary extends React.Component {
 const loadModuleComponent = (componentName) => {
   if (!componentName) return null;
 
+  const normalizedComponentName = String(componentName)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
   // Fallback mapping for renamed/legacy component names
   const componentMapping = {
     FinanceReports: "Finance",
@@ -69,9 +81,25 @@ const loadModuleComponent = (componentName) => {
     SignatureManagement: "DocSign",
     Security: "PhysicalSecurity",
     Budget: "Budget",
+    purchaseorders: "PurchaseOrders",
+    purchaseorder: "PurchaseOrders",
+    po: "PurchaseOrders",
+    materialrequests: "MaterialRequests",
+    materialrequest: "MaterialRequests",
   };
 
-  const finalComponentName = componentMapping[componentName] || componentName;
+  const finalComponentName =
+    componentMapping[componentName] ||
+    componentMapping[normalizedComponentName] ||
+    componentName;
+
+  const eagerComponents = {
+    PurchaseOrders,
+  };
+
+  if (eagerComponents[finalComponentName]) {
+    return eagerComponents[finalComponentName];
+  }
 
   try {
     return lazy(() =>
@@ -109,6 +137,10 @@ const iconMap = {
   Admin: { icon: "fa-sliders", color: "gray" },
   Policy: { icon: "fa-file-shield", color: "gray" },
   Budget: { icon: "fa-wallet", color: "blue" },
+};
+
+const legacyModuleById = {
+  11: { id: 11, name: "Purchase Orders", componentName: "PurchaseOrders" },
 };
 
 export default function Home() {
@@ -150,9 +182,26 @@ export default function Home() {
     return modules.filter((m) => m.name.toLowerCase().includes(q));
   }, [modules, search]);
 
+  const getModuleRouteId = useCallback((module) => {
+    if (!module) return "";
+    return String(module.id ?? module._id ?? "");
+  }, []);
+
   const handleOpenModule = (moduleId) => {
     // Special handling for DocSign module - navigate to main module
-    const module = modules.find((m) => String(m.id) === String(moduleId));
+    const module = modules.find(
+      (m) => getModuleRouteId(m) === String(moduleId),
+    );
+
+    if (
+      module &&
+      ((module.componentName || "").toLowerCase() === "purchaseorders" ||
+        (module.name || "").toLowerCase() === "purchase orders")
+    ) {
+      navigate("/home/11");
+      return;
+    }
+
     if (
       module &&
       (module.componentName === "DocSign" || module.name === "DocSign")
@@ -164,15 +213,21 @@ export default function Home() {
   };
 
   // Memoize module component to prevent remount on parent re-render
-  const mid = id ? parseInt(id, 10) : null;
+  const moduleRouteId = id ? String(id) : "";
   const found = useMemo(() => {
-    return mid !== null
-      ? (modules || []).find((m) => String(m.id) === String(mid))
-      : null;
-  }, [mid, modules]);
+    if (!moduleRouteId) return null;
+
+    const matchedModule = (modules || []).find(
+      (m) => getModuleRouteId(m) === moduleRouteId,
+    );
+    if (matchedModule) return matchedModule;
+
+    return legacyModuleById[moduleRouteId] || null;
+  }, [moduleRouteId, modules, getModuleRouteId]);
 
   const ModuleComp = useMemo(() => {
-    return found ? loadModuleComponent(found.componentName) : null;
+    if (!found) return null;
+    return loadModuleComponent(found.componentName || found.name);
   }, [found]);
 
   // Auto-retry fetching modules when server comes back online
@@ -196,6 +251,18 @@ export default function Home() {
 
   // ===== MODULE DETAIL VIEW =====
   if (id) {
+    // Hard fallback for unstable module metadata/loading path.
+    if (String(id) === "11") {
+      return (
+        <div className="min-h-screen flex flex-col">
+          <Navbar user={user} />
+          <div className="flex-1">
+            <PurchaseOrders />
+          </div>
+        </div>
+      );
+    }
+
     // Still loading or server error — show spinner instead of "not found"
     if (loading || (error && modules.length === 0)) {
       return (
@@ -432,10 +499,10 @@ export default function Home() {
 
               return (
                 <button
-                  key={m.id}
-                  onClick={() => handleOpenModule(m.id)}
+                  key={getModuleRouteId(m) || m.name}
+                  onClick={() => handleOpenModule(getModuleRouteId(m))}
                   aria-label={`Open ${m.name} module`}
-                  className="group relative flex flex-col items-center p-8 bg-transparent rounded-r-full border border-[#dbe0e6] shadow-sm h-[260px] hover:shadow-xl transition-shadow"
+                  className="group relative flex flex-col items-center p-8 bg-transparent rounded-sm border border-[#dbe0e6] shadow-sm h-[260px] hover:shadow-xl transition-shadow"
                 >
                   <div
                     className={`size-20 bg-gradient-to-br ${colorClass} flex items-center justify-center mb-6 shadow-sm border rounded-full border-transparent group-hover:border-current transition-colors`}

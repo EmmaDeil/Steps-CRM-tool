@@ -35,6 +35,7 @@ const TrainingModel = require('./models/Training');
 const DepartmentModel = require('./models/Department');
 const JobTitleModel = require('./models/JobTitle');
 const RoleModel = require('./models/Role');
+const BudgetCategoryModel = require('./models/BudgetCategory');
 const InventoryItemModel = require('./models/InventoryItem');
 const NotificationModel = require('./models/Notification');
 const { validatePassword, getPasswordPolicy } = require('./utils/passwordValidator');
@@ -6202,9 +6203,22 @@ async function start() {
         return res.status(400).json({ success: false, error: 'No invoices selected' });
       }
       
+      const pendingPurchaseOrders = await PurchaseOrderModel.find({
+        _id: { $in: invoiceIds },
+        status: 'payment_pending',
+      })
+        .populate('linkedMaterialRequestId', 'budgetCode')
+        .lean();
+
+      if (!pendingPurchaseOrders.length) {
+        return res.status(400).json({ success: false, error: 'No pending invoices found to pay' });
+      }
+
+      const payableIds = pendingPurchaseOrders.map((po) => po._id);
+
       const result = await PurchaseOrderModel.updateMany(
         {
-          _id: { $in: invoiceIds },
+          _id: { $in: payableIds },
           status: 'payment_pending',
         },
         {
@@ -6214,18 +6228,128 @@ async function start() {
           },
         },
       );
+
+      // Roll up spent amount by budget code so budget lines reflect paid invoices.
+      const spendByBudgetCode = pendingPurchaseOrders.reduce((acc, po) => {
+        const budgetCode = String(po?.linkedMaterialRequestId?.budgetCode || '').trim();
+        if (!budgetCode) return acc;
+        acc[budgetCode] = (acc[budgetCode] || 0) + (Number(po.totalAmount) || 0);
+        return acc;
+      }, {});
+
+      const budgetUpdateResults = [];
+      for (const [budgetCode, amount] of Object.entries(spendByBudgetCode)) {
+        if (!amount) continue;
+
+        let updatedBudget = null;
+        if (mongoose.Types.ObjectId.isValid(budgetCode)) {
+          updatedBudget = await BudgetCategoryModel.findByIdAndUpdate(
+            budgetCode,
+            { $inc: { spent: amount } },
+            { new: true },
+          );
+        }
+
+        if (!updatedBudget) {
+          const escaped = budgetCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          updatedBudget = await BudgetCategoryModel.findOneAndUpdate(
+            { name: { $regex: `^${escaped}$`, $options: 'i' } },
+            { $inc: { spent: amount } },
+            { new: true },
+          );
+        }
+
+        budgetUpdateResults.push({
+          budgetCode,
+          amount,
+          updated: Boolean(updatedBudget),
+        });
+      }
       
       res.json({
         success: true,
         message: `Successfully processed payment for ${result.modifiedCount} invoice(s)`,
         data: {
-          paidInvoices: invoiceIds,
+          paidInvoices: payableIds,
           modifiedCount: result.modifiedCount,
+          budgetUpdates: budgetUpdateResults,
           timestamp: new Date(),
         },
       });
     } catch (error) {
       console.error('Error processing payment:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Pay a single invoice
+  app.post('/api/finance/accounts-payable/:invoiceId/pay', async (req, res) => {
+    try {
+      const { invoiceId } = req.params;
+
+      if (!invoiceId || !mongoose.Types.ObjectId.isValid(invoiceId)) {
+        return res.status(400).json({ success: false, error: 'Invalid invoice ID' });
+      }
+
+      const po = await PurchaseOrderModel.findOne({
+        _id: invoiceId,
+        status: 'payment_pending',
+      }).populate('linkedMaterialRequestId', 'budgetCode');
+
+      if (!po) {
+        return res.status(400).json({ success: false, error: 'Invoice not found or already paid' });
+      }
+
+      // Update the purchase order to paid status
+      const result = await PurchaseOrderModel.findByIdAndUpdate(
+        invoiceId,
+        {
+          $set: {
+            status: 'paid',
+            paidDate: new Date(),
+          },
+        },
+        { new: true }
+      );
+
+      // Update budget spent amount
+      const budgetCode = String(po?.linkedMaterialRequestId?.budgetCode || '').trim();
+      let budgetUpdated = false;
+
+      if (budgetCode) {
+        let updatedBudget = null;
+
+        if (mongoose.Types.ObjectId.isValid(budgetCode)) {
+          updatedBudget = await BudgetCategoryModel.findByIdAndUpdate(
+            budgetCode,
+            { $inc: { spent: Number(po.totalAmount) || 0 } },
+            { new: true }
+          );
+        }
+
+        if (!updatedBudget) {
+          const escaped = budgetCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          updatedBudget = await BudgetCategoryModel.findOneAndUpdate(
+            { name: { $regex: `^${escaped}$`, $options: 'i' } },
+            { $inc: { spent: Number(po.totalAmount) || 0 } },
+            { new: true }
+          );
+        }
+
+        budgetUpdated = Boolean(updatedBudget);
+      }
+
+      res.json({
+        success: true,
+        message: 'Invoice paid successfully',
+        data: {
+          invoice: result,
+          budgetUpdated,
+          timestamp: new Date(),
+        },
+      });
+    } catch (error) {
+      console.error('Error paying single invoice:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
