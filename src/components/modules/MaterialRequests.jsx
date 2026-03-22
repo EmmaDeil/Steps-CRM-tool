@@ -1273,6 +1273,32 @@ const MaterialRequests = () => {
                       </div>
                     </label>
 
+                    <label className="flex flex-col gap-2">
+                      <span className="text-sm font-medium text-[#111418]">
+                        Approver
+                      </span>
+                      <div className="relative">
+                        <i className="fa-solid fa-user-check absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
+                        <select
+                          name="approver"
+                          value={formData.approver || ""}
+                          onChange={handleFormChange}
+                          className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
+                        >
+                          <option value="">Select Approver</option>
+                          {(userList || []).map((usr) => (
+                            <option
+                              key={usr._id || usr.id}
+                              value={usr.fullName || usr.email}
+                            >
+                              {usr.fullName || usr.email}
+                            </option>
+                          ))}
+                        </select>
+                        {/* <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i> */}
+                      </div>
+                    </label>
+
                     <label className="flex flex-col gap-2 sm:col-span-2">
                       <span className="text-sm font-medium text-[#111418]">
                         Budget Category
