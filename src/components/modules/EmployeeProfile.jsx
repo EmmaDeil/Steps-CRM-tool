@@ -41,6 +41,7 @@ const EmployeeProfile = ({
   const [mfaBackupCodes, setMfaBackupCodes] = useState(null);
   const [mfaLoading, setMfaLoading] = useState(false);
   const [disablePassword, setDisablePassword] = useState("");
+  const [isResendingEmail, setIsResendingEmail] = useState(false);
 
   // Determine if current user is HR admin
   const isHR = currentUser?.role === "HR" || currentUser?.role === "Admin";
@@ -507,6 +508,22 @@ const EmployeeProfile = ({
     }
   };
 
+  const handleResendVerification = async () => {
+    try {
+      setIsResendingEmail(true);
+      await apiService.auth.resendVerification();
+      toast.success("Verification email sent! Check your inbox.");
+    } catch (error) {
+      toast.error(
+        error.serverData?.error ||
+        error.response?.data?.error ||
+        "Failed to resend verification email"
+      );
+    } finally {
+      setIsResendingEmail(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6">
@@ -707,6 +724,28 @@ const EmployeeProfile = ({
                       ) : (
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                           {employee?.email}
+                          {isOwnProfile && currentUser?.isEmailVerified !== undefined && (
+                            <span className="ml-2 inline-flex items-center gap-1.5 align-middle">
+                              {currentUser?.isEmailVerified ? (
+                                <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                                  <i className="fa-solid fa-check-circle text-green-500"></i> Verified
+                                </span>
+                              ) : (
+                                <>
+                                  <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
+                                    <i className="fa-solid fa-triangle-exclamation text-yellow-500"></i> Unverified
+                                  </span>
+                                  <button
+                                    onClick={handleResendVerification}
+                                    disabled={isResendingEmail}
+                                    className="ml-1 text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium disabled:opacity-50"
+                                  >
+                                    {isResendingEmail ? 'Sending...' : 'Resend Verification email'}
+                                  </button>
+                                </>
+                              )}
+                            </span>
+                          )}
                         </p>
                       )}
                     </div>

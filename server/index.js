@@ -122,7 +122,7 @@ const DEFAULT_JOB_TITLES = [
 ];
 const VendorModel = require('./models/Vendor');
 const approvalRuleRoutes = require('./routes/approvalRule.routes');
-const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP, sendInventoryExpiryAlertEmail } = require('./utils/emailService');
+const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP, sendInventoryExpiryAlertEmail, sendWelcomeVerificationEmail } = require('./utils/emailService');
 const { sendSMSOTP } = require('./utils/smsService');
 const { buildApprovalChain } = require('./utils/approvalRuleHelper');
 const { Server } = require('socket.io');
@@ -448,7 +448,7 @@ async function start() {
         });
       }
 
-      // Create new user
+      const verificationToken = require('crypto').randomBytes(32).toString('hex');
       const user = new UserModel({
         firstName,
         lastName,
@@ -458,6 +458,8 @@ async function start() {
         status: 'Active',
         department: (typeof foundDept !== 'undefined' && foundDept) ? foundDept.name : (department || null),
         jobTitle: (typeof foundJT !== 'undefined' && foundJT) ? foundJT.title : (jobTitle || null),
+        emailVerificationToken: verificationToken,
+        emailVerificationExpires: Date.now() + 48 * 60 * 60 * 1000 // 48 hours
       });
 
       await user.save();
@@ -501,6 +503,10 @@ async function start() {
         console.error('Signup employee link error:', employeeLinkError);
       }
 
+      // Send welcome verification email asynchronously (do not await so it doesn't block response)
+      sendWelcomeVerificationEmail(user.email, user.firstName || user.fullName, user.emailVerificationToken)
+        .catch(err => console.error('Failed to send welcome email:', err));
+
       // Generate token with role
       const token = generateToken(user._id, user.role);
 
@@ -515,6 +521,7 @@ async function start() {
         status: user.status,
         department: user.department || null,
         jobTitle: user.jobTitle || null,
+        isEmailVerified: user.isEmailVerified || false,
       };
 
       res.status(201).json({
@@ -623,6 +630,7 @@ async function start() {
             jobTitle: user.jobTitle,
             mfaEnabled: false,
             permissions: user.permissions || {},
+            isEmailVerified: user.isEmailVerified || false,
           };
           return res.json({
             success: true,
@@ -654,6 +662,7 @@ async function start() {
         jobTitle: user.jobTitle,
         mfaEnabled: !!userWithMfa.mfaEnabled,
         permissions: user.permissions || {},
+        isEmailVerified: user.isEmailVerified || false,
       };
 
       res.json({
@@ -688,6 +697,7 @@ async function start() {
         department: req.user.department,
         jobTitle: req.user.jobTitle,
         permissions: req.user.permissions || {},
+        isEmailVerified: req.user.isEmailVerified || false,
       };
 
       res.json({
@@ -702,6 +712,74 @@ async function start() {
         success: false,
         error: 'Verification failed',
       });
+    }
+  });
+
+  // Verify Email
+  app.get('/api/auth/verify-email/:token', async (req, res) => {
+    try {
+      const { token } = req.params;
+      if (!token) {
+        return res.status(400).json({ success: false, error: 'Verification token is required' });
+      }
+
+      const user = await UserModel.findOne({
+        emailVerificationToken: token,
+        emailVerificationExpires: { $gt: Date.now() },
+      });
+
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          error: 'Verification token is invalid or has expired',
+        });
+      }
+
+      // Mark as verified and clear tokens
+      user.isEmailVerified = true;
+      user.emailVerificationToken = undefined;
+      user.emailVerificationExpires = undefined;
+      await user.save();
+
+      res.json({
+        success: true,
+        message: 'Email verified successfully',
+      });
+    } catch (error) {
+      console.error('Email verification error:', error);
+      res.status(500).json({ success: false, error: 'Failed to verify email' });
+    }
+  });
+
+  // Resend Verification Email
+  app.post('/api/auth/resend-verification', authMiddleware, async (req, res) => {
+    try {
+      const user = await UserModel.findById(req.user._id);
+      
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+
+      if (user.isEmailVerified) {
+        return res.status(400).json({ success: false, error: 'Email is already verified' });
+      }
+
+      // Generate new token
+      const verificationToken = require('crypto').randomBytes(32).toString('hex');
+      user.emailVerificationToken = verificationToken;
+      user.emailVerificationExpires = Date.now() + 48 * 60 * 60 * 1000; // 48 hours
+      await user.save();
+
+      // Send email
+      await sendWelcomeVerificationEmail(user.email, user.firstName || user.fullName, verificationToken);
+
+      res.json({
+        success: true,
+        message: 'Verification email sent successfully',
+      });
+    } catch (error) {
+      console.error('Resend verification error:', error);
+      res.status(500).json({ success: false, error: 'Failed to resend verification email' });
     }
   });
 

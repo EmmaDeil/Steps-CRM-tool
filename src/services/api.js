@@ -85,6 +85,12 @@ export const apiService = {
   patch: (url, data, config) => api.patch(url, data, config),
   delete: (url, config) => api.delete(url, config),
 
+  // Auth endpoints
+  auth: {
+    verifyEmail: (token) => api.get(`/api/auth/verify-email/${token}`),
+    resendVerification: () => api.post('/api/auth/resend-verification'),
+  },
+
   // Module-specific endpoints
   attendance: {
     getAll: () => api.get('/api/attendance'),
