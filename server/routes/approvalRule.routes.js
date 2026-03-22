@@ -2,6 +2,46 @@ const express = require("express");
 const router = express.Router();
 const ApprovalRule = require("../models/ApprovalRule");
 
+const normalizeApproverRole = (role) =>
+  role === "Direct Manager" ? "Manager" : role;
+
+const sanitizeRulePayload = (payload = {}) => {
+  const clean = {};
+
+  if (payload.moduleType !== undefined) {
+    clean.moduleType = String(payload.moduleType).trim();
+  }
+
+  if (payload.condition !== undefined) {
+    if (Array.isArray(payload.condition)) {
+      const normalizedConditions = payload.condition
+        .map((cond) => String(cond || "").trim())
+        .filter(Boolean);
+      clean.condition = normalizedConditions.length
+        ? normalizedConditions
+        : ["All Requests"];
+    } else {
+      const single = String(payload.condition || "").trim();
+      clean.condition = [single || "All Requests"];
+    }
+  }
+
+  if (payload.levels !== undefined) {
+    clean.levels = Array.isArray(payload.levels)
+      ? payload.levels.map((level, index) => ({
+          level: Number(level?.level) || index + 1,
+          approverRole: normalizeApproverRole(level?.approverRole),
+        }))
+      : [];
+  }
+
+  if (payload.status !== undefined) {
+    clean.status = String(payload.status).trim();
+  }
+
+  return clean;
+};
+
 // GET all rules
 router.get("/", async (req, res) => {
   try {
@@ -32,9 +72,7 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     console.log("Creating approval rule with data:", req.body);
-    const ruleData = {
-      ...req.body
-    };
+    const ruleData = sanitizeRulePayload(req.body);
     
     // Only add createdBy if user exists
     if (req.user) {
@@ -47,24 +85,38 @@ router.post("/", async (req, res) => {
     res.status(201).json(savedRule);
   } catch (error) {
     console.error("Error creating approval rule:", error);
-    res.status(500).json({ error: "Failed to create approval rule", details: error.message });
+    if (error?.name === "ValidationError" || error?.name === "CastError") {
+      return res.status(400).json({
+        error: "Invalid approval rule data",
+        details: error.message,
+      });
+    }
+    res
+      .status(500)
+      .json({ error: "Failed to create approval rule", details: error.message });
   }
 });
 
 // PUT update a rule
 router.put("/:id", async (req, res) => {
   try {
-    const updatedRule = await ApprovalRule.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const updateData = sanitizeRulePayload(req.body);
+    const updatedRule = await ApprovalRule.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+      runValidators: true,
+    });
     if (!updatedRule) {
       return res.status(404).json({ error: "Rule not found" });
     }
     res.json(updatedRule);
   } catch (error) {
     console.error("Error updating approval rule:", error);
+    if (error?.name === "ValidationError" || error?.name === "CastError") {
+      return res.status(400).json({
+        error: "Invalid approval rule data",
+        details: error.message,
+      });
+    }
     res.status(500).json({ error: "Failed to update approval rule" });
   }
 });

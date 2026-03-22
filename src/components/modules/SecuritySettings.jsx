@@ -85,15 +85,21 @@ const SecuritySettings = () => {
   const [activeSessions, setActiveSessions] = useState([]);
   const [analyticsData, setAnalyticsData] = useState(null);
 
+  const unwrapResponse = (response) => response?.data ?? response;
+
   // Fetch security settings
   const fetchSecuritySettings = useCallback(async () => {
     setSettingsLoading(true);
     try {
       const response = await apiService.get("/api/security/settings");
-      if (response.data) {
-        setPasswordPolicy(response.data.passwordPolicy);
-        setMfaSettings(response.data.mfaSettings);
-        setSessionControl(response.data.sessionControl);
+      const data = unwrapResponse(response);
+      if (data) {
+        setPasswordPolicy((prev) => data.passwordPolicy || prev);
+        setMfaSettings((prev) => data.mfaSettings || prev);
+        setSessionControl((prev) => ({
+          ...prev,
+          ...(data.sessionControl || {}),
+        }));
       }
     } catch (error) {
       console.error("Error fetching security settings:", error);
@@ -107,9 +113,8 @@ const SecuritySettings = () => {
   const fetchNotificationRules = useCallback(async () => {
     try {
       const response = await apiService.get("/api/security/notification-rules");
-      if (response.data) {
-        setNotificationRules(response.data.rules || []);
-      }
+      const data = unwrapResponse(response);
+      setNotificationRules(data?.rules || []);
     } catch (error) {
       console.error("Error fetching notification rules:", error);
     }
@@ -119,9 +124,8 @@ const SecuritySettings = () => {
   const fetchSettingsHistory = useCallback(async () => {
     try {
       const response = await apiService.get("/api/security/settings-history");
-      if (response.data) {
-        setSettingsHistory(response.data.history || []);
-      }
+      const data = unwrapResponse(response);
+      setSettingsHistory(data?.history || []);
     } catch (error) {
       console.error("Error fetching settings history:", error);
     }
@@ -131,9 +135,8 @@ const SecuritySettings = () => {
   const fetchActiveSessions = useCallback(async () => {
     try {
       const response = await apiService.get("/api/security/active-sessions");
-      if (response.data) {
-        setActiveSessions(response.data.sessions || []);
-      }
+      const data = unwrapResponse(response);
+      setActiveSessions(data?.sessions || []);
     } catch (error) {
       console.error("Error fetching active sessions:", error);
       toast.error("Failed to load active sessions");
@@ -144,9 +147,8 @@ const SecuritySettings = () => {
   const fetchAnalytics = useCallback(async () => {
     try {
       const response = await apiService.get("/api/security/analytics");
-      if (response.data) {
-        setAnalyticsData(response.data);
-      }
+      const data = unwrapResponse(response);
+      setAnalyticsData(data || null);
     } catch (error) {
       console.error("Error fetching analytics:", error);
       toast.error("Failed to load analytics data");
@@ -157,10 +159,11 @@ const SecuritySettings = () => {
   const fetchActiveUsers = useCallback(async () => {
     try {
       const response = await apiService.get("/api/security/active-users");
-      if (response.data) {
+      const data = unwrapResponse(response);
+      if (data) {
         setSessionControl((prev) => ({
           ...prev,
-          activeUsers: response.data.count,
+          activeUsers: data.count,
         }));
       }
     } catch (error) {
@@ -262,10 +265,11 @@ const SecuritySettings = () => {
       const response = await apiService.get(
         `/api/audit-logs?${params.toString()}`,
       );
-      if (response.data) {
-        setActivityLogs(response.data.logs || []);
-        if (response.data.pagination) {
-          setPagination(response.data.pagination);
+      const data = unwrapResponse(response);
+      if (data) {
+        setActivityLogs(data.logs || []);
+        if (data.pagination) {
+          setPagination(data.pagination);
         }
       }
     } catch (error) {
@@ -405,12 +409,11 @@ const SecuritySettings = () => {
       if (statusFilter && statusFilter !== "All Statuses")
         params.append("status", statusFilter);
 
-      const response = await fetch(
-        `${
-          apiService.defaults.baseURL
-        }/api/audit-logs/export?${params.toString()}`,
+      const response = await apiService.get(
+        `/api/audit-logs/export?${params.toString()}`,
+        { responseType: "blob" },
       );
-      const blob = await response.blob();
+      const blob = unwrapResponse(response);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -462,15 +465,12 @@ const SecuritySettings = () => {
     }
 
     try {
-      const response = await fetch(
-        `${apiService.defaults.baseURL}/api/audit-logs/export`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ logIds: selectedLogs }),
-        },
+      const response = await apiService.post(
+        "/api/audit-logs/export",
+        { logIds: selectedLogs },
+        { responseType: "blob" },
       );
-      const blob = await response.blob();
+      const blob = unwrapResponse(response);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -565,7 +565,8 @@ const SecuritySettings = () => {
         "/api/security/notification-rules",
         rule,
       );
-      setNotificationRules((prev) => [...prev, response.data.rule]);
+      const data = unwrapResponse(response);
+      setNotificationRules((prev) => [...prev, data.rule]);
       toast.success("Notification rule added");
     } catch (error) {
       console.error("Error adding notification rule:", error);
@@ -843,7 +844,6 @@ const SecuritySettings = () => {
                   </button>
                 </div>
               </div>
-
             </>
           )}
         </div>
@@ -1381,7 +1381,8 @@ const SecuritySettings = () => {
                 { responseType: "blob" },
               );
 
-              const blob = new Blob([response.data]);
+              const payload = response?.data ?? response;
+              const blob = new Blob([payload]);
               const url = window.URL.createObjectURL(blob);
               const link = document.createElement("a");
               link.href = url;
@@ -1417,12 +1418,13 @@ const SecuritySettings = () => {
                   type: reportType,
                 },
               );
+              const payload = response?.data ?? response;
 
               toast.dismiss();
               toast.success("Compliance report generated successfully");
 
               // Download the report
-              const blob = new Blob([JSON.stringify(response.data, null, 2)]);
+              const blob = new Blob([JSON.stringify(payload, null, 2)]);
               const url = window.URL.createObjectURL(blob);
               const link = document.createElement("a");
               link.href = url;
@@ -1616,8 +1618,7 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
     formData.enforcement !== mfaSettings.enforcement ||
     formData.gracePeriod !== mfaSettings.gracePeriod;
 
-  const isOTPMethod =
-    formData.method === "Email" || formData.method === "SMS";
+  const isOTPMethod = formData.method === "Email" || formData.method === "SMS";
 
   const methodInfoMap = {
     Email: {
@@ -1635,11 +1636,13 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
     "Authenticator App": {
       icon: "fa-key",
       color: "purple",
-      message: "TOTP-based authenticator apps (Google Authenticator, Authy, etc.) are supported.",
+      message:
+        "TOTP-based authenticator apps (Google Authenticator, Authy, etc.) are supported.",
     },
   };
 
-  const currentInfo = methodInfoMap[formData.method] || methodInfoMap["Authenticator App"];
+  const currentInfo =
+    methodInfoMap[formData.method] || methodInfoMap["Authenticator App"];
 
   const handleSave = async () => {
     if (!isDirty || isSaving) return;
@@ -1657,12 +1660,12 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
     setTestOTPCode("");
     try {
       const response = await apiService.post("/api/mfa/send-otp", {});
-      setTestMaskedTarget(response.data.maskedTarget || "");
+      const payload = response?.data ?? response;
+      setTestMaskedTarget(payload.maskedTarget || "");
       setTestOTPSent(true);
-      toast.success(`OTP sent to ${response.data.maskedTarget}`);
+      toast.success(`OTP sent to ${payload.maskedTarget}`);
     } catch (error) {
-      const msg =
-        error?.response?.data?.message || "Failed to send test OTP";
+      const msg = error?.response?.data?.message || "Failed to send test OTP";
       toast.error(msg);
     } finally {
       setIsSendingTest(false);
@@ -1679,8 +1682,7 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
       setTestOTPCode("");
       setShowTestOTP(false);
     } catch (error) {
-      const msg =
-        error?.response?.data?.message || "OTP verification failed";
+      const msg = error?.response?.data?.message || "OTP verification failed";
       toast.error(msg);
     } finally {
       setIsVerifyingTest(false);
@@ -1745,8 +1747,8 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
                 currentInfo.color === "blue"
                   ? "bg-blue-50 border border-blue-200"
                   : currentInfo.color === "green"
-                  ? "bg-green-50 border border-green-200"
-                  : "bg-purple-50 border border-purple-200"
+                    ? "bg-green-50 border border-green-200"
+                    : "bg-purple-50 border border-purple-200"
               }`}
             >
               <i
@@ -1754,8 +1756,8 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
                   currentInfo.color === "blue"
                     ? "text-blue-500"
                     : currentInfo.color === "green"
-                    ? "text-green-500"
-                    : "text-purple-500"
+                      ? "text-green-500"
+                      : "text-purple-500"
                 }`}
               ></i>
               <p
@@ -1763,8 +1765,8 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
                   currentInfo.color === "blue"
                     ? "text-blue-700"
                     : currentInfo.color === "green"
-                    ? "text-green-700"
-                    : "text-purple-700"
+                      ? "text-green-700"
+                      : "text-purple-700"
                 }`}
               >
                 {currentInfo.message}
@@ -1827,9 +1829,8 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
                     <>
                       <p className="text-sm text-green-700 bg-green-50 p-2 rounded">
                         <i className="fa-solid fa-check-circle mr-1"></i>
-                        Code sent to{" "}
-                        <strong>{testMaskedTarget}</strong>. Enter it
-                        below to verify.
+                        Code sent to <strong>{testMaskedTarget}</strong>. Enter
+                        it below to verify.
                       </p>
                       <div className="flex gap-2">
                         <input
@@ -1837,7 +1838,7 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
                           value={testOTPCode}
                           onChange={(e) =>
                             setTestOTPCode(
-                              e.target.value.replace(/\D/g, "").slice(0, 6)
+                              e.target.value.replace(/\D/g, "").slice(0, 6),
                             )
                           }
                           placeholder="Enter 6-digit code"
@@ -1846,9 +1847,7 @@ const MFASettingsModal = ({ mfaSettings, onClose, onSave }) => {
                         />
                         <button
                           onClick={handleVerifyTestOTP}
-                          disabled={
-                            testOTPCode.length !== 6 || isVerifyingTest
-                          }
+                          disabled={testOTPCode.length !== 6 || isVerifyingTest}
                           className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                           {isVerifyingTest ? (
@@ -2030,7 +2029,9 @@ const SessionControlModal = ({
                 {sessionControl.activeUsers}
               </span>
             </div>
-            <p className="text-xs text-gray-500">Currently active users in the system</p>
+            <p className="text-xs text-gray-500">
+              Currently active users in the system
+            </p>
           </div>
 
           <div className="bg-red-50 border-2 border-red-300 p-4 rounded-lg">
@@ -2658,18 +2659,24 @@ const SessionManagementModal = ({
                           {session.department && (
                             <div>
                               <span className="text-gray-500">Department:</span>
-                              <p className="text-gray-900 font-medium">{session.department}</p>
+                              <p className="text-gray-900 font-medium">
+                                {session.department}
+                              </p>
                             </div>
                           )}
                           {session.jobTitle && (
                             <div>
                               <span className="text-gray-500">Job Title:</span>
-                              <p className="text-gray-900 font-medium">{session.jobTitle}</p>
+                              <p className="text-gray-900 font-medium">
+                                {session.jobTitle}
+                              </p>
                             </div>
                           )}
                           <div>
                             <span className="text-gray-500">Last Active:</span>
-                            <p className="text-gray-900 font-medium">{session.lastActivity}</p>
+                            <p className="text-gray-900 font-medium">
+                              {session.lastActivity}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -2686,7 +2693,6 @@ const SessionManagementModal = ({
               ))}
             </div>
           )}
-
         </div>
 
         <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end">
@@ -3308,8 +3314,10 @@ const TwoFAWizardModal = ({ isOpen, onClose, onComplete }) => {
     setError("");
     try {
       const response = await apiService.post("/api/auth/mfa-setup");
-      setQrCode(response.data.qrCode);
-      setSecret(response.data.secret);
+      const payload = response?.data ?? response;
+      const mfaData = payload?.data || payload;
+      setQrCode(mfaData.qrCode);
+      setSecret(mfaData.secret);
       setStep(2);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to initialize MFA setup");
@@ -3329,7 +3337,9 @@ const TwoFAWizardModal = ({ isOpen, onClose, onComplete }) => {
       const response = await apiService.post("/api/auth/mfa-confirm", {
         code: verificationCode,
       });
-      setBackupCodes(response.data.backupCodes || []);
+      const payload = response?.data ?? response;
+      const mfaData = payload?.data || payload;
+      setBackupCodes(mfaData.backupCodes || []);
       setStep(3);
     } catch (err) {
       setError(err.response?.data?.message || "Invalid verification code");

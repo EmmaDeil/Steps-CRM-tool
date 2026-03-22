@@ -84,6 +84,14 @@ const purchaseOrderSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    firstPartiallyPaidAt: {
+      type: Date,
+      default: null,
+    },
+    fullyPaidAt: {
+      type: Date,
+      default: null,
+    },
     paymentHistory: [
       {
         amount: { type: Number, default: 0 },

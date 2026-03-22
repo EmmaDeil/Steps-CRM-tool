@@ -43,6 +43,12 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
     invoice?.balanceDue !== undefined
       ? Number(invoice.balanceDue || 0)
       : Math.max(0, totalAmount - currentPaid);
+  const firstPartiallyPaidAt = invoice?.firstPartiallyPaidAt
+    ? new Date(invoice.firstPartiallyPaidAt)
+    : null;
+  const fullyPaidAt = invoice?.fullyPaidAt
+    ? new Date(invoice.fullyPaidAt)
+    : null;
   const maxPayablePercentage =
     totalAmount > 0
       ? Number(((Math.max(0, currentBalance) / totalAmount) * 100).toFixed(2))
@@ -336,6 +342,26 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                     {invoice.dueDate
                       ? new Date(invoice.dueDate).toLocaleDateString()
                       : "N/A"}
+                  </p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                  <p className="text-xs text-slate-500 uppercase font-semibold mb-2 flex items-center gap-2">
+                    <i className="fa-regular fa-clock"></i>
+                    First Partial Payment
+                  </p>
+                  <p className="text-base font-medium text-slate-900">
+                    {firstPartiallyPaidAt
+                      ? firstPartiallyPaidAt.toLocaleString()
+                      : "Not yet"}
+                  </p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                  <p className="text-xs text-slate-500 uppercase font-semibold mb-2 flex items-center gap-2">
+                    <i className="fa-solid fa-check-double"></i>
+                    Full Payment Completed
+                  </p>
+                  <p className="text-base font-medium text-slate-900">
+                    {fullyPaidAt ? fullyPaidAt.toLocaleString() : "Not yet"}
                   </p>
                 </div>
               </div>

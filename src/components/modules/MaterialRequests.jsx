@@ -406,24 +406,72 @@ const MaterialRequests = () => {
       ? requests
       : requests.filter((req) => req.status === filterStatus);
 
-  const resolveApproverDisplay = useCallback((request) => {
-    if (!request) return "-";
+  const resolveApproverDisplay = useCallback(
+    (request) => {
+      if (!request) return "-";
 
-    const pendingApprover = request.approvalChain?.find(
-      (entry) => entry?.status === "pending",
-    )?.approverName;
-    if (pendingApprover) return pendingApprover;
+      const normalize = (value) =>
+        String(value || "")
+          .toLowerCase()
+          .trim();
 
-    const firstChainApprover = request.approvalChain?.find(
-      (entry) => entry?.approverName,
-    )?.approverName;
-    if (firstChainApprover) return firstChainApprover;
+      const lookupByEmail = (email) => {
+        const normalizedEmail = normalize(email);
+        if (!normalizedEmail) return "";
+        const matched = userList.find(
+          (u) => normalize(u?.email) === normalizedEmail,
+        );
+        return matched?.name || "";
+      };
 
-    const directApprover = String(request.approver || "").trim();
-    if (directApprover) return directApprover;
+      const lookupById = (id) => {
+        const normalizedId = String(id || "").trim();
+        if (!normalizedId) return "";
+        const matched = userList.find(
+          (u) => String(u?.id || "").trim() === normalizedId,
+        );
+        return matched?.name || "";
+      };
 
-    return "-";
-  }, []);
+      const pendingApprover = request.approvalChain?.find(
+        (entry) => entry?.status === "pending",
+      )?.approverName;
+      if (pendingApprover) return pendingApprover;
+
+      const pendingApproverByEmail = lookupByEmail(
+        request.approvalChain?.find((entry) => entry?.status === "pending")
+          ?.approverEmail,
+      );
+      if (pendingApproverByEmail) return pendingApproverByEmail;
+
+      const firstChainApprover = request.approvalChain?.find(
+        (entry) => entry?.approverName,
+      )?.approverName;
+      if (firstChainApprover) return firstChainApprover;
+
+      const chainApproverByEmail = lookupByEmail(
+        request.approvalChain?.find((entry) => entry?.approverEmail)
+          ?.approverEmail,
+      );
+      if (chainApproverByEmail) return chainApproverByEmail;
+
+      const directApproverById = lookupById(request.approverId);
+      if (directApproverById) return directApproverById;
+
+      const directApproverByEmail = lookupByEmail(request.approverEmail);
+      if (directApproverByEmail) return directApproverByEmail;
+
+      const directApprover = String(request.approver || "").trim();
+      if (directApprover) {
+        const mapped =
+          lookupByEmail(directApprover) || lookupById(directApprover);
+        return mapped || directApprover;
+      }
+
+      return "-";
+    },
+    [userList],
+  );
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;

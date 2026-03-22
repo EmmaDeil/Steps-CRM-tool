@@ -3426,13 +3426,20 @@ async function start() {
       const { sessionId } = req.params;
       
       // Log the session termination
-      await AuditLog.create({
+      await AuditLogModel.create({
         action: 'Session Terminated',
-        actor: 'Admin',
+        actor: {
+          userId: String(req.user?._id || req.user?.id || ''),
+          userName: req.user?.fullName || req.user?.email || 'Admin',
+          userEmail: req.user?.email || 'admin@system.com',
+          initials: String(req.user?.fullName || req.user?.email || 'AD')
+            .slice(0, 2)
+            .toUpperCase(),
+        },
         description: `Session ${sessionId} was forcibly terminated`,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
-        status: 'success'
+        status: 'Success'
       });
 
       res.json({ message: 'Session terminated successfully', sessionId });
@@ -3450,44 +3457,46 @@ async function start() {
       const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
       // Total logs count
-      const totalLogs = await AuditLog.countDocuments();
+      const totalLogs = await AuditLogModel.countDocuments();
       
       // Logs in last 30 days
-      const recentLogs = await AuditLog.countDocuments({
+      const recentLogs = await AuditLogModel.countDocuments({
         timestamp: { $gte: last30Days }
       });
 
       // Failed login attempts
-      const failedLogins = await AuditLog.countDocuments({
-        action: 'Login',
-        status: 'failed'
+      const failedLogins = await AuditLogModel.countDocuments({
+        $or: [
+          { action: 'Failed Login' },
+          { action: 'Login', status: 'Failed' },
+        ],
       });
 
       // Successful logins
-      const successfulLogins = await AuditLog.countDocuments({
+      const successfulLogins = await AuditLogModel.countDocuments({
         action: 'Login',
-        status: 'success'
+        status: 'Success'
       });
 
       // Config changes
-      const configChanges = await AuditLog.countDocuments({
+      const configChanges = await AuditLogModel.countDocuments({
         action: 'Config Update'
       });
 
       // Access denied events
-      const accessDenied = await AuditLog.countDocuments({
+      const accessDenied = await AuditLogModel.countDocuments({
         action: 'Access Denied'
       });
 
       // Activity by action type
-      const actionStats = await AuditLog.aggregate([
+      const actionStats = await AuditLogModel.aggregate([
         { $group: { _id: '$action', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]);
 
       // Daily activity (last 7 days)
-      const dailyActivity = await AuditLog.aggregate([
+      const dailyActivity = await AuditLogModel.aggregate([
         { $match: { timestamp: { $gte: last7Days } } },
         {
           $group: {
@@ -3499,9 +3508,9 @@ async function start() {
       ]);
 
       // Top users by activity
-      const topUsers = await AuditLog.aggregate([
+      const topUsers = await AuditLogModel.aggregate([
         { $match: { timestamp: { $gte: last30Days } } },
-        { $group: { _id: '$actor', count: { $sum: 1 } } },
+        { $group: { _id: '$actor.userName', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]);
@@ -3879,10 +3888,15 @@ async function start() {
       ] = await Promise.all([
         AuditLogModel.countDocuments(),
         AuditLogModel.countDocuments({ timestamp: { $gte: last90Days } }),
-        AuditLogModel.countDocuments({ action: 'Login', status: 'failed' }),
+        AuditLogModel.countDocuments({
+          $or: [
+            { action: 'Failed Login' },
+            { action: 'Login', status: 'Failed' },
+          ],
+        }),
         AuditLogModel.countDocuments({ action: 'Access Denied' }),
         AuditLogModel.countDocuments({ action: 'Config Update' }),
-        AuditLogModel.countDocuments({ action: 'Password Change' })
+        AuditLogModel.countDocuments({ action: 'Password Reset' })
       ]);
 
       const settings = await SecuritySettingsModel.findOne();
@@ -4132,7 +4146,7 @@ async function start() {
           userEmail: req.user.email,
           initials: (req.user.fullName || req.user.email).substring(0, 2).toUpperCase(),
         },
-        action: 'MFA Enable',
+        action: 'MFA Enabled',
         actionColor: 'green',
         ipAddress: req.ip || req.connection?.remoteAddress || '127.0.0.1',
         userAgent: req.headers['user-agent'],
@@ -4179,7 +4193,7 @@ async function start() {
           userEmail: req.user.email,
           initials: (req.user.fullName || req.user.email).substring(0, 2).toUpperCase(),
         },
-        action: 'MFA Disable',
+        action: 'MFA Disabled',
         actionColor: 'red',
         ipAddress: req.ip || req.connection?.remoteAddress || '127.0.0.1',
         userAgent: req.headers['user-agent'],
@@ -7057,6 +7071,10 @@ async function start() {
         paidAmount,
         balanceDue,
         paidPercentage,
+        paidDate: po.paidDate || null,
+        firstPartiallyPaidAt: po.firstPartiallyPaidAt || null,
+        fullyPaidAt: po.fullyPaidAt || null,
+        paymentHistory: Array.isArray(po.paymentHistory) ? po.paymentHistory : [],
         status: uiStatus,
         department: po?.linkedMaterialRequestId?.department || 'General',
       };
@@ -7135,6 +7153,7 @@ async function start() {
             $set: {
               status: 'paid',
               paidDate: now,
+              fullyPaidAt: now,
               paidAmount: totalAmount,
               paidPercentage: 100,
               apInvoiceNumber,
@@ -7320,6 +7339,11 @@ async function start() {
           $set: {
             status: isFullyPaid ? 'paid' : 'partly_paid',
             paidDate: isFullyPaid ? now : po.paidDate || null,
+            firstPartiallyPaidAt:
+              !isFullyPaid && !po.firstPartiallyPaidAt
+                ? now
+                : po.firstPartiallyPaidAt || null,
+            fullyPaidAt: isFullyPaid ? now : po.fullyPaidAt || null,
             paidAmount: isFullyPaid ? totalAmount : nextPaidAmount,
             paidPercentage: isFullyPaid ? 100 : nextPaidPercentage,
             billTo: resolvedBillTo,

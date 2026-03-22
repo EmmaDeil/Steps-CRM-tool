@@ -79,7 +79,11 @@ const ApprovalSettings = () => {
       setLevels([{ level: 1, approverRole: "Manager" }]);
     } catch (error) {
       console.error("Error saving rule:", error);
-      toast.error("Failed to save rule");
+      const serverMessage =
+        error?.response?.data?.details ||
+        error?.response?.data?.error ||
+        error?.message;
+      toast.error(serverMessage || "Failed to save rule");
     } finally {
       setIsSaving(false);
     }

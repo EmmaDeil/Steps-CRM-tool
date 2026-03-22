@@ -183,19 +183,36 @@ const InvoiceDetail = ({ invoice, onBack }) => {
                   History
                 </h4>
                 <div className="space-y-2">
-                  {invoice.paymentHistory.map((ph, idx) => (
-                    <div key={idx} className="flex justify-between text-sm">
-                      <span className="text-blue-700">
-                        {new Date(ph.paidAt).toLocaleDateString("en-GB")}
-                        <span className="text-blue-400 text-xs ml-2">
-                          ({ph.percentage}%)
+                  {invoice.paymentHistory.map((ph, idx) => {
+                    const paidAt = ph?.paidAt ? new Date(ph.paidAt) : null;
+                    const cumulativePercentage = invoice.paymentHistory
+                      .slice(0, idx + 1)
+                      .reduce(
+                        (sum, item) => sum + Number(item?.percentage || 0),
+                        0,
+                      );
+                    const milestoneLabel =
+                      cumulativePercentage >= 99.99
+                        ? "Full Payment"
+                        : "Partial Payment";
+
+                    return (
+                      <div
+                        key={idx}
+                        className="flex justify-between text-sm gap-3"
+                      >
+                        <span className="text-blue-700">
+                          {paidAt ? paidAt.toLocaleString("en-GB") : "N/A"}
+                          <span className="text-blue-400 text-xs ml-2">
+                            ({ph.percentage}% - {milestoneLabel})
+                          </span>
                         </span>
-                      </span>
-                      <span className="font-semibold text-blue-900">
-                        {formatCurrency(ph.amount)}
-                      </span>
-                    </div>
-                  ))}
+                        <span className="font-semibold text-blue-900 whitespace-nowrap">
+                          {formatCurrency(ph.amount)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

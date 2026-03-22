@@ -209,7 +209,7 @@ const Invoicing = ({ onBackToFinance }) => {
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
   const [selectedInvoiceView, setSelectedInvoiceView] = useState(null);
-  
+
   const location = useLocation();
 
   useEffect(() => {
@@ -286,7 +286,13 @@ const Invoicing = ({ onBackToFinance }) => {
                 po.vendor?.toLowerCase().includes(s)
               );
             })
-            .map((po) => ({ ...po, _isAP: true })); // flag as AP
+            .map((po) => ({
+              ...po,
+              _isAP: true,
+              // Ensure Invoice # column is always populated for AP rows.
+              invoiceNumber:
+                po.invoiceNumber || po.apInvoiceNumber || po.poNumber || "-",
+            })); // flag as AP
 
           fetchedInvoices = [...fetchedInvoices, ...filteredPos].sort(
             (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
@@ -738,7 +744,10 @@ const Invoicing = ({ onBackToFinance }) => {
                       className="hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-4 py-3 font-mono text-xs text-emerald-700 font-medium">
-                        {inv.invoiceNumber}
+                        {inv.invoiceNumber ||
+                          inv.apInvoiceNumber ||
+                          inv.poNumber ||
+                          "-"}
                       </td>
                       <td className="px-4 py-3 font-medium text-gray-800">
                         {inv.billTo}
