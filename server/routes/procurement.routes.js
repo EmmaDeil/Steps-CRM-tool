@@ -156,7 +156,7 @@ router.post('/material-requests/:id/approve', async (req, res) => {
     }
 
     const actorName =
-      req.user?.fullName || req.user?.email || req.body?.approver || 'Approver';
+      req.user?.fullName || (req.user?.firstName ? `${req.user.firstName} ${req.user.lastName || ''}`.trim() : null) || req.user?.email || req.body?.approver || 'Approver';
     const actorId = req.user?._id;
 
     request.activities = Array.isArray(request.activities) ? request.activities : [];
@@ -179,7 +179,7 @@ router.post('/material-requests/:id/approve', async (req, res) => {
           type: 'approval',
           author: actorName,
           authorId: actorId,
-          text: `Approved level ${currentStep.level || currentIdx + 1}`,
+          text: `has approved level ${currentStep.level || currentIdx + 1}`,
           timestamp: new Date(),
           approvalLevel: currentStep.level || currentIdx + 1,
         });
@@ -218,7 +218,7 @@ router.post('/material-requests/:id/approve', async (req, res) => {
       type: 'approval',
       author: actorName,
       authorId: actorId,
-      text: 'Request approved',
+      text: 'has approved request',
       timestamp: new Date(),
     });
     const updatedRequest = await request.save();
@@ -470,9 +470,9 @@ router.post('/material-requests/:id/reject', async (req, res) => {
     request.activities = Array.isArray(request.activities) ? request.activities : [];
     request.activities.push({
       type: 'rejection',
-      author: req.user?.fullName || req.user?.email || 'Approver',
+      author: req.user?.fullName || (req.user?.firstName ? `${req.user.firstName} ${req.user.lastName || ''}`.trim() : null) || req.user?.email || 'Approver',
       authorId: req.user?._id,
-      text: `Request rejected: ${rejectionText}`,
+      text: `has rejected request: ${rejectionText}`,
       timestamp: new Date(),
     });
 
