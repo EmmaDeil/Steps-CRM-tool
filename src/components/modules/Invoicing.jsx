@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
 import { formatCurrency } from "../../services/currency";
+import InvoiceDetail from "./InvoiceDetail";
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
@@ -127,6 +128,7 @@ const Invoicing = () => {
   const [invoicesTotal, setInvoicesTotal] = useState(0);
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
+  const [selectedInvoiceView, setSelectedInvoiceView] = useState(null);
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchIssues = useCallback(async (page = 1, search = "", status = "all") => {
@@ -149,10 +151,44 @@ const Invoicing = () => {
       setInvoicesLoading(true);
       const params = new URLSearchParams({ page, limit: 20 });
       if (search) params.set("search", search);
-      if (status !== "all") params.set("status", status);
+      if (status !== "all" && status !== "payable") {
+        params.set("status", status);
+      }
+      
       const res = await apiService.get(`/api/invoices?${params}`);
-      setInvoices(res?.invoices || []);
-      setInvoicesTotal(res?.total || 0);
+      let fetchedInvoices = res?.invoices || [];
+      let backendTotal = res?.total || 0;
+
+      // Also fetch paid/partly paid Purchase Orders (Accounts Payable)
+      if (status === "all" || status === "payable" || status === "paid") {
+        const poRes = await apiService.get('/api/purchase-orders/pending-payment');
+        // Actually pending-payment returns 'payment_pending', 'partly_paid'.
+        // Let's also fetch explicitly 'paid' ones
+        const paidPoRes = await apiService.get('/api/purchase-orders?status=paid&limit=50');
+        
+        const pos = [
+          ...(poRes?.data || poRes || []),
+          ...(paidPoRes?.orders || [])
+        ];
+        
+        // Remove duplicates if any
+        const uniquePos = Array.from(new Map(pos.map(po => [po._id, po])).values());
+        
+        // Filter by search if needed locally
+        const filteredPos = uniquePos.filter(po => {
+          if (!search) return true;
+          const s = search.toLowerCase();
+          return (po.poNumber?.toLowerCase().includes(s) || po.vendor?.toLowerCase().includes(s));
+        }).map(po => ({ ...po, _isAP: true })); // flag as AP
+
+        fetchedInvoices = [...fetchedInvoices, ...filteredPos].sort((a, b) => 
+          new Date(b.createdAt) - new Date(a.createdAt)
+        );
+        backendTotal += filteredPos.length;
+      }
+      
+      setInvoices(fetchedInvoices);
+      setInvoicesTotal(backendTotal);
       setInvoicesTotalPages(res?.totalPages || 1);
       setInvoicesPage(page);
     } catch { toast.error("Failed to load invoices"); }
@@ -186,6 +222,11 @@ const Invoicing = () => {
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
+  
+  if (selectedInvoiceView) {
+    return <InvoiceDetail invoice={selectedInvoiceView} onBack={() => setSelectedInvoiceView(null)} />;
+  }
+
   return (
     <div className="w-full">
       {/* Header */}
@@ -360,6 +401,7 @@ const Invoicing = () => {
               <option value="sent">Sent</option>
               <option value="paid">Paid</option>
               <option value="cancelled">Cancelled</option>
+              <option value="payable">Accounts Payable (PO)</option>
             </select>
           </div>
 
@@ -395,11 +437,17 @@ const Invoicing = () => {
                       <td className="px-4 py-3 text-gray-400 text-xs">{new Date(inv.createdAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => handlePrintInvoice(inv._id)}
-                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Print invoice">
-                            <i className="fa-solid fa-print text-xs"></i>
+                          <button onClick={() => setSelectedInvoiceView(inv)}
+                            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors" title="View Details">
+                            <i className="fa-solid fa-eye text-xs"></i>
                           </button>
-                          {inv.status === "draft" && (
+                          {!inv._isAP && (
+                            <button onClick={() => handlePrintInvoice(inv._id)}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Print invoice">
+                              <i className="fa-solid fa-print text-xs"></i>
+                            </button>
+                          )}
+                          {inv.status === "draft" && !inv._isAP && (
                             <button onClick={() => handleStatusChange(inv._id, "sent")}
                               className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Mark as Sent">
                               <i className="fa-solid fa-paper-plane text-xs"></i>

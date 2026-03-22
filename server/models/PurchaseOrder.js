@@ -31,6 +31,7 @@ const purchaseOrderSchema = new mongoose.Schema(
         'issued',
         'approved',
         'payment_pending',
+        'partly_paid',
         'paid',
         'received',
         'closed',
@@ -50,6 +51,26 @@ const purchaseOrderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    paidAmount: {
+      type: Number,
+      default: 0,
+    },
+    paidPercentage: {
+      type: Number,
+      default: 0,
+    },
+    paidDate: {
+      type: Date,
+      default: null,
+    },
+    paymentHistory: [
+      {
+        amount: { type: Number, default: 0 },
+        percentage: { type: Number, default: 0 },
+        paidAt: { type: Date, default: Date.now },
+        paidBy: { type: String, default: '' },
+      },
+    ],
     totalAmountNgn: {
       type: Number,
       default: 0,

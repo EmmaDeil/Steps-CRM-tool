@@ -67,35 +67,49 @@ export default function AddVendorModal({ isOpen, onClose, onVendorAdded }) {
     setIsSubmitting(true);
 
     try {
-      // Create FormData for file upload
-      const submitData = new FormData();
+      const encodedDocuments = await Promise.all(
+        documents.map(
+          (file) =>
+            new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () =>
+                resolve({
+                  name: file.name,
+                  data: reader.result,
+                  size: file.size,
+                  type: file.type,
+                });
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            }),
+        ),
+      );
 
-      // Append all form fields
-      Object.keys(formData).forEach((key) => {
-        submitData.append(key, formData[key]);
-      });
-
-      // Append documents
-      documents.forEach((file) => {
-        submitData.append("documents", file);
-      });
+      const submitData = {
+        ...formData,
+        documents: encodedDocuments,
+      };
 
       const response = await apiService.post("/api/vendors", submitData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+        timeout: 30000,
       });
 
       if (response.success) {
         toast.success("Vendor added successfully");
-        onVendorAdded(response.data);
+        onVendorAdded(response.data || null);
         handleClose();
       } else {
         toast.error(response.error || "Failed to add vendor");
       }
     } catch (error) {
       console.error("Error adding vendor:", error);
-      toast.error("Failed to add vendor");
+      toast.error(
+        error?.serverData?.error ||
+          error?.response?.data?.error ||
+          (error?.code === "ECONNABORTED"
+            ? "Vendor request timed out. Please try again."
+            : "Failed to add vendor"),
+      );
     } finally {
       setIsSubmitting(false);
     }

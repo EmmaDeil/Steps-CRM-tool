@@ -113,8 +113,8 @@ const vendorSchema = new mongoose.Schema(
   }
 );
 
-// Generate unique vendor ID before saving
-vendorSchema.pre('save', async function (next) {
+// Generate unique vendor ID before validation so required constraint is satisfied.
+vendorSchema.pre('validate', async function (next) {
   if (!this.vendorId) {
     const count = await this.constructor.countDocuments();
     this.vendorId = `VEN-${String(count + 8800).padStart(4, '0')}`;

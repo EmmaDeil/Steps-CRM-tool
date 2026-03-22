@@ -540,7 +540,7 @@ router.get('/purchase-orders', async (req, res) => {
 router.get('/purchase-orders/pending-payment', async (req, res) => {
   try {
     const orders = await PurchaseOrder.find({ 
-      status: 'payment_pending' 
+      status: { $in: ['payment_pending', 'partly_paid'] },
     }).sort({ createdAt: -1 });
     res.json(orders);
   } catch (err) {
@@ -872,6 +872,12 @@ router.put('/purchase-orders/:id', async (req, res) => {
   try {
     // If updating line items, might need to recalculate total
     const updates = { ...req.body };
+    const shouldAddActivityComment = Boolean(updates.addActivityComment);
+    const activityComment = String(updates.comment || '').trim();
+
+    delete updates.addActivityComment;
+    delete updates.comment;
+
     const existingOrder = await PurchaseOrder.findById(req.params.id);
     if (!existingOrder) return res.status(404).json({ success: false, message: 'Not found' });
 
@@ -889,14 +895,27 @@ router.put('/purchase-orders/:id', async (req, res) => {
           0,
         );
     }
-    if (!updates.currency) {
-      updates.currency = 'NGN';
-    }
-    if (!updates.exchangeRateToNgn) {
-      updates.exchangeRateToNgn = 1;
-    }
+
     if (updates.totalAmount !== undefined && updates.totalAmountNgn === undefined) {
-      updates.totalAmountNgn = (Number(updates.totalAmount) || 0) * (Number(updates.exchangeRateToNgn) || 1);
+      const exchangeRate =
+        updates.exchangeRateToNgn !== undefined
+          ? Number(updates.exchangeRateToNgn) || 1
+          : Number(existingOrder.exchangeRateToNgn) || 1;
+      updates.totalAmountNgn = (Number(updates.totalAmount) || 0) * exchangeRate;
+    }
+
+    if (shouldAddActivityComment && activityComment) {
+      const nextActivities = Array.isArray(existingOrder.activities)
+        ? [...existingOrder.activities]
+        : [];
+      nextActivities.push({
+        type: 'comment',
+        author: req.user?.fullName || req.user?.email || 'User',
+        authorId: req.user?._id,
+        text: activityComment,
+        timestamp: new Date(),
+      });
+      updates.activities = nextActivities;
     }
 
     const updatedOrder = await PurchaseOrder.findByIdAndUpdate(

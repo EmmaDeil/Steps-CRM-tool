@@ -1438,7 +1438,7 @@ async function start() {
       let totalEmployees = 0;
       try {
         const EmployeeModel = require('./models/Employee');
-        totalEmployees = await EmployeeModel.countDocuments({ status: 'active' });
+        totalEmployees = await EmployeeModel.countDocuments({ status: 'Active' });
       } catch(e) {}
 
       // Calculate financial metrics from real data
@@ -1819,6 +1819,62 @@ async function start() {
           icon: 'fa-file-alt',
           iconColor: 'bg-gray-100 text-gray-600',
           description: 'Create custom reports based on specific criteria and data points'
+        },
+        {
+          value: 'Procurement Performance Report',
+          label: 'Procurement Performance Report',
+          module: 'Procurement',
+          icon: 'fa-cart-shopping',
+          iconColor: 'bg-amber-100 text-amber-700',
+          description: 'Track purchase flow performance, approvals, and spending trends across procurement.'
+        },
+        {
+          value: 'Inventory Health Report',
+          label: 'Inventory Health Report',
+          module: 'Inventory',
+          icon: 'fa-boxes-stacked',
+          iconColor: 'bg-emerald-100 text-emerald-700',
+          description: 'Monitor inventory stock levels, movement patterns, and expiry risk indicators.'
+        },
+        {
+          value: 'Vendor Performance Report',
+          label: 'Vendor Performance Report',
+          module: 'Vendor Management',
+          icon: 'fa-building-user',
+          iconColor: 'bg-indigo-100 text-indigo-700',
+          description: 'Evaluate vendor activity, payment progress, and service delivery signals.'
+        },
+        {
+          value: 'Workforce Insights Report',
+          label: 'Workforce Insights Report',
+          module: 'HR & Admin',
+          icon: 'fa-people-group',
+          iconColor: 'bg-rose-100 text-rose-700',
+          description: 'Analyze workforce attendance, approvals, and staffing activity from HR operations.'
+        },
+        {
+          value: 'Accounts Payable Aging Report',
+          label: 'Accounts Payable Aging Report',
+          module: 'Finance',
+          icon: 'fa-file-invoice-dollar',
+          iconColor: 'bg-cyan-100 text-cyan-700',
+          description: 'Track unpaid and partly paid purchase orders by aging buckets and outstanding balances.'
+        },
+        {
+          value: 'Payroll Variance Report',
+          label: 'Payroll Variance Report',
+          module: 'HR & Payroll',
+          icon: 'fa-money-check-dollar',
+          iconColor: 'bg-lime-100 text-lime-700',
+          description: 'Compare payroll amounts across periods and surface variances in compensation trends.'
+        },
+        {
+          value: 'Security Incident Report',
+          label: 'Security Incident Report',
+          module: 'Physical Security',
+          icon: 'fa-shield-halved',
+          iconColor: 'bg-red-100 text-red-700',
+          description: 'Summarize incident logs, access anomalies, and response timelines for security teams.'
         }
       ];
       
@@ -4643,69 +4699,88 @@ async function start() {
   // HR MANAGEMENT ROUTES
   // ===================================
 
-  // Employees - Get all employees with search
-  app.get('/api/hr/employees', async (req, res) => {
+  let lastEmployeeDirectorySyncAt = 0;
+  let employeeDirectorySyncInFlight = false;
+
+  const syncUsersIntoEmployees = async () => {
+    if (employeeDirectorySyncInFlight) return;
+
+    const now = Date.now();
+    // Run at most once every 5 minutes to avoid blocking frequent UI reads.
+    if (now - lastEmployeeDirectorySyncAt < 5 * 60 * 1000) return;
+
+    employeeDirectorySyncInFlight = true;
     try {
-      const { search } = req.query;
-      let query = {};
+      const users = await UserModel.find({}).select('firstName lastName fullName email role status department jobTitle phoneNumber employeeRef').lean();
 
       const toEmployeeStatus = (userStatus) => {
         if (userStatus === 'Inactive') return 'Terminated';
         return 'Active';
       };
 
-      // Keep HR directory and Admin user list aligned by ensuring each user has a linked employee.
-      try {
-        const users = await UserModel.find({}).select('firstName lastName fullName email role status department jobTitle phoneNumber employeeRef').lean();
-        for (const user of users) {
-          if (!user.email) continue;
+      for (const user of users) {
+        if (!user.email) continue;
 
-          let employee = null;
-          if (user.employeeRef) {
-            employee = await EmployeeModel.findById(user.employeeRef);
-          }
-
-          if (!employee) {
-            employee = await EmployeeModel.findOne({ email: user.email.toLowerCase() });
-          }
-
-          if (employee) {
-            const employeeUpdates = {};
-            if (!employee.userRef || String(employee.userRef) !== String(user._id)) {
-              employeeUpdates.userRef = user._id;
-            }
-            if ((!user.employeeRef || String(user.employeeRef) !== String(employee._id))) {
-              await UserModel.findByIdAndUpdate(user._id, { employeeRef: employee._id });
-            }
-            if (Object.keys(employeeUpdates).length > 0) {
-              employeeUpdates.updatedAt = new Date();
-              await EmployeeModel.findByIdAndUpdate(employee._id, employeeUpdates);
-            }
-            continue;
-          }
-
-          const count = await EmployeeModel.countDocuments();
-          const employeeId = `EMP${String(count + 1).padStart(5, '0')}`;
-          const firstName = user.firstName || user.fullName?.split(' ')[0] || 'Unknown';
-          const lastName = user.lastName || user.fullName?.split(' ').slice(1).join(' ') || 'User';
-          const newEmployee = await EmployeeModel.create({
-            firstName,
-            lastName,
-            email: user.email.toLowerCase(),
-            phone: user.phoneNumber || '',
-            department: user.department || null,
-            role: user.role || 'user',
-            jobTitle: user.jobTitle || user.role || 'Employee',
-            status: toEmployeeStatus(user.status),
-            employeeId,
-            userRef: user._id,
-          });
-
-          await UserModel.findByIdAndUpdate(user._id, { employeeRef: newEmployee._id });
+        let employee = null;
+        if (user.employeeRef) {
+          employee = await EmployeeModel.findById(user.employeeRef);
         }
-      } catch (syncErr) {
-        console.error('Error syncing users into HR employee directory:', syncErr);
+
+        if (!employee) {
+          employee = await EmployeeModel.findOne({ email: user.email.toLowerCase() });
+        }
+
+        if (employee) {
+          const employeeUpdates = {};
+          if (!employee.userRef || String(employee.userRef) !== String(user._id)) {
+            employeeUpdates.userRef = user._id;
+          }
+          if (!user.employeeRef || String(user.employeeRef) !== String(employee._id)) {
+            await UserModel.findByIdAndUpdate(user._id, { employeeRef: employee._id });
+          }
+          if (Object.keys(employeeUpdates).length > 0) {
+            employeeUpdates.updatedAt = new Date();
+            await EmployeeModel.findByIdAndUpdate(employee._id, employeeUpdates);
+          }
+          continue;
+        }
+
+        const count = await EmployeeModel.countDocuments();
+        const employeeId = `EMP${String(count + 1).padStart(5, '0')}`;
+        const firstName = user.firstName || user.fullName?.split(' ')[0] || 'Unknown';
+        const lastName = user.lastName || user.fullName?.split(' ').slice(1).join(' ') || 'User';
+        const newEmployee = await EmployeeModel.create({
+          firstName,
+          lastName,
+          email: user.email.toLowerCase(),
+          phone: user.phoneNumber || '',
+          department: user.department || null,
+          role: user.role || 'user',
+          jobTitle: user.jobTitle || user.role || 'Employee',
+          status: toEmployeeStatus(user.status),
+          employeeId,
+          userRef: user._id,
+        });
+
+        await UserModel.findByIdAndUpdate(user._id, { employeeRef: newEmployee._id });
       }
+
+      lastEmployeeDirectorySyncAt = Date.now();
+    } catch (syncErr) {
+      console.error('Error syncing users into HR employee directory:', syncErr);
+    } finally {
+      employeeDirectorySyncInFlight = false;
+    }
+  };
+
+  // Employees - Get all employees with search
+  app.get('/api/hr/employees', async (req, res) => {
+    try {
+      const { search } = req.query;
+      let query = {};
+
+      // Fire and forget sync so list requests stay responsive.
+      syncUsersIntoEmployees();
       
       if (search) {
         const searchRegex = new RegExp(search, 'i');
@@ -4887,6 +4962,9 @@ async function start() {
           status: u.status || 'Active',
           avatar: u.profilePicture || '',
           salary: 0,
+          paySchedule: '',
+          bonus: 0,
+          allowances: 0,
           address: '',
           emergencyContact: { name: '', relationship: '', phone: '' },
           employeeId: null,
@@ -4916,6 +4994,9 @@ async function start() {
         status: employee.status || 'Active',
         avatar: employee.avatar || '',
         salary: employee.salary || 0,
+        paySchedule: employee.paySchedule || '',
+        bonus: employee.bonus || 0,
+        allowances: employee.allowances || 0,
         address: employee.address || '',
         emergencyContact: employee.emergencyContact || { name: '', relationship: '', phone: '' },
         employeeId: employee.employeeId,
@@ -6357,7 +6438,7 @@ async function start() {
       const skip = (pageNum - 1) * limit;
 
       const query = {
-        status: { $in: ['payment_pending', 'paid'] },
+        status: { $in: ['payment_pending', 'partly_paid', 'paid'] },
       };
 
       if (vendor) {
@@ -6368,6 +6449,9 @@ async function start() {
         const normalized = String(status).toLowerCase();
         if (normalized === 'paid') query.status = 'paid';
         if (normalized === 'pending' || normalized === 'payment_pending') query.status = 'payment_pending';
+        if (normalized === 'partly_paid' || normalized === 'partial' || normalized === 'partly') {
+          query.status = 'partly_paid';
+        }
       }
 
       if (search) {
@@ -6387,7 +6471,21 @@ async function start() {
         PurchaseOrderModel.countDocuments(query),
       ]);
 
-      const invoices = rows.map((po) => ({
+      const invoices = rows.map((po) => {
+        const totalAmount = Number(po.totalAmount || 0);
+        const rawPaidAmount = Number(po.paidAmount || 0);
+        const paidAmount =
+          po.status === 'paid' && rawPaidAmount <= 0
+            ? totalAmount
+            : Math.min(rawPaidAmount, totalAmount);
+        const balanceDue = Math.max(0, totalAmount - paidAmount);
+        const paidPercentage = totalAmount > 0 ? Number(((paidAmount / totalAmount) * 100).toFixed(2)) : 0;
+
+        let uiStatus = 'Pending';
+        if (balanceDue <= 0 || po.status === 'paid') uiStatus = 'Paid';
+        else if (po.status === 'partly_paid' || paidAmount > 0) uiStatus = 'Partly Paid';
+
+        return {
         _id: po._id,
         vendor: po.vendor,
         requestTitle:
@@ -6397,10 +6495,14 @@ async function start() {
         invoiceNumber: po.poNumber,
         issueDate: po.orderDate || po.createdAt,
         dueDate: po.expectedDelivery || po.orderDate || po.createdAt,
-        amount: Number(po.totalAmount || 0),
-        status: po.status === 'paid' ? 'Paid' : 'Pending',
+        amount: totalAmount,
+        paidAmount,
+        balanceDue,
+        paidPercentage,
+        status: uiStatus,
         department: po?.linkedMaterialRequestId?.department || 'General',
-      }));
+      };
+      });
 
       res.json({
         success: true,
@@ -6428,7 +6530,7 @@ async function start() {
       
       const pendingPurchaseOrders = await PurchaseOrderModel.find({
         _id: { $in: invoiceIds },
-        status: 'payment_pending',
+        status: { $in: ['payment_pending', 'partly_paid'] },
       })
         .populate('linkedMaterialRequestId', 'budgetCode')
         .lean();
@@ -6437,26 +6539,51 @@ async function start() {
         return res.status(400).json({ success: false, error: 'No pending invoices found to pay' });
       }
 
-      const payableIds = pendingPurchaseOrders.map((po) => po._id);
+      const payableIds = [];
+      const now = new Date();
+      const paidBy = req.user?._id || req.user?.id || 'system';
 
-      const result = await PurchaseOrderModel.updateMany(
-        {
-          _id: { $in: payableIds },
-          status: 'payment_pending',
-        },
-        {
-          $set: {
-            status: 'paid',
-            paidDate: new Date(),
-          },
-        },
-      );
+      for (const po of pendingPurchaseOrders) {
+        const totalAmount = Number(po.totalAmount || 0);
+        const alreadyPaid = Number(po.paidAmount || 0);
+        const amountToPay = Math.max(0, totalAmount - alreadyPaid);
+        if (amountToPay <= 0) continue;
+
+        payableIds.push(po._id);
+
+        await PurchaseOrderModel.updateOne(
+          { _id: po._id },
+          {
+            $set: {
+              status: 'paid',
+              paidDate: now,
+              paidAmount: totalAmount,
+              paidPercentage: 100,
+            },
+            $push: {
+              paymentHistory: {
+                amount: amountToPay,
+                percentage:
+                  totalAmount > 0
+                    ? Number(((amountToPay / totalAmount) * 100).toFixed(2))
+                    : 0,
+                paidAt: now,
+                paidBy: String(paidBy),
+              },
+            },
+          }
+        );
+      }
 
       // Roll up spent amount by budget code so budget lines reflect paid invoices.
       const spendByBudgetCode = pendingPurchaseOrders.reduce((acc, po) => {
         const budgetCode = String(po?.linkedMaterialRequestId?.budgetCode || '').trim();
         if (!budgetCode) return acc;
-        acc[budgetCode] = (acc[budgetCode] || 0) + (Number(po.totalAmount) || 0);
+        const totalAmount = Number(po.totalAmount || 0);
+        const alreadyPaid = Number(po.paidAmount || 0);
+        const amountToPay = Math.max(0, totalAmount - alreadyPaid);
+        if (!amountToPay) return acc;
+        acc[budgetCode] = (acc[budgetCode] || 0) + amountToPay;
         return acc;
       }, {});
 
@@ -6491,10 +6618,10 @@ async function start() {
       
       res.json({
         success: true,
-        message: `Successfully processed payment for ${result.modifiedCount} invoice(s)`,
+        message: `Successfully processed payment for ${payableIds.length} invoice(s)`,
         data: {
           paidInvoices: payableIds,
-          modifiedCount: result.modifiedCount,
+          modifiedCount: payableIds.length,
           budgetUpdates: budgetUpdateResults,
           timestamp: new Date(),
         },
@@ -6509,27 +6636,71 @@ async function start() {
   app.post('/api/finance/accounts-payable/:invoiceId/pay', async (req, res) => {
     try {
       const { invoiceId } = req.params;
+      const payPercentageRaw = Number(req.body?.payPercentage ?? 100);
 
       if (!invoiceId || !mongoose.Types.ObjectId.isValid(invoiceId)) {
         return res.status(400).json({ success: false, error: 'Invalid invoice ID' });
       }
 
+      if (!Number.isFinite(payPercentageRaw) || payPercentageRaw <= 0 || payPercentageRaw > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'payPercentage must be a number greater than 0 and at most 100',
+        });
+      }
+
       const po = await PurchaseOrderModel.findOne({
         _id: invoiceId,
-        status: 'payment_pending',
+        status: { $in: ['payment_pending', 'partly_paid'] },
       }).populate('linkedMaterialRequestId', 'budgetCode');
 
       if (!po) {
         return res.status(400).json({ success: false, error: 'Invoice not found or already paid' });
       }
 
-      // Update the purchase order to paid status
+      const totalAmount = Number(po.totalAmount || 0);
+      const alreadyPaid = Number(po.paidAmount || 0);
+      const balanceDue = Math.max(0, totalAmount - alreadyPaid);
+
+      if (balanceDue <= 0) {
+        return res.status(400).json({ success: false, error: 'Invoice is already fully paid' });
+      }
+
+      const requestedAmount = Number(((totalAmount * payPercentageRaw) / 100).toFixed(2));
+      if (requestedAmount <= 0) {
+        return res.status(400).json({ success: false, error: 'Payment amount resolves to 0. Increase percentage.' });
+      }
+
+      if (requestedAmount > balanceDue + 0.001) {
+        const maxAllowedPercentage = totalAmount > 0 ? Number(((balanceDue / totalAmount) * 100).toFixed(2)) : 0;
+        return res.status(400).json({
+          success: false,
+          error: `Requested percentage exceeds balance due. Max allowed now is ${maxAllowedPercentage}%`,
+        });
+      }
+
+      const nextPaidAmount = Number((alreadyPaid + requestedAmount).toFixed(2));
+      const nextPaidPercentage = totalAmount > 0 ? Number(((nextPaidAmount / totalAmount) * 100).toFixed(2)) : 0;
+      const isFullyPaid = nextPaidAmount >= totalAmount - 0.001;
+      const now = new Date();
+      const paidBy = req.user?._id || req.user?.id || 'system';
+
       const result = await PurchaseOrderModel.findByIdAndUpdate(
         invoiceId,
         {
           $set: {
-            status: 'paid',
-            paidDate: new Date(),
+            status: isFullyPaid ? 'paid' : 'partly_paid',
+            paidDate: isFullyPaid ? now : po.paidDate || null,
+            paidAmount: isFullyPaid ? totalAmount : nextPaidAmount,
+            paidPercentage: isFullyPaid ? 100 : nextPaidPercentage,
+          },
+          $push: {
+            paymentHistory: {
+              amount: requestedAmount,
+              percentage: payPercentageRaw,
+              paidAt: now,
+              paidBy: String(paidBy),
+            },
           },
         },
         { new: true }
@@ -6545,7 +6716,7 @@ async function start() {
         if (mongoose.Types.ObjectId.isValid(budgetCode)) {
           updatedBudget = await BudgetCategoryModel.findByIdAndUpdate(
             budgetCode,
-            { $inc: { spent: Number(po.totalAmount) || 0 } },
+            { $inc: { spent: requestedAmount } },
             { new: true }
           );
         }
@@ -6554,7 +6725,7 @@ async function start() {
           const escaped = budgetCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           updatedBudget = await BudgetCategoryModel.findOneAndUpdate(
             { name: { $regex: `^${escaped}$`, $options: 'i' } },
-            { $inc: { spent: Number(po.totalAmount) || 0 } },
+            { $inc: { spent: requestedAmount } },
             { new: true }
           );
         }
@@ -6564,10 +6735,15 @@ async function start() {
 
       res.json({
         success: true,
-        message: 'Invoice paid successfully',
+        message: isFullyPaid
+          ? 'Invoice paid successfully'
+          : 'Partial payment recorded successfully',
         data: {
           invoice: result,
           budgetUpdated,
+          paidAmount: requestedAmount,
+          remainingBalance: Number(Math.max(0, totalAmount - (isFullyPaid ? totalAmount : nextPaidAmount)).toFixed(2)),
+          paidPercentage: isFullyPaid ? 100 : nextPaidPercentage,
           timestamp: new Date(),
         },
       });
@@ -6739,6 +6915,25 @@ async function start() {
       });
     } catch (error) {
       console.error('Error creating vendor:', error);
+      if (error?.name === 'ValidationError') {
+        const details = Object.values(error.errors || {})
+          .map((entry) => entry?.message)
+          .filter(Boolean)
+          .join(', ');
+        return res.status(400).json({
+          success: false,
+          error: details || 'Invalid vendor payload',
+        });
+      }
+
+      if (error?.code === 11000) {
+        const duplicateField = Object.keys(error.keyPattern || {})[0] || 'field';
+        return res.status(409).json({
+          success: false,
+          error: `Duplicate value for ${duplicateField}. Please use a unique value.`,
+        });
+      }
+
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -7043,7 +7238,7 @@ async function start() {
   let server = null;
   if (!isServerlessRuntime) {
     server = httpServer.listen(port, () => {
-      console.log(`Steps backend listening on http://localhost:${port}`);
+      console.log(`Netlink backend listening on http://localhost:${port}`);
       console.log('WebSocket server ready for real-time updates');
     });
   }

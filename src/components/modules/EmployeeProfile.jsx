@@ -144,13 +144,17 @@ const EmployeeProfile = ({
     const fetchEditOptions = async () => {
       try {
         const [employeesRes, locationsRes] = await Promise.all([
-          apiService.get("/api/hr/employees"),
+          apiService.get("/api/hr/employees", { timeout: 30000 }),
           apiService.get("/api/store-locations"),
         ]);
 
-        setManagerOptions(
-          Array.isArray(employeesRes?.data) ? employeesRes.data : [],
-        );
+        const employeeRows = Array.isArray(employeesRes)
+          ? employeesRes
+          : Array.isArray(employeesRes?.data)
+            ? employeesRes.data
+            : [];
+
+        setManagerOptions(employeeRows);
         setLocationOptions(Array.isArray(locationsRes) ? locationsRes : []);
       } catch (error) {
         console.error("Error fetching profile edit options:", error);
@@ -165,10 +169,15 @@ const EmployeeProfile = ({
   useEffect(() => {
     const fetchOrgEmployees = async () => {
       try {
-        const employeesRes = await apiService.get("/api/hr/employees");
-        setOrgEmployees(
-          Array.isArray(employeesRes?.data) ? employeesRes.data : [],
-        );
+        const employeesRes = await apiService.get("/api/hr/employees", {
+          timeout: 30000,
+        });
+        const employeeRows = Array.isArray(employeesRes)
+          ? employeesRes
+          : Array.isArray(employeesRes?.data)
+            ? employeesRes.data
+            : [];
+        setOrgEmployees(employeeRows);
       } catch (error) {
         console.error("Error fetching organogram employees:", error);
         setOrgEmployees([]);

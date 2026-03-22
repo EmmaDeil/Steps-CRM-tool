@@ -88,7 +88,9 @@ const Analytics = () => {
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const response = await apiService.get("/api/analytics/reports");
+        const response = await apiService.get("/api/analytics/reports", {
+          timeout: 30000,
+        });
         if (response?.data) {
           setDatasets({
             facilityData: response.data.facilityData || [],
@@ -102,7 +104,12 @@ const Analytics = () => {
         }
       } catch (err) {
         console.error("Failed to load analytics data", err);
-        toast.error("Failed to fetch live analytics data.");
+        toast.error(
+          err?.serverData?.error ||
+            (err?.code === "ECONNABORTED"
+              ? "Analytics request timed out. Please try again."
+              : "Failed to fetch live analytics data."),
+        );
       } finally {
         setLoadingAnalytics(false);
       }
@@ -114,7 +121,9 @@ const Analytics = () => {
   useEffect(() => {
     const fetchReportTypes = async () => {
       try {
-        const response = await apiService.get("/api/reports/types/available");
+        const response = await apiService.get("/api/reports/types/available", {
+          timeout: 30000,
+        });
         if (response?.reportTypes) {
           setReportTypes(response.reportTypes);
           // Set default report type if not already set from location state
@@ -151,8 +160,10 @@ const Analytics = () => {
       try {
         setLoadingInventorySummary(true);
         const [summary, expiring] = await Promise.all([
-          apiService.get("/api/inventory/summary?days=30"),
-          apiService.get("/api/inventory/alerts/expiring?days=30"),
+          apiService.get("/api/inventory/summary?days=30", { timeout: 30000 }),
+          apiService.get("/api/inventory/alerts/expiring?days=30", {
+            timeout: 30000,
+          }),
         ]);
 
         setInventorySummary(summary || null);
@@ -173,6 +184,7 @@ const Analytics = () => {
       try {
         setLoadingReports(true);
         const response = await apiService.get("/api/reports", {
+          timeout: 30000,
           params: {
             reportType: reportType !== "All" ? reportType : undefined,
             department:

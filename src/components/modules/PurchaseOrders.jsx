@@ -205,6 +205,7 @@ const PurchaseOrders = () => {
       issued: { label: "Issued", color: "blue" },
       approved: { label: "Approved", color: "green" },
       payment_pending: { label: "Payment Pending", color: "orange" },
+      partly_paid: { label: "Partly Paid", color: "orange" },
       paid: { label: "Paid", color: "green" },
       received: { label: "Received", color: "green" },
       closed: { label: "Closed", color: "gray" },
@@ -224,6 +225,7 @@ const PurchaseOrders = () => {
       blue: "bg-blue-50 text-blue-700 border-blue-100",
       yellow: "bg-yellow-50 text-yellow-700 border-yellow-100",
       green: "bg-green-50 text-green-700 border-green-100",
+      orange: "bg-orange-50 text-orange-700 border-orange-100",
       gray: "bg-gray-100 text-gray-700 border-gray-200",
       red: "bg-red-50 text-red-700 border-red-100",
     };
@@ -235,6 +237,7 @@ const PurchaseOrders = () => {
       blue: "bg-blue-500",
       yellow: "bg-yellow-500",
       green: "bg-green-500",
+      orange: "bg-orange-500",
       gray: "bg-gray-500",
       red: "bg-red-500",
     };
@@ -524,13 +527,21 @@ const PurchaseOrders = () => {
       setIsSendingComment(true);
       const poId = selectedPo._id || selectedPo.id;
       const response = await apiService.put(`/api/purchase-orders/${poId}`, {
-        notes: trimmedComment,
+        addActivityComment: true,
+        comment: trimmedComment,
       });
 
       const updatedPo = response?.data || response;
       if (updatedPo?._id || updatedPo?.id) {
         setSelectedPo((prev) => ({ ...prev, ...updatedPo }));
       }
+
+      setEditForm((prev) => ({
+        ...prev,
+        comment: "",
+      }));
+      setShowCommentMentionDropdown(false);
+      setCommentMentionSearch("");
 
       await fetchPurchaseOrders();
       toast.success("Comment sent");
