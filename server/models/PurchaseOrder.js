@@ -29,6 +29,17 @@ const purchaseOrderSchema = new mongoose.Schema(
       default: null,
       trim: true,
     },
+    apTaxRate: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 100,
+    },
+    apTaxAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     orderDate: {
       type: Date,
       default: Date.now,

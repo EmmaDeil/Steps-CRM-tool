@@ -10,9 +10,19 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
   const [payPercentage, setPayPercentage] = useState(100);
   const [isPaying, setIsPaying] = useState(false);
   const [billTo, setBillTo] = useState(invoice?.billTo || "");
+  const [taxRate, setTaxRate] = useState(
+    Number.isFinite(Number(invoice?.taxRate)) ? Number(invoice.taxRate) : 0,
+  );
   const [isSavingBillTo, setIsSavingBillTo] = useState(false);
 
   const totalAmount = Number(invoice?.amount || 0);
+  const preTaxAmount = Number(invoice?.preTaxAmount || totalAmount);
+  const currentTaxRate = Number.isFinite(Number(invoice?.taxRate))
+    ? Number(invoice.taxRate)
+    : Number(taxRate || 0);
+  const currentTaxAmount = Number.isFinite(Number(invoice?.taxAmount))
+    ? Number(invoice.taxAmount)
+    : Number(((preTaxAmount * currentTaxRate) / 100).toFixed(2));
   const currentPaid = Number(invoice?.paidAmount || 0);
   const currentBalance =
     invoice?.balanceDue !== undefined
@@ -34,7 +44,10 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
 
   useEffect(() => {
     setBillTo(invoice?.billTo || "");
-  }, [invoice?._id, invoice?.billTo]);
+    setTaxRate(
+      Number.isFinite(Number(invoice?.taxRate)) ? Number(invoice.taxRate) : 0,
+    );
+  }, [invoice?._id, invoice?.billTo, invoice?.taxRate]);
 
   const handleSaveBillTo = async () => {
     const nextBillTo = String(billTo || "").trim();
@@ -43,11 +56,20 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
       return;
     }
 
+    if (
+      !Number.isFinite(Number(taxRate)) ||
+      Number(taxRate) < 0 ||
+      Number(taxRate) > 100
+    ) {
+      toast.error("Tax rate must be between 0 and 100");
+      return;
+    }
+
     try {
       setIsSavingBillTo(true);
       const response = await apiService.patch(
         `/api/finance/accounts-payable/${invoice._id}/bill-to`,
-        { billTo: nextBillTo },
+        { billTo: nextBillTo, taxRate: Number(taxRate) },
       );
 
       if (response?.success) {
@@ -73,11 +95,24 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
       return;
     }
 
+    if (
+      !Number.isFinite(Number(taxRate)) ||
+      Number(taxRate) < 0 ||
+      Number(taxRate) > 100
+    ) {
+      toast.error("Please set a valid Tax rate before making payment");
+      return;
+    }
+
     try {
       setIsPaying(true);
       const response = await apiService.post(
         `/api/finance/accounts-payable/${invoice._id}/pay`,
-        { payPercentage, billTo: resolvedBillTo },
+        {
+          payPercentage,
+          billTo: resolvedBillTo,
+          taxRate: Number(taxRate),
+        },
       );
 
       if (response.success) {
@@ -199,12 +234,32 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                   placeholder="Enter Bill To entity (department, legal entity, or contact)"
                   className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-primary focus:border-primary"
                 />
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Tax Rate (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={taxRate}
+                    onChange={(e) => setTaxRate(Number(e.target.value || 0))}
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-primary focus:border-primary"
+                  />
+                </div>
                 <button
                   onClick={handleSaveBillTo}
-                  disabled={isSavingBillTo || !String(billTo || "").trim()}
+                  disabled={
+                    isSavingBillTo ||
+                    !String(billTo || "").trim() ||
+                    !Number.isFinite(Number(taxRate)) ||
+                    Number(taxRate) < 0 ||
+                    Number(taxRate) > 100
+                  }
                   className="self-start px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSavingBillTo ? "Saving..." : "Save Bill To"}
+                  {isSavingBillTo ? "Saving..." : "Save Billing Setup"}
                 </button>
               </div>
             </div>
@@ -278,6 +333,11 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                   </p>
                   <p className="text-4xl font-black text-blue-900 tracking-tight">
                     {formatCurrency(invoice.amount || 0, { currency })}
+                  </p>
+                  <p className="text-xs text-blue-700 mt-2">
+                    Base: {formatCurrency(preTaxAmount, { currency })} | Tax (
+                    {currentTaxRate}%):{" "}
+                    {formatCurrency(currentTaxAmount, { currency })}
                   </p>
                 </div>
                 <div className="flex gap-8">

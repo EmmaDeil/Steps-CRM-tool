@@ -71,17 +71,22 @@ const Finance = () => {
         },
       });
 
-      if (response.success && response.data) {
-        // Filter for approved, locked POs ready for AP
-        const filtered =
-          response.data.purchaseOrders?.filter(
-            (po) =>
-              (po.status === "approved" || po.status === "payment_pending") &&
-              po.isLocked,
-          ) || [];
+      const rows =
+        (Array.isArray(response?.data?.purchaseOrders) &&
+          response.data.purchaseOrders) ||
+        (Array.isArray(response?.data?.orders) && response.data.orders) ||
+        (Array.isArray(response?.purchaseOrders) && response.purchaseOrders) ||
+        (Array.isArray(response?.orders) && response.orders) ||
+        [];
 
-        setRecentPOs(filtered.slice(0, 10));
-      }
+      // Filter for approved, locked POs ready for AP.
+      const filtered = rows.filter(
+        (po) =>
+          (po.status === "approved" || po.status === "payment_pending") &&
+          po.isLocked,
+      );
+
+      setRecentPOs(filtered.slice(0, 10));
     } catch (err) {
       console.error("Error fetching recent POs:", err);
     } finally {

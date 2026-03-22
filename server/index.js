@@ -6487,6 +6487,8 @@ async function start() {
     try {
       const { invoiceId } = req.params;
       const billTo = String(req.body?.billTo || '').trim();
+      const taxRateInput = req.body?.taxRate;
+      const parsedTaxRate = Number(taxRateInput);
 
       if (!invoiceId || !mongoose.Types.ObjectId.isValid(invoiceId)) {
         return res.status(400).json({ success: false, error: 'Invalid invoice ID' });
@@ -6496,22 +6498,38 @@ async function start() {
         return res.status(400).json({ success: false, error: 'billTo is required' });
       }
 
-      const updated = await PurchaseOrderModel.findByIdAndUpdate(
-        invoiceId,
-        { $set: { billTo } },
-        { new: true }
-      );
+      if (!Number.isFinite(parsedTaxRate) || parsedTaxRate < 0 || parsedTaxRate > 100) {
+        return res.status(400).json({ success: false, error: 'taxRate is required and must be between 0 and 100' });
+      }
 
-      if (!updated) {
+      const existing = await PurchaseOrderModel.findById(invoiceId).lean();
+      if (!existing) {
         return res.status(404).json({ success: false, error: 'Invoice not found' });
       }
 
+      const baseAmount = Number(existing.totalAmount || 0);
+      const apTaxAmount = Number(((baseAmount * parsedTaxRate) / 100).toFixed(2));
+
+      const updated = await PurchaseOrderModel.findByIdAndUpdate(
+        invoiceId,
+        {
+          $set: {
+            billTo,
+            apTaxRate: parsedTaxRate,
+            apTaxAmount,
+          },
+        },
+        { new: true }
+      );
+
       res.json({
         success: true,
-        message: 'Bill To updated successfully',
+        message: 'Payment setup updated successfully',
         data: {
           _id: updated._id,
           billTo: updated.billTo,
+          taxRate: Number(updated.apTaxRate || 0),
+          taxAmount: Number(updated.apTaxAmount || 0),
           invoiceNumber: updated.apInvoiceNumber || updated.poNumber,
         },
       });
@@ -6566,7 +6584,10 @@ async function start() {
       ]);
 
       const invoices = rows.map((po) => {
-        const totalAmount = Number(po.totalAmount || 0);
+        const baseAmount = Number(po.totalAmount || 0);
+        const taxRate = Number(po.apTaxRate ?? 0);
+        const taxAmount = Number(po.apTaxAmount ?? ((baseAmount * taxRate) / 100)) || 0;
+        const totalAmount = Number((baseAmount + taxAmount).toFixed(2));
         const rawPaidAmount = Number(po.paidAmount || 0);
         const paidAmount =
           po.status === 'paid' && rawPaidAmount <= 0
@@ -6591,6 +6612,9 @@ async function start() {
         poNumber: po.poNumber,
         issueDate: po.orderDate || po.createdAt,
         dueDate: po.expectedDelivery || po.orderDate || po.createdAt,
+        preTaxAmount: baseAmount,
+        taxRate,
+        taxAmount,
         amount: totalAmount,
         paidAmount,
         balanceDue,
@@ -6637,21 +6661,35 @@ async function start() {
 
       const payableIds = [];
       const paidInvoices = [];
+      const skippedInvoices = [];
       const now = new Date();
       const paidBy = req.user?._id || req.user?.id || 'system';
 
       for (const po of pendingPurchaseOrders) {
-        const totalAmount = Number(po.totalAmount || 0);
+        const baseAmount = Number(po.totalAmount || 0);
+        const taxRate = Number(po.apTaxRate);
+        const taxConfigured = Number.isFinite(taxRate) && taxRate >= 0 && taxRate <= 100;
+        if (!taxConfigured) {
+          skippedInvoices.push({ _id: po._id, reason: 'Tax must be set before payment' });
+          continue;
+        }
+
+        const apTaxAmount = Number(((baseAmount * taxRate) / 100).toFixed(2));
+        const totalAmount = Number((baseAmount + apTaxAmount).toFixed(2));
         const alreadyPaid = Number(po.paidAmount || 0);
         const amountToPay = Math.max(0, totalAmount - alreadyPaid);
         if (amountToPay <= 0) continue;
 
-        payableIds.push(po._id);
         const apInvoiceNumber = po.apInvoiceNumber || await generateApInvoiceNumber();
         const finalBillTo =
-          String(po.billTo || '').trim() ||
-          String(po?.linkedMaterialRequestId?.department || '').trim() ||
-          String(po.vendor || '').trim();
+          String(po.billTo || '').trim();
+
+        if (!finalBillTo) {
+          skippedInvoices.push({ _id: po._id, reason: 'Bill To must be set before payment' });
+          continue;
+        }
+
+        payableIds.push(po._id);
 
         await PurchaseOrderModel.updateOne(
           { _id: po._id },
@@ -6663,6 +6701,8 @@ async function start() {
               paidPercentage: 100,
               apInvoiceNumber,
               billTo: finalBillTo,
+              apTaxRate: taxRate,
+              apTaxAmount,
             },
             $push: {
               paymentHistory: {
@@ -6682,14 +6722,29 @@ async function start() {
           _id: po._id,
           invoiceNumber: apInvoiceNumber,
           billTo: finalBillTo,
+          taxRate,
+          taxAmount: apTaxAmount,
+        });
+      }
+
+      if (payableIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'No selected invoices are ready for payment. Set Bill To and Tax first.',
+          data: { skippedInvoices },
         });
       }
 
       // Roll up spent amount by budget code so budget lines reflect paid invoices.
+      const payableIdSet = new Set(payableIds.map((id) => String(id)));
       const spendByBudgetCode = pendingPurchaseOrders.reduce((acc, po) => {
+        if (!payableIdSet.has(String(po._id))) return acc;
         const budgetCode = String(po?.linkedMaterialRequestId?.budgetCode || '').trim();
         if (!budgetCode) return acc;
-        const totalAmount = Number(po.totalAmount || 0);
+        const baseAmount = Number(po.totalAmount || 0);
+        const taxRate = Number(po.apTaxRate || 0);
+        const taxAmount = Number(((baseAmount * taxRate) / 100).toFixed(2));
+        const totalAmount = Number((baseAmount + taxAmount).toFixed(2));
         const alreadyPaid = Number(po.paidAmount || 0);
         const amountToPay = Math.max(0, totalAmount - alreadyPaid);
         if (!amountToPay) return acc;
@@ -6731,6 +6786,7 @@ async function start() {
         message: `Successfully processed payment for ${payableIds.length} invoice(s)`,
         data: {
           paidInvoices,
+          skippedInvoices,
           modifiedCount: payableIds.length,
           budgetUpdates: budgetUpdateResults,
           timestamp: new Date(),
@@ -6748,6 +6804,7 @@ async function start() {
       const { invoiceId } = req.params;
       const payPercentageRaw = Number(req.body?.payPercentage ?? 100);
       const billToInput = String(req.body?.billTo || '').trim();
+      const taxRateInput = Number(req.body?.taxRate);
 
       if (!invoiceId || !mongoose.Types.ObjectId.isValid(invoiceId)) {
         return res.status(400).json({ success: false, error: 'Invalid invoice ID' });
@@ -6769,7 +6826,21 @@ async function start() {
         return res.status(400).json({ success: false, error: 'Invoice not found or already paid' });
       }
 
-      const totalAmount = Number(po.totalAmount || 0);
+      const baseAmount = Number(po.totalAmount || 0);
+      const resolvedTaxRate =
+        Number.isFinite(taxRateInput) && taxRateInput >= 0 && taxRateInput <= 100
+          ? taxRateInput
+          : Number(po.apTaxRate);
+
+      if (!Number.isFinite(resolvedTaxRate) || resolvedTaxRate < 0 || resolvedTaxRate > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'Please set Tax before processing payment for this PO.',
+        });
+      }
+
+      const resolvedTaxAmount = Number(((baseAmount * resolvedTaxRate) / 100).toFixed(2));
+      const totalAmount = Number((baseAmount + resolvedTaxAmount).toFixed(2));
       const alreadyPaid = Number(po.paidAmount || 0);
       const balanceDue = Math.max(0, totalAmount - alreadyPaid);
 
@@ -6814,6 +6885,8 @@ async function start() {
             paidAmount: isFullyPaid ? totalAmount : nextPaidAmount,
             paidPercentage: isFullyPaid ? 100 : nextPaidPercentage,
             billTo: resolvedBillTo,
+            apTaxRate: resolvedTaxRate,
+            apTaxAmount: resolvedTaxAmount,
           },
           $push: {
             paymentHistory: {
@@ -6880,9 +6953,13 @@ async function start() {
             ...result.toObject(),
             apInvoiceNumber: invoiceNumber || result.apInvoiceNumber || null,
             billTo: resolvedBillTo,
+            apTaxRate: resolvedTaxRate,
+            apTaxAmount: resolvedTaxAmount,
           },
           invoiceNumber: invoiceNumber || result.apInvoiceNumber || result.poNumber,
           billTo: resolvedBillTo,
+          taxRate: resolvedTaxRate,
+          taxAmount: resolvedTaxAmount,
           budgetUpdated,
           paidAmount: requestedAmount,
           remainingBalance: Number(Math.max(0, totalAmount - (isFullyPaid ? totalAmount : nextPaidAmount)).toFixed(2)),
