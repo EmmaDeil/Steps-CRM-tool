@@ -10,7 +10,6 @@ const StockTransfer = require('../models/StockTransfer');
 const StockMovement = require('../models/StockMovement');
 const { logMovement } = require('./inventory.routes');
 const {
-  buildWaybillHTML,
   generateWaybillNumber,
   updateStockLevel,
   getStockAtLocation,
@@ -51,7 +50,7 @@ router.get('/material-requests/:id', async (req, res) => {
     const request = await MaterialRequest.findById(req.params.id);
     if (!request) return res.status(404).json({ success: false, message: 'Not found' });
     res.json(request);
-  } catch (err) {
+  } catch (_err) {
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 });
@@ -313,7 +312,6 @@ router.post('/material-requests/:id/approve', async (req, res) => {
         }
 
         // Auto-create an InventoryIssue
-        let autoIssue = null;
         try {
           const issueLineItems = inventoryIssues.map(issue => ({
             inventoryItemId: issue.inventoryItemId,
@@ -323,7 +321,7 @@ router.post('/material-requests/:id/approve', async (req, res) => {
             totalPrice: issue.quantityIssued * issue.unitPrice,
           }));
 
-          autoIssue = await InventoryIssue.create({
+          await InventoryIssue.create({
             issuedTo: request.department || request.requestedBy,
             issuedToType: request.department ? 'department' : 'person',
             issuedBy: req.user?._id,
@@ -556,7 +554,7 @@ router.get('/purchase-orders/:id', async (req, res) => {
         .populate('linkedMaterialRequestId');
     if (!order) return res.status(404).json({ success: false, message: 'Not found' });
     res.json(order);
-  } catch (err) {
+  } catch (_err) {
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 });

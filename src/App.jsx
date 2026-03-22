@@ -5,6 +5,7 @@ import Signup from "./components/auth/Signup";
 import ForgotPassword from "./components/auth/ForgotPassword";
 import Home from "./home/Home";
 import Profile from "./components/Profile";
+import Settings from "./components/Settings";
 import PrivateRoute from "./components/PrivateRoute";
 import NotFound from "./components/NotFound";
 import VisitorSignIn from "./components/VisitorSignIn";
@@ -56,6 +57,17 @@ function App() {
             <PrivateRoute>
               <PageWithNavbar>
                 <Profile />
+              </PageWithNavbar>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/home/settings"
+          element={
+            <PrivateRoute>
+              <PageWithNavbar>
+                <Settings />
               </PageWithNavbar>
             </PrivateRoute>
           }

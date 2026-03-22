@@ -136,7 +136,7 @@ const Navbar = ({ user }) => {
                   <button
                     onClick={() => {
                       setIsDropdownOpen(false);
-                      navigate("/home/profile");
+                      navigate("/home/settings");
                     }}
                     className="w-full text-left px-4 py-2 text-sm text-[#111418] hover:bg-gray-100 flex items-center gap-3 transition-colors"
                   >
