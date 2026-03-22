@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import Pagination from "../Pagination";
 import Skeleton from "../Skeleton";
 import EmptyState from "../EmptyState";
@@ -33,6 +34,14 @@ const Finance = () => {
   const [showBudget, setShowBudget] = useState(false);
   const [showInvoicing, setShowInvoicing] = useState(false);
   const [showQuickAction, setShowQuickAction] = useState(false);
+
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.openInvoicing) {
+      setShowInvoicing(true);
+    }
+  }, [location.state]);
 
   const displayName =
     user?.firstName || user?.fullName?.split(" ")[0] || "User";

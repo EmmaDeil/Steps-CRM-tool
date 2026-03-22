@@ -19,6 +19,16 @@ const purchaseOrderSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    billTo: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    apInvoiceNumber: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     orderDate: {
       type: Date,
       default: Date.now,

@@ -6468,6 +6468,59 @@ async function start() {
     }
   });
 
+  const generateApInvoiceNumber = async () => {
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    let attempt = 0;
+
+    while (attempt < 5) {
+      const suffix = Math.floor(1000 + Math.random() * 9000);
+      const candidate = `APINV-${stamp}-${suffix}`;
+      const exists = await PurchaseOrderModel.exists({ apInvoiceNumber: candidate });
+      if (!exists) return candidate;
+      attempt += 1;
+    }
+
+    return `APINV-${stamp}-${Date.now().toString().slice(-6)}`;
+  };
+
+  app.patch('/api/finance/accounts-payable/:invoiceId/bill-to', async (req, res) => {
+    try {
+      const { invoiceId } = req.params;
+      const billTo = String(req.body?.billTo || '').trim();
+
+      if (!invoiceId || !mongoose.Types.ObjectId.isValid(invoiceId)) {
+        return res.status(400).json({ success: false, error: 'Invalid invoice ID' });
+      }
+
+      if (!billTo) {
+        return res.status(400).json({ success: false, error: 'billTo is required' });
+      }
+
+      const updated = await PurchaseOrderModel.findByIdAndUpdate(
+        invoiceId,
+        { $set: { billTo } },
+        { new: true }
+      );
+
+      if (!updated) {
+        return res.status(404).json({ success: false, error: 'Invoice not found' });
+      }
+
+      res.json({
+        success: true,
+        message: 'Bill To updated successfully',
+        data: {
+          _id: updated._id,
+          billTo: updated.billTo,
+          invoiceNumber: updated.apInvoiceNumber || updated.poNumber,
+        },
+      });
+    } catch (error) {
+      console.error('Error updating bill-to:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Get accounts payable invoices
   app.get('/api/finance/accounts-payable', async (req, res) => {
     try {
@@ -6496,7 +6549,9 @@ async function start() {
       if (search) {
         query.$or = [
           { poNumber: { $regex: String(search), $options: 'i' } },
+          { apInvoiceNumber: { $regex: String(search), $options: 'i' } },
           { vendor: { $regex: String(search), $options: 'i' } },
+          { billTo: { $regex: String(search), $options: 'i' } },
         ];
       }
 
@@ -6527,11 +6582,13 @@ async function start() {
         return {
         _id: po._id,
         vendor: po.vendor,
+        billTo: po.billTo || '',
         requestTitle:
           po?.linkedMaterialRequestId?.requestTitle ||
           po?.linkedMaterialRequestId?.requestId ||
           '',
-        invoiceNumber: po.poNumber,
+        invoiceNumber: po.apInvoiceNumber || po.poNumber,
+        poNumber: po.poNumber,
         issueDate: po.orderDate || po.createdAt,
         dueDate: po.expectedDelivery || po.orderDate || po.createdAt,
         amount: totalAmount,
@@ -6579,6 +6636,7 @@ async function start() {
       }
 
       const payableIds = [];
+      const paidInvoices = [];
       const now = new Date();
       const paidBy = req.user?._id || req.user?.id || 'system';
 
@@ -6589,6 +6647,11 @@ async function start() {
         if (amountToPay <= 0) continue;
 
         payableIds.push(po._id);
+        const apInvoiceNumber = po.apInvoiceNumber || await generateApInvoiceNumber();
+        const finalBillTo =
+          String(po.billTo || '').trim() ||
+          String(po?.linkedMaterialRequestId?.department || '').trim() ||
+          String(po.vendor || '').trim();
 
         await PurchaseOrderModel.updateOne(
           { _id: po._id },
@@ -6598,6 +6661,8 @@ async function start() {
               paidDate: now,
               paidAmount: totalAmount,
               paidPercentage: 100,
+              apInvoiceNumber,
+              billTo: finalBillTo,
             },
             $push: {
               paymentHistory: {
@@ -6612,6 +6677,12 @@ async function start() {
             },
           }
         );
+
+        paidInvoices.push({
+          _id: po._id,
+          invoiceNumber: apInvoiceNumber,
+          billTo: finalBillTo,
+        });
       }
 
       // Roll up spent amount by budget code so budget lines reflect paid invoices.
@@ -6659,7 +6730,7 @@ async function start() {
         success: true,
         message: `Successfully processed payment for ${payableIds.length} invoice(s)`,
         data: {
-          paidInvoices: payableIds,
+          paidInvoices,
           modifiedCount: payableIds.length,
           budgetUpdates: budgetUpdateResults,
           timestamp: new Date(),
@@ -6676,6 +6747,7 @@ async function start() {
     try {
       const { invoiceId } = req.params;
       const payPercentageRaw = Number(req.body?.payPercentage ?? 100);
+      const billToInput = String(req.body?.billTo || '').trim();
 
       if (!invoiceId || !mongoose.Types.ObjectId.isValid(invoiceId)) {
         return res.status(400).json({ success: false, error: 'Invalid invoice ID' });
@@ -6710,6 +6782,14 @@ async function start() {
         return res.status(400).json({ success: false, error: 'Payment amount resolves to 0. Increase percentage.' });
       }
 
+      const resolvedBillTo = billToInput || String(po.billTo || '').trim();
+      if (!resolvedBillTo) {
+        return res.status(400).json({
+          success: false,
+          error: 'Please set Bill To before processing payment for this PO.',
+        });
+      }
+
       if (requestedAmount > balanceDue + 0.001) {
         const maxAllowedPercentage = totalAmount > 0 ? Number(((balanceDue / totalAmount) * 100).toFixed(2)) : 0;
         return res.status(400).json({
@@ -6723,6 +6803,7 @@ async function start() {
       const isFullyPaid = nextPaidAmount >= totalAmount - 0.001;
       const now = new Date();
       const paidBy = req.user?._id || req.user?.id || 'system';
+      const paidByName = req.user?.fullName || req.user?.name || req.user?.email || 'System';
 
       const result = await PurchaseOrderModel.findByIdAndUpdate(
         invoiceId,
@@ -6732,6 +6813,7 @@ async function start() {
             paidDate: isFullyPaid ? now : po.paidDate || null,
             paidAmount: isFullyPaid ? totalAmount : nextPaidAmount,
             paidPercentage: isFullyPaid ? 100 : nextPaidPercentage,
+            billTo: resolvedBillTo,
           },
           $push: {
             paymentHistory: {
@@ -6740,10 +6822,26 @@ async function start() {
               paidAt: now,
               paidBy: String(paidBy),
             },
+            activities: {
+              type: 'status_change',
+              author: paidByName,
+              authorId: String(paidBy),
+              text: isFullyPaid ? `Processed full payment. Invoice #${po.poNumber} generated.` : `Processed ${payPercentageRaw}% payment. Invoice #${po.poNumber} generated.`,
+              timestamp: now,
+            }
           },
         },
         { new: true }
       );
+
+      let invoiceNumber = result.apInvoiceNumber || null;
+      if (isFullyPaid && !invoiceNumber) {
+        invoiceNumber = await generateApInvoiceNumber();
+        await PurchaseOrderModel.updateOne(
+          { _id: invoiceId },
+          { $set: { apInvoiceNumber: invoiceNumber } }
+        );
+      }
 
       // Update budget spent amount
       const budgetCode = String(po?.linkedMaterialRequestId?.budgetCode || '').trim();
@@ -6778,7 +6876,13 @@ async function start() {
           ? 'Invoice paid successfully'
           : 'Partial payment recorded successfully',
         data: {
-          invoice: result,
+          invoice: {
+            ...result.toObject(),
+            apInvoiceNumber: invoiceNumber || result.apInvoiceNumber || null,
+            billTo: resolvedBillTo,
+          },
+          invoiceNumber: invoiceNumber || result.apInvoiceNumber || result.poNumber,
+          billTo: resolvedBillTo,
           budgetUpdated,
           paidAmount: requestedAmount,
           remainingBalance: Number(Math.max(0, totalAmount - (isFullyPaid ? totalAmount : nextPaidAmount)).toFixed(2)),

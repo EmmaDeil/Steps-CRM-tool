@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
 import { formatCurrency } from "../../services/currency";
@@ -208,6 +209,15 @@ const Invoicing = ({ onBackToFinance }) => {
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
   const [selectedInvoiceView, setSelectedInvoiceView] = useState(null);
+  
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.openInvoicing && location.state?.invoiceSearch) {
+      setActiveTab("invoices");
+      setInvoiceSearch(location.state.invoiceSearch);
+    }
+  }, [location.state]);
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchIssues = useCallback(

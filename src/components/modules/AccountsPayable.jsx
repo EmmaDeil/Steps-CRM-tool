@@ -56,7 +56,7 @@ const AccountsPayable = ({ onBack }) => {
   useEffect(() => {
     if (selectedInvoiceDetail && invoices.length > 0) {
       const updatedInvoice = invoices.find(
-        (inv) => inv._id === selectedInvoiceDetail._id
+        (inv) => inv._id === selectedInvoiceDetail._id,
       );
       if (
         updatedInvoice &&
@@ -399,7 +399,10 @@ const AccountsPayable = ({ onBack }) => {
                               : ""
                         }`}
                       >
-                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                        <td
+                          className="py-3 px-4"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <input
                             className="rounded border-slate-300 text-primary focus:ring-primary h-4 w-4"
                             type="checkbox"
@@ -419,6 +422,11 @@ const AccountsPayable = ({ onBack }) => {
                               <div className="text-xs text-slate-500">
                                 {invoice.vendor || "Unknown Vendor"}
                               </div>
+                              {invoice.billTo && (
+                                <div className="text-[11px] text-slate-400">
+                                  Bill To: {invoice.billTo}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -536,7 +544,6 @@ const AccountsPayable = ({ onBack }) => {
           </div>
         </div>
       </footer>
-
     </div>
   );
 };

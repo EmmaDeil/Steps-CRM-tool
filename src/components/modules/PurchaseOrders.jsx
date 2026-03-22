@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useAppContext } from "../../context/useAppContext";
 import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
@@ -7,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 
 const PurchaseOrders = () => {
   const navigate = useNavigate();
+  const { modules } = useAppContext();
   const pendingOpenPoRef = useRef({ id: "", number: "" });
   const commentInputRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -15,6 +17,7 @@ const PurchaseOrders = () => {
   const [activeFilter, setActiveFilter] = useState("all");
   const [selectedPo, setSelectedPo] = useState(null);
   const [loadingPoDetails, setLoadingPoDetails] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [isTogglingLock, setIsTogglingLock] = useState(false);
@@ -467,6 +470,7 @@ const PurchaseOrders = () => {
       });
       setShowCommentMentionDropdown(false);
       setCommentMentionSearch("");
+      setIsEditing(false);
     } catch (err) {
       console.error("Error loading purchase order:", err);
       toast.error("Failed to open purchase order");
@@ -501,6 +505,7 @@ const PurchaseOrders = () => {
       if (updatedPo?._id || updatedPo?.id) {
         setSelectedPo((prev) => ({ ...prev, ...updatedPo }));
       }
+      setIsEditing(false);
       await fetchPurchaseOrders();
     } catch (err) {
       console.error("Error updating purchase order:", err);
@@ -992,18 +997,48 @@ const PurchaseOrders = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleSavePoEdit}
-                  disabled={
-                    isSavingEdit ||
-                    !editForm.vendor.trim() ||
-                    selectedPo?.isLocked
-                  }
-                  className="px-4 py-2 rounded-lg bg-[#137fec] text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSavingEdit ? "Saving..." : "Save PO Changes"}
-                </button>
+                {isEditing ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditing(false);
+                        setEditForm({
+                          vendor: selectedPo.vendor || "",
+                          status: selectedPo.status || "draft",
+                          expectedDelivery: selectedPo.expectedDelivery
+                            ? new Date(selectedPo.expectedDelivery).toISOString().split("T")[0]
+                            : "",
+                          comment: selectedPo.notes || selectedPo.comment || "",
+                        });
+                      }}
+                      className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-[#617589] text-sm font-semibold hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSavePoEdit}
+                      disabled={
+                        isSavingEdit ||
+                        !editForm.vendor.trim() ||
+                        selectedPo?.isLocked
+                      }
+                      className="px-4 py-2 rounded-lg bg-[#137fec] text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSavingEdit ? "Saving..." : "Save PO Changes"}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    disabled={selectedPo?.isLocked}
+                    className="px-4 py-2 rounded-lg border border-[#137fec] text-[#137fec] bg-white text-sm font-semibold hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Edit PO
+                  </button>
+                )}
                 {showApprovalDecisionButtons && (
                   <>
                     <button
@@ -1055,7 +1090,7 @@ const PurchaseOrders = () => {
                     </span>
                     <select
                       value={editForm.vendor}
-                      disabled={selectedPo?.isLocked}
+                      disabled={!isEditing || selectedPo?.isLocked}
                       onChange={(e) =>
                         setEditForm((prev) => ({
                           ...prev,
@@ -1096,7 +1131,7 @@ const PurchaseOrders = () => {
                     </span>
                     <select
                       value={editForm.status}
-                      disabled={selectedPo?.isLocked}
+                      disabled={!isEditing || selectedPo?.isLocked}
                       onChange={(e) =>
                         setEditForm((prev) => ({
                           ...prev,
@@ -1144,7 +1179,7 @@ const PurchaseOrders = () => {
                     <input
                       type="date"
                       value={editForm.expectedDelivery}
-                      disabled={selectedPo?.isLocked}
+                      disabled={!isEditing || selectedPo?.isLocked}
                       onChange={(e) =>
                         setEditForm((prev) => ({
                           ...prev,
@@ -1308,11 +1343,46 @@ const PurchaseOrders = () => {
                             <i className="fa-solid fa-clock text-xs text-[#617589]"></i>
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm text-[#111418]">
+                            <p className="text-sm text-[#111418] whitespace-pre-wrap">
                               <span className="font-semibold">
                                 {entry.author || "System"}
                               </span>{" "}
-                              {entry.text || "Updated purchase order"}
+                              {String(entry.text || "Updated purchase order")
+                                .split(/(@\w+(?:\s\w+)?|Invoice #PO-[\w-]+)/)
+                                .map((part, pIdx) => {
+                                  if (/^@\w+/.test(part)) {
+                                    return (
+                                      <span
+                                        key={pIdx}
+                                        className="inline-flex items-center bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded text-xs mx-0.5"
+                                      >
+                                        {part}
+                                      </span>
+                                    );
+                                  } else if (/^Invoice #[a-zA-Z0-9_-]+/.test(part)) {
+                                    const invNum = part.replace("Invoice #", "");
+                                    return (
+                                      <button
+                                        key={pIdx}
+                                        type="button"
+                                        onClick={() => {
+                                          const financeModule = modules?.find((m) => m.name === "Finance");
+                                          if (financeModule) {
+                                            navigate(`/home/${financeModule.id || financeModule._id}`, {
+                                              state: { openInvoicing: true, invoiceSearch: invNum }
+                                            });
+                                          } else {
+                                            toast.error("Finance module not found.");
+                                          }
+                                        }}
+                                        className="inline-flex items-center text-[#137fec] hover:text-blue-700 hover:underline font-semibold mx-0.5"
+                                      >
+                                        {part}
+                                      </button>
+                                    );
+                                  }
+                                  return <span key={pIdx}>{part}</span>;
+                                })}
                             </p>
                             <p className="text-xs text-[#617589] mt-0.5">
                               {entry.timestamp

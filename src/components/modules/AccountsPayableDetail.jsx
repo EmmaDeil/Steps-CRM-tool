@@ -9,6 +9,8 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
   const { currency } = useCurrency();
   const [payPercentage, setPayPercentage] = useState(100);
   const [isPaying, setIsPaying] = useState(false);
+  const [billTo, setBillTo] = useState(invoice?.billTo || "");
+  const [isSavingBillTo, setIsSavingBillTo] = useState(false);
 
   const totalAmount = Number(invoice?.amount || 0);
   const currentPaid = Number(invoice?.paidAmount || 0);
@@ -30,14 +32,52 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
     setPayPercentage(defaultPercentage > 0 ? defaultPercentage : 0);
   }, [invoice?._id, invoice?.status, maxPayablePercentage]);
 
+  useEffect(() => {
+    setBillTo(invoice?.billTo || "");
+  }, [invoice?._id, invoice?.billTo]);
+
+  const handleSaveBillTo = async () => {
+    const nextBillTo = String(billTo || "").trim();
+    if (!nextBillTo) {
+      toast.error("Bill To is required");
+      return;
+    }
+
+    try {
+      setIsSavingBillTo(true);
+      const response = await apiService.patch(
+        `/api/finance/accounts-payable/${invoice._id}/bill-to`,
+        { billTo: nextBillTo },
+      );
+
+      if (response?.success) {
+        toast.success(response.message || "Bill To updated");
+        if (onPaymentSuccess) {
+          onPaymentSuccess();
+        }
+      }
+    } catch (error) {
+      console.error("Error updating Bill To:", error);
+      toast.error(error?.serverData?.error || "Failed to update Bill To");
+    } finally {
+      setIsSavingBillTo(false);
+    }
+  };
+
   const handlePay = async () => {
     if (!invoice) return;
+
+    const resolvedBillTo = String(billTo || "").trim();
+    if (!resolvedBillTo) {
+      toast.error("Please set Bill To before making payment");
+      return;
+    }
 
     try {
       setIsPaying(true);
       const response = await apiService.post(
         `/api/finance/accounts-payable/${invoice._id}/pay`,
-        { payPercentage },
+        { payPercentage, billTo: resolvedBillTo },
       );
 
       if (response.success) {
@@ -142,6 +182,30 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                     {invoice.category || "General Category"}
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Bill To */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <i className="fa-solid fa-file-signature text-primary"></i>
+                Bill To
+              </h3>
+              <div className="flex flex-col gap-3">
+                <input
+                  type="text"
+                  value={billTo}
+                  onChange={(e) => setBillTo(e.target.value)}
+                  placeholder="Enter Bill To entity (department, legal entity, or contact)"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-primary focus:border-primary"
+                />
+                <button
+                  onClick={handleSaveBillTo}
+                  disabled={isSavingBillTo || !String(billTo || "").trim()}
+                  className="self-start px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingBillTo ? "Saving..." : "Save Bill To"}
+                </button>
               </div>
             </div>
 
