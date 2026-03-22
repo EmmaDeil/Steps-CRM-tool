@@ -138,6 +138,7 @@ const iconMap = {
   Attendance: { icon: "fa-id-badge", color: "emerald" },
   HRM: { icon: "fa-people-group", color: "rose" },
   Security: { icon: "fa-lock", color: "red" },
+  "Incident Reporting": { icon: "fa-triangle-exclamation", color: "red" },
   DocSign: { icon: "fa-pen-fancy", color: "pink" },
   // "": { icon: "fa-pen-fancy", color: "pink" },
   Admin: { icon: "fa-sliders", color: "gray" },
@@ -449,7 +450,7 @@ export default function Home() {
         </div>
 
         {/* Modules Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-6xl rounded-l-xl border border-[#dbe0e6] p-6 bg-white shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-6xl rounded-xl border border-[#dbe0e6] p-6 bg-white shadow-sm">
           {loading &&
             Array.from({ length: 8 }).map((_, i) => (
               <div
