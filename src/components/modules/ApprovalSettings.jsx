@@ -3,6 +3,9 @@ import { toast } from "react-hot-toast";
 import apiService from "../../services/api";
 
 const ApprovalSettings = () => {
+  const formatApproverRole = (role) =>
+    role === "Direct Manager" ? "Manager" : role;
+
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -13,9 +16,7 @@ const ApprovalSettings = () => {
   // Form State
   const [moduleType, setModuleType] = useState("Advance Requests");
   const [conditions, setConditions] = useState(["All Requests"]);
-  const [levels, setLevels] = useState([
-    { level: 1, approverRole: "Direct Manager" },
-  ]);
+  const [levels, setLevels] = useState([{ level: 1, approverRole: "Manager" }]);
 
   const fetchRules = async () => {
     try {
@@ -75,7 +76,7 @@ const ApprovalSettings = () => {
       // Reset form
       setModuleType("Advance Requests");
       setConditions(["All Requests"]);
-      setLevels([{ level: 1, approverRole: "Direct Manager" }]);
+      setLevels([{ level: 1, approverRole: "Manager" }]);
     } catch (error) {
       console.error("Error saving rule:", error);
       toast.error("Failed to save rule");
@@ -90,7 +91,15 @@ const ApprovalSettings = () => {
     setConditions(
       Array.isArray(rule.condition) ? rule.condition : [rule.condition],
     );
-    setLevels(rule.levels.map((level) => ({ ...level })));
+    setLevels(
+      rule.levels.map((level) => ({
+        ...level,
+        approverRole:
+          level.approverRole === "Direct Manager"
+            ? "Manager"
+            : level.approverRole,
+      })),
+    );
     setShowAddModal(true);
   };
 
@@ -131,7 +140,7 @@ const ApprovalSettings = () => {
     // Reset form
     setModuleType("Advance Requests");
     setConditions(["All Requests"]);
-    setLevels([{ level: 1, approverRole: "Direct Manager" }]);
+    setLevels([{ level: 1, approverRole: "Manager" }]);
   };
 
   return (
@@ -232,9 +241,10 @@ const ApprovalSettings = () => {
                           <div key={idx} className="flex items-center gap-2">
                             <span
                               className="bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium px-2.5 py-1 rounded-full cursor-help whitespace-nowrap"
-                              title={`Level ${level.level}: ${level.approverRole}`}
+                              title={`Level ${level.level}: ${formatApproverRole(level.approverRole)}`}
                             >
-                              {level.level}. {level.approverRole}
+                              {level.level}.{" "}
+                              {formatApproverRole(level.approverRole)}
                             </span>
                             {idx < rule.levels.length - 1 && (
                               <i className="fa-solid fa-arrow-right text-gray-400 text-[10px]"></i>
@@ -384,7 +394,7 @@ const ApprovalSettings = () => {
                         ...levels,
                         {
                           level: levels.length + 1,
-                          approverRole: "Direct Manager",
+                          approverRole: "Manager",
                         },
                       ])
                     }
@@ -418,7 +428,7 @@ const ApprovalSettings = () => {
                           }}
                           className="w-full h-9 px-3 rounded border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500"
                         >
-                          <option value="Direct Manager">Direct Manager</option>
+                          <option value="Manager">Manager</option>
                           <option value="Department Head">
                             Department Head
                           </option>

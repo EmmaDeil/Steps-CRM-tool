@@ -9,6 +9,7 @@ const approvalLevelSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: [
+      "Manager",
       "Direct Manager",
       "Department Head",
       "Finance Manager",

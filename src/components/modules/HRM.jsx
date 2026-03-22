@@ -1101,7 +1101,7 @@ const HRM = () => {
                                     Job Title
                                   </th>
                                   <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                    Reports To (Direct Manager)
+                                    Reports To (Manager)
                                   </th>
                                 </tr>
                               </thead>

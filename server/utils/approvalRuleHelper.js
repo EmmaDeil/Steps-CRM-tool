@@ -77,7 +77,7 @@ function evaluateConditions(conditions, requestData) {
 
 /**
  * Get role-based approver for a request
- * @param {String} approverRole - Role name (e.g., 'Direct Manager', 'Department Head')
+ * @param {String} approverRole - Role name (e.g., 'Manager', 'Department Head')
  * @param {Object} requestData - Request data containing employee info
  * @returns {Object} - Approver info {id, name, email, role}
  */
@@ -120,6 +120,7 @@ async function getApproverByRole(approverRole, requestData) {
     };
 
     switch (approverRole) {
+      case 'Manager':
       case 'Direct Manager':
         // Resolve requester employee then route to their assigned manager.
         {
@@ -136,7 +137,7 @@ async function getApproverByRole(approverRole, requestData) {
                 id: String(manager.userRef || manager._id || manager.employeeId || ''),
                 name: toDisplayName(manager),
                 email: manager.email,
-                role: 'Direct Manager'
+                role: 'Manager'
               };
             }
           }

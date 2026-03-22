@@ -10,6 +10,7 @@
     "seed:clear": "node seed.js --clear",
     "seed:users": "node seed.js --users",
     "test:connection": "node test-connection.js",
+    "migrate:manager-role": "node scripts/migrate-manager-role.js",
     "vercel-build": "echo 'No build step required for Express API'"
   },
   "dependencies": {
