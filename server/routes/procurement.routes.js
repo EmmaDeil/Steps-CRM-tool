@@ -491,7 +491,7 @@ router.post('/material-requests/:id/reject', async (req, res) => {
 // GET Purchase Orders List (with filters and pagination)
 router.get('/purchase-orders', async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, vendor, status } = req.query;
+    const { page = 1, limit = 10, search, vendor, status, dateRange } = req.query;
     const query = {};
 
     // Apply search filter
@@ -505,6 +505,33 @@ router.get('/purchase-orders', async (req, res) => {
     // Apply exact match filters
     if (vendor) query.vendor = vendor;
     if (status && status !== 'all') query.status = status;
+
+    if (dateRange && dateRange !== 'all') {
+      const now = new Date();
+      let startDate = null;
+
+      if (dateRange === 'last7') {
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      } else if (dateRange === 'last30') {
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      } else if (dateRange === 'last90') {
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      } else if (dateRange === 'thisMonth') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+
+      if (startDate) {
+        query.$and = [
+          ...(Array.isArray(query.$and) ? query.$and : []),
+          {
+            $or: [
+              { orderDate: { $gte: startDate } },
+              { createdAt: { $gte: startDate } },
+            ],
+          },
+        ];
+      }
+    }
 
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);

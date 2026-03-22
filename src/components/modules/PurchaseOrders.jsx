@@ -16,6 +16,7 @@ const PurchaseOrders = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedVendor, setSelectedVendor] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
+  const [selectedDateRange, setSelectedDateRange] = useState("all");
   const [activeFilter, setActiveFilter] = useState("all");
   const [selectedPo, setSelectedPo] = useState(null);
   const [loadingPoDetails, setLoadingPoDetails] = useState(false);
@@ -68,6 +69,9 @@ const PurchaseOrders = () => {
 
       if (searchQuery) params.search = searchQuery;
       if (selectedVendor) params.vendor = selectedVendor;
+      if (selectedDateRange && selectedDateRange !== "all") {
+        params.dateRange = selectedDateRange;
+      }
 
       // Map activeFilter to status
       if (activeFilter && activeFilter !== "all") {
@@ -107,6 +111,7 @@ const PurchaseOrders = () => {
     searchQuery,
     selectedVendor,
     selectedStatus,
+    selectedDateRange,
     activeFilter,
   ]);
 
@@ -146,14 +151,16 @@ const PurchaseOrders = () => {
         params: { limit: 1000, status: "Active" }, // Get all active vendors
       });
 
-      // Handle response structure
-      if (response.data && response.data.vendors) {
-        setVendors(response.data.vendors);
-      } else if (Array.isArray(response)) {
-        setVendors(response);
-      } else {
-        setVendors([]);
-      }
+      const payload = response?.data ?? response;
+      const nextVendors = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.vendors)
+          ? payload.vendors
+          : Array.isArray(payload?.data?.vendors)
+            ? payload.data.vendors
+            : [];
+
+      setVendors(nextVendors);
     } catch (err) {
       console.error("Error fetching vendors:", err);
       toast.error("Failed to load vendors");
@@ -1727,13 +1734,27 @@ const PurchaseOrders = () => {
                 {/* Filters Group */}
                 <div className="flex flex-wrap gap-3 flex-1 lg:justify-end">
                   {/* Date Range */}
-                  <div className="relative min-w-[200px] flex-1 lg:flex-none">
-                    <i className="fa-solid fa-calendar absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-[14px]"></i>
-                    <input
-                      type="text"
-                      className="w-full rounded-lg border border-[#dbe0e6] bg-white h-10 pl-10 pr-4 text-sm text-[#111418] placeholder-[#617589] focus:outline-none focus:ring-2 focus:ring-[#137fec]/50 focus:border-[#137fec]"
-                      placeholder="Filter by Date Range"
-                    />
+                  <div className="relative min-w-[180px] flex-1 lg:flex-none">
+                    <select
+                      value={selectedDateRange}
+                      onChange={(e) => {
+                        setSelectedDateRange(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      style={{
+                        appearance: "none",
+                        WebkitAppearance: "none",
+                        MozAppearance: "none",
+                      }}
+                      className="w-full rounded-lg border border-[#dbe0e6] bg-white h-10 pl-3 pr-8 text-sm text-[#111418] focus:outline-none focus:ring-2 focus:ring-[#137fec]/50 focus:border-[#137fec] cursor-pointer"
+                    >
+                      <option value="all">All Dates</option>
+                      <option value="last7">Last 7 days</option>
+                      <option value="last30">Last 30 days</option>
+                      <option value="last90">Last 90 days</option>
+                      <option value="thisMonth">This month</option>
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-[12px]"></i>
                   </div>
 
                   {/* Vendor Filter */}
@@ -1798,6 +1819,7 @@ const PurchaseOrders = () => {
                   onClick={() => {
                     setActiveFilter("all");
                     setSelectedStatus("");
+                    setSelectedDateRange("all");
                     setCurrentPage(1);
                   }}
                   className={`flex h-7 shrink-0 items-center justify-center gap-x-1.5 rounded-full px-3 transition-colors text-xs font-semibold ${

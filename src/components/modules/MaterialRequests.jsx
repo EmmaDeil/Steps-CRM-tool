@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import { useAuth } from "../../context/useAuth";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiService } from "../../services/api";
@@ -401,11 +407,6 @@ const MaterialRequests = () => {
     }
   };
 
-  const filteredRequests =
-    filterStatus === "all"
-      ? requests
-      : requests.filter((req) => req.status === filterStatus);
-
   const resolveApproverDisplay = useCallback(
     (request) => {
       if (!request) return "-";
@@ -472,6 +473,91 @@ const MaterialRequests = () => {
     },
     [userList],
   );
+
+  const filteredRequests = useMemo(() => {
+    const normalizedSearch = String(searchQuery || "")
+      .toLowerCase()
+      .trim();
+    const now = new Date();
+
+    const lowerBound = (() => {
+      if (dateFilter === "last7") {
+        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      }
+      if (dateFilter === "last30") {
+        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+      if (dateFilter === "last90") {
+        return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      }
+      return null;
+    })();
+
+    const filtered = requests.filter((req) => {
+      const requestStatus = String(req.status || "").toLowerCase();
+      if (filterStatus !== "all" && requestStatus !== String(filterStatus)) {
+        return false;
+      }
+
+      if (lowerBound) {
+        const requestDate = new Date(req.date || req.createdAt || Date.now());
+        if (Number.isNaN(requestDate.getTime()) || requestDate < lowerBound) {
+          return false;
+        }
+      }
+
+      if (!normalizedSearch) return true;
+
+      const searchable = [
+        req.requestId,
+        req.requestTitle,
+        req.requestedBy,
+        req.reason,
+        req.department,
+        req.budgetCode,
+        resolveApproverDisplay(req),
+        ...(Array.isArray(req.lineItems)
+          ? req.lineItems.flatMap((item) => [item?.itemName, item?.description])
+          : []),
+      ]
+        .map((value) => String(value || "").toLowerCase())
+        .join(" ");
+
+      return searchable.includes(normalizedSearch);
+    });
+
+    const sorted = [...filtered];
+    if (sortBy === "oldest") {
+      sorted.sort(
+        (a, b) =>
+          new Date(a.date || a.createdAt || 0).getTime() -
+          new Date(b.date || b.createdAt || 0).getTime(),
+      );
+    } else if (sortBy === "requester") {
+      sorted.sort((a, b) =>
+        String(a.requestedBy || "").localeCompare(String(b.requestedBy || "")),
+      );
+    } else if (sortBy === "status") {
+      sorted.sort((a, b) =>
+        String(a.status || "").localeCompare(String(b.status || "")),
+      );
+    } else {
+      sorted.sort(
+        (a, b) =>
+          new Date(b.date || b.createdAt || 0).getTime() -
+          new Date(a.date || a.createdAt || 0).getTime(),
+      );
+    }
+
+    return sorted;
+  }, [
+    requests,
+    searchQuery,
+    filterStatus,
+    dateFilter,
+    sortBy,
+    resolveApproverDisplay,
+  ]);
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -1180,24 +1266,12 @@ const MaterialRequests = () => {
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               <DataTable
                 columns={materialRequestColumns}
-                data={filteredRequests.filter(
-                  (req) =>
-                    searchQuery === "" ||
-                    req.requestId
-                      ?.toLowerCase()
-                      .includes(searchQuery.toLowerCase()) ||
-                    req.requestedBy
-                      ?.toLowerCase()
-                      .includes(searchQuery.toLowerCase()) ||
-                    req.lineItems?.some((item) =>
-                      item.itemName
-                        ?.toLowerCase()
-                        .includes(searchQuery.toLowerCase()),
-                    ),
-                )}
+                data={filteredRequests}
                 isLoading={false}
                 emptyMessage={
-                  searchQuery || filterStatus !== "all"
+                  searchQuery ||
+                  filterStatus !== "all" ||
+                  dateFilter !== "last30"
                     ? "No material requests found. Try adjusting your filters."
                     : "Create a new request to get started."
                 }

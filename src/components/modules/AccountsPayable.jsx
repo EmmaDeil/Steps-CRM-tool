@@ -33,6 +33,9 @@ const AccountsPayable = ({ onBack }) => {
           page: currentPage,
           vendor: filters.vendor || undefined,
           status: filters.status || undefined,
+          dateRange: filters.dateRange || undefined,
+          minAmount: filters.minAmount || undefined,
+          maxAmount: filters.maxAmount || undefined,
           search: searchQuery || undefined,
         },
       });
@@ -260,17 +263,21 @@ const AccountsPayable = ({ onBack }) => {
               </select>
               <i className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 fa-solid fa-chevron-down text-xs text-slate-400"></i>
             </div>
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-md px-2 py-1.5 shadow-sm">
-              <i className="fa-solid fa-calendar-days text-xs text-slate-400"></i>
-              <input
-                className="border-none p-0 text-sm bg-transparent focus:ring-0 w-32 placeholder-slate-400 text-slate-700"
-                placeholder="Due Date Range"
-                type="text"
+            <div className="relative">
+              <select
                 value={filters.dateRange}
                 onChange={(e) =>
                   setFilters({ ...filters, dateRange: e.target.value })
                 }
-              />
+                className="appearance-none bg-white border border-slate-200 hover:border-primary/50 text-slate-700 pl-3 pr-8 py-1.5 rounded-md text-sm focus:ring-1 focus:ring-primary cursor-pointer shadow-sm"
+              >
+                <option value="">All Dates</option>
+                <option value="last7">Last 7 days</option>
+                <option value="last30">Last 30 days</option>
+                <option value="last90">Last 90 days</option>
+                <option value="thisMonth">This month</option>
+              </select>
+              <i className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 fa-solid fa-chevron-down text-xs text-slate-400"></i>
             </div>
             <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-md px-2 py-1.5 shadow-sm">
               <span className="text-xs font-semibold text-slate-400">

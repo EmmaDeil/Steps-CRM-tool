@@ -6994,10 +6994,17 @@ async function start() {
   // Get accounts payable invoices
   app.get('/api/finance/accounts-payable', async (req, res) => {
     try {
-      const { vendor, status, page = 1, search = '' } = req.query;
+      const {
+        vendor,
+        status,
+        page = 1,
+        search = '',
+        dateRange,
+        minAmount,
+        maxAmount,
+      } = req.query;
       const pageNum = Math.max(parseInt(page, 10) || 1, 1);
       const limit = 20;
-      const skip = (pageNum - 1) * limit;
 
       const query = {
         status: { $in: ['payment_pending', 'partly_paid', 'paid'] },
@@ -7025,17 +7032,40 @@ async function start() {
         ];
       }
 
-      const [rows, total] = await Promise.all([
-        PurchaseOrderModel.find(query)
-          .populate('linkedMaterialRequestId', 'department requestId requestTitle')
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(limit)
-          .lean(),
-        PurchaseOrderModel.countDocuments(query),
-      ]);
+      if (dateRange && dateRange !== 'all') {
+        const now = new Date();
+        let startDate = null;
 
-      const invoices = rows.map((po) => {
+        if (dateRange === 'last7') {
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        } else if (dateRange === 'last30') {
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        } else if (dateRange === 'last90') {
+          startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        } else if (dateRange === 'thisMonth') {
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        }
+
+        if (startDate) {
+          query.$and = [
+            ...(Array.isArray(query.$and) ? query.$and : []),
+            {
+              $or: [
+                { orderDate: { $gte: startDate } },
+                { createdAt: { $gte: startDate } },
+              ],
+            },
+          ];
+        }
+      }
+
+      const rows = await PurchaseOrderModel.find(query)
+        .populate('linkedMaterialRequestId', 'department requestId requestTitle')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      const invoices = rows
+        .map((po) => {
         const baseAmount = Number(po.totalAmount || 0);
         const taxRate = Number(po.apTaxRate ?? 0);
         const taxAmount = Number(po.apTaxAmount ?? ((baseAmount * taxRate) / 100)) || 0;
@@ -7078,14 +7108,31 @@ async function start() {
         status: uiStatus,
         department: po?.linkedMaterialRequestId?.department || 'General',
       };
-      });
+
+      })
+        .filter((invoice) => {
+          const min = Number(minAmount);
+          const max = Number(maxAmount);
+          const hasMin = Number.isFinite(min);
+          const hasMax = Number.isFinite(max);
+
+          if (hasMin && invoice.amount < min) return false;
+          if (hasMax && invoice.amount > max) return false;
+          return true;
+        });
+
+      const total = invoices.length;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const safePage = Math.min(pageNum, totalPages);
+      const skip = (safePage - 1) * limit;
+      const pagedInvoices = invoices.slice(skip, skip + limit);
 
       res.json({
         success: true,
         data: {
-          invoices,
-          totalPages: Math.ceil(total / limit),
-          currentPage: pageNum,
+          invoices: pagedInvoices,
+          totalPages,
+          currentPage: safePage,
           total,
         },
       });
