@@ -2427,11 +2427,38 @@ async function start() {
 
   app.post('/api/retirement-breakdown', async (req, res) => {
     try {
-      const newBreakdown = await RetirementBreakdownModel.create(req.body);
+      const payload = {
+        ...req.body,
+        userId: String(req.body?.userId || '').trim(),
+        employeeName: String(req.body?.employeeName || '').trim(),
+      };
+
+      if (!payload.userId) {
+        return res.status(400).json({
+          success: false,
+          error: 'userId is required',
+        });
+      }
+
+      if (!payload.employeeName) {
+        return res.status(400).json({
+          success: false,
+          error: 'employeeName is required',
+        });
+      }
+
+      const newBreakdown = await RetirementBreakdownModel.create(payload);
       res.status(201).json({ message: 'Breakdown saved successfully', data: newBreakdown });
     } catch (err) {
       console.error('Error creating retirement breakdown:', err);
-      res.status(500).json({ message: 'Failed to save breakdown' });
+      if (err?.name === 'ValidationError') {
+        return res.status(400).json({
+          success: false,
+          error: err.message,
+        });
+      }
+
+      res.status(500).json({ success: false, message: 'Failed to save breakdown' });
     }
   });
 
