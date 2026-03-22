@@ -1231,6 +1231,14 @@ async function start() {
 
       const mentions = (text.match(/@(\w+\s?\w*)/g) || []).map(m => m.substring(1).trim());
 
+      request.comments.push({
+        author,
+        authorId,
+        text,
+        timestamp: new Date(),
+        mentions,
+      });
+
       request.activities.push({
         type: 'comment',
         author,
@@ -2121,10 +2129,6 @@ async function start() {
         requestData.approvalChain = approvalInfo.approvalChain;
         requestData.currentApprovalLevel = 1;
         requestData.status = 'pending';
-        
-        // Get first approver from chain
-        const firstApprover = approvalInfo.approvalChain[0];
-        requestData.approver = firstApprover.approverName;
       }
       
       const newRequest = await MaterialRequestModel.create(requestData);

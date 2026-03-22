@@ -409,9 +409,6 @@ const MaterialRequests = () => {
   const resolveApproverDisplay = useCallback((request) => {
     if (!request) return "-";
 
-    const directApprover = String(request.approver || "").trim();
-    if (directApprover) return directApprover;
-
     const pendingApprover = request.approvalChain?.find(
       (entry) => entry?.status === "pending",
     )?.approverName;
@@ -421,6 +418,9 @@ const MaterialRequests = () => {
       (entry) => entry?.approverName,
     )?.approverName;
     if (firstChainApprover) return firstChainApprover;
+
+    const directApprover = String(request.approver || "").trim();
+    if (directApprover) return directApprover;
 
     return "-";
   }, []);
@@ -512,6 +512,7 @@ const MaterialRequests = () => {
     try {
       const requestData = {
         ...formData,
+        department: formData.department || user?.department || "",
         currency: selectedCurrency,
         exchangeRate: isForeignCurrency ? String(exchangeRateToNgn) : "",
         exchangeRateToNgn: effectiveRateToNgn,
@@ -2526,6 +2527,22 @@ const MaterialRequests = () => {
                       </div>
                       <div className="flex flex-col gap-1">
                         <p className="text-[#617589] text-sm">
+                          Selected Approver
+                        </p>
+                        <p className="text-[#111418] text-base font-medium">
+                          {selectedRequest.approver || "Not specified"}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <p className="text-[#617589] text-sm">
+                          Current Approver
+                        </p>
+                        <p className="text-[#111418] text-base font-medium">
+                          {resolveApproverDisplay(selectedRequest)}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <p className="text-[#617589] text-sm">
                           Required By Date
                         </p>
                         <p className="text-[#111418] text-base font-medium">
@@ -2822,8 +2839,12 @@ const MaterialRequests = () => {
                               ]
                             : [];
 
+                        const nonCommentActivities = activities.filter(
+                          (entry) => entry.type !== "comment",
+                        );
+
                         const combined = [
-                          ...activities,
+                          ...nonCommentActivities,
                           ...comments,
                           ...initialCommentEntry,
                         ].sort((a, b) => a._time - b._time);
