@@ -421,7 +421,8 @@ const EmployeeProfile = ({
       setValidationErrors({});
 
       const payload = {
-        name: editingEmployee.name,
+        firstName: editingEmployee.firstName,
+        lastName: editingEmployee.lastName,
         email: editingEmployee.email,
         phone: editingEmployee.phone || "",
         dateOfBirth: editingEmployee.dateOfBirth || "",
@@ -435,6 +436,7 @@ const EmployeeProfile = ({
         Object.assign(payload, {
           department: editingEmployee.department || "",
           jobTitle: editingEmployee.jobTitle || "",
+          role: editingEmployee.role || "Employee",
           status: editingEmployee.status || "Active",
           salary: editingEmployee.salary || 0,
           paySchedule: editingEmployee.paySchedule || "",
@@ -568,17 +570,32 @@ const EmployeeProfile = ({
                 <div className="flex flex-col justify-center flex-1">
                   {isEditing ? (
                     <>
-                      <input
-                        type="text"
-                        value={editingEmployee?.name || ""}
-                        onChange={(e) =>
-                          setEditingEmployee({
-                            ...editingEmployee,
-                            name: e.target.value,
-                          })
-                        }
-                        className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded"
-                      />
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          type="text"
+                          placeholder="First Name"
+                          value={editingEmployee?.firstName || ""}
+                          onChange={(e) =>
+                            setEditingEmployee({
+                              ...editingEmployee,
+                              firstName: e.target.value,
+                            })
+                          }
+                          className="w-full text-2xl md:text-3xl font-bold text-gray-900 dark:text-white px-2 py-1 border border-gray-300 dark:border-gray-600 rounded input-focus"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Last Name"
+                          value={editingEmployee?.lastName || ""}
+                          onChange={(e) =>
+                            setEditingEmployee({
+                              ...editingEmployee,
+                              lastName: e.target.value,
+                            })
+                          }
+                          className="w-full text-2xl md:text-3xl font-bold text-gray-900 dark:text-white px-2 py-1 border border-gray-300 dark:border-gray-600 rounded input-focus"
+                        />
+                      </div>
                       {isHR && (
                         <input
                           type="text"
@@ -596,7 +613,7 @@ const EmployeeProfile = ({
                   ) : (
                     <>
                       <h1 className="text-gray-900 dark:text-white text-2xl md:text-3xl font-bold">
-                        {employee?.name}
+                        {`${employee?.firstName || ""} ${employee?.lastName || ""}`.trim() || "Unnamed Employee"}
                       </h1>
                       <p className="text-gray-500 dark:text-gray-400 text-base">
                         {employee?.jobTitle}
@@ -1715,6 +1732,34 @@ const EmployeeProfile = ({
                   </div>
 
                   <div className="space-y-4">
+                    <div>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
+                        System Role
+                      </p>
+                      {isEditing && isHR ? (
+                        <select
+                          name="role"
+                          value={editingEmployee?.role || "Employee"}
+                          onChange={(e) =>
+                            setEditingEmployee({
+                              ...editingEmployee,
+                              role: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white"
+                        >
+                          <option value="Employee">Employee</option>
+                          <option value="HR">HR</option>
+                          <option value="Manager">Manager</option>
+                          <option value="Admin">Admin</option>
+                        </select>
+                      ) : (
+                        <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
+                          {employee?.role || "Employee"}
+                        </p>
+                      )}
+                    </div>
+
                     <div>
                       <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
                         Job Title

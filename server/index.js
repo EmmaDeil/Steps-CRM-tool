@@ -5243,7 +5243,9 @@ async function start() {
     try {
       const { id } = req.params;
       const {
-        name,
+        firstName,
+        lastName,
+        role,
         email,
         phone,
         dateOfBirth,
@@ -5300,16 +5302,16 @@ async function start() {
 
       if (!oldEmployee && linkedUser) {
         const userUpdateData = {};
-        if (name !== undefined) {
-          const nameParts = String(name).trim().split(/\s+/);
-          userUpdateData.firstName = nameParts[0] || linkedUser.firstName || 'User';
-          userUpdateData.lastName = nameParts.slice(1).join(' ') || linkedUser.lastName || '';
-          userUpdateData.fullName = String(name).trim();
+        if (firstName !== undefined || lastName !== undefined) {
+          userUpdateData.firstName = firstName || linkedUser.firstName || 'User';
+          userUpdateData.lastName = lastName || linkedUser.lastName || '';
+          userUpdateData.fullName = `${userUpdateData.firstName} ${userUpdateData.lastName}`.trim();
         }
         if (email !== undefined) userUpdateData.email = email.toLowerCase();
         if (phone !== undefined) userUpdateData.phoneNumber = phone || null;
         if (department !== undefined) userUpdateData.department = department || null;
         if (jobTitle !== undefined) userUpdateData.jobTitle = jobTitle || null;
+        if (role !== undefined) userUpdateData.role = role || null;
         if (avatar !== undefined && avatar) {
           try {
             const allowedTypes = /^image\/(jpeg|jpg|png|gif|webp)$/;
@@ -5374,9 +5376,13 @@ async function start() {
       const changes = [];
       
       // Always allow these fields to be updated
-      if (name !== undefined && name !== oldEmployee.name) {
-        updateData.name = name;
-        changes.push({ field: 'name', oldValue: oldEmployee.name, newValue: name });
+      if (firstName !== undefined && firstName !== oldEmployee.firstName) {
+        updateData.firstName = firstName;
+        changes.push({ field: 'firstName', oldValue: oldEmployee.firstName, newValue: firstName });
+      }
+      if (lastName !== undefined && lastName !== oldEmployee.lastName) {
+        updateData.lastName = lastName;
+        changes.push({ field: 'lastName', oldValue: oldEmployee.lastName, newValue: lastName });
       }
       if (email !== undefined && email.toLowerCase() !== oldEmployee.email) {
         updateData.email = email.toLowerCase();
@@ -5426,6 +5432,10 @@ async function start() {
       if (jobTitle !== undefined && jobTitle !== oldEmployee.jobTitle) {
         updateData.jobTitle = jobTitle;
         changes.push({ field: 'jobTitle', oldValue: oldEmployee.jobTitle, newValue: jobTitle });
+      }
+      if (role !== undefined && role !== oldEmployee.role) {
+        updateData.role = role;
+        changes.push({ field: 'role', oldValue: oldEmployee.role, newValue: role });
       }
       if (status !== undefined && status !== oldEmployee.status) {
         updateData.status = status;
@@ -5534,12 +5544,12 @@ async function start() {
       try {
         if (employee.userRef) {
           const syncData = {};
-          if (name !== undefined) {
-            const nameParts = name.split(' ');
-            syncData.firstName = nameParts[0];
-            syncData.lastName = nameParts.slice(1).join(' ') || '';
-            syncData.fullName = name;
+          if (firstName !== undefined || lastName !== undefined) {
+            if (firstName !== undefined) syncData.firstName = firstName;
+            if (lastName !== undefined) syncData.lastName = lastName;
+            syncData.fullName = `${syncData.firstName || employee.firstName || ''} ${syncData.lastName || employee.lastName || ''}`.trim();
           }
+          if (role !== undefined) syncData.role = role;
           if (email !== undefined) syncData.email = email.toLowerCase();
           if (department !== undefined) syncData.department = department;
           if (jobTitle !== undefined) syncData.jobTitle = jobTitle;
@@ -5557,6 +5567,8 @@ async function start() {
         id: employee._id.toString(),
         _id: employee._id,
         name: employee.name,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
         email: employee.email,
         phone: employee.phone || '',
         dateOfBirth: employee.dateOfBirth,
