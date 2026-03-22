@@ -227,59 +227,61 @@ const DocSignRequest = ({ onBack }) => {
 
     setSending(true);
     try {
-      // Upload file first if not already uploaded
-      const formData = new FormData();
-      formData.append("file", uploadedFile);
+      // Convert file to base64 for MongoDB storage
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const fileDataURL = reader.result; // Base64 encoded data URL
 
-      // Here you would upload to your server
-      // For now, we'll use a placeholder URL
-      const uploadedFileURL = `/uploads/documents/${Date.now()}_${
-        uploadedFile.name
-      }`;
+        // Create document with recipients and placed fields
+        const documentData = {
+          name: fileName,
+          fileURL: fileDataURL, // Store base64 encoded file in MongoDB
+          uploadedBy: user?.email || user?.userId,
+          uploadedByName: user?.name || user?.fullName || "Unknown",
+          status: "Pending",
+          recipients: validRecipients.map((r) => ({
+            id: r.id,
+            name: r.name,
+            email: r.email,
+            role: "signer",
+            status: "pending",
+          })),
+          signatures: [],
+          fields: placedFields.map((field) => ({
+            id: field.id,
+            type: field.type,
+            label: field.label,
+            page: field.page,
+            position: field.position,
+            size: field.size,
+            required: field.required,
+            assignedTo: field.assignedTo,
+          })),
+          dueDate: expirationDate || null,
+          metadata: {
+            subject,
+            message,
+            signingMode,
+            reminderFrequency,
+            customBranding,
+          },
+        };
 
-      // Create document with recipients and placed fields
-      const documentData = {
-        name: fileName,
-        fileURL: uploadedFileURL,
-        uploadedBy: user?.email || user?.userId,
-        uploadedByName: user?.name || user?.fullName || "Unknown",
-        status: "Pending",
-        recipients: validRecipients.map((r) => ({
-          id: r.id,
-          name: r.name,
-          email: r.email,
-          role: "signer",
-          status: "pending",
-        })),
-        signatures: [],
-        fields: placedFields.map((field) => ({
-          id: field.id,
-          type: field.type,
-          label: field.label,
-          page: field.page,
-          position: field.position,
-          size: field.size,
-          required: field.required,
-          assignedTo: field.assignedTo,
-        })),
-        dueDate: expirationDate || null,
-        metadata: {
-          subject,
-          message,
-          signingMode,
-          reminderFrequency,
-          customBranding,
-        },
+        try {
+          await apiService.documents.create(documentData);
+
+          toast.success("Signature request sent successfully!");
+          if (onBack) {
+            onBack();
+          } else {
+            navigate("/home/9");
+          }
+        } catch (error) {
+          console.error("Error creating document:", error);
+          toast.error("Failed to send signature request");
+        }
       };
-
-      await apiService.documents.create(documentData);
-
-      toast.success("Signature request sent successfully!");
-      if (onBack) {
-        onBack();
-      } else {
-        navigate("/home/9");
-      }
+      reader.readAsDataURL(uploadedFile);
     } catch (error) {
       console.error("Error sending request:", error);
       toast.error("Failed to send signature request");

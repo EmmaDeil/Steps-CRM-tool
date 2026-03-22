@@ -576,7 +576,7 @@ Backend:
 - Node.js and Express
 - MongoDB with Mongoose
 - JWT auth middleware
-- Multer for uploads
+- Base64 encoded file storage in MongoDB
 
 ## Project Structure
 
@@ -590,7 +590,6 @@ StepsProject/
       models/
       routes/
       utils/
-      uploads/
    src/
       App.jsx
       main.jsx
@@ -612,7 +611,7 @@ StepsProject/
 
 ```text
                            ┌──────────────────────┐
-                           │      StepsProject    │
+                           │      NetlinkProject    │
                            └──────────┬───────────┘
                                       │
           ┌───────────────────────────┼────────────────────────────┐
@@ -627,7 +626,7 @@ StepsProject/
    │      │                │   │      │                │    │      │              │
    ↓      ↓                ↓   ↓      ↓                ↓    ↓      ↓              ↓
 components/ context/    services/   routes/ models/  middleware/ package.json README.md vite.config.js
-   │                    home/ utils/ utils/ uploads/  index.js
+   │                    home/ utils/ utils/  index.js
    │
    ├─ auth/
    ├─ common/

@@ -18,19 +18,6 @@ import { useCurrency } from "../../context/useCurrency";
 import DataTable from "../common/DataTable";
 import ModuleLoader from "../common/ModuleLoader";
 
-const DEFAULT_REQUEST_TYPES = [
-  "Internal Transfer",
-  "RFQ",
-  "Purchase Request",
-  "Emergency Purchase",
-  "Stock Replenishment",
-  "Service Request",
-  "IT Equipment Request",
-  "Maintenance Supplies",
-  "Office Supplies",
-  "Capital Expenditure",
-];
-
 const MaterialRequests = () => {
   const { user } = useAuth();
   const location = useLocation();
@@ -53,9 +40,7 @@ const MaterialRequests = () => {
   const [currencyLoading, setCurrencyLoading] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [requestTypeOptions, setRequestTypeOptions] = useState(
-    DEFAULT_REQUEST_TYPES,
-  );
+  const [requestTypeOptions, setRequestTypeOptions] = useState([]);
   const [showRequestTypeModal, setShowRequestTypeModal] = useState(false);
   const [newRequestType, setNewRequestType] = useState("");
   const [savingRequestTypes, setSavingRequestTypes] = useState(false);
@@ -256,14 +241,9 @@ const MaterialRequests = () => {
             : Array.isArray(response?.data)
               ? response.data
               : [];
-
-      if (rows.length > 0) {
-        setRequestTypeOptions(rows);
-      } else {
-        setRequestTypeOptions(DEFAULT_REQUEST_TYPES);
-      }
+      setRequestTypeOptions(rows);
     } catch {
-      setRequestTypeOptions(DEFAULT_REQUEST_TYPES);
+      setRequestTypeOptions([]);
     }
   }, []);
 
@@ -1411,7 +1391,7 @@ const MaterialRequests = () => {
             <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
               <div className="flex flex-wrap items-center gap-3">
                 {/* Search Input */}
-                <div className="flex-1 min-w-[280px]">
+                <div className="flex-1 min-w-[200px]">
                   <div className="relative">
                     <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#617589]"></i>
                     <input
@@ -1486,7 +1466,7 @@ const MaterialRequests = () => {
                     className="px-3 py-2 text-[#617589] hover:text-[#111418] hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2 text-sm"
                   >
                     <i className="fa-solid fa-filter-circle-xmark"></i>
-                    Clear filters
+                    {/* Clear filters */}
                   </button>
                 )}
               </div>

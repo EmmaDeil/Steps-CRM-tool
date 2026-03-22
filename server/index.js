@@ -7874,21 +7874,13 @@ async function start() {
         color: 'green'
       });
 
-      // Check file storage (async)
-      const uploadsDir = path.join(__dirname, 'uploads');
-      let storageStatus = 'offline';
-      try {
-        await fs.promises.access(uploadsDir);
-        storageStatus = 'online';
-      } catch (err) {
-        console.log('Storage directory not accessible:', err.message);
-      }
+      // MongoDB storage is used for all uploads (base64 encoded files)
       services.push({
         id: 3,
         name: 'Storage Service',
-        status: storageStatus,
-        uptime: storageStatus === 'online' ? '100%' : '0%',
-        color: storageStatus === 'online' ? 'green' : 'red'
+        status: 'online', // MongoDB is always online when DB connection is active
+        uptime: '100%',
+        color: 'green'
       });
 
       // Email service status (check if email config exists)
