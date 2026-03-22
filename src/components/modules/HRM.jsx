@@ -119,7 +119,7 @@ const HRM = () => {
   const [organogramEmployees, setOrganogramEmployees] = useState([]);
   const [organogramLoading, setOrganogramLoading] = useState(false);
   const [organogramSaving, setOrganogramSaving] = useState(false);
-  const [managerDrafts, setManagerDrafts] = useState({});
+  const [departmentManagerDrafts, setDepartmentManagerDrafts] = useState({});
   const [departmentHeadDrafts, setDepartmentHeadDrafts] = useState({});
 
   // Leave allocations state
@@ -422,13 +422,40 @@ const HRM = () => {
         String(a.name || "").localeCompare(String(b.name || "")),
       );
 
+      const getDepartmentKey = (department) => {
+        const deptName = String(department || "Unassigned").trim();
+        return `name:${deptName.toLowerCase()}`;
+      };
+
+      const managerDraftMap = {};
+      const allDepartmentNames = new Set([
+        ...(departments || []).map((department) => department?.name || ""),
+        ...sortedEmployees.map(
+          (employee) => employee.department || "Unassigned",
+        ),
+      ]);
+
+      allDepartmentNames.forEach((departmentName) => {
+        const key = getDepartmentKey(departmentName || "Unassigned");
+        const managerIds = [
+          ...new Set(
+            sortedEmployees
+              .filter(
+                (employee) =>
+                  String(employee.department || "Unassigned") ===
+                  String(departmentName || "Unassigned"),
+              )
+              .map((employee) => String(employee.managerId || "").trim())
+              .filter(Boolean),
+          ),
+        ];
+
+        // If a department already has mixed managers, require explicit selection.
+        managerDraftMap[key] = managerIds.length === 1 ? managerIds[0] : "";
+      });
+
       setOrganogramEmployees(sortedEmployees);
-      setManagerDrafts(
-        sortedEmployees.reduce((acc, employee) => {
-          acc[employee.id] = employee.managerId || "";
-          return acc;
-        }, {}),
-      );
+      setDepartmentManagerDrafts(managerDraftMap);
       setDepartmentHeadDrafts(
         (departments || []).reduce((acc, department) => {
           if (department?._id) {
@@ -449,10 +476,30 @@ const HRM = () => {
     const actingUserId =
       user?.id || user?._id || user?.userId || user?.sub || "system";
 
-    const managerUpdates = organogramEmployees.filter(
-      (employee) =>
-        (managerDrafts[employee.id] || "") !== (employee.managerId || ""),
-    );
+    const getDepartmentKey = (departmentName) => {
+      const deptName = String(departmentName || "Unassigned").trim();
+      return `name:${deptName.toLowerCase()}`;
+    };
+
+    const managerUpdates = [];
+    organogramDepartments.forEach((departmentBucket) => {
+      const selectedManagerId =
+        departmentManagerDrafts[getDepartmentKey(departmentBucket.name)] || "";
+      const selectedManager = organogramEmployees.find(
+        (candidate) => candidate.id === selectedManagerId,
+      );
+
+      departmentBucket.employees.forEach((employee) => {
+        if ((employee.managerId || "") !== selectedManagerId) {
+          managerUpdates.push({
+            id: employee.id,
+            managerId: selectedManagerId,
+            managerName: selectedManager?.name || "",
+          });
+        }
+      });
+    });
+
     const departmentHeadUpdates = (departments || []).filter((department) => {
       if (!department?._id) return false;
       return (
@@ -468,15 +515,10 @@ const HRM = () => {
 
     setOrganogramSaving(true);
     try {
-      for (const employee of managerUpdates) {
-        const selectedManagerId = managerDrafts[employee.id] || "";
-        const selectedManager = organogramEmployees.find(
-          (candidate) => candidate.id === selectedManagerId,
-        );
-
-        await apiService.put(`/api/hr/employees/${employee.id}`, {
-          managerId: selectedManagerId,
-          managerName: selectedManager?.name || "",
+      for (const update of managerUpdates) {
+        await apiService.put(`/api/hr/employees/${update.id}`, {
+          managerId: update.managerId,
+          managerName: update.managerName,
           updatedBy: actingUserId,
         });
       }
@@ -977,8 +1019,25 @@ const HRM = () => {
   }
 
   if (showOrganogramPage) {
+    const getDepartmentKey = (departmentName) => {
+      const deptName = String(departmentName || "Unassigned").trim();
+      return `name:${deptName.toLowerCase()}`;
+    };
+
+    const departmentsWithManager = organogramDepartments.filter(
+      (departmentBucket) =>
+        !!departmentManagerDrafts[getDepartmentKey(departmentBucket.name)],
+    ).length;
+
+    const departmentsWithHead = organogramDepartments.filter(
+      (departmentBucket) => {
+        if (!departmentBucket.department?._id) return false;
+        return !!departmentHeadDrafts[departmentBucket.department._id];
+      },
+    ).length;
+
     return (
-      <div className="w-full min-h-screen bg-gray-50 px-1">
+      <div className="w-full min-h-screen bg-[radial-gradient(circle_at_top_right,_#dbeafe,_#f8fafc_40%,_#eef2ff)] px-1">
         <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
           <div className="flex h-full grow flex-col w-full">
             <Breadcrumb
@@ -993,48 +1052,93 @@ const HRM = () => {
               ]}
             />
 
-            <div className="p-2 space-y-4">
-              <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <i className="fa-solid fa-sitemap text-primary"></i>
-                    Organogram Configuration
-                  </h2>
-                  <p className="text-sm text-slate-500 mt-1">
-                    Configure department heads and direct reporting lines used
-                    by approval flow roles.
-                  </p>
+            <div className="p-2 space-y-5">
+              <div className="rounded-2xl border border-blue-100 bg-white/90 backdrop-blur shadow-[0_10px_30px_rgba(15,23,42,0.08)] p-5 md:p-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div className="space-y-2">
+                    <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 text-xs font-bold uppercase tracking-wide">
+                      <i className="fa-solid fa-sitemap"></i>
+                      Organization Map
+                    </span>
+                    <h2 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">
+                      Organogram Configuration
+                    </h2>
+                    <p className="text-sm md:text-base text-slate-600 max-w-3xl">
+                      Set one department manager per department and optionally
+                      assign department heads. Every employee in a department
+                      reports to the selected department manager.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                    <button
+                      onClick={loadOrganogramData}
+                      disabled={organogramLoading || organogramSaving}
+                      className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      <i className="fa-solid fa-rotate-right mr-2"></i>
+                      Refresh
+                    </button>
+                    <button
+                      onClick={saveOrganogramChanges}
+                      disabled={organogramLoading || organogramSaving}
+                      className="px-3.5 py-2 rounded-lg bg-[#137fec] hover:bg-blue-700 text-white text-sm font-semibold shadow-sm disabled:opacity-50"
+                    >
+                      <i className="fa-solid fa-floppy-disk mr-2"></i>
+                      {organogramSaving ? "Saving..." : "Save Changes"}
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={loadOrganogramData}
-                    disabled={organogramLoading || organogramSaving}
-                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-semibold text-slate-700 dark:text-slate-200 disabled:opacity-50"
-                  >
-                    Refresh
-                  </button>
-                  <button
-                    onClick={saveOrganogramChanges}
-                    disabled={organogramLoading || organogramSaving}
-                    className="px-3 py-2 rounded-lg bg-primary hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-50"
-                  >
-                    {organogramSaving ? "Saving..." : "Save Changes"}
-                  </button>
+
+                <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Departments
+                    </p>
+                    <p className="text-xl font-black text-slate-900 mt-1">
+                      {organogramDepartments.length}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Managers Assigned
+                    </p>
+                    <p className="text-xl font-black text-slate-900 mt-1">
+                      {departmentsWithManager}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Heads Assigned
+                    </p>
+                    <p className="text-xl font-black text-slate-900 mt-1">
+                      {departmentsWithHead}
+                    </p>
+                  </div>
                 </div>
               </div>
 
               {organogramLoading ? (
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 text-sm text-slate-500">
+                <div className="rounded-2xl border border-slate-200 bg-white p-10 text-sm text-slate-500 flex items-center justify-center gap-2">
+                  <i className="fa-solid fa-spinner fa-spin"></i>
                   Loading organogram...
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                   {organogramDepartments.map((departmentBucket) => {
                     const selectedDepartmentHead = departmentBucket.department
                       ?._id
                       ? departmentHeadDrafts[departmentBucket.department._id] ||
                         ""
                       : "";
+                    const selectedDepartmentManager =
+                      departmentManagerDrafts[
+                        getDepartmentKey(departmentBucket.name)
+                      ] || "";
+                    const selectedDepartmentManagerName =
+                      organogramEmployees.find(
+                        (employee) => employee.id === selectedDepartmentManager,
+                      )?.name || "";
 
                     return (
                       <div
@@ -1042,114 +1146,123 @@ const HRM = () => {
                           departmentBucket.department?._id ||
                           departmentBucket.name
                         }
-                        className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden"
+                        className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
                       >
-                        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                          <div>
-                            <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                              {departmentBucket.name}
-                            </h3>
-                            <p className="text-xs text-slate-500">
-                              {departmentBucket.employees.length} employees
-                            </p>
+                        <div className="px-4 py-4 border-b border-slate-100 flex flex-col gap-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h3 className="text-lg font-bold text-slate-900">
+                                <i className="fa-solid fa-building mr-2 text-blue-500"></i>
+                                {departmentBucket.name}
+                              </h3>
+                              <p className="text-xs text-slate-500 mt-1">
+                                {departmentBucket.employees.length} team members
+                              </p>
+                            </div>
+                            {!selectedDepartmentManager && (
+                              <span className="text-[11px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2 py-1">
+                                Manager not set
+                              </span>
+                            )}
                           </div>
 
-                          {departmentBucket.department?._id ? (
-                            <div className="flex items-center gap-2">
-                              <label className="text-xs font-semibold text-slate-500">
-                                Department Head
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                Department Manager
                               </label>
                               <select
-                                value={selectedDepartmentHead}
+                                value={selectedDepartmentManager}
                                 onChange={(event) =>
-                                  setDepartmentHeadDrafts((prev) => ({
+                                  setDepartmentManagerDrafts((prev) => ({
                                     ...prev,
-                                    [departmentBucket.department._id]:
+                                    [getDepartmentKey(departmentBucket.name)]:
                                       event.target.value,
                                   }))
                                 }
-                                className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white"
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900"
                               >
-                                <option value="">Not set</option>
-                                {departmentBucket.employees.map((employee) => (
+                                <option value="">No manager</option>
+                                {organogramEmployees.map((employee) => (
                                   <option key={employee.id} value={employee.id}>
                                     {employee.name}
+                                    {employee.department
+                                      ? ` (${employee.department})`
+                                      : ""}
                                   </option>
                                 ))}
                               </select>
                             </div>
-                          ) : (
-                            <span className="text-xs text-amber-600 font-semibold">
-                              Create this department to store head assignment
-                            </span>
-                          )}
+
+                            {departmentBucket.department?._id ? (
+                              <div className="space-y-1">
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                  Department Head
+                                </label>
+                                <select
+                                  value={selectedDepartmentHead}
+                                  onChange={(event) =>
+                                    setDepartmentHeadDrafts((prev) => ({
+                                      ...prev,
+                                      [departmentBucket.department._id]:
+                                        event.target.value,
+                                    }))
+                                  }
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-900"
+                                >
+                                  <option value="">Not set</option>
+                                  {departmentBucket.employees.map(
+                                    (employee) => (
+                                      <option
+                                        key={employee.id}
+                                        value={employee.id}
+                                      >
+                                        {employee.name}
+                                      </option>
+                                    ),
+                                  )}
+                                </select>
+                              </div>
+                            ) : (
+                              <div className="md:col-span-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 font-semibold">
+                                Create this department to store head assignment
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {departmentBucket.employees.length === 0 ? (
-                          <div className="px-4 py-4 text-sm text-slate-500">
+                          <div className="px-4 py-6 text-sm text-slate-500">
                             No employees in this department.
                           </div>
                         ) : (
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                              <thead className="bg-slate-50 dark:bg-slate-900/30 border-b border-slate-100 dark:border-slate-700">
-                                <tr>
-                                  <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                    Employee
-                                  </th>
-                                  <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                    Job Title
-                                  </th>
-                                  <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                    Reports To (Manager)
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {departmentBucket.employees.map((employee) => (
-                                  <tr key={employee.id}>
-                                    <td className="px-4 py-2.5 text-slate-900 dark:text-white font-medium">
+                          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-slate-50/60">
+                            {departmentBucket.employees.map((employee) => (
+                              <div
+                                key={employee.id}
+                                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-900">
                                       {employee.name}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-0.5">
                                       {employee.jobTitle ||
                                         employee.role ||
                                         "Employee"}
-                                    </td>
-                                    <td className="px-4 py-2.5">
-                                      <select
-                                        value={managerDrafts[employee.id] || ""}
-                                        onChange={(event) =>
-                                          setManagerDrafts((prev) => ({
-                                            ...prev,
-                                            [employee.id]: event.target.value,
-                                          }))
-                                        }
-                                        className="w-full max-w-xs px-2.5 py-1.5 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white"
-                                      >
-                                        <option value="">No manager</option>
-                                        {organogramEmployees
-                                          .filter(
-                                            (candidate) =>
-                                              candidate.id !== employee.id,
-                                          )
-                                          .map((candidate) => (
-                                            <option
-                                              key={candidate.id}
-                                              value={candidate.id}
-                                            >
-                                              {candidate.name}
-                                              {candidate.department
-                                                ? ` (${candidate.department})`
-                                                : ""}
-                                            </option>
-                                          ))}
-                                      </select>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                    </p>
+                                  </div>
+                                  <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-semibold">
+                                    Reports To
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-600 mt-2">
+                                  {selectedDepartmentManagerName ||
+                                    "No manager assigned"}
+                                </p>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
