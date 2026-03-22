@@ -18,13 +18,26 @@ import { useCurrency } from "../../context/useCurrency";
 import DataTable from "../common/DataTable";
 import ModuleLoader from "../common/ModuleLoader";
 
+const DEFAULT_REQUEST_TYPES = [
+  "Internal Transfer",
+  "RFQ",
+  "Purchase Request",
+  "Emergency Purchase",
+  "Stock Replenishment",
+  "Service Request",
+  "IT Equipment Request",
+  "Maintenance Supplies",
+  "Office Supplies",
+  "Capital Expenditure",
+];
+
 const MaterialRequests = () => {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [_error, setError] = useState(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState("last30");
@@ -40,6 +53,17 @@ const MaterialRequests = () => {
   const [currencyLoading, setCurrencyLoading] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [requestTypeOptions, setRequestTypeOptions] = useState(
+    DEFAULT_REQUEST_TYPES,
+  );
+  const [showRequestTypeModal, setShowRequestTypeModal] = useState(false);
+  const [newRequestType, setNewRequestType] = useState("");
+  const [savingRequestTypes, setSavingRequestTypes] = useState(false);
+  const [showRfqModal, setShowRfqModal] = useState(false);
+  const [vendors, setVendors] = useState([]);
+  const [selectedRfqVendorIds, setSelectedRfqVendorIds] = useState([]);
+  const [sendingRfq, setSendingRfq] = useState(false);
+  const [creatingPo, setCreatingPo] = useState(false);
 
   // Form state
   const { currency: appCurrency } = useCurrency();
@@ -96,6 +120,7 @@ const MaterialRequests = () => {
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
   const viewCommentRef = useRef(null);
+  const backendRetryTimerRef = useRef(null);
 
   const quantityTypeOptions = [
     "Pieces",
@@ -113,6 +138,11 @@ const MaterialRequests = () => {
   // API integrations
   const { departments: _departments, loading: _departmentsLoading } =
     useDepartments();
+
+  const isAdmin = useMemo(() => {
+    const role = String(user?.role || "").toLowerCase();
+    return role === "admin";
+  }, [user?.role]);
 
   const getAttachmentName = (file) => {
     if (!file) return "Attachment";
@@ -212,6 +242,149 @@ const MaterialRequests = () => {
     }
   };
 
+  const fetchRequestTypes = useCallback(async () => {
+    try {
+      const response = await apiService.get("/api/material-request-types");
+      const rows = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response?.data?.data)
+          ? response.data.data
+          : Array.isArray(response)
+            ? response
+            : Array.isArray(response?.data)
+              ? response.data
+              : [];
+
+      if (rows.length > 0) {
+        setRequestTypeOptions(rows);
+      } else {
+        setRequestTypeOptions(DEFAULT_REQUEST_TYPES);
+      }
+    } catch {
+      setRequestTypeOptions(DEFAULT_REQUEST_TYPES);
+    }
+  }, []);
+
+  const fetchVendors = useCallback(async () => {
+    try {
+      const response = await apiService.get("/api/vendors", {
+        params: { limit: 1000, status: "Active" },
+      });
+      const rows = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.vendors)
+          ? response.vendors
+          : Array.isArray(response?.data?.vendors)
+            ? response.data.vendors
+            : Array.isArray(response?.data)
+              ? response.data
+              : [];
+      setVendors(rows);
+    } catch {
+      setVendors([]);
+    }
+  }, []);
+
+  const saveRequestTypes = async () => {
+    if (!isAdmin) return;
+    if (!Array.isArray(requestTypeOptions) || requestTypeOptions.length === 0) {
+      toast.error("At least one request type is required");
+      return;
+    }
+
+    setSavingRequestTypes(true);
+    try {
+      const response = await apiService.put("/api/material-request-types", {
+        requestTypes: requestTypeOptions,
+      });
+      const rows = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response?.data?.data)
+          ? response.data.data
+          : Array.isArray(response)
+            ? response
+            : requestTypeOptions;
+      setRequestTypeOptions(rows);
+      toast.success("Request types updated");
+      setShowRequestTypeModal(false);
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.message || "Failed to update request types",
+      );
+    } finally {
+      setSavingRequestTypes(false);
+    }
+  };
+
+  const handleGenerateRfq = async () => {
+    if (!selectedRequest?._id) return;
+    if (selectedRfqVendorIds.length === 0) {
+      toast.error("Select at least one vendor");
+      return;
+    }
+
+    setSendingRfq(true);
+    try {
+      const response = await apiService.post(
+        `/api/material-requests/${selectedRequest._id}/generate-rfq`,
+        { vendorIds: selectedRfqVendorIds },
+      );
+
+      const updatedRequest = response?.request || response?.data?.request;
+      if (updatedRequest?._id) {
+        setSelectedRequest(updatedRequest);
+        setRequests((prev) =>
+          prev.map((req) =>
+            req._id === updatedRequest._id ? updatedRequest : req,
+          ),
+        );
+      }
+
+      toast.success(response?.message || "RFQ sent to selected vendors");
+      setShowRfqModal(false);
+      setSelectedRfqVendorIds([]);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to generate RFQ");
+    } finally {
+      setSendingRfq(false);
+    }
+  };
+
+  const handleCreatePoFromApproved = async () => {
+    if (!selectedRequest?._id) return;
+    setCreatingPo(true);
+    try {
+      const response = await apiService.post(
+        `/api/material-requests/${selectedRequest._id}/create-po`,
+        {},
+      );
+
+      const updatedRequest = response?.request || response?.data?.request;
+      const po = response?.purchaseOrder || response?.data?.purchaseOrder;
+
+      if (updatedRequest?._id) {
+        setSelectedRequest(updatedRequest);
+        setRequests((prev) =>
+          prev.map((req) =>
+            req._id === updatedRequest._id ? updatedRequest : req,
+          ),
+        );
+      }
+
+      if (po?._id || po?.poNumber) {
+        await openPurchaseOrderFromActivity(po.poNumber, po._id || po.id);
+      }
+
+      toast.success(response?.message || "Purchase order created");
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.message || "Failed to create purchase order",
+      );
+    } finally {
+      setCreatingPo(false);
+    }
+  };
+
   const fetchUsers = async () => {
     try {
       const response = await apiService.get("/api/users", {
@@ -295,13 +468,23 @@ const MaterialRequests = () => {
           toast.success(`Issued: ${issuedSummary}`, { duration: 4000 });
         }
       } else {
-        // Purchase order created
-        toast.success("Request approved! Purchase order created.");
+        toast.success(
+          "Request approved. You can now generate RFQ or create Purchase Order.",
+        );
       }
 
       setShowApprovalModal(false);
-      setSelectedRequest(null);
-      fetchRequests();
+      const updatedRequest = response?.request || response?.data?.request;
+      if (updatedRequest?._id) {
+        setSelectedRequest(updatedRequest);
+        setRequests((prev) =>
+          prev.map((request) =>
+            request._id === updatedRequest._id ? updatedRequest : request,
+          ),
+        );
+      } else {
+        fetchRequests();
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to approve request");
     } finally {
@@ -377,10 +560,22 @@ const MaterialRequests = () => {
     fetchBudgetCategories();
     fetchCurrencies();
     fetchSkuItems();
+    fetchRequestTypes();
+    fetchVendors();
 
     // Keep create flow fresh: clear legacy persisted in-progress form state.
     localStorage.removeItem("materialRequestsState");
-  }, [fetchCurrencies]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchCurrencies, fetchRequestTypes, fetchVendors]);
+
+  useEffect(() => {
+    return () => {
+      if (backendRetryTimerRef.current) {
+        clearTimeout(backendRetryTimerRef.current);
+        backendRetryTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -394,18 +589,44 @@ const MaterialRequests = () => {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [activeDropdown]);
 
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     try {
       setLoading(true);
       const response = await apiService.get("/api/material-requests");
       setRequests(response.data || response || []);
       setError(null);
-    } catch {
-      setError("Failed to load material requests");
+      if (backendRetryTimerRef.current) {
+        clearTimeout(backendRetryTimerRef.current);
+        backendRetryTimerRef.current = null;
+      }
+    } catch (err) {
+      const status = err?.response?.status;
+      const serverMessage =
+        err?.serverData?.message || err?.response?.data?.message || "";
+
+      if (status === 401) {
+        setError("Session expired. Please sign in again.");
+      } else if (status === 403) {
+        setError("You do not have permission to view material requests.");
+      } else if (!err?.response) {
+        console.warn(
+          "MaterialRequests: backend unavailable at http://localhost:4000. Retrying in 5 seconds.",
+          err,
+        );
+        setError(null);
+        if (!backendRetryTimerRef.current) {
+          backendRetryTimerRef.current = setTimeout(() => {
+            backendRetryTimerRef.current = null;
+            fetchRequests();
+          }, 5000);
+        }
+      } else {
+        setError(serverMessage || "Failed to load material requests");
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const resolveApproverDisplay = useCallback(
     (request) => {
@@ -872,6 +1093,17 @@ const MaterialRequests = () => {
   };
 
   const openPurchaseOrderFromActivity = async (poNumber, poId) => {
+    let poModuleId = 11;
+
+    if (poNumber) {
+      sessionStorage.setItem("purchaseOrdersSearch", poNumber);
+    }
+    if (poId) {
+      sessionStorage.setItem("purchaseOrdersOpenPoId", String(poId));
+    } else if (poNumber) {
+      sessionStorage.setItem("purchaseOrdersOpenPoNumber", String(poNumber));
+    }
+
     try {
       const modsRes = await apiService.get("/api/modules");
       const modules = Array.isArray(modsRes)
@@ -895,25 +1127,14 @@ const MaterialRequests = () => {
         );
       });
 
-      const poModuleId = poModule?.id ?? 11;
-
-      if (!poModuleId) {
-        toast.error("Purchase Orders module not found");
-        return;
+      if (poModule?.id || poModule?._id) {
+        poModuleId = poModule.id ?? poModule._id;
       }
-
-      if (poNumber) {
-        sessionStorage.setItem("purchaseOrdersSearch", poNumber);
-      }
-      if (poId) {
-        sessionStorage.setItem("purchaseOrdersOpenPoId", String(poId));
-      } else if (poNumber) {
-        sessionStorage.setItem("purchaseOrdersOpenPoNumber", String(poNumber));
-      }
-      navigate(`/home/${poModuleId}`);
     } catch {
-      toast.error("Unable to open Purchase Orders module");
+      // Keep fallback module id and continue navigation.
     }
+
+    navigate(`/home/${poModuleId}`);
   };
 
   useEffect(() => {
@@ -943,16 +1164,6 @@ const MaterialRequests = () => {
   if (loading) {
     return (
       <ModuleLoader moduleName="Material Requests" subtitle="Please wait..." />
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="w-full p-4">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
-          {error}
-        </div>
-      </div>
     );
   }
 
@@ -1174,7 +1385,7 @@ const MaterialRequests = () => {
                 className="px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-[#0d6efd] transition-colors flex items-center gap-2 font-medium"
               >
                 <i className="fa-solid fa-plus"></i>
-                Create New Request
+                Create Request
               </button>
             </div>
 
@@ -1318,8 +1529,19 @@ const MaterialRequests = () => {
                   </div>
                   <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <label className="flex flex-col gap-2">
-                      <span className="text-sm font-medium text-[#111418]">
-                        Request Type <span className="text-red-500">*</span>
+                      <span className="flex items-center justify-between gap-2 text-sm font-medium text-[#111418]">
+                        <span>
+                          Request Type <span className="text-red-500">*</span>
+                        </span>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setShowRequestTypeModal(true)}
+                            className="text-xs font-semibold text-[#137fec] hover:text-[#0d6efd]"
+                          >
+                            Manage types
+                          </button>
+                        )}
                       </span>
                       <div className="relative">
                         <i className="fa-solid fa-tag absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
@@ -1331,21 +1553,11 @@ const MaterialRequests = () => {
                           required
                         >
                           <option value="">Select Request Type</option>
-                          <option value="Internal Transfer">
-                            Internal Transfer (From Inventory)
-                          </option>
-                          <option value="RFQ">
-                            RFQ (Request for Quotation)
-                          </option>
-                          <option value="Purchase Request">
-                            Purchase Request
-                          </option>
-                          <option value="Emergency Purchase">
-                            Emergency Purchase
-                          </option>
-                          <option value="Stock Replenishment">
-                            Stock Replenishment
-                          </option>
+                          {requestTypeOptions.map((typeOption) => (
+                            <option key={typeOption} value={typeOption}>
+                              {typeOption}
+                            </option>
+                          ))}
                         </select>
                         {/* <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i> */}
                       </div>
@@ -1844,7 +2056,7 @@ const MaterialRequests = () => {
               </div>
 
               {/* SECTION 3: Comment & Approval */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden pt-3">
                 <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                   <h3 className="text-base font-bold text-[#111418]">
                     Comment
@@ -1891,12 +2103,12 @@ const MaterialRequests = () => {
                         required
                       />
                       {showFormMentionDropdown && (
-                        <div className="absolute z-50 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto w-[280px]">
+                        <div className="absolute z-50 bottom-full left-0 right-0 -mt-3 py-2 bg-white rounded-xl shadow-lg max-h-[150px] overflow-y-auto w-[150px]">
                           {userList
                             .filter((u) =>
                               u.name?.toLowerCase().includes(formMentionSearch),
                             )
-                            .slice(0, 8)
+                            .slice(0, 5)
                             .map((u) => (
                               <button
                                 key={u.id || u._id}
@@ -1913,22 +2125,22 @@ const MaterialRequests = () => {
                                     /@(\w*)$/,
                                     `@${u.name} `,
                                   );
-                                  setMessage(replaced + after);
+                                  const nextValue = replaced + after;
+                                  const nextCaretPosition = replaced.length;
+                                  setMessage(nextValue);
                                   setShowFormMentionDropdown(false);
-                                  setTimeout(() => textarea.focus(), 0);
+                                  setTimeout(() => {
+                                    textarea.focus();
+                                    textarea.setSelectionRange(
+                                      nextCaretPosition,
+                                      nextCaretPosition,
+                                    );
+                                  }, 0);
                                 }}
                               >
-                                <strong className="text-[#111418] text-sm">
+                                <p className="text-[#111418] text-sm">
                                   {u.name}
-                                </strong>
-                                {u.role && (
-                                  <>
-                                    <br />
-                                    <small className="text-[#617589]">
-                                      {u.role}
-                                    </small>
-                                  </>
-                                )}
+                                </p>
                               </button>
                             ))}
                           {userList.filter((u) =>
@@ -2614,6 +2826,37 @@ const MaterialRequests = () => {
                     <i className="fa-solid fa-print"></i>
                     <span className="truncate">Print</span>
                   </button>
+                  {String(selectedRequest.status || "").toLowerCase() ===
+                    "approved" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRfqVendorIds([]);
+                          setShowRfqModal(true);
+                        }}
+                        className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 text-white shadow-sm hover:bg-indigo-700 transition-colors text-sm font-bold"
+                      >
+                        <i className="fa-solid fa-file-export"></i>
+                        <span className="truncate">Generate RFQ</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCreatePoFromApproved}
+                        disabled={creatingPo}
+                        className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#137fec] px-5 text-white shadow-sm hover:bg-[#0d6efd] transition-colors text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {creatingPo ? (
+                          <i className="fa-solid fa-circle-notch fa-spin"></i>
+                        ) : (
+                          <i className="fa-solid fa-file-invoice"></i>
+                        )}
+                        <span className="truncate">
+                          {creatingPo ? "Creating PO..." : "Create PO"}
+                        </span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -2651,7 +2894,16 @@ const MaterialRequests = () => {
                           {selectedRequest.department || "Not specified"}
                         </p>
                       </div>
-                      {(!Array.isArray(selectedRequest.approvalChain) || selectedRequest.approvalChain.length === 0) ? (
+                      <div className="flex flex-col gap-1">
+                        <p className="text-[#617589] text-sm">Request Type</p>
+                        <p className="text-[#111418] text-base font-medium">
+                          {selectedRequest.requestType ||
+                            selectedRequest.type ||
+                            "Not specified"}
+                        </p>
+                      </div>
+                      {!Array.isArray(selectedRequest.approvalChain) ||
+                      selectedRequest.approvalChain.length === 0 ? (
                         <div className="flex flex-col gap-1">
                           <p className="text-[#617589] text-sm">Approver</p>
                           <p className="text-[#111418] text-base font-medium">
@@ -3057,7 +3309,7 @@ const MaterialRequests = () => {
                                         /^@\w+/.test(part) ? (
                                           <span
                                             key={pIdx}
-                                            className="inline-flex items-center bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded text-xs mx-0.5"
+                                            className="text-[#137fec] font-semibold"
                                           >
                                             {part}
                                           </span>
@@ -3167,7 +3419,7 @@ const MaterialRequests = () => {
                             }}
                           />
                           {showViewMentionDropdown && (
-                            <div className="absolute z-50 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto w-[280px]">
+                            <div className="absolute z-50 top-full left-0 right-0 -mt-2 bg-white rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
                               {userList
                                 .filter((u) =>
                                   u.name
@@ -3191,22 +3443,22 @@ const MaterialRequests = () => {
                                         /@(\w*)$/,
                                         `@${u.name} `,
                                       );
-                                      setViewComment(replaced + after);
+                                      const nextValue = replaced + after;
+                                      const nextCaretPosition = replaced.length;
+                                      setViewComment(nextValue);
                                       setShowViewMentionDropdown(false);
-                                      setTimeout(() => textarea.focus(), 0);
+                                      setTimeout(() => {
+                                        textarea.focus();
+                                        textarea.setSelectionRange(
+                                          nextCaretPosition,
+                                          nextCaretPosition,
+                                        );
+                                      }, 0);
                                     }}
                                   >
                                     <strong className="text-[#111418] text-sm">
                                       {u.name}
                                     </strong>
-                                    {u.role && (
-                                      <>
-                                        <br />
-                                        <small className="text-[#617589]">
-                                          {u.role}
-                                        </small>
-                                      </>
-                                    )}
                                   </button>
                                 ))}
                               {userList.filter((u) =>
@@ -3534,6 +3786,185 @@ const MaterialRequests = () => {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRequestTypeModal && isAdmin && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl rounded-xl bg-white shadow-xl border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#111418]">
+                Manage Request Types
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRequestTypeModal(false);
+                  setNewRequestType("");
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newRequestType}
+                  onChange={(e) => setNewRequestType(e.target.value)}
+                  placeholder="Add new request type"
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = String(newRequestType || "").trim();
+                    if (!next) return;
+                    if (
+                      requestTypeOptions.some(
+                        (entry) =>
+                          String(entry).toLowerCase() === next.toLowerCase(),
+                      )
+                    ) {
+                      toast.error("Request type already exists");
+                      return;
+                    }
+                    setRequestTypeOptions((prev) => [...prev, next]);
+                    setNewRequestType("");
+                  }}
+                  className="rounded-lg bg-[#137fec] px-4 py-2 text-white text-sm font-semibold"
+                >
+                  Add
+                </button>
+              </div>
+
+              <div className="max-h-64 overflow-auto rounded-lg border border-gray-200 p-2">
+                {requestTypeOptions.map((entry) => (
+                  <div
+                    key={entry}
+                    className="flex items-center justify-between rounded px-2 py-2 hover:bg-gray-50"
+                  >
+                    <span className="text-sm text-[#111418]">{entry}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRequestTypeOptions((prev) =>
+                          prev.filter((item) => item !== entry),
+                        )
+                      }
+                      className="text-red-600 hover:text-red-700 text-sm"
+                    >
+                      <i className="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowRequestTypeModal(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={savingRequestTypes}
+                onClick={saveRequestTypes}
+                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {savingRequestTypes ? "Saving..." : "Save Types"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRfqModal && selectedRequest && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#111418]">Generate RFQ</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRfqModal(false);
+                  setSelectedRfqVendorIds([]);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-[#617589]">
+                Select vendors to email the RFQ PDF for request
+                <span className="font-semibold text-[#111418]">
+                  {` #${selectedRequest.requestId || selectedRequest._id}`}
+                </span>
+                .
+              </p>
+              <div className="max-h-72 overflow-auto rounded-lg border border-gray-200">
+                {(vendors || []).length === 0 ? (
+                  <p className="p-4 text-sm text-[#617589]">
+                    No active vendors available.
+                  </p>
+                ) : (
+                  vendors.map((vendor) => {
+                    const id = String(vendor._id || vendor.id || "");
+                    const checked = selectedRfqVendorIds.includes(id);
+                    return (
+                      <label
+                        key={id}
+                        className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-b-0"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedRfqVendorIds((prev) => [...prev, id]);
+                            } else {
+                              setSelectedRfqVendorIds((prev) =>
+                                prev.filter((entry) => entry !== id),
+                              );
+                            }
+                          }}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[#111418] truncate">
+                            {vendor.companyName || "Vendor"}
+                          </p>
+                          <p className="text-xs text-[#617589] truncate">
+                            {vendor.email || "No email"}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowRfqModal(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateRfq}
+                disabled={sendingRfq}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {sendingRfq ? "Sending..." : "Send RFQ"}
+              </button>
             </div>
           </div>
         </div>

@@ -22,6 +22,7 @@ const PurchaseOrders = () => {
   const [loadingPoDetails, setLoadingPoDetails] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isCreatingPo, setIsCreatingPo] = useState(false);
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [isTogglingLock, setIsTogglingLock] = useState(false);
   const [isSubmittingApproval, setIsSubmittingApproval] = useState(false);
@@ -46,6 +47,7 @@ const PurchaseOrders = () => {
   const [showCommentMentionDropdown, setShowCommentMentionDropdown] =
     useState(false);
   const [commentMentionSearch, setCommentMentionSearch] = useState("");
+  const [selectedRows, setSelectedRows] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -54,6 +56,43 @@ const PurchaseOrders = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [limit] = useState(10);
+
+  const handleCreateBlankPurchaseOrder = async () => {
+    try {
+      setIsCreatingPo(true);
+
+      const payload = {
+        vendor: "TBD",
+        status: "draft",
+        currency: "NGN",
+        exchangeRateToNgn: 1,
+        totalAmount: 0,
+        totalAmountNgn: 0,
+        lineItems: [],
+        notes: "",
+      };
+
+      const response = await apiService.post("/api/purchase-orders", payload);
+      const createdPo = response?.data || response;
+
+      if (!createdPo?._id && !createdPo?.id) {
+        throw new Error("Invalid purchase order response");
+      }
+
+      await fetchPurchaseOrders();
+      await openPurchaseOrderDetails(createdPo);
+      toast.success("Blank purchase order created");
+    } catch (error) {
+      console.error("Error creating blank purchase order:", error);
+      toast.error(
+        error?.serverData?.message ||
+          error?.response?.data?.message ||
+          "Failed to create purchase order",
+      );
+    } finally {
+      setIsCreatingPo(false);
+    }
+  };
 
   // Fetch purchase orders from API
   const fetchPurchaseOrders = useCallback(async () => {
@@ -489,6 +528,58 @@ const PurchaseOrders = () => {
     }
   };
 
+  const toggleRowSelection = (poId) => {
+    const newSelection = new Set(selectedRows);
+    if (newSelection.has(poId)) {
+      newSelection.delete(poId);
+    } else {
+      newSelection.add(poId);
+    }
+    setSelectedRows(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedRows.size === purchaseOrders.length) {
+      setSelectedRows(new Set());
+    } else {
+      const allIds = new Set(purchaseOrders.map((po) => po._id || po.id));
+      setSelectedRows(allIds);
+    }
+  };
+
+  const handleDeleteSelectedRows = async () => {
+    if (selectedRows.size === 0) {
+      toast.error("No purchase orders selected");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Are you sure you want to delete ${selectedRows.size} purchase order(s)? This action cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const deletePromises = Array.from(selectedRows).map((poId) =>
+        apiService.delete(`/api/purchase-orders/${poId}`),
+      );
+      await Promise.all(deletePromises);
+      toast.success(
+        `${selectedRows.size} purchase order(s) deleted successfully`,
+      );
+      setSelectedRows(new Set());
+      await fetchPurchaseOrders();
+    } catch (err) {
+      console.error("Error deleting purchase orders:", err);
+      toast.error("Failed to delete some purchase orders");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSavePoEdit = async () => {
     try {
       if (!selectedPo?._id && !selectedPo?.id) return;
@@ -504,6 +595,14 @@ const PurchaseOrders = () => {
         status: editForm.status,
         expectedDelivery: editForm.expectedDelivery || null,
         notes: editForm.comment?.trim() || "",
+        lineItems: Array.isArray(selectedPo?.lineItems)
+          ? selectedPo.lineItems
+          : [],
+        totalAmount: (selectedPo?.lineItems || []).reduce(
+          (sum, item) =>
+            sum + (Number(item?.quantity) || 0) * (Number(item?.amount) || 0),
+          0,
+        ),
       };
 
       const updateResponse = await apiService.put(
@@ -781,6 +880,11 @@ const PurchaseOrders = () => {
   );
 
   const selectedPoStatus = String(selectedPo?.status || "").toLowerCase();
+  const selectedPoComputedTotal = (selectedPo?.lineItems || []).reduce(
+    (sum, item) =>
+      sum + (Number(item?.quantity) || 0) * (Number(item?.amount) || 0),
+    0,
+  );
   const showApprovalDecisionButtons =
     !!selectedPo &&
     !selectedPo?.isLocked &&
@@ -801,6 +905,49 @@ const PurchaseOrders = () => {
       ...prev,
       [sectionKey]: !prev[sectionKey],
     }));
+  };
+
+  const updatePoLineItem = (index, field, value) => {
+    setSelectedPo((prev) => {
+      if (!prev) return prev;
+      const current = Array.isArray(prev.lineItems) ? [...prev.lineItems] : [];
+      if (!current[index]) return prev;
+
+      const nextValue =
+        field === "quantity" || field === "amount" ? Number(value) : value;
+
+      current[index] = {
+        ...current[index],
+        [field]: nextValue,
+      };
+
+      return { ...prev, lineItems: current };
+    });
+  };
+
+  const addPoLineItem = () => {
+    setSelectedPo((prev) => {
+      if (!prev) return prev;
+      const current = Array.isArray(prev.lineItems) ? [...prev.lineItems] : [];
+      current.push({
+        itemName: "",
+        quantity: 1,
+        quantityType: "Units",
+        amount: 0,
+        description: "",
+      });
+      return { ...prev, lineItems: current };
+    });
+  };
+
+  const removePoLineItem = (index) => {
+    setSelectedPo((prev) => {
+      if (!prev) return prev;
+      const current = Array.isArray(prev.lineItems) ? [...prev.lineItems] : [];
+      if (current.length <= 1) return prev;
+      current.splice(index, 1);
+      return { ...prev, lineItems: current };
+    });
   };
 
   // Pagination handlers
@@ -861,18 +1008,45 @@ const PurchaseOrders = () => {
       header: (
         <input
           type="checkbox"
-          className="rounded border-[#dbe0e6] text-[#137fec] focus:ring-[#137fec]/20"
+          checked={
+            selectedRows.size > 0 && selectedRows.size === purchaseOrders.length
+          }
+          onChange={toggleSelectAll}
+          className="rounded border-[#dbe0e6] text-[#137fec] focus:ring-[#137fec]/20 cursor-pointer"
+          title={
+            selectedRows.size > 0 && selectedRows.size === purchaseOrders.length
+              ? "Deselect all"
+              : "Select all"
+          }
         />
       ),
       accessorKey: "select",
       className: "w-[40px] pl-4 pr-3 py-3",
       cellClassName: "pl-4 pr-3 py-3",
-      cell: () => (
-        <input
-          type="checkbox"
-          className="rounded border-[#dbe0e6] text-[#137fec] focus:ring-[#137fec]/20"
-        />
-      ),
+      cell: (po) => {
+        const poId = po._id || po.id;
+        const isSelected = selectedRows.has(poId);
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => toggleRowSelection(poId)}
+              className="rounded border-[#dbe0e6] text-[#137fec] focus:ring-[#137fec]/20 cursor-pointer"
+            />
+            {isSelected && (
+              <button
+                type="button"
+                onClick={() => handleDeleteSelectedRows()}
+                className="p-1 rounded-md text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                title="Delete selected"
+              >
+                <i className="fa-solid fa-trash text-[14px]"></i>
+              </button>
+            )}
+          </div>
+        );
+      },
     },
     {
       header: (
@@ -1232,7 +1406,7 @@ const PurchaseOrders = () => {
                     </span>
                     <div className="h-10 px-3 rounded-lg border border-[#dbe0e6] bg-gray-50 flex items-center text-sm font-semibold text-[#111418]">
                       {formatPoCurrency(
-                        selectedPo.totalAmount || 0,
+                        selectedPoComputedTotal,
                         resolvePoCurrency(selectedPo),
                       )}
                     </div>
@@ -1420,7 +1594,7 @@ const PurchaseOrders = () => {
                                     return (
                                       <span
                                         key={pIdx}
-                                        className="inline-flex items-center bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded text-xs mx-0.5"
+                                        className="text-[#137fec] font-semibold"
                                       >
                                         {part}
                                       </span>
@@ -1483,13 +1657,24 @@ const PurchaseOrders = () => {
             <div className="mt-6 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50 flex items-center justify-between">
                 <h3 className="text-lg font-bold text-[#111418]">Items</h3>
-                <button
-                  type="button"
-                  onClick={() => toggleSection("lineItems")}
-                  className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
-                >
-                  {collapsedSections.lineItems ? "Expand" : "Collapse"}
-                </button>
+                <div className="flex items-center gap-3">
+                  {isEditing && !selectedPo?.isLocked && (
+                    <button
+                      type="button"
+                      onClick={addPoLineItem}
+                      className="text-xs font-semibold text-[#137fec] hover:text-[#0d6efd]"
+                    >
+                      + Add Item
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => toggleSection("lineItems")}
+                    className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
+                  >
+                    {collapsedSections.lineItems ? "Expand" : "Collapse"}
+                  </button>
+                </div>
               </div>
               {!collapsedSections.lineItems && (
                 <div className="overflow-x-auto">
@@ -1511,24 +1696,92 @@ const PurchaseOrders = () => {
                         <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
                           Total
                         </th>
+                        {isEditing && !selectedPo?.isLocked && (
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
+                            Remove
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {(selectedPo.lineItems || []).map((item, idx) => (
                         <tr key={`${item.itemName || "item"}-${idx}`}>
                           <td className="px-4 py-3 text-sm font-medium text-[#111418]">
-                            {item.itemName || "-"}
+                            {isEditing && !selectedPo?.isLocked ? (
+                              <input
+                                type="text"
+                                value={item.itemName || ""}
+                                onChange={(e) =>
+                                  updatePoLineItem(
+                                    idx,
+                                    "itemName",
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-full rounded border border-gray-300 px-2 py-1"
+                              />
+                            ) : (
+                              item.itemName || "-"
+                            )}
                           </td>
                           <td className="px-4 py-3 text-sm text-[#111418]">
-                            {item.quantity || 0}
+                            {isEditing && !selectedPo?.isLocked ? (
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.quantity || 0}
+                                onChange={(e) =>
+                                  updatePoLineItem(
+                                    idx,
+                                    "quantity",
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-24 rounded border border-gray-300 px-2 py-1"
+                              />
+                            ) : (
+                              item.quantity || 0
+                            )}
                           </td>
                           <td className="px-4 py-3 text-sm text-[#617589]">
-                            {item.quantityType || "-"}
+                            {isEditing && !selectedPo?.isLocked ? (
+                              <input
+                                type="text"
+                                value={item.quantityType || ""}
+                                onChange={(e) =>
+                                  updatePoLineItem(
+                                    idx,
+                                    "quantityType",
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-28 rounded border border-gray-300 px-2 py-1"
+                              />
+                            ) : (
+                              item.quantityType || "-"
+                            )}
                           </td>
                           <td className="px-4 py-3 text-sm text-[#111418] text-right">
-                            {formatPoCurrency(
-                              item.amount || 0,
-                              resolvePoCurrency(selectedPo),
+                            {isEditing && !selectedPo?.isLocked ? (
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.amount || 0}
+                                onChange={(e) =>
+                                  updatePoLineItem(
+                                    idx,
+                                    "amount",
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-28 rounded border border-gray-300 px-2 py-1 text-right"
+                              />
+                            ) : (
+                              formatPoCurrency(
+                                item.amount || 0,
+                                resolvePoCurrency(selectedPo),
+                              )
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm font-semibold text-[#111418] text-right">
@@ -1538,6 +1791,18 @@ const PurchaseOrders = () => {
                               resolvePoCurrency(selectedPo),
                             )}
                           </td>
+                          {isEditing && !selectedPo?.isLocked && (
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => removePoLineItem(idx)}
+                                className="text-red-600 hover:text-red-700"
+                                title="Remove item"
+                              >
+                                <i className="fa-solid fa-trash"></i>
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -1657,7 +1922,7 @@ const PurchaseOrders = () => {
                     />
                     {showCommentMentionDropdown &&
                       filteredMentionUsers.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#dbe0e6] rounded-lg shadow-lg z-50 max-h-44 overflow-y-auto">
+                        <div className="absolute z-50 top-full left-0 right-0 -mt-2 bg-white rounded-lg shadow-lg max-h-44 overflow-y-auto">
                           {filteredMentionUsers.map((name) => (
                             <button
                               key={name}
@@ -1703,15 +1968,15 @@ const PurchaseOrders = () => {
               </div>
               <button
                 className="flex items-center justify-center gap-2 overflow-hidden rounded-lg h-10 px-5 bg-[#137fec] hover:bg-blue-600 transition-colors text-white text-sm font-bold leading-normal tracking-[0.015em] shadow-sm"
-                onClick={() =>
-                  toast(
-                    "Purchase Orders are automatically created when Material Requests are approved. Head over to Material Requests to start the process.",
-                    { icon: "ℹ️", duration: 5000 },
-                  )
-                }
+                onClick={handleCreateBlankPurchaseOrder}
+                disabled={isCreatingPo}
               >
-                <i className="fa-solid fa-plus text-[16px]"></i>
-                <span className="truncate">Create Purchase Order</span>
+                <i
+                  className={`fa-solid ${isCreatingPo ? "fa-circle-notch fa-spin" : "fa-plus"} text-[16px]`}
+                ></i>
+                <span className="truncate">
+                  {isCreatingPo ? "Creating..." : "Create Purchase Order"}
+                </span>
               </button>
             </div>
 

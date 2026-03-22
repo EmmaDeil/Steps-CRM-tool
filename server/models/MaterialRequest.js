@@ -13,7 +13,6 @@ const materialRequestSchema = new mongoose.Schema(
     requestType: {
       type: String,
       required: false,
-      enum: ['Internal Transfer', 'RFQ', 'Purchase Request', 'Emergency Purchase', 'Stock Replenishment'],
       default: 'Purchase Request',
     },
     approver: {

@@ -1,13 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const PDFDocument = require('pdfkit');
 const MaterialRequest = require('../models/MaterialRequest');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const BudgetCategory = require('../models/BudgetCategory');
+const Vendor = require('../models/Vendor');
+const SystemSettings = require('../models/SystemSettings');
 const InventoryItem = require('../models/InventoryItem');
 const InventoryIssue = require('../models/InventoryIssue');
 const StockTransfer = require('../models/StockTransfer');
 const StockMovement = require('../models/StockMovement');
+const { transporter } = require('../utils/emailService');
+const { authMiddleware, requireRole } = require('../middleware/auth');
 const { logMovement } = require('./inventory.routes');
 const {
   generateWaybillNumber,
@@ -22,16 +27,201 @@ const REQUEST_TYPE_MAP = {
   'purchase request': 'Purchase Request',
   'emergency purchase': 'Emergency Purchase',
   'stock replenishment': 'Stock Replenishment',
+  'service request': 'Service Request',
+  'it equipment request': 'IT Equipment Request',
+  'maintenance supplies': 'Maintenance Supplies',
+  'office supplies': 'Office Supplies',
+  'capital expenditure': 'Capital Expenditure',
+  capex: 'Capital Expenditure',
 };
 
 const normalizeRequestType = (requestType) => {
-  const normalized = String(requestType || '').trim().toLowerCase();
-  return REQUEST_TYPE_MAP[normalized] || 'Purchase Request';
+  const rawValue = String(requestType || '').trim();
+  const normalized = rawValue.toLowerCase();
+  return REQUEST_TYPE_MAP[normalized] || rawValue || 'Purchase Request';
+};
+
+const DEFAULT_MATERIAL_REQUEST_TYPES = [
+  'Internal Transfer',
+  'RFQ',
+  'Purchase Request',
+  'Emergency Purchase',
+  'Stock Replenishment',
+  'Service Request',
+  'IT Equipment Request',
+  'Maintenance Supplies',
+  'Office Supplies',
+  'Capital Expenditure',
+];
+
+const getMaterialRequestTypes = async () => {
+  const settings = await SystemSettings.findOne();
+  const configured = Array.isArray(settings?.materialRequestTypes)
+    ? settings.materialRequestTypes
+    : [];
+  return configured.length > 0 ? configured : DEFAULT_MATERIAL_REQUEST_TYPES;
+};
+
+const buildRfqPdfBuffer = async (request, vendors) => {
+  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  const chunks = [];
+
+  return new Promise((resolve, reject) => {
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    doc.fontSize(18).text('Request For Quotation (RFQ)', { align: 'left' });
+    doc.moveDown(0.5);
+    doc.fontSize(11).fillColor('#4b5563').text(`Request ID: ${request.requestId || request._id}`);
+    doc.text(`Title: ${request.requestTitle || 'Material Request'}`);
+    doc.text(`Type: ${request.requestType || 'N/A'}`);
+    doc.text(`Department: ${request.department || 'N/A'}`);
+    doc.text(`Requested By: ${request.requestedBy || 'N/A'}`);
+    doc.text(`Date: ${new Date(request.createdAt || Date.now()).toLocaleString()}`);
+    doc.moveDown(0.8);
+
+    doc.fillColor('#111827').fontSize(13).text('Line Items');
+    doc.moveDown(0.3);
+
+    const lineItems = Array.isArray(request.lineItems) ? request.lineItems : [];
+    let total = 0;
+    lineItems.forEach((item, idx) => {
+      const qty = Number(item.quantity) || 0;
+      const unitPrice = Number(item.amount) || 0;
+      const lineTotal = qty * unitPrice;
+      total += lineTotal;
+
+      doc
+        .fontSize(10)
+        .text(
+          `${idx + 1}. ${item.itemName || 'Item'} | Qty: ${qty} ${item.quantityType || ''} | Unit: ${unitPrice.toFixed(2)} | Total: ${lineTotal.toFixed(2)}`,
+        );
+
+      if (item.description) {
+        doc.fillColor('#6b7280').fontSize(9).text(`    ${item.description}`);
+        doc.fillColor('#111827');
+      }
+    });
+
+    doc.moveDown(0.8);
+    doc.fontSize(11).text(`Estimated Total: ${total.toFixed(2)} ${request.currency || 'NGN'}`);
+    doc.moveDown(0.8);
+    doc.fontSize(11).text('Vendors');
+    vendors.forEach((v) => {
+      doc.fontSize(10).text(`- ${v.companyName} (${v.email})`);
+    });
+
+    doc.end();
+  });
+};
+
+const createPurchaseOrderFromRequest = async ({ request, vendor, actor }) => {
+  const existingPo = await PurchaseOrder.findOne({ linkedMaterialRequestId: request._id });
+  if (existingPo) {
+    return { purchaseOrder: existingPo, created: false };
+  }
+
+  const totalAmount = (request.lineItems || []).reduce(
+    (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.amount) || 0),
+    0,
+  );
+
+  const poLineItems = (request.lineItems || []).map((item) => ({
+    itemName: item.itemName,
+    quantity: item.quantity,
+    quantityType: item.quantityType,
+    amount: item.amount || 0,
+    description: item.description,
+  }));
+
+  const poApprovalInfo = await buildApprovalChain('Purchase Orders', {
+    department: request.department,
+    totalAmount,
+    requestedBy: request.requestedBy,
+    requestType: request.requestType,
+  });
+
+  const newPO = new PurchaseOrder({
+    vendor: vendor || request.preferredVendor || 'TBD',
+    status: 'draft',
+    currency: request.currency || 'NGN',
+    exchangeRateToNgn: request.exchangeRateToNgn || 1,
+    totalAmount,
+    totalAmountNgn: totalAmount * (request.exchangeRateToNgn || 1),
+    linkedMaterialRequestId: request._id,
+    lineItems: poLineItems,
+    usesRuleBasedApproval: !!poApprovalInfo?.usesRuleBasedApproval,
+    approvalRuleId: poApprovalInfo?.rule?._id,
+    currentApprovalLevel: poApprovalInfo?.currentApprovalLevel || 1,
+    approvalChain: Array.isArray(poApprovalInfo?.approvalChain)
+      ? poApprovalInfo.approvalChain
+      : [],
+    activities: [
+      {
+        type: 'created',
+        author: actor?.name || 'System',
+        authorId: actor?.id,
+        text: 'Purchase order generated from approved material request',
+        timestamp: new Date(),
+      },
+    ],
+  });
+
+  await newPO.save();
+
+  request.activities = Array.isArray(request.activities) ? request.activities : [];
+  request.activities.push({
+    type: 'po_created',
+    author: actor?.name || 'System',
+    authorId: actor?.id,
+    text: `Purchase Order ${newPO.poNumber} created`,
+    timestamp: new Date(),
+    poId: newPO._id,
+    poNumber: newPO.poNumber,
+  });
+  await request.save();
+
+  return { purchaseOrder: newPO, created: true };
 };
 
 // ==========================================
 // MATERIAL REQUESTS API
 // ==========================================
+
+// GET configurable material request types
+router.get('/material-request-types', async (_req, res) => {
+  try {
+    const requestTypes = await getMaterialRequestTypes();
+    return res.json({ success: true, data: requestTypes });
+  } catch (err) {
+    console.error('Error fetching material request types:', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch request types' });
+  }
+});
+
+// PUT configurable material request types (Admin only)
+router.put('/material-request-types', authMiddleware, requireRole('Admin'), async (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body?.requestTypes) ? req.body.requestTypes : [];
+    const cleaned = [...new Set(incoming
+      .map((value) => String(value || '').trim())
+      .filter(Boolean))];
+
+    if (cleaned.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one request type is required' });
+    }
+
+    const settings = (await SystemSettings.findOne()) || new SystemSettings();
+    settings.materialRequestTypes = cleaned;
+    await settings.save();
+
+    return res.json({ success: true, data: settings.materialRequestTypes });
+  } catch (err) {
+    console.error('Error updating material request types:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update request types' });
+  }
+});
 
 // GET all Material Requests
 router.get('/material-requests', async (req, res) => {
@@ -139,7 +329,6 @@ router.put('/material-requests/:id', async (req, res) => {
 // POST Approve Material Request -> Auto Generate Purchase Order OR Fulfill from Inventory
 router.post('/material-requests/:id/approve', async (req, res) => {
   try {
-    const { vendor } = req.body; // Frontend passes selected vendor
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: 'Invalid request id' });
     }
@@ -370,76 +559,146 @@ router.post('/material-requests/:id/approve', async (req, res) => {
       }
     }
 
-    // 3. For other request types, generate corresponding Purchase Order
-    const totalAmount = request.lineItems.reduce(
-      (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.amount) || 0),
-      0,
-    );
-    
-    // Map line items to PO line items
-    const poLineItems = request.lineItems.map(item => ({
-        itemName: item.itemName,
-        quantity: item.quantity,
-        quantityType: item.quantityType,
-        amount: item.amount || 0,
-        description: item.description
-    }));
-
-    const poApprovalInfo = await buildApprovalChain('Purchase Orders', {
-      department: request.department,
-      totalAmount,
-      requestedBy: request.requestedBy,
-      requestType: request.requestType,
-    });
-
-    const newPO = new PurchaseOrder({
-        vendor: vendor || request.preferredVendor || 'Unknown Vendor',
-        status: 'draft',
-      currency: request.currency || 'NGN',
-      exchangeRateToNgn: request.exchangeRateToNgn || 1,
-        totalAmount: totalAmount,
-      totalAmountNgn: totalAmount * (request.exchangeRateToNgn || 1),
-        linkedMaterialRequestId: updatedRequest._id,
-        lineItems: poLineItems,
-        usesRuleBasedApproval: !!poApprovalInfo?.usesRuleBasedApproval,
-        approvalRuleId: poApprovalInfo?.rule?._id,
-        currentApprovalLevel: poApprovalInfo?.currentApprovalLevel || 1,
-        approvalChain: Array.isArray(poApprovalInfo?.approvalChain)
-          ? poApprovalInfo.approvalChain
-          : [],
-        activities: [
-          {
-            type: 'created',
-            author: req.user?.fullName || req.user?.email || 'System',
-            authorId: req.user?._id,
-            text: 'Purchase order generated from approved material request',
-            timestamp: new Date(),
-          },
-        ],
-    });
-
-    await newPO.save();
-
-    request.activities.push({
-      type: 'po_created',
-      author: 'System',
-      text: `Purchase Order ${newPO.poNumber} created`,
-      timestamp: new Date(),
-      poId: newPO._id,
-      poNumber: newPO.poNumber,
-    });
-    await request.save();
-
-    res.json({ 
-        success: true, 
-        message: 'Request approved and PO generated', 
-        request: updatedRequest,
-        purchaseOrder: newPO,
-        type: 'purchase_order'
+    return res.json({
+      success: true,
+      message: 'Request approved. You can now generate RFQ or create Purchase Order.',
+      request: updatedRequest,
+      type: 'approved',
     });
   } catch (err) {
     console.error('Error approving request:', err);
     res.status(500).json({ success: false, message: 'Error approving request', error: err.message });
+  }
+});
+
+// POST Generate RFQ for approved request and send PDF to selected vendors
+router.post('/material-requests/:id/generate-rfq', authMiddleware, async (req, res) => {
+  try {
+    const { vendorIds = [] } = req.body || {};
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid request id' });
+    }
+
+    const request = await MaterialRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
+    if (!['approved', 'fulfilled'].includes(String(request.status || '').toLowerCase())) {
+      return res.status(400).json({ success: false, message: 'RFQ can only be generated for approved requests' });
+    }
+
+    const ids = Array.isArray(vendorIds)
+      ? vendorIds.filter((id) => mongoose.Types.ObjectId.isValid(id))
+      : [];
+    if (ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'Select at least one vendor' });
+    }
+
+    const vendors = await Vendor.find({ _id: { $in: ids }, status: 'Active' });
+    const recipients = vendors.filter((v) => String(v.email || '').trim());
+    if (recipients.length === 0) {
+      return res.status(400).json({ success: false, message: 'No active vendors with valid emails selected' });
+    }
+
+    const pdfBuffer = await buildRfqPdfBuffer(request, recipients);
+    const actorName = req.user?.fullName || req.user?.email || 'System';
+
+    const sendResults = [];
+    for (const vendor of recipients) {
+      try {
+        const mailOptions = {
+          from: process.env.EMAIL_USER,
+          to: vendor.email,
+          subject: `RFQ: ${request.requestTitle || request.requestId}`,
+          html: `
+            <p>Dear ${vendor.contactPerson || vendor.companyName},</p>
+            <p>Please find attached Request for Quotation for material request <strong>${request.requestId}</strong>.</p>
+            <p>Kindly review and send your quotation.</p>
+          `,
+          attachments: [
+            {
+              filename: `RFQ-${request.requestId || request._id}.pdf`,
+              content: pdfBuffer,
+              contentType: 'application/pdf',
+            },
+          ],
+        };
+
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`📧 RFQ email would be sent to ${vendor.email}`);
+          sendResults.push({ vendorId: vendor._id, email: vendor.email, success: true, devMode: true });
+        } else {
+          await transporter.sendMail(mailOptions);
+          sendResults.push({ vendorId: vendor._id, email: vendor.email, success: true });
+        }
+      } catch (sendErr) {
+        sendResults.push({ vendorId: vendor._id, email: vendor.email, success: false, error: sendErr.message });
+      }
+    }
+
+    const successCount = sendResults.filter((r) => r.success).length;
+    request.activities = Array.isArray(request.activities) ? request.activities : [];
+    request.activities.push({
+      type: 'status_change',
+      author: actorName,
+      authorId: req.user?._id,
+      text: `RFQ sent to ${successCount}/${recipients.length} selected vendor(s)`,
+      timestamp: new Date(),
+    });
+    await request.save();
+
+    return res.json({
+      success: true,
+      message: `RFQ processed for ${successCount} vendor(s)`,
+      request,
+      results: sendResults,
+    });
+  } catch (err) {
+    console.error('Error generating RFQ:', err);
+    return res.status(500).json({ success: false, message: 'Failed to generate RFQ', error: err.message });
+  }
+});
+
+// POST Create Purchase Order from approved request
+router.post('/material-requests/:id/create-po', authMiddleware, async (req, res) => {
+  try {
+    const { vendor } = req.body || {};
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid request id' });
+    }
+
+    const request = await MaterialRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
+
+    const normalizedStatus = String(request.status || '').toLowerCase();
+    if (!['approved', 'fulfilled'].includes(normalizedStatus)) {
+      return res.status(400).json({ success: false, message: 'Only approved requests can create a purchase order' });
+    }
+
+    if (request.requestType === 'Internal Transfer') {
+      return res.status(400).json({ success: false, message: 'Internal Transfer requests do not create purchase orders' });
+    }
+
+    const actor = {
+      name: req.user?.fullName || req.user?.email || 'System',
+      id: req.user?._id,
+    };
+
+    const { purchaseOrder, created } = await createPurchaseOrderFromRequest({
+      request,
+      vendor,
+      actor,
+    });
+
+    return res.json({
+      success: true,
+      created,
+      message: created ? 'Purchase order created successfully' : 'Purchase order already exists',
+      request,
+      purchaseOrder,
+      type: 'purchase_order',
+    });
+  } catch (err) {
+    console.error('Error creating purchase order from request:', err);
+    return res.status(500).json({ success: false, message: 'Failed to create purchase order', error: err.message });
   }
 });
 

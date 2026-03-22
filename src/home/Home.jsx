@@ -13,8 +13,6 @@ import Navbar from "../components/Navbar";
 import Breadcrumb from "../components/Breadcrumb";
 import { apiService } from "../services/api";
 import Footer from "../components/Footer";
-import PurchaseOrders from "../components/modules/PurchaseOrders";
-import Finance from "../components/modules/Finance";
 import ModuleLoader from "../components/common/ModuleLoader";
 
 const ModuleLoadingState = ({ moduleName = "Module", subtitle }) => {
@@ -62,16 +60,12 @@ class ModuleErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
-      if (!this.state.reloadAttempted) {
-        return (
-          <ModuleLoadingState
-            moduleName={this.props.moduleName || "Module"}
-            subtitle="Recovering from a loading error..."
-          />
-        );
-      }
-
-      return this.props.fallback;
+      return (
+        <ModuleLoadingState
+          moduleName={this.props.moduleName || "Module"}
+          subtitle="Loading module..."
+        />
+      );
     }
 
     return this.props.children;
@@ -93,19 +87,13 @@ const loadModuleComponent = (componentName) => {
     admincontrol: "Admin",
     signaturemanagement: "DocSign",
     security: "PhysicalSecurity",
+    materialrequest: "MaterialRequests",
+    materialrequests: "MaterialRequests",
+    materialrequestmodule: "MaterialRequests",
   };
 
   const finalComponentName =
     componentAliasMap[normalizedComponentName] || componentName;
-
-  const eagerComponents = {
-    PurchaseOrders,
-    Finance,
-  };
-
-  if (eagerComponents[finalComponentName]) {
-    return eagerComponents[finalComponentName];
-  }
 
   try {
     return lazy(() =>
@@ -144,23 +132,6 @@ const iconMap = {
   Admin: { icon: "fa-sliders", color: "gray" },
   Policy: { icon: "fa-file-shield", color: "gray" },
   Budget: { icon: "fa-wallet", color: "blue" },
-};
-
-const normalizeModuleKey = (value) =>
-  String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-
-const legacyModuleKeysById = {
-  5: ["finance"],
-  9: ["docsign"],
-  11: ["purchaseorders", "purchaseordersmodule"],
-};
-
-const legacyModuleLabelById = {
-  5: "Finance",
-  9: "DocSign",
-  11: "Purchase Orders",
 };
 
 export default function Home() {
@@ -216,22 +187,8 @@ export default function Home() {
   const found = useMemo(() => {
     if (!moduleRouteId) return null;
 
-    const matchedModule = (modules || []).find(
-      (m) => getModuleRouteId(m) === moduleRouteId,
-    );
-    if (matchedModule) return matchedModule;
-
-    const legacyKeys = legacyModuleKeysById[moduleRouteId] || [];
-    if (legacyKeys.length === 0) return null;
-
     return (
-      (modules || []).find((m) => {
-        const componentKey = normalizeModuleKey(m.componentName);
-        const nameKey = normalizeModuleKey(m.name);
-        return (
-          legacyKeys.includes(componentKey) || legacyKeys.includes(nameKey)
-        );
-      }) || null
+      (modules || []).find((m) => getModuleRouteId(m) === moduleRouteId) || null
     );
   }, [moduleRouteId, modules, getModuleRouteId]);
 
@@ -242,9 +199,6 @@ export default function Home() {
 
   const requestedModuleName = useMemo(() => {
     if (found?.name) return found.name;
-    if (moduleRouteId && legacyModuleLabelById[moduleRouteId]) {
-      return legacyModuleLabelById[moduleRouteId];
-    }
 
     const matchedModule = (modules || []).find(
       (m) => getModuleRouteId(m) === moduleRouteId,
@@ -347,39 +301,7 @@ export default function Home() {
         <div className="min-h-screen flex flex-col">
           <Navbar user={user} />
           <div className="flex-1">
-            <ModuleErrorBoundary
-              moduleName={found.name}
-              fallback={
-                <div className="flex-1 flex items-center justify-center px-4 py-10">
-                  <div className="text-center max-w-md">
-                    <h3 className="text-xl font-bold mb-2 text-[#111418]">
-                      ⚠️ Module Not Available
-                    </h3>
-                    <p className="text-sm text-[#617589] mb-4">
-                      The <strong>{found.name}</strong> module could not be
-                      loaded. This may be because the component file is missing
-                      or there's a build issue.
-                    </p>
-                    <div className="flex gap-3 justify-center">
-                      <button
-                        className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                        onClick={() => window.location.reload()}
-                      >
-                        <i className="fa-solid fa-rotate-right text-base"></i>
-                        Try Again
-                      </button>
-                      <button
-                        className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 hover:bg-blue-50"
-                        onClick={() => navigate("/home")}
-                      >
-                        <i className="fa-solid fa-home text-base"></i>
-                        Back to Home
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              }
-            >
+            <ModuleErrorBoundary moduleName={found.name}>
               <Suspense
                 key={id}
                 fallback={<ModuleLoadingState moduleName={found.name} />}
@@ -395,24 +317,18 @@ export default function Home() {
     }
 
     // Module not available
+    console.warn(
+      `Module component could not be resolved for: ${found?.name || "Unknown"}`,
+      found,
+    );
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar user={user} />
-        <div className="flex-1 flex items-center justify-center px-4 py-10">
-          <div className="inline-block rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 px-6 py-4 text-center">
-            <h3 className="text-lg font-bold mb-2">⚠️ Module Not Available</h3>
-            <p className="text-sm mb-3 text-[#617589]">
-              The <strong>{found.name}</strong> module is currently under
-              development.
-            </p>
-            <button
-              className="inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold rounded-md border border-blue-600 text-blue-700 hover:bg-blue-50"
-              onClick={() => navigate("/home")}
-            >
-              <i className="fa-solid fa-home text-base"></i>
-              Back to Home
-            </button>
-          </div>
+        <div className="flex-1 relative">
+          <ModuleLoadingState
+            moduleName={found.name}
+            subtitle="Loading module..."
+          />
         </div>
       </div>
     );
@@ -535,11 +451,13 @@ export default function Home() {
                   <p className="text-sm text-[#617589] text-center">
                     {/* Click to access this module */}
                   </p>
-                  <div className={`mt-4 py-1 px-3 text-xs font-semibold rounded-full ${
-                    canAccess
-                      ? "bg-blue-50 text-blue-700"
-                      : "bg-gray-100 text-gray-400"
-                  }`}>
+                  <div
+                    className={`mt-4 py-1 px-3 text-xs font-semibold rounded-full ${
+                      canAccess
+                        ? "bg-blue-50 text-blue-700"
+                        : "bg-gray-100 text-gray-400"
+                    }`}
+                  >
                     {canAccess ? "Explore" : "No Access"}
                   </div>
                 </button>

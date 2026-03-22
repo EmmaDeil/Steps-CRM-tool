@@ -19,7 +19,7 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-const InvoiceDetail = ({ invoice, onBack }) => {
+const InvoiceDetail = ({ invoice }) => {
   // Determine if this is an AR Invoice or an AP PO
   const isAP = invoice._isAP;
 
