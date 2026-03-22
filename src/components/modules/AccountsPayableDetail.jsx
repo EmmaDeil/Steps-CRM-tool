@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
@@ -14,6 +14,21 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
     Number.isFinite(Number(invoice?.taxRate)) ? Number(invoice.taxRate) : 0,
   );
   const [isSavingBillTo, setIsSavingBillTo] = useState(false);
+
+  const billToOptions = useMemo(() => {
+    const candidates = [
+      invoice?.billTo,
+      invoice?.department,
+      invoice?.vendor,
+      "Head Office",
+      "Finance Department",
+      "Operations Department",
+    ];
+
+    return [...new Set(candidates.map((item) => String(item || "").trim()))]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  }, [invoice?.billTo, invoice?.department, invoice?.vendor]);
 
   const totalAmount = Number(invoice?.amount || 0);
   const preTaxAmount = Number(invoice?.preTaxAmount || totalAmount);
@@ -143,7 +158,7 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 flex flex-col">
+    <div className="w-full min-h-screen bg-slate-100 flex flex-col">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -154,7 +169,7 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
       />
 
       {/* Header section similar to accounts payable */}
-      <section className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
+      <section className="bg-white border-b border-slate-200 px-6 py-4">
         <div className="max-w-[1800px] mx-auto w-full flex items-center justify-between">
           <div className="flex items-center gap-4">
             {/* <button
@@ -170,10 +185,10 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
         </div>
       </section>
 
-      <main className="flex-1 overflow-auto bg-slate-50 p-6">
+      <main className="flex-1 overflow-auto p-6">
         <div className="max-w-4xl mx-auto space-y-6">
           {/* Invoice Header */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <p className="text-xs text-slate-500 uppercase font-semibold mb-1">
@@ -200,7 +215,7 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Vendor Information */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="bg-white rounded-lg border border-slate-200 p-6">
               <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <i className="fa-solid fa-building text-primary"></i>
                 Vendor Information
@@ -221,19 +236,27 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
             </div>
 
             {/* Bill To */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="bg-white rounded-lg border border-slate-200 p-6">
               <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <i className="fa-solid fa-file-signature text-primary"></i>
                 Bill To
               </h3>
               <div className="flex flex-col gap-3">
-                <input
-                  type="text"
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Billing Entity
+                </label>
+                <select
                   value={billTo}
                   onChange={(e) => setBillTo(e.target.value)}
-                  placeholder="Enter Bill To entity (department, legal entity, or contact)"
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-primary focus:border-primary"
-                />
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 focus:ring-2 focus:ring-primary focus:border-primary bg-white"
+                >
+                  <option value="">Select Bill To</option>
+                  {billToOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     Tax Rate (%)
@@ -245,7 +268,7 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                     step="0.01"
                     value={taxRate}
                     onChange={(e) => setTaxRate(Number(e.target.value || 0))}
-                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-primary focus:border-primary"
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
                 <button
@@ -257,7 +280,7 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                     Number(taxRate) < 0 ||
                     Number(taxRate) > 100
                   }
-                  className="self-start px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="self-start px-4 py-2 rounded-md bg-slate-900 hover:bg-slate-950 text-white text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSavingBillTo ? "Saving..." : "Save Billing Setup"}
                 </button>
@@ -265,7 +288,7 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
             </div>
 
             {/* Department */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="bg-white rounded-lg border border-slate-200 p-6">
               <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <i className="fa-solid fa-sitemap text-primary"></i>
                 Department
@@ -281,7 +304,7 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
             </div>
 
             {/* Date Information */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
+            <div className="bg-white rounded-lg border border-slate-200 p-6 lg:col-span-2">
               <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <i className="fa-solid fa-calendar text-primary"></i>
                 Dates
@@ -320,44 +343,42 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
           </div>
 
           {/* Amount Information */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
             <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
               <i className="fa-solid fa-receipt text-primary"></i>
               Amount Details
             </h3>
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-6 md:p-8">
-              <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div>
-                  <p className="text-sm font-medium text-blue-800 mb-1">
-                    Total Amount Due
+            <div className="border border-slate-200 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-0">
+                <div className="p-5 border-b md:border-b-0 md:border-r border-slate-200">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                    Total Amount
                   </p>
-                  <p className="text-4xl font-black text-blue-900 tracking-tight">
+                  <p className="text-2xl font-bold text-slate-900">
                     {formatCurrency(invoice.amount || 0, { currency })}
                   </p>
-                  <p className="text-xs text-blue-700 mt-2">
-                    Base: {formatCurrency(preTaxAmount, { currency })} | Tax (
-                    {currentTaxRate}%):{" "}
-                    {formatCurrency(currentTaxAmount, { currency })}
+                </div>
+                <div className="p-5 border-b md:border-b-0 md:border-r border-slate-200">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                    Paid Amount
+                  </p>
+                  <p className="text-2xl font-bold text-emerald-700">
+                    {formatCurrency(invoice.paidAmount || 0, { currency })}
                   </p>
                 </div>
-                <div className="flex gap-8">
-                  <div>
-                    <p className="text-xs font-semibold text-emerald-800 mb-1 uppercase tracking-wider">
-                      Paid So Far
-                    </p>
-                    <p className="text-xl font-bold text-emerald-700">
-                      {formatCurrency(invoice.paidAmount || 0, { currency })}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-amber-800 mb-1 uppercase tracking-wider">
-                      Balance Due
-                    </p>
-                    <p className="text-xl font-bold text-amber-700">
-                      {formatCurrency(invoice.balanceDue || 0, { currency })}
-                    </p>
-                  </div>
+                <div className="p-5">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                    Balance Due
+                  </p>
+                  <p className="text-2xl font-bold text-amber-700">
+                    {formatCurrency(invoice.balanceDue || 0, { currency })}
+                  </p>
                 </div>
+              </div>
+              <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 text-sm text-slate-700">
+                Base Amount: {formatCurrency(preTaxAmount, { currency })} | Tax
+                ({currentTaxRate}%):{" "}
+                {formatCurrency(currentTaxAmount, { currency })}
               </div>
             </div>
 
@@ -386,7 +407,7 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                           onChange={(e) =>
                             setPayPercentage(Number(e.target.value || 0))
                           }
-                          className="w-32 pl-4 pr-8 py-2.5 border border-slate-300 rounded-lg text-base font-semibold text-slate-900 focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                          className="w-32 pl-4 pr-8 py-2.5 border border-slate-300 rounded-md text-base font-semibold text-slate-900 focus:ring-2 focus:ring-primary focus:border-primary"
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">
                           %
@@ -422,14 +443,12 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                       payPercentage >
                         Math.max(0.01, maxPayablePercentage || 100)
                     }
-                    className="w-full md:w-auto px-8 py-3.5 rounded-lg bg-primary hover:bg-blue-600 text-white text-base font-bold shadow-lg shadow-blue-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                    className="w-full md:w-auto px-6 py-3 rounded-md bg-primary hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     <i
-                      className={`fa-solid ${isPaying ? "fa-spinner fa-spin" : "fa-shield-halved"} text-lg`}
+                      className={`fa-solid ${isPaying ? "fa-spinner fa-spin" : "fa-credit-card"}`}
                     ></i>
-                    {isPaying
-                      ? "Processing..."
-                      : `Pay ${payPercentage}% Securely`}
+                    {isPaying ? "Processing..." : `Pay ${payPercentage}%`}
                   </button>
                 </div>
               </div>
