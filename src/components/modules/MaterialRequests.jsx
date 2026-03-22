@@ -10,6 +10,7 @@ import { NumericFormat } from "react-number-format";
 import { formatCurrency, getCurrencySymbol } from "../../services/currency";
 import { useCurrency } from "../../context/useCurrency";
 import DataTable from "../common/DataTable";
+import ModuleLoader from "../common/ModuleLoader";
 
 const MaterialRequests = () => {
   const { user } = useAuth();
@@ -713,15 +714,7 @@ const MaterialRequests = () => {
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mb-4"></div>
-          <h3 className="text-lg font-semibold mb-1 text-[#111418]">
-            Loading Material Requests module
-          </h3>
-          <p className="text-sm text-[#617589]">Please wait...</p>
-        </div>
-      </div>
+      <ModuleLoader moduleName="Material Requests" subtitle="Please wait..." />
     );
   }
 

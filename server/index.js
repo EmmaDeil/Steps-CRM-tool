@@ -5014,6 +5014,9 @@ async function start() {
         jobTitle,
         status,
         salary,
+        paySchedule,
+        bonus,
+        allowances,
         address,
         emergencyContact,
         avatar,
@@ -5109,6 +5112,9 @@ async function start() {
             status: updatedUser.status || 'Active',
             avatar: updatedUser.profilePicture || '',
             salary: 0,
+            paySchedule: '',
+            bonus: 0,
+            allowances: 0,
             address: '',
             emergencyContact: { name: '', relationship: '', phone: '' },
             employeeId: null,
@@ -5191,6 +5197,18 @@ async function start() {
       if (salary !== undefined && parseFloat(salary) !== oldEmployee.salary) {
         updateData.salary = parseFloat(salary);
         changes.push({ field: 'salary', oldValue: oldEmployee.salary, newValue: parseFloat(salary) });
+      }
+      if (paySchedule !== undefined && paySchedule !== oldEmployee.paySchedule) {
+        updateData.paySchedule = paySchedule || undefined;
+        changes.push({ field: 'paySchedule', oldValue: oldEmployee.paySchedule, newValue: paySchedule || undefined });
+      }
+      if (bonus !== undefined && parseFloat(bonus || 0) !== Number(oldEmployee.bonus || 0)) {
+        updateData.bonus = parseFloat(bonus || 0);
+        changes.push({ field: 'bonus', oldValue: oldEmployee.bonus || 0, newValue: parseFloat(bonus || 0) });
+      }
+      if (allowances !== undefined && parseFloat(allowances || 0) !== Number(oldEmployee.allowances || 0)) {
+        updateData.allowances = parseFloat(allowances || 0);
+        changes.push({ field: 'allowances', oldValue: oldEmployee.allowances || 0, newValue: parseFloat(allowances || 0) });
       }
       if (startDate !== undefined) {
         const normalizedStartDate = startDate ? new Date(startDate) : null;
@@ -5312,6 +5330,9 @@ async function start() {
         status: employee.status || 'Active',
         avatar: employee.avatar || '',
         salary: employee.salary || 0,
+        paySchedule: employee.paySchedule || '',
+        bonus: employee.bonus || 0,
+        allowances: employee.allowances || 0,
         address: employee.address || '',
         emergencyContact: employee.emergencyContact || { name: '', relationship: '', phone: '' },
         employeeId: employee.employeeId,
@@ -5480,35 +5501,124 @@ async function start() {
   app.get('/api/hr/analytics', async (req, res) => {
     try {
       const range = req.query.range === 'ytd' ? 'ytd' : '6m';
-      
-      // Calculate actual analytics from database
-      const totalEmployees = await EmployeeModel.countDocuments({ status: 'Active' });
-      
-      // Get new hires for current month
-      const startOfMonth = new Date();
-      startOfMonth.setDate(1);
-      startOfMonth.setHours(0, 0, 0, 0);
-      
-      const newHires = await EmployeeModel.countDocuments({
-        startDate: { $gte: startOfMonth },
-        status: 'Active',
+
+      const now = new Date();
+      const startOfCurrentMonth = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        1,
+        0,
+        0,
+        0,
+        0
+      );
+      const monthCount = range === 'ytd' ? now.getMonth() + 1 : 6;
+      const firstMonthStart = new Date(
+        startOfCurrentMonth.getFullYear(),
+        startOfCurrentMonth.getMonth() - (monthCount - 1),
+        1,
+        0,
+        0,
+        0,
+        0
+      );
+
+      const [
+        totalEmployees,
+        activeEmployees,
+        newHires,
+        hiresRows,
+        exitsRows,
+      ] = await Promise.all([
+        EmployeeModel.countDocuments(),
+        EmployeeModel.countDocuments({ status: 'Active' }),
+        EmployeeModel.countDocuments({
+          startDate: { $gte: startOfCurrentMonth, $lte: now },
+        }),
+        EmployeeModel.aggregate([
+          {
+            $match: {
+              startDate: { $gte: firstMonthStart, $lte: now },
+            },
+          },
+          {
+            $group: {
+              _id: {
+                y: { $year: '$startDate' },
+                m: { $month: '$startDate' },
+              },
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+        EmployeeModel.aggregate([
+          {
+            $match: {
+              status: { $in: ['Inactive', 'Terminated'] },
+              updatedAt: { $gte: firstMonthStart, $lte: now },
+            },
+          },
+          {
+            $group: {
+              _id: {
+                y: { $year: '$updatedAt' },
+                m: { $month: '$updatedAt' },
+              },
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+      ]);
+
+      const hiresByMonth = {};
+      const exitsByMonth = {};
+
+      hiresRows.forEach((row) => {
+        const key = `${row._id.y}-${String(row._id.m).padStart(2, '0')}`;
+        hiresByMonth[key] = row.count;
       });
 
-      // Calculate turnover rates (simplified - you can enhance this)
-      let months, turnoverRates;
-      if (range === 'ytd') {
-        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        turnoverRates = Array(12).fill(0).map(() => Math.random() * 3); // Placeholder
-      } else {
-        months = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        turnoverRates = Array(6).fill(0).map(() => Math.random() * 3); // Placeholder
+      exitsRows.forEach((row) => {
+        const key = `${row._id.y}-${String(row._id.m).padStart(2, '0')}`;
+        exitsByMonth[key] = row.count;
+      });
+
+      const months = [];
+      const turnoverRates = [];
+      const hiresTrend = [];
+      const exitsTrend = [];
+
+      for (let i = 0; i < monthCount; i += 1) {
+        const monthDate = new Date(
+          firstMonthStart.getFullYear(),
+          firstMonthStart.getMonth() + i,
+          1
+        );
+        const monthKey = `${monthDate.getFullYear()}-${String(
+          monthDate.getMonth() + 1
+        ).padStart(2, '0')}`;
+        const monthLabel = monthDate.toLocaleString('en-US', { month: 'short' });
+
+        const hiresCount = Number(hiresByMonth[monthKey] || 0);
+        const exitsCount = Number(exitsByMonth[monthKey] || 0);
+        const turnoverRate = Number(
+          ((exitsCount / Math.max(1, activeEmployees)) * 100).toFixed(1)
+        );
+
+        months.push(monthLabel);
+        turnoverRates.push(turnoverRate);
+        hiresTrend.push(hiresCount);
+        exitsTrend.push(exitsCount);
       }
 
-      res.json({ 
-        turnoverRates, 
-        months, 
+      res.json({
+        turnoverRates,
+        months,
         newHires,
         totalEmployees,
+        activeEmployees,
+        hiresTrend,
+        exitsTrend,
       });
     } catch (err) {
       console.error('Error fetching analytics:', err);

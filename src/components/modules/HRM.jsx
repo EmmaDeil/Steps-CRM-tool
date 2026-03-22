@@ -179,6 +179,37 @@ const HRM = () => {
   const fetchAll = async () => {
     try {
       setEmployeesLoading(true);
+
+      const unwrapPayload = (payload) => {
+        if (
+          payload &&
+          typeof payload === "object" &&
+          payload.data !== undefined
+        ) {
+          return payload.data;
+        }
+        return payload;
+      };
+
+      const toArrayPayload = (payload) => {
+        const unwrapped = unwrapPayload(payload);
+        if (Array.isArray(unwrapped)) return unwrapped;
+        if (Array.isArray(unwrapped?.data)) return unwrapped.data;
+        return [];
+      };
+
+      const toObjectPayload = (payload, fallback = {}) => {
+        const unwrapped = unwrapPayload(payload);
+        if (
+          unwrapped &&
+          typeof unwrapped === "object" &&
+          !Array.isArray(unwrapped)
+        ) {
+          return unwrapped;
+        }
+        return fallback;
+      };
+
       const [
         empRes,
         reqRes,
@@ -204,54 +235,49 @@ const HRM = () => {
       ]);
 
       setEmployees(
-        empRes.status === "fulfilled" && empRes.value
-          ? empRes.value.data || []
-          : [],
+        empRes.status === "fulfilled" ? toArrayPayload(empRes.value) : [],
       );
       setRequisitions(
-        reqRes.status === "fulfilled" && reqRes.value.data
-          ? Array.isArray(reqRes.value.data)
-            ? reqRes.value.data
-            : reqRes.value.data.data || []
-          : [],
+        reqRes.status === "fulfilled" ? toArrayPayload(reqRes.value) : [],
       );
       setAnalytics(
-        anaRes.status === "fulfilled" && anaRes.value.data
-          ? anaRes.value.data
+        anaRes.status === "fulfilled"
+          ? {
+              turnoverRates: [],
+              months: [],
+              newHires: 0,
+              ...toObjectPayload(anaRes.value, {}),
+            }
           : { turnoverRates: [], months: [], newHires: 0 },
       );
       setLeaveRequests(
-        leaveRes.status === "fulfilled" && leaveRes.value.data
-          ? Array.isArray(leaveRes.value.data)
-            ? leaveRes.value.data
-            : leaveRes.value.data.data || []
-          : [],
+        leaveRes.status === "fulfilled" ? toArrayPayload(leaveRes.value) : [],
       );
       setLeaveAllocations(
-        allocRes.status === "fulfilled" && allocRes.value.data
-          ? Array.isArray(allocRes.value.data)
-            ? allocRes.value.data
-            : allocRes.value.data.data || []
-          : [],
+        allocRes.status === "fulfilled" ? toArrayPayload(allocRes.value) : [],
       );
       setPerformance(
-        perfRes.status === "fulfilled" && perfRes.value.data
-          ? perfRes.value.data
+        perfRes.status === "fulfilled"
+          ? {
+              q3CompletedPct: 0,
+              pending: { selfReviews: 0, managerReviews: 0 },
+              ...toObjectPayload(perfRes.value, {}),
+            }
           : {
               q3CompletedPct: 0,
               pending: { selfReviews: 0, managerReviews: 0 },
             },
       );
       setTraining(
-        trainRes.status === "fulfilled" && trainRes.value.data
-          ? Array.isArray(trainRes.value.data)
-            ? trainRes.value.data
-            : trainRes.value.data.data || []
-          : [],
+        trainRes.status === "fulfilled" ? toArrayPayload(trainRes.value) : [],
       );
       setPayrollNext(
-        payRes.status === "fulfilled" && payRes.value.data
-          ? payRes.value.data
+        payRes.status === "fulfilled"
+          ? {
+              date: "",
+              runApproved: false,
+              ...toObjectPayload(payRes.value, {}),
+            }
           : { date: "", runApproved: false },
       );
 
@@ -734,19 +760,16 @@ const HRM = () => {
                 label="Total Employees"
                 icon="group"
                 value={employeesLoading ? "…" : totalEmployees}
-                trend={2.1}
               />
               <StatCard
                 label="Open Requisitions"
                 icon="work"
                 value={openRequisitions}
-                trend={5}
               />
               <StatCard
                 label="New Hires (Mo)"
                 icon="badge"
                 value={analytics.newHires}
-                trend={12}
               />
               <StatCard
                 label="Pending Approvals"

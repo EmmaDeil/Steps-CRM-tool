@@ -13,6 +13,13 @@ const EmployeeSchema = new mongoose.Schema({
   avatar: { type: String, default: '' }, // Stores base64 data URL (data:image/png;base64,...)
   employeeId: { type: String },
   salary: { type: Number, default: 0 },
+  paySchedule: {
+    type: String,
+    enum: ['Monthly', 'Semi-monthly', 'Bi-weekly', 'Weekly'],
+    default: undefined,
+  },
+  bonus: { type: Number, default: 0 },
+  allowances: { type: Number, default: 0 },
   address: { type: String },
   emergencyContact: {
     name: { type: String },

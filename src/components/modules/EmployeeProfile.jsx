@@ -427,6 +427,9 @@ const EmployeeProfile = ({
           jobTitle: editingEmployee.jobTitle || "",
           status: editingEmployee.status || "Active",
           salary: editingEmployee.salary || 0,
+          paySchedule: editingEmployee.paySchedule || "",
+          bonus: editingEmployee.bonus || 0,
+          allowances: editingEmployee.allowances || 0,
           startDate: editingEmployee.startDate || "",
           employmentType: editingEmployee.employmentType || "",
           managerId: editingEmployee.managerId || "",
@@ -444,6 +447,7 @@ const EmployeeProfile = ({
       const response = await apiService.put(
         `/api/hr/employees/${employee._id}`,
         payload,
+        { timeout: 30000 },
       );
 
       if (response) {
@@ -474,8 +478,15 @@ const EmployeeProfile = ({
       }
     } catch (error) {
       console.error("Error saving employee:", error);
+      const timeoutMessage =
+        error?.code === "ECONNABORTED"
+          ? "Save request timed out. Please ensure the server is running and try again."
+          : null;
       toast.error(
-        error.response?.data?.message || "Failed to save employee profile",
+        timeoutMessage ||
+          error.serverData?.message ||
+          error.response?.data?.message ||
+          "Failed to save employee profile",
         {
           icon: "❌",
           duration: 4000,
