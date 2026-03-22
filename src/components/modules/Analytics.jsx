@@ -20,6 +20,26 @@ import {
   Legend,
 } from "recharts";
 
+const normalizeReportItem = (report) => ({
+  ...report,
+  icon: report?.icon || "fa-file-lines",
+  iconColor: report?.iconColor || "bg-blue-100 text-blue-600",
+  status: report?.status || "Processing",
+  module: report?.module || "General",
+  name: report?.name || "Untitled Report",
+});
+
+const safeDate = (value, fallback = "-") => {
+  if (!value) return fallback;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return fallback;
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
 const Analytics = () => {
   const location = useLocation();
   useAuth();
@@ -54,6 +74,9 @@ const Analytics = () => {
   ];
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [reportSortOrder, setReportSortOrder] = useState("desc");
+  const [reportPage, setReportPage] = useState(1);
+  const reportsPerPage = 10;
 
   useEffect(() => {
     if (location.state?.defaultSearch) {
@@ -91,15 +114,16 @@ const Analytics = () => {
         const response = await apiService.get("/api/analytics/reports", {
           timeout: 30000,
         });
-        if (response?.data) {
+        const payload = response?.data || response;
+        if (payload) {
           setDatasets({
-            facilityData: response.data.facilityData || [],
-            financialData: response.data.financialData || [],
-            attendanceData: response.data.attendanceData || [],
-            approvalData: response.data.approvalData || [],
-            customData: response.data.customData || [],
-            moduleDetails: response.data.moduleDetails || {},
-            stats: response.data.stats || {},
+            facilityData: payload.facilityData || [],
+            financialData: payload.financialData || [],
+            attendanceData: payload.attendanceData || [],
+            approvalData: payload.approvalData || [],
+            customData: payload.customData || [],
+            moduleDetails: payload.moduleDetails || {},
+            stats: payload.stats || {},
           });
         }
       } catch (err) {
@@ -194,9 +218,11 @@ const Analytics = () => {
             includeDrafts: includeDrafts || undefined,
           },
         });
-        if (response?.reports) {
-          setReports(response.reports);
-        }
+        const reportList =
+          (Array.isArray(response?.reports) && response.reports) ||
+          (Array.isArray(response?.data?.reports) && response.data.reports) ||
+          [];
+        setReports(reportList.map(normalizeReportItem));
       } catch (err) {
         console.error("Failed to load reports", err);
         toast.error("Failed to fetch reports.");
@@ -377,12 +403,32 @@ const Analytics = () => {
   const stats = getDynamicStats();
 
   // Filter reports based on search query
-  const filteredReports = reports.filter(
-    (report) =>
-      report.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      report.reportType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      report.module?.toLowerCase().includes(searchQuery.toLowerCase()),
+  const filteredReports = reports
+    .filter(
+      (report) =>
+        report.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        report.reportType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        report.module?.toLowerCase().includes(searchQuery.toLowerCase()),
+    )
+    .sort((a, b) => {
+      const timeA = new Date(a.createdAt || 0).getTime() || 0;
+      const timeB = new Date(b.createdAt || 0).getTime() || 0;
+      return reportSortOrder === "desc" ? timeB - timeA : timeA - timeB;
+    });
+
+  const totalReportPages = Math.max(
+    1,
+    Math.ceil(filteredReports.length / reportsPerPage),
   );
+
+  const paginatedReports = filteredReports.slice(
+    (reportPage - 1) * reportsPerPage,
+    reportPage * reportsPerPage,
+  );
+
+  useEffect(() => {
+    setReportPage(1);
+  }, [searchQuery, reportSortOrder, reports.length]);
 
   const getStatusColor = (status) => {
     const colors = {
@@ -408,7 +454,7 @@ const Analytics = () => {
 
       if (response?.success) {
         toast.success("Report deleted successfully");
-        setReports(reports.filter((r) => r._id !== reportId));
+        setReports((prev) => prev.filter((r) => r._id !== reportId));
       }
     } catch (error) {
       console.error("Error deleting report:", error);
@@ -427,6 +473,98 @@ const Analytics = () => {
     setCustomModules([]);
     setModuleSearch("");
     toast.success("Filters reset");
+  };
+
+  const handleGenerateReport = async () => {
+    try {
+      const payload = {
+        reportType,
+        department,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        includeDrafts,
+        generatedBy: "Analytics Module",
+      };
+
+      const response = await apiService.post("/api/reports", payload, {
+        timeout: 30000,
+      });
+      const created = response?.report || response?.data?.report;
+
+      if (created?._id) {
+        setReports((prev) => [normalizeReportItem(created), ...prev]);
+        toast.success("Report generation started");
+
+        setTimeout(async () => {
+          try {
+            const refreshedResponse = await apiService.get(
+              `/api/reports/${created._id}`,
+              {
+                timeout: 15000,
+              },
+            );
+            const refreshed =
+              refreshedResponse?.report || refreshedResponse?.data?.report;
+            if (refreshed?._id) {
+              setReports((prev) =>
+                prev.map((report) =>
+                  report._id === refreshed._id
+                    ? normalizeReportItem(refreshed)
+                    : report,
+                ),
+              );
+            }
+          } catch (_err) {
+            // Silent: keep existing state if follow-up refresh fails.
+          }
+        }, 2500);
+      } else {
+        toast.success("Report requested");
+      }
+    } catch (err) {
+      console.error("Failed to generate report", err);
+      toast.error(err?.serverData?.error || "Failed to generate report");
+    }
+  };
+
+  const handlePrintRecentReports = () => {
+    if (paginatedReports.length === 0) {
+      toast("No reports to print");
+      return;
+    }
+
+    const printContent = `
+      <html><head><title>Recent Reports</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        h1 { font-size: 18px; margin-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f5f5f5; font-weight: 600; }
+      </style></head><body>
+      <h1>Recent Reports</h1>
+      <table>
+        <thead><tr><th>Name</th><th>Module</th><th>Date</th><th>Status</th></tr></thead>
+        <tbody>
+          ${paginatedReports
+            .map(
+              (r) =>
+                `<tr><td>${r.name}</td><td>${r.module}</td><td>${safeDate(r.createdAt)}</td><td>${r.status}</td></tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>
+      </body></html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast.error("Unable to open print dialog");
+      return;
+    }
+
+    win.document.write(printContent);
+    win.document.close();
+    win.print();
   };
 
   // Departments now provided by useDepartments()
@@ -514,6 +652,16 @@ const Analytics = () => {
     }
   };
 
+  const statToneMap = {
+    blue: { box: "bg-blue-100", text: "text-blue-600" },
+    green: { box: "bg-green-100", text: "text-green-600" },
+    red: { box: "bg-red-100", text: "text-red-600" },
+    orange: { box: "bg-orange-100", text: "text-orange-600" },
+    purple: { box: "bg-purple-100", text: "text-purple-600" },
+  };
+
+  const getStatTone = (color) => statToneMap[color] || statToneMap.blue;
+
   return (
     <div className="w-full min-h-screen bg-gray-50 px-1">
       <Breadcrumb
@@ -584,10 +732,10 @@ const Analytics = () => {
                 </p>
               </div>
               <div
-                className={`w-10 h-10 bg-${stats.color1}-100 rounded-lg flex items-center justify-center`}
+                className={`w-10 h-10 ${getStatTone(stats.color1).box} rounded-lg flex items-center justify-center`}
               >
                 <i
-                  className={`fa-solid ${stats.icon1} text-${stats.color1}-600`}
+                  className={`fa-solid ${stats.icon1} ${getStatTone(stats.color1).text}`}
                 ></i>
               </div>
             </div>
@@ -608,15 +756,17 @@ const Analytics = () => {
                 </p>
               </div>
               <div
-                className={`w-10 h-10 bg-${stats.color2}-100 rounded-lg flex items-center justify-center`}
+                className={`w-10 h-10 ${getStatTone(stats.color2).box} rounded-lg flex items-center justify-center`}
               >
                 <i
-                  className={`fa-solid ${stats.icon2} text-${stats.color2}-600`}
+                  className={`fa-solid ${stats.icon2} ${getStatTone(stats.color2).text}`}
                 ></i>
               </div>
             </div>
             {stats.status2 && (
-              <p className={`text-sm text-${stats.color2}-600 font-medium`}>
+              <p
+                className={`text-sm ${getStatTone(stats.color2).text} font-medium`}
+              >
                 {stats.status2}
               </p>
             )}
@@ -631,14 +781,16 @@ const Analytics = () => {
                 </p>
               </div>
               <div
-                className={`w-10 h-10 bg-${stats.color3}-100 rounded-lg flex items-center justify-center`}
+                className={`w-10 h-10 ${getStatTone(stats.color3).box} rounded-lg flex items-center justify-center`}
               >
                 <i
-                  className={`fa-solid ${stats.icon3} text-${stats.color3}-600`}
+                  className={`fa-solid ${stats.icon3} ${getStatTone(stats.color3).text}`}
                 ></i>
               </div>
             </div>
-            <p className={`text-sm text-${stats.color3}-600 font-medium`}>
+            <p
+              className={`text-sm ${getStatTone(stats.color3).text} font-medium`}
+            >
               {stats.growth3 && (
                 <i className="fa-solid fa-arrow-trend-up mr-1"></i>
               )}
@@ -655,15 +807,17 @@ const Analytics = () => {
                 </p>
               </div>
               <div
-                className={`w-10 h-10 bg-${stats.color4}-100 rounded-lg flex items-center justify-center`}
+                className={`w-10 h-10 ${getStatTone(stats.color4).box} rounded-lg flex items-center justify-center`}
               >
                 <i
-                  className={`fa-solid ${stats.icon4} text-${stats.color4}-600`}
+                  className={`fa-solid ${stats.icon4} ${getStatTone(stats.color4).text}`}
                 ></i>
               </div>
             </div>
             {stats.status4 && (
-              <p className={`text-sm text-${stats.color4}-600 font-medium`}>
+              <p
+                className={`text-sm ${getStatTone(stats.color4).text} font-medium`}
+              >
                 {stats.status4}
               </p>
             )}
@@ -1295,6 +1449,14 @@ const Analytics = () => {
 
                 {/* Reset Filters */}
                 <button
+                  onClick={handleGenerateReport}
+                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm"
+                >
+                  <i className="fa-solid fa-gear mr-2"></i>
+                  Generate Report
+                </button>
+
+                <button
                   onClick={handleResetFilters}
                   className="w-full px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors text-sm"
                 >
@@ -1313,10 +1475,22 @@ const Analytics = () => {
                     Recent Reports
                   </h3>
                   <div className="flex items-center gap-2">
-                    <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                    <button
+                      onClick={() =>
+                        setReportSortOrder((prev) =>
+                          prev === "desc" ? "asc" : "desc",
+                        )
+                      }
+                      title={`Sort by date (${reportSortOrder === "desc" ? "newest" : "oldest"} first)`}
+                      className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                    >
                       <i className="fa-solid fa-list"></i>
                     </button>
-                    <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                    <button
+                      onClick={handlePrintRecentReports}
+                      title="Print current report page"
+                      className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                    >
                       <i className="fa-solid fa-print"></i>
                     </button>
                   </div>
@@ -1389,7 +1563,7 @@ const Analytics = () => {
                         </td>
                       </tr>
                     ) : (
-                      filteredReports.map((report) => (
+                      paginatedReports.map((report) => (
                         <tr key={report._id} className="hover:bg-gray-50">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
@@ -1403,7 +1577,10 @@ const Analytics = () => {
                                   {report.name}
                                 </p>
                                 <p className="text-sm text-gray-500">
-                                  ID: #{report._id.slice(-8).toUpperCase()}
+                                  ID: #
+                                  {String(report._id || "")
+                                    .slice(-8)
+                                    .toUpperCase()}
                                 </p>
                               </div>
                             </div>
@@ -1415,14 +1592,7 @@ const Analytics = () => {
                           </td>
                           <td className="px-6 py-4">
                             <span className="text-sm text-gray-900">
-                              {new Date(report.createdAt).toLocaleDateString(
-                                "en-US",
-                                {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                },
-                              )}
+                              {safeDate(report.createdAt)}
                             </span>
                           </td>
                           <td className="px-6 py-4">
@@ -1500,21 +1670,37 @@ const Analytics = () => {
               {/* Pagination */}
               <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
                 <p className="text-sm text-gray-600">
-                  Showing {filteredReports.length > 0 ? "1" : "0"} to{" "}
-                  {filteredReports.length} of {reports.length} results
+                  Showing{" "}
+                  {filteredReports.length === 0
+                    ? 0
+                    : (reportPage - 1) * reportsPerPage + 1}{" "}
+                  to{" "}
+                  {Math.min(
+                    reportPage * reportsPerPage,
+                    filteredReports.length,
+                  )}{" "}
+                  of {filteredReports.length} results
                 </p>
                 <div className="flex items-center gap-2">
                   <button
-                    disabled
+                    onClick={() =>
+                      setReportPage((prev) => Math.max(1, prev - 1))
+                    }
+                    disabled={reportPage <= 1}
                     className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Previous
                   </button>
                   <button className="px-3 py-1 bg-blue-600 text-white rounded text-sm font-medium">
-                    1
+                    {reportPage}
                   </button>
                   <button
-                    disabled
+                    onClick={() =>
+                      setReportPage((prev) =>
+                        Math.min(totalReportPages, prev + 1),
+                      )
+                    }
+                    disabled={reportPage >= totalReportPages}
                     className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next

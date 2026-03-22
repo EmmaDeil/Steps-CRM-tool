@@ -1614,6 +1614,41 @@ async function start() {
           module: 'Custom',
           icon: 'fa-file-alt',
           iconColor: 'bg-gray-100 text-gray-600'
+        },
+        'Procurement Performance Report': {
+          module: 'Procurement',
+          icon: 'fa-cart-shopping',
+          iconColor: 'bg-amber-100 text-amber-700'
+        },
+        'Inventory Health Report': {
+          module: 'Inventory',
+          icon: 'fa-boxes-stacked',
+          iconColor: 'bg-emerald-100 text-emerald-700'
+        },
+        'Vendor Performance Report': {
+          module: 'Vendor Management',
+          icon: 'fa-building-user',
+          iconColor: 'bg-indigo-100 text-indigo-700'
+        },
+        'Workforce Insights Report': {
+          module: 'HR & Admin',
+          icon: 'fa-people-group',
+          iconColor: 'bg-rose-100 text-rose-700'
+        },
+        'Accounts Payable Aging Report': {
+          module: 'Finance',
+          icon: 'fa-file-invoice-dollar',
+          iconColor: 'bg-cyan-100 text-cyan-700'
+        },
+        'Payroll Variance Report': {
+          module: 'HR & Payroll',
+          icon: 'fa-money-check-dollar',
+          iconColor: 'bg-lime-100 text-lime-700'
+        },
+        'Security Incident Report': {
+          module: 'Physical Security',
+          icon: 'fa-shield-halved',
+          iconColor: 'bg-red-100 text-red-700'
         }
       };
       
@@ -1627,7 +1662,11 @@ async function start() {
       // Build date filter for aggregation
       const dateFilter = {};
       if (startDate) dateFilter.$gte = new Date(startDate);
-      if (endDate) dateFilter.$lte = new Date(endDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.$lte = end;
+      }
       const hasDateFilter = Object.keys(dateFilter).length > 0;
 
       // Aggregate real data based on report type
