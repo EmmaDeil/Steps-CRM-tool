@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAppContext } from "../../context/useAppContext";
+import { useAuth } from "../../context/useAuth";
 import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
@@ -9,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 const PurchaseOrders = () => {
   const navigate = useNavigate();
   const { modules } = useAppContext();
+  const { user } = useAuth();
   const pendingOpenPoRef = useRef({ id: "", number: "" });
   const commentInputRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -717,10 +719,64 @@ const PurchaseOrders = () => {
     return `${approved}/${chain.length} approved`;
   };
 
+  const canUserApprovePo = useCallback(
+    (po) => {
+      if (!po) return false;
+
+      const normalize = (value) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/\s+/g, " ")
+          .trim();
+      const normalizeName = (value) =>
+        normalize(value).replace(/[^a-z0-9\s]/g, "");
+
+      const actorId = String(user?._id || user?.id || "").trim();
+      const actorEmail = normalize(
+        user?.primaryEmailAddress?.emailAddress || user?.email || "",
+      );
+      const actorName = normalizeName(
+        user?.fullName ||
+          [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+          "",
+      );
+      const isAdmin = normalize(user?.role) === "admin";
+      if (isAdmin) return true;
+
+      const chain = Array.isArray(po?.approvalChain) ? po.approvalChain : [];
+      const pendingOrAwaiting =
+        chain.find(
+          (step) => String(step?.status || "").toLowerCase() === "pending",
+        ) ||
+        chain.find(
+          (step) => String(step?.status || "").toLowerCase() === "awaiting",
+        );
+
+      if (pendingOrAwaiting) {
+        return (
+          (pendingOrAwaiting.approverId &&
+            String(pendingOrAwaiting.approverId).trim() === actorId) ||
+          (pendingOrAwaiting.approverEmail &&
+            normalize(pendingOrAwaiting.approverEmail) === actorEmail) ||
+          (pendingOrAwaiting.approverName &&
+            normalizeName(pendingOrAwaiting.approverName) === actorName)
+        );
+      }
+
+      return (
+        (po.approverId && String(po.approverId).trim() === actorId) ||
+        (po.approverEmail && normalize(po.approverEmail) === actorEmail) ||
+        (po.approver && normalizeName(po.approver) === actorName)
+      );
+    },
+    [user],
+  );
+
   const selectedPoStatus = String(selectedPo?.status || "").toLowerCase();
   const showApprovalDecisionButtons =
     !!selectedPo &&
     !selectedPo?.isLocked &&
+    canUserApprovePo(selectedPo) &&
     ![
       "approved",
       "payment_pending",
@@ -1007,7 +1063,9 @@ const PurchaseOrders = () => {
                           vendor: selectedPo.vendor || "",
                           status: selectedPo.status || "draft",
                           expectedDelivery: selectedPo.expectedDelivery
-                            ? new Date(selectedPo.expectedDelivery).toISOString().split("T")[0]
+                            ? new Date(selectedPo.expectedDelivery)
+                                .toISOString()
+                                .split("T")[0]
                             : "",
                           comment: selectedPo.notes || selectedPo.comment || "",
                         });
@@ -1359,20 +1417,35 @@ const PurchaseOrders = () => {
                                         {part}
                                       </span>
                                     );
-                                  } else if (/^Invoice #[a-zA-Z0-9_-]+/.test(part)) {
-                                    const invNum = part.replace("Invoice #", "");
+                                  } else if (
+                                    /^Invoice #[a-zA-Z0-9_-]+/.test(part)
+                                  ) {
+                                    const invNum = part.replace(
+                                      "Invoice #",
+                                      "",
+                                    );
                                     return (
                                       <button
                                         key={pIdx}
                                         type="button"
                                         onClick={() => {
-                                          const financeModule = modules?.find((m) => m.name === "Finance");
+                                          const financeModule = modules?.find(
+                                            (m) => m.name === "Finance",
+                                          );
                                           if (financeModule) {
-                                            navigate(`/home/${financeModule.id || financeModule._id}`, {
-                                              state: { openInvoicing: true, invoiceSearch: invNum }
-                                            });
+                                            navigate(
+                                              `/home/${financeModule.id || financeModule._id}`,
+                                              {
+                                                state: {
+                                                  openInvoicing: true,
+                                                  invoiceSearch: invNum,
+                                                },
+                                              },
+                                            );
                                           } else {
-                                            toast.error("Finance module not found.");
+                                            toast.error(
+                                              "Finance module not found.",
+                                            );
                                           }
                                         }}
                                         className="inline-flex items-center text-[#137fec] hover:text-blue-700 hover:underline font-semibold mx-0.5"

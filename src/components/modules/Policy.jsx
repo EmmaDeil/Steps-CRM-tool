@@ -7,6 +7,48 @@ import { useDepartments } from "../../context/useDepartments";
 
 const Policy = () => {
   const { user } = useAuth();
+
+  const normalize = useCallback(
+    (value) =>
+      String(value || "")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim(),
+    [],
+  );
+
+  const normalizeName = useCallback(
+    (value) => normalize(value).replace(/[^a-z0-9\s]/g, ""),
+    [normalize],
+  );
+
+  const canUserReviewPolicy = useCallback(
+    (policy) => {
+      if (!policy) return false;
+
+      const actorId = String(user?._id || user?.id || "").trim();
+      const actorEmail = normalize(
+        user?.primaryEmailAddress?.emailAddress || user?.email || "",
+      );
+      const actorName = normalizeName(
+        user?.fullName ||
+          [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+          "",
+      );
+
+      const isAdmin = normalize(user?.role) === "admin";
+      if (isAdmin) return true;
+
+      return (
+        (policy.approverId && String(policy.approverId).trim() === actorId) ||
+        (policy.approverEmail &&
+          normalize(policy.approverEmail) === actorEmail) ||
+        (policy.approver && normalizeName(policy.approver) === actorName)
+      );
+    },
+    [normalize, normalizeName, user],
+  );
+
   const [policies, setPolicies] = useState([]);
   const [policiesLoading, setPoliciesLoading] = useState(true);
   const { departments, loading: departmentsLoading } = useDepartments();
@@ -919,15 +961,16 @@ const Policy = () => {
                                 Submit for Approval
                               </button>
                             )}
-                            {policy.status === "Pending Approval" && (
-                              <button
-                                onClick={() => setApprovalModal(policy)}
-                                className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 flex items-center gap-2"
-                              >
-                                <i className="fa-solid fa-check-circle"></i>
-                                Review & Approve
-                              </button>
-                            )}
+                            {policy.status === "Pending Approval" &&
+                              canUserReviewPolicy(policy) && (
+                                <button
+                                  onClick={() => setApprovalModal(policy)}
+                                  className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 flex items-center gap-2"
+                                >
+                                  <i className="fa-solid fa-check-circle"></i>
+                                  Review & Approve
+                                </button>
+                              )}
                             <button
                               onClick={() => handleEditPolicy(policy._id)}
                               className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
@@ -1546,36 +1589,53 @@ const Policy = () => {
               </div>
 
               {/* Approval Actions */}
-              <div className="space-y-3 pt-4 border-t border-gray-200">
-                <p className="text-sm text-gray-600 mb-4">
-                  Review the policy document above and choose an action:
-                </p>
-                <div className="flex gap-3">
+              {canUserReviewPolicy(approvalModal) ? (
+                <div className="space-y-3 pt-4 border-t border-gray-200">
+                  <p className="text-sm text-gray-600 mb-4">
+                    Review the policy document above and choose an action:
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => handleApprovePolicy(approvalModal._id)}
+                      className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      <i className="fa-solid fa-check-circle"></i>
+                      Approve & Publish
+                    </button>
+                    <button
+                      onClick={() => handleRejectPolicy(approvalModal._id)}
+                      className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      <i className="fa-solid fa-times-circle"></i>
+                      Reject & Return
+                    </button>
+                  </div>
                   <button
-                    onClick={() => handleApprovePolicy(approvalModal._id)}
-                    className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                    onClick={() => {
+                      setApprovalModal(null);
+                      setActionMenuOpen(null);
+                    }}
+                    className="w-full px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
                   >
-                    <i className="fa-solid fa-check-circle"></i>
-                    Approve & Publish
-                  </button>
-                  <button
-                    onClick={() => handleRejectPolicy(approvalModal._id)}
-                    className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-                  >
-                    <i className="fa-solid fa-times-circle"></i>
-                    Reject & Return
+                    Cancel
                   </button>
                 </div>
-                <button
-                  onClick={() => {
-                    setApprovalModal(null);
-                    setActionMenuOpen(null);
-                  }}
-                  className="w-full px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
+              ) : (
+                <div className="space-y-3 pt-4 border-t border-gray-200">
+                  <p className="text-sm text-gray-600">
+                    You are not assigned to review this policy.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setApprovalModal(null);
+                      setActionMenuOpen(null);
+                    }}
+                    className="w-full px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

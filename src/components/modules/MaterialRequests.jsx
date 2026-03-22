@@ -641,41 +641,44 @@ const MaterialRequests = () => {
   };
 
   const isUserApprover = (request) => {
-    const currentStep = getCurrentPendingApprover(request);
-    const currentUserId = String(user?._id || "");
-    const currentUserEmail = String(
+    const normalize = (value) =>
+      String(value || "")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+    const normalizeName = (value) =>
+      normalize(value).replace(/[^a-z0-9\s]/g, "");
+
+    const currentUserId = String(user?._id || user?.id || "").trim();
+    const currentUserEmail = normalize(
       user?.primaryEmailAddress?.emailAddress || user?.email || "",
-    )
-      .toLowerCase()
-      .trim();
-    const currentUserName = String(user?.fullName || "")
-      .toLowerCase()
-      .trim();
+    );
+    const currentUserName = normalizeName(
+      user?.fullName ||
+        [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+        "",
+    );
+    const isAdmin = normalize(user?.role) === "admin";
+
+    if (isAdmin) return true;
+
+    const currentStep = getCurrentPendingApprover(request);
 
     if (currentStep) {
       return (
         (currentStep.approverId &&
           String(currentStep.approverId).trim() === currentUserId) ||
         (currentStep.approverEmail &&
-          String(currentStep.approverEmail).toLowerCase().trim() ===
-            currentUserEmail) ||
+          normalize(currentStep.approverEmail) === currentUserEmail) ||
         (currentStep.approverName &&
-          String(currentStep.approverName).toLowerCase().trim() ===
-            currentUserName)
+          normalizeName(currentStep.approverName) === currentUserName)
       );
     }
 
     return (
-      String(user?.fullName || "")
-        .toLowerCase()
-        .trim() ===
-        String(request?.approver || "")
-          .toLowerCase()
-          .trim() ||
-      currentUserEmail ===
-        String(request?.approverEmail || "")
-          .toLowerCase()
-          .trim()
+      normalizeName(request?.approver || "") === currentUserName ||
+      normalize(request?.approverEmail || "") === currentUserEmail ||
+      String(request?.approverId || "").trim() === currentUserId
     );
   };
 
@@ -959,30 +962,31 @@ const MaterialRequests = () => {
               <i className="fa-solid fa-paper-plane"></i>
             </button>
           )}
-          {isUserApprover(req) && req.status === "pending" && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleApproveClick(req);
-                }}
-                className="p-1 text-[#617589] hover:text-green-600 transition-colors"
-                title="Approve request"
-              >
-                <i className="fa-solid fa-check"></i>
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRejectClick(req);
-                }}
-                className="p-1 text-[#617589] hover:text-red-600 transition-colors"
-                title="Reject request"
-              >
-                <i className="fa-solid fa-times"></i>
-              </button>
-            </>
-          )}
+          {isUserApprover(req) &&
+            String(req.status || "").toLowerCase() === "pending" && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleApproveClick(req);
+                  }}
+                  className="p-1 text-[#617589] hover:text-green-600 transition-colors"
+                  title="Approve request"
+                >
+                  <i className="fa-solid fa-check"></i>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRejectClick(req);
+                  }}
+                  className="p-1 text-[#617589] hover:text-red-600 transition-colors"
+                  title="Reject request"
+                >
+                  <i className="fa-solid fa-times"></i>
+                </button>
+              </>
+            )}
         </div>
       ),
     },
@@ -2667,7 +2671,8 @@ const MaterialRequests = () => {
 
                   {/* Approval History (show here first for pending approver flow) */}
                   {isUserApprover(selectedRequest) &&
-                    selectedRequest.status === "pending" && (
+                    String(selectedRequest.status || "").toLowerCase() ===
+                      "pending" && (
                       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                         <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
                           <i className="fa-solid fa-clock-rotate-left text-gray-500"></i>
@@ -3207,7 +3212,8 @@ const MaterialRequests = () => {
                   {/* Approval History */}
                   {!(
                     isUserApprover(selectedRequest) &&
-                    selectedRequest.status === "pending"
+                    String(selectedRequest.status || "").toLowerCase() ===
+                      "pending"
                   ) && (
                     <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                       <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
