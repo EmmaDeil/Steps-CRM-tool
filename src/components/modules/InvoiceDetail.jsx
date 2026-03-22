@@ -30,25 +30,38 @@ const InvoiceDetail = ({ invoice, onBack }) => {
   return (
     <div className="w-full bg-white min-h-screen p-2 md:p-6 text-gray-800 flex flex-col">
       {/* Header controls (Hide in print) */}
-      <div className="flex justify-between items-center mb-6 print:hidden">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-800 transition-colors font-medium px-4 py-2 rounded-lg hover:bg-gray-100"
-        >
-          <i className="fa-solid fa-arrow-left"></i>
-          Back to Invoices
-        </button>
+      <div className="flex justify-end items-center mb-6 print:hidden">
         <button
           onClick={() => window.print()}
           className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg shadow-sm font-medium transition-colors"
         >
           <i className="fa-solid fa-print"></i>
-          Print Document
+          Print
         </button>
       </div>
 
+      {/* Print styles */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #printable-invoice, #printable-invoice * {
+            visibility: visible;
+          }
+          #printable-invoice {
+            position: absolute;
+            left: 0;
+            top: 0;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+          }
+        }
+      `}</style>
+
       {/* Printable Area */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-8 max-w-4xl mx-auto w-full print:border-none print:shadow-none print:p-0">
+      <div id="printable-invoice" className="bg-white border border-gray-200 rounded-xl shadow-sm p-8 max-w-4xl mx-auto w-full print:border-none print:shadow-none print:p-0">
         
         {/* Document Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 pb-6 mb-6">
@@ -70,7 +83,7 @@ const InvoiceDetail = ({ invoice, onBack }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 bg-gray-50 p-6 rounded-lg print:bg-transparent print:p-0 print:gap-4">
           <div>
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">From (Our Company)</h3>
-            <p className="font-semibold text-gray-800 text-lg">Steps CRM</p>
+            <p className="font-semibold text-gray-800 text-lg">Netlink CRM</p>
             <p className="text-sm text-gray-500 mt-1">Finance Department</p>
           </div>
           <div>

@@ -82,12 +82,12 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
       <section className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
         <div className="max-w-[1800px] mx-auto w-full flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button
+            {/* <button
               onClick={onBack}
               className="text-slate-400 hover:text-slate-600 transition-colors flex items-center justify-center p-2 rounded-full hover:bg-slate-100"
             >
               <i className="fa-solid fa-arrow-left text-lg"></i>
-            </button>
+            </button> */}
             <h1 className="text-xl font-bold text-slate-900">
               Invoice Details
             </h1>

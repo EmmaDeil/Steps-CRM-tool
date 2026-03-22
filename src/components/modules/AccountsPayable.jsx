@@ -369,13 +369,12 @@ const AccountsPayable = ({ onBack }) => {
                     <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
                       Dept.
                     </th>
-                    <th className="py-3 px-4 w-12 border-b border-slate-200"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-sm bg-white">
                   {invoices.length === 0 ? (
                     <tr>
-                      <td colSpan="9" className="py-12 text-center">
+                      <td colSpan="8" className="py-12 text-center">
                         <div className="flex flex-col items-center gap-3">
                           <div className="text-4xl">📋</div>
                           <div className="text-slate-900 font-medium">
@@ -391,7 +390,8 @@ const AccountsPayable = ({ onBack }) => {
                     invoices.map((invoice) => (
                       <tr
                         key={invoice._id}
-                        className={`hover:bg-slate-50 transition-colors group ${
+                        onClick={() => handleViewInvoiceDetails(invoice)}
+                        className={`hover:bg-slate-50 transition-colors group cursor-pointer ${
                           invoice.status === "Pending"
                             ? "bg-yellow-50/30"
                             : invoice.status === "Partly Paid"
@@ -399,7 +399,7 @@ const AccountsPayable = ({ onBack }) => {
                               : ""
                         }`}
                       >
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
                           <input
                             className="rounded border-slate-300 text-primary focus:ring-primary h-4 w-4"
                             type="checkbox"
@@ -455,14 +455,6 @@ const AccountsPayable = ({ onBack }) => {
                         </td>
                         <td className="py-3 px-4 text-slate-600">
                           {invoice.department || "General"}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <button
-                            onClick={() => handleViewInvoiceDetails(invoice)}
-                            className="text-slate-400 hover:text-primary transition-colors"
-                          >
-                            <i className="fa-solid fa-ellipsis-vertical text-lg"></i>
-                          </button>
                         </td>
                       </tr>
                     ))

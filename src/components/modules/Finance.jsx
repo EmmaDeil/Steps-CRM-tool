@@ -111,20 +111,8 @@ const Finance = () => {
       <div className="w-full min-h-screen bg-gray-50 px-1">
         <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
           <div className="flex h-full grow flex-col w-full">
-            <Breadcrumb
-              items={[
-                { label: "Home", href: "/home", icon: "fa-house" },
-                {
-                  label: "Finance",
-                  onClick: () => setShowInvoicing(false),
-                  icon: "fa-coins",
-                  cursor: "pointer",
-                },
-                { label: "Invoicing", icon: "fa-file-invoice-dollar" },
-              ]}
-            />
-            <div className="p-2 mt-4">
-              <Invoicing />
+            <div className="p-2">
+              <Invoicing onBackToFinance={() => setShowInvoicing(false)} />
             </div>
           </div>
         </div>

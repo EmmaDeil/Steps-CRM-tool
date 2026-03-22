@@ -86,27 +86,17 @@ const loadModuleComponent = (componentName) => {
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
 
-  // Fallback mapping for renamed/legacy component names
-  const componentMapping = {
-    FinanceReports: "Finance",
-    Admin: "Admin",
-    "Admin Controls": "Admin",
-    AdminControls: "Admin",
-    AdminControl: "Admin",
-    SignatureManagement: "DocSign",
-    Security: "PhysicalSecurity",
-    Budget: "Budget",
-    purchaseorders: "PurchaseOrders",
-    purchaseorder: "PurchaseOrders",
-    po: "PurchaseOrders",
-    materialrequests: "MaterialRequests",
-    materialrequest: "MaterialRequests",
+  // Aliases keep old DB module names working after component renames.
+  const componentAliasMap = {
+    financereports: "Finance",
+    admincontrols: "Admin",
+    admincontrol: "Admin",
+    signaturemanagement: "DocSign",
+    security: "PhysicalSecurity",
   };
 
   const finalComponentName =
-    componentMapping[componentName] ||
-    componentMapping[normalizedComponentName] ||
-    componentName;
+    componentAliasMap[normalizedComponentName] || componentName;
 
   const eagerComponents = {
     PurchaseOrders,
@@ -155,9 +145,21 @@ const iconMap = {
   Budget: { icon: "fa-wallet", color: "blue" },
 };
 
-const legacyModuleById = {
-  5: { id: 5, name: "Finance", componentName: "Finance" },
-  11: { id: 11, name: "Purchase Orders", componentName: "PurchaseOrders" },
+const normalizeModuleKey = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+const legacyModuleKeysById = {
+  5: ["finance"],
+  9: ["docsign"],
+  11: ["purchaseorders", "purchaseordersmodule"],
+};
+
+const legacyModuleLabelById = {
+  5: "Finance",
+  9: "DocSign",
+  11: "Purchase Orders",
 };
 
 export default function Home() {
@@ -205,39 +207,7 @@ export default function Home() {
   }, []);
 
   const handleOpenModule = (moduleId) => {
-    // Special handling for specific modules with hard fallback routes
-    const module = modules.find(
-      (m) => getModuleRouteId(m) === String(moduleId),
-    );
-
-    // Finance module - force to ID 5
-    if (
-      module &&
-      ((module.componentName || "").toLowerCase() === "finance" ||
-        (module.name || "").toLowerCase() === "finance")
-    ) {
-      navigate("/home/5");
-      return;
-    }
-
-    // Purchase Orders module - force to ID 11
-    if (
-      module &&
-      ((module.componentName || "").toLowerCase() === "purchaseorders" ||
-        (module.name || "").toLowerCase() === "purchase orders")
-    ) {
-      navigate("/home/11");
-      return;
-    }
-
-    if (
-      module &&
-      (module.componentName === "DocSign" || module.name === "DocSign")
-    ) {
-      navigate("/home/9");
-    } else {
-      navigate(`/home/${moduleId}`);
-    }
+    navigate(`/home/${moduleId}`);
   };
 
   // Memoize module component to prevent remount on parent re-render
@@ -250,7 +220,18 @@ export default function Home() {
     );
     if (matchedModule) return matchedModule;
 
-    return legacyModuleById[moduleRouteId] || null;
+    const legacyKeys = legacyModuleKeysById[moduleRouteId] || [];
+    if (legacyKeys.length === 0) return null;
+
+    return (
+      (modules || []).find((m) => {
+        const componentKey = normalizeModuleKey(m.componentName);
+        const nameKey = normalizeModuleKey(m.name);
+        return (
+          legacyKeys.includes(componentKey) || legacyKeys.includes(nameKey)
+        );
+      }) || null
+    );
   }, [moduleRouteId, modules, getModuleRouteId]);
 
   const ModuleComp = useMemo(() => {
@@ -260,8 +241,8 @@ export default function Home() {
 
   const requestedModuleName = useMemo(() => {
     if (found?.name) return found.name;
-    if (moduleRouteId && legacyModuleById[moduleRouteId]?.name) {
-      return legacyModuleById[moduleRouteId].name;
+    if (moduleRouteId && legacyModuleLabelById[moduleRouteId]) {
+      return legacyModuleLabelById[moduleRouteId];
     }
 
     const matchedModule = (modules || []).find(
