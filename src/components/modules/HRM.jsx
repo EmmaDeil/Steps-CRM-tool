@@ -57,6 +57,10 @@ const HRM = () => {
   const [employees, setEmployees] = useState([]);
   const [employeesLoading, setEmployeesLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [employeePage, setEmployeePage] = useState(1);
+  const [employeeTotal, setEmployeeTotal] = useState(0);
+  const [employeeTotalPages, setEmployeeTotalPages] = useState(1);
+  const EMPLOYEES_PAGE_SIZE = 20;
 
   // Department management state
   const [showDeptModal, setShowDeptModal] = useState(false);
@@ -106,6 +110,7 @@ const HRM = () => {
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
   const failureToastShownRef = useRef(false);
+  const searchEffectInitializedRef = useRef(false);
   const [startEmployeeInEditMode, setStartEmployeeInEditMode] = useState(false);
 
   // Leave allocations state
@@ -145,7 +150,7 @@ const HRM = () => {
     managerName: "",
   });
 
-  const totalEmployees = employees.length;
+  const totalEmployees = employeeTotal || employees.length;
   const openRequisitions = requisitions.length;
   // newHires provided in analytics
   const pendingApprovals = leaveRequests.filter(
@@ -176,55 +181,82 @@ const HRM = () => {
     );
   }, [user]);
 
+  const unwrapPayload = (payload) => {
+    if (payload && typeof payload === "object" && payload.data !== undefined) {
+      return payload.data;
+    }
+    return payload;
+  };
+
+  const toArrayPayload = (payload) => {
+    const unwrapped = unwrapPayload(payload);
+    if (Array.isArray(unwrapped)) return unwrapped;
+    if (Array.isArray(unwrapped?.data)) return unwrapped.data;
+    return [];
+  };
+
+  const toObjectPayload = (payload, fallback = {}) => {
+    const unwrapped = unwrapPayload(payload);
+    if (
+      unwrapped &&
+      typeof unwrapped === "object" &&
+      !Array.isArray(unwrapped)
+    ) {
+      return unwrapped;
+    }
+    return fallback;
+  };
+
+  const fetchEmployees = async (pageToLoad = employeePage) => {
+    setEmployeesLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(pageToLoad),
+        limit: String(EMPLOYEES_PAGE_SIZE),
+      });
+
+      if (search) {
+        params.set("search", search);
+      }
+
+      const empRes = await apiService.get(
+        `/api/hr/employees?${params.toString()}`,
+      );
+      const responsePayload = toObjectPayload(empRes, {});
+      const employeeList = Array.isArray(responsePayload?.data)
+        ? responsePayload.data
+        : toArrayPayload(empRes);
+      const pagination = responsePayload?.pagination || {};
+
+      setEmployees(employeeList);
+      setEmployeePage(pagination.page || pageToLoad);
+      setEmployeeTotal(pagination.total || employeeList.length);
+      setEmployeeTotalPages(
+        pagination.totalPages ||
+          Math.max(
+            Math.ceil(
+              (pagination.total || employeeList.length) / EMPLOYEES_PAGE_SIZE,
+            ),
+            1,
+          ),
+      );
+      setSelectedEmployees([]);
+      return true;
+    } catch (error) {
+      setEmployees([]);
+      setEmployeeTotal(0);
+      setEmployeeTotalPages(1);
+      console.warn("Failed to load employees:", error);
+      return false;
+    } finally {
+      setEmployeesLoading(false);
+    }
+  };
+
   const fetchAll = async () => {
     try {
       setEmployeesLoading(true);
-
-      const unwrapPayload = (payload) => {
-        if (
-          payload &&
-          typeof payload === "object" &&
-          payload.data !== undefined
-        ) {
-          return payload.data;
-        }
-        return payload;
-      };
-
-      const toArrayPayload = (payload) => {
-        const unwrapped = unwrapPayload(payload);
-        if (Array.isArray(unwrapped)) return unwrapped;
-        if (Array.isArray(unwrapped?.data)) return unwrapped.data;
-        return [];
-      };
-
-      const toObjectPayload = (payload, fallback = {}) => {
-        const unwrapped = unwrapPayload(payload);
-        if (
-          unwrapped &&
-          typeof unwrapped === "object" &&
-          !Array.isArray(unwrapped)
-        ) {
-          return unwrapped;
-        }
-        return fallback;
-      };
-
-      const [
-        empRes,
-        reqRes,
-        anaRes,
-        leaveRes,
-        perfRes,
-        trainRes,
-        payRes,
-        allocRes,
-      ] = await Promise.allSettled([
-        apiService.get(
-          `/api/hr/employees${
-            search ? `?search=${encodeURIComponent(search)}` : ""
-          }`,
-        ),
+      const dashboardPromise = Promise.allSettled([
         apiService.get("/api/hr/requisitions"),
         apiService.get(`/api/hr/analytics?range=${range}`),
         apiService.get("/api/hr/leave-requests"),
@@ -234,9 +266,11 @@ const HRM = () => {
         apiService.get("/api/hr/leave-allocations"),
       ]);
 
-      setEmployees(
-        empRes.status === "fulfilled" ? toArrayPayload(empRes.value) : [],
-      );
+      const employeesLoaded = await fetchEmployees(employeePage);
+
+      const [reqRes, anaRes, leaveRes, perfRes, trainRes, payRes, allocRes] =
+        await dashboardPromise;
+
       setRequisitions(
         reqRes.status === "fulfilled" ? toArrayPayload(reqRes.value) : [],
       );
@@ -283,7 +317,7 @@ const HRM = () => {
 
       // Check for failures and log them
       const failures = [
-        empRes.status === "rejected" ? "Employees" : null,
+        !employeesLoaded ? "Employees" : null,
         reqRes.status === "rejected" ? "Requisitions" : null,
         anaRes.status === "rejected" ? "Analytics" : null,
         leaveRes.status === "rejected" ? "Leave Requests" : null,
@@ -309,8 +343,9 @@ const HRM = () => {
     } catch (error) {
       console.error("Error in fetchAll:", error);
       toast.error("Failed to load HR dashboard data");
-    } finally {
       setEmployeesLoading(false);
+    } finally {
+      // employee loading is cleared when employeePromise settles.
     }
   };
 
@@ -321,7 +356,14 @@ const HRM = () => {
 
   // Debounced search
   useEffect(() => {
-    const t = setTimeout(() => fetchAll(), 400);
+    if (!searchEffectInitializedRef.current) {
+      searchEffectInitializedRef.current = true;
+      return;
+    }
+
+    const t = setTimeout(() => {
+      fetchEmployees(1);
+    }, 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
@@ -683,6 +725,37 @@ const HRM = () => {
           emptyMessage="No employees found."
           keyExtractor={(item) => item.id || item._id?.toString()}
         />
+      </div>
+      <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-xs text-slate-500">
+        <span>
+          Showing{" "}
+          {employees.length === 0
+            ? 0
+            : (employeePage - 1) * EMPLOYEES_PAGE_SIZE + 1}
+          -{Math.min(employeePage * EMPLOYEES_PAGE_SIZE, totalEmployees)} of{" "}
+          {totalEmployees}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchEmployees(Math.max(employeePage - 1, 1))}
+            disabled={employeesLoading || employeePage <= 1}
+            className="px-2.5 py-1 border border-slate-200 dark:border-slate-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <span>
+            Page {employeePage} / {employeeTotalPages}
+          </span>
+          <button
+            onClick={() =>
+              fetchEmployees(Math.min(employeePage + 1, employeeTotalPages))
+            }
+            disabled={employeesLoading || employeePage >= employeeTotalPages}
+            className="px-2.5 py-1 border border-slate-200 dark:border-slate-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );

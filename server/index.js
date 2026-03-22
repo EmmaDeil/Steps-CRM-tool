@@ -5006,6 +5006,7 @@ async function start() {
     employeeDirectorySyncInFlight = true;
     try {
       const users = await UserModel.find({}).select('firstName lastName fullName email role status department jobTitle phoneNumber employeeRef').lean();
+      let employeeSequence = await EmployeeModel.countDocuments();
 
       const toEmployeeStatus = (userStatus) => {
         if (userStatus === 'Inactive') return 'Terminated';
@@ -5039,8 +5040,8 @@ async function start() {
           continue;
         }
 
-        const count = await EmployeeModel.countDocuments();
-        const employeeId = `EMP${String(count + 1).padStart(5, '0')}`;
+        employeeSequence += 1;
+        const employeeId = `EMP${String(employeeSequence).padStart(5, '0')}`;
         const firstName = user.firstName || user.fullName?.split(' ')[0] || 'Unknown';
         const lastName = user.lastName || user.fullName?.split(' ').slice(1).join(' ') || 'User';
         const newEmployee = await EmployeeModel.create({
@@ -5071,10 +5072,17 @@ async function start() {
   app.get('/api/hr/employees', async (req, res) => {
     try {
       const { search } = req.query;
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const requestedLimit = parseInt(req.query.limit, 10) || 20;
+      const limit = Math.min(Math.max(requestedLimit, 1), 100);
+      const skip = (page - 1) * limit;
       let query = {};
 
       // Fire and forget sync so list requests stay responsive.
-      syncUsersIntoEmployees();
+      // Skip sync during search to keep typeahead results snappy.
+      if (!search && page === 1) {
+        syncUsersIntoEmployees();
+      }
       
       if (search) {
         const searchRegex = new RegExp(search, 'i');
@@ -5089,10 +5097,16 @@ async function start() {
           ],
         };
       }
+
+      const total = search
+        ? await EmployeeModel.countDocuments(query)
+        : await EmployeeModel.estimatedDocumentCount();
       
       const employees = await EmployeeModel.find(query)
-        .select('-__v')
-        .sort({ name: 1 })
+        .select('name firstName lastName email phone dateOfBirth department role jobTitle startDate status avatar employeeId')
+        .sort({ _id: -1 })
+        .skip(skip)
+        .limit(limit)
         .lean();
 
       // Transform to match frontend expected format
@@ -5112,7 +5126,16 @@ async function start() {
         employeeId: emp.employeeId,
       }));
 
-      res.json({ success: true, data: formattedEmployees });
+      res.json({
+        success: true,
+        data: formattedEmployees,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.max(Math.ceil(total / limit), 1),
+        },
+      });
     } catch (err) {
       console.error('Error fetching employees:', err);
       res.status(500).json({ success: false, message: 'Failed to fetch employees', error: err.message });
