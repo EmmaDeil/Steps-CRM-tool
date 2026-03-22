@@ -622,6 +622,7 @@ async function start() {
             department: user.department,
             jobTitle: user.jobTitle,
             mfaEnabled: false,
+            permissions: user.permissions || {},
           };
           return res.json({
             success: true,
@@ -652,6 +653,7 @@ async function start() {
         department: user.department,
         jobTitle: user.jobTitle,
         mfaEnabled: !!userWithMfa.mfaEnabled,
+        permissions: user.permissions || {},
       };
 
       res.json({
@@ -685,6 +687,7 @@ async function start() {
         profilePicture: req.user.profilePicture,
         department: req.user.department,
         jobTitle: req.user.jobTitle,
+        permissions: req.user.permissions || {},
       };
 
       res.json({
@@ -2776,7 +2779,10 @@ async function start() {
       try {
         let existingEmp = await EmployeeModel.findOne({ email: email.toLowerCase() });
         if (existingEmp) {
+          // Sync user identity fields to the existing employee profile
           existingEmp.userRef = user._id;
+          existingEmp.firstName = firstName;
+          existingEmp.lastName = lastName;
           await existingEmp.save();
           user.employeeRef = existingEmp._id;
           await user.save();
@@ -3813,6 +3819,7 @@ async function start() {
         department: user.department,
         jobTitle: user.jobTitle,
         mfaEnabled: true,
+        permissions: user.permissions || {},
       };
 
       res.json({
