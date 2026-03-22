@@ -1218,24 +1218,18 @@ async function start() {
 
   // ============ MATERIAL REQUEST COMMENT ROUTES ============
   // Add comment to a material request
-  app.post('/api/material-requests/:id/comments', async (req, res) => {
+  app.post('/api/material-requests/:id/comments', authMiddleware, async (req, res) => {
     try {
       const request = await MaterialRequestModel.findById(req.params.id);
       if (!request) return res.status(404).json({ message: 'Request not found' });
 
-      const { author, authorId, text } = req.body;
+      const { text } = req.body;
       if (!text || !text.trim()) return res.status(400).json({ message: 'Comment text is required' });
 
-      const mentions = (text.match(/@(\w+\s?\w*)/g) || []).map(m => m.substring(1).trim());
+      const author = req.user?.fullName || req.user?.email || req.body?.author || 'Unknown';
+      const authorId = String(req.user?._id || req.body?.authorId || '');
 
-      const comment = {
-        author,
-        authorId,
-        text,
-        timestamp: new Date(),
-        mentions,
-      };
-      request.comments.push(comment);
+      const mentions = (text.match(/@(\w+\s?\w*)/g) || []).map(m => m.substring(1).trim());
 
       request.activities.push({
         type: 'comment',
@@ -2186,7 +2180,7 @@ async function start() {
   });
 
   // Approve material request and create PO
-  app.post('/api/material-requests/:id/approve', async (req, res) => {
+  app.post('/api/material-requests/:id/approve', authMiddleware, async (req, res) => {
     try {
       const { id } = req.params;
       if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -2206,8 +2200,89 @@ async function start() {
         return res.status(400).json({ message: 'Rejected request cannot be approved' });
       }
 
+      const actorId = String(req.user?._id || '');
+      const actorEmail = String(req.user?.email || '').toLowerCase();
+      const actorName = String(
+        req.user?.fullName || `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || req.user?.email || ''
+      ).trim().toLowerCase();
+
+      const pendingStep = Array.isArray(materialRequest.approvalChain)
+        ? materialRequest.approvalChain.find((step) => step?.status === 'pending')
+        : null;
+
+      const pendingStepApproverId = String(pendingStep?.approverId || '').trim();
+      const pendingStepApproverEmail = String(pendingStep?.approverEmail || '').toLowerCase().trim();
+      const pendingStepApproverName = String(pendingStep?.approverName || '').toLowerCase().trim();
+      const requestApproverName = String(materialRequest.approver || '').toLowerCase().trim();
+
+      const isPendingStepApprover = !!pendingStep && (
+        (pendingStepApproverId && pendingStepApproverId === actorId) ||
+        (pendingStepApproverEmail && pendingStepApproverEmail === actorEmail) ||
+        (pendingStepApproverName && pendingStepApproverName === actorName)
+      );
+
+      const isSingleApprover = !pendingStep && (
+        (materialRequest.approverEmail && String(materialRequest.approverEmail).toLowerCase() === actorEmail) ||
+        (requestApproverName && requestApproverName === actorName)
+      );
+
+      const isAdminOverride = String(req.user?.role || '').toLowerCase() === 'admin';
+
+      if (!isPendingStepApprover && !isSingleApprover && !isAdminOverride) {
+        return res.status(403).json({ message: 'Only the assigned approver can approve this request' });
+      }
+
+      // Rule-based flow: mark current level approved and route to next approver.
+      if (pendingStep) {
+        pendingStep.status = 'approved';
+        pendingStep.approvedAt = new Date();
+        if (req.body?.comments) {
+          pendingStep.comments = String(req.body.comments);
+        }
+
+        const nextStep = materialRequest.approvalChain.find((step) => step?.status === 'awaiting');
+        if (nextStep) {
+          nextStep.status = 'pending';
+          materialRequest.currentApprovalLevel = nextStep.level || materialRequest.currentApprovalLevel;
+          materialRequest.approver = nextStep.approverName || materialRequest.approver;
+
+          materialRequest.activities.push({
+            type: 'approval',
+            author: req.user?.fullName || req.user?.email || 'System',
+            authorId: actorId,
+            text: `approved level ${pendingStep.level || materialRequest.currentApprovalLevel || 1}. Pending ${nextStep.approverName || 'next approver'}`,
+            timestamp: new Date(),
+            approvalLevel: pendingStep.level || materialRequest.currentApprovalLevel || 1,
+            pendingApprover: nextStep.approverName || '',
+          });
+
+          await materialRequest.save();
+
+          if (nextStep.approverEmail) {
+            await sendApprovalEmail({
+              ...materialRequest.toObject(),
+              approver: nextStep.approverName,
+              approverEmail: nextStep.approverEmail,
+            });
+          }
+
+          return res.json({
+            message: 'Approval recorded and forwarded to next approver',
+            data: materialRequest,
+          });
+        }
+      }
+
       // Update material request status
       materialRequest.status = 'approved';
+      materialRequest.activities.push({
+        type: 'approval',
+        author: req.user?.fullName || req.user?.email || 'System',
+        authorId: actorId,
+        text: 'approved the material request',
+        timestamp: new Date(),
+        approvalLevel: pendingStep?.level || materialRequest.currentApprovalLevel || 1,
+      });
       await materialRequest.save();
 
       // Auto-create Purchase Order
@@ -2252,6 +2327,17 @@ async function start() {
         ],
       });
 
+      materialRequest.activities.push({
+        type: 'po_created',
+        author: req.user?.fullName || req.user?.email || 'System',
+        authorId: actorId,
+        text: 'created Purchase Order',
+        timestamp: new Date(),
+        poId: purchaseOrder._id,
+        poNumber: purchaseOrder.poNumber,
+      });
+      await materialRequest.save();
+
       // PO created for procurement team review (no email sent)
 
       res.json({ 
@@ -2266,7 +2352,7 @@ async function start() {
   });
 
   // Reject material request
-  app.post('/api/material-requests/:id/reject', async (req, res) => {
+  app.post('/api/material-requests/:id/reject', authMiddleware, async (req, res) => {
     try {
       const { id } = req.params;
       if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -2274,11 +2360,63 @@ async function start() {
       }
 
       const reason = (req.body && req.body.reason) ? req.body.reason : '';
-      const updated = await MaterialRequestModel.findByIdAndUpdate(
-        id,
-        { status: 'rejected', rejectionReason: reason },
-        { new: true }
+      const materialRequest = await MaterialRequestModel.findById(id);
+      if (!materialRequest) return res.status(404).json({ message: 'Request not found' });
+
+      if (materialRequest.status === 'approved') {
+        return res.status(400).json({ message: 'Approved request cannot be rejected' });
+      }
+
+      const actorId = String(req.user?._id || '');
+      const actorEmail = String(req.user?.email || '').toLowerCase();
+      const actorName = String(
+        req.user?.fullName || `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || req.user?.email || ''
+      ).trim().toLowerCase();
+
+      const pendingStep = Array.isArray(materialRequest.approvalChain)
+        ? materialRequest.approvalChain.find((step) => step?.status === 'pending')
+        : null;
+
+      const pendingStepApproverId = String(pendingStep?.approverId || '').trim();
+      const pendingStepApproverEmail = String(pendingStep?.approverEmail || '').toLowerCase().trim();
+      const pendingStepApproverName = String(pendingStep?.approverName || '').toLowerCase().trim();
+      const requestApproverName = String(materialRequest.approver || '').toLowerCase().trim();
+
+      const isPendingStepApprover = !!pendingStep && (
+        (pendingStepApproverId && pendingStepApproverId === actorId) ||
+        (pendingStepApproverEmail && pendingStepApproverEmail === actorEmail) ||
+        (pendingStepApproverName && pendingStepApproverName === actorName)
       );
+
+      const isSingleApprover = !pendingStep && (
+        (materialRequest.approverEmail && String(materialRequest.approverEmail).toLowerCase() === actorEmail) ||
+        (requestApproverName && requestApproverName === actorName)
+      );
+
+      const isAdminOverride = String(req.user?.role || '').toLowerCase() === 'admin';
+
+      if (!isPendingStepApprover && !isSingleApprover && !isAdminOverride) {
+        return res.status(403).json({ message: 'Only the assigned approver can reject this request' });
+      }
+
+      if (pendingStep) {
+        pendingStep.status = 'rejected';
+        pendingStep.approvedAt = new Date();
+        pendingStep.comments = reason || pendingStep.comments || '';
+      }
+
+      materialRequest.status = 'rejected';
+      materialRequest.rejectionReason = reason;
+      materialRequest.activities.push({
+        type: 'rejection',
+        author: req.user?.fullName || req.user?.email || 'System',
+        authorId: actorId,
+        text: reason ? `rejected the request: ${reason}` : 'rejected the request',
+        timestamp: new Date(),
+        approvalLevel: pendingStep?.level || materialRequest.currentApprovalLevel || 1,
+      });
+
+      const updated = await materialRequest.save();
       if (!updated) return res.status(404).json({ message: 'Request not found' });
       res.json({ message: 'Request rejected', data: updated });
     } catch (err) {
@@ -5110,6 +5248,8 @@ async function start() {
           id: u._id.toString(),
           _id: u._id,
           name: u.fullName || [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email,
+          firstName: u.firstName || '',
+          lastName: u.lastName || '',
           email: u.email,
           phone: u.phoneNumber || '',
           department: u.department || '',
@@ -5140,6 +5280,8 @@ async function start() {
         id: employee._id.toString(),
         _id: employee._id,
         name: employee.name,
+        firstName: employee.firstName || '',
+        lastName: employee.lastName || '',
         email: employee.email,
         phone: employee.phone || '',
         dateOfBirth: employee.dateOfBirth,
@@ -5302,11 +5444,6 @@ async function start() {
 
       if (!oldEmployee && linkedUser) {
         const userUpdateData = {};
-        if (firstName !== undefined || lastName !== undefined) {
-          userUpdateData.firstName = firstName || linkedUser.firstName || 'User';
-          userUpdateData.lastName = lastName || linkedUser.lastName || '';
-          userUpdateData.fullName = `${userUpdateData.firstName} ${userUpdateData.lastName}`.trim();
-        }
         if (email !== undefined) userUpdateData.email = email.toLowerCase();
         if (phone !== undefined) userUpdateData.phoneNumber = phone || null;
         if (department !== undefined) userUpdateData.department = department || null;
@@ -5371,18 +5508,41 @@ async function start() {
         return res.status(404).json({ success: false, message: 'Employee not found' });
       }
 
+      // Names are sourced from signup user identity when linked.
+      // This prevents employees from manually changing first/last name in profile edits.
+      let authoritativeNameSource = null;
+      if (oldEmployee.userRef) {
+        authoritativeNameSource = await UserModel.findById(oldEmployee.userRef)
+          .select('firstName lastName')
+          .lean();
+      }
+
       // Find and update employee
       const updateData = {};
       const changes = [];
       
       // Always allow these fields to be updated
-      if (firstName !== undefined && firstName !== oldEmployee.firstName) {
-        updateData.firstName = firstName;
-        changes.push({ field: 'firstName', oldValue: oldEmployee.firstName, newValue: firstName });
-      }
-      if (lastName !== undefined && lastName !== oldEmployee.lastName) {
-        updateData.lastName = lastName;
-        changes.push({ field: 'lastName', oldValue: oldEmployee.lastName, newValue: lastName });
+      if (authoritativeNameSource?.firstName || authoritativeNameSource?.lastName) {
+        const authoritativeFirstName = authoritativeNameSource.firstName || oldEmployee.firstName || '';
+        const authoritativeLastName = authoritativeNameSource.lastName || oldEmployee.lastName || '';
+
+        if (authoritativeFirstName !== oldEmployee.firstName) {
+          updateData.firstName = authoritativeFirstName;
+          changes.push({ field: 'firstName', oldValue: oldEmployee.firstName, newValue: authoritativeFirstName });
+        }
+        if (authoritativeLastName !== oldEmployee.lastName) {
+          updateData.lastName = authoritativeLastName;
+          changes.push({ field: 'lastName', oldValue: oldEmployee.lastName, newValue: authoritativeLastName });
+        }
+      } else {
+        if (firstName !== undefined && firstName !== oldEmployee.firstName) {
+          updateData.firstName = firstName;
+          changes.push({ field: 'firstName', oldValue: oldEmployee.firstName, newValue: firstName });
+        }
+        if (lastName !== undefined && lastName !== oldEmployee.lastName) {
+          updateData.lastName = lastName;
+          changes.push({ field: 'lastName', oldValue: oldEmployee.lastName, newValue: lastName });
+        }
       }
       if (email !== undefined && email.toLowerCase() !== oldEmployee.email) {
         updateData.email = email.toLowerCase();
@@ -5544,11 +5704,6 @@ async function start() {
       try {
         if (employee.userRef) {
           const syncData = {};
-          if (firstName !== undefined || lastName !== undefined) {
-            if (firstName !== undefined) syncData.firstName = firstName;
-            if (lastName !== undefined) syncData.lastName = lastName;
-            syncData.fullName = `${syncData.firstName || employee.firstName || ''} ${syncData.lastName || employee.lastName || ''}`.trim();
-          }
           if (role !== undefined) syncData.role = role;
           if (email !== undefined) syncData.email = email.toLowerCase();
           if (department !== undefined) syncData.department = department;
@@ -5876,18 +6031,54 @@ async function start() {
   });
 
   // Legacy Leave Requests endpoint (uses new Leave Request model via api.js)
-  app.get('/api/hr/leave-requests', async (_req, res) => {
+  app.get('/api/hr/leave-requests', authMiddleware, async (req, res) => {
     try {
-      // Get recent pending leave requests for dashboard
-      const requests = await api.getLeaveRequests({ status: 'pending' });
+      const requests = await api.getLeaveRequests({
+        status: { $in: ['pending_manager', 'pending_hr', 'approved_manager', 'pending'] },
+      });
+
+      const currentUserId = String(req.user?._id || '');
+      const currentUserEmail = String(req.user?.email || '').toLowerCase().trim();
+      const currentUserName = String(req.user?.fullName || '').toLowerCase().trim();
+
+      const canActOnRequest = (request) => {
+        const pendingStep = Array.isArray(request.approvalChain)
+          ? request.approvalChain.find((step) => step?.status === 'pending')
+          : null;
+
+        if (pendingStep) {
+          return (
+            (pendingStep.approverId && String(pendingStep.approverId).trim() === currentUserId) ||
+            (pendingStep.approverEmail && String(pendingStep.approverEmail).toLowerCase().trim() === currentUserEmail) ||
+            (pendingStep.approverName && String(pendingStep.approverName).toLowerCase().trim() === currentUserName)
+          );
+        }
+
+        // Legacy fallback: HR users can handle pending_hr requests.
+        if (String(request.status || '').toLowerCase() === 'pending_hr') {
+          return ['hr', 'admin'].includes(String(req.user?.role || '').toLowerCase());
+        }
+
+        return false;
+      };
       
-      // Format for HR dashboard (simplified view)
       const formatted = requests.slice(0, 10).map(req => ({
         id: req._id.toString(),
         name: req.employeeName,
         type: req.leaveType,
         range: `${new Date(req.fromDate).toLocaleDateString()} - ${new Date(req.toDate).toLocaleDateString()}`,
         status: req.status,
+        approvalChain: req.approvalChain || [],
+        currentApprovalLevel: req.currentApprovalLevel || 1,
+        usesRuleBasedApproval: !!req.usesRuleBasedApproval,
+        currentApprover:
+          (Array.isArray(req.approvalChain) ? req.approvalChain.find((s) => s?.status === 'pending')?.approverName : null) ||
+          req.managerName ||
+          null,
+        currentApproverRole:
+          (Array.isArray(req.approvalChain) ? req.approvalChain.find((s) => s?.status === 'pending')?.approverRole : null) ||
+          (String(req.status || '').toLowerCase() === 'pending_hr' ? 'HR' : 'Manager'),
+        canAct: canActOnRequest(req),
       }));
 
       res.json(formatted);
@@ -5897,32 +6088,103 @@ async function start() {
     }
   });
 
-  app.post('/api/hr/leave-requests/:id/approve', async (req, res) => {
+  app.post('/api/hr/leave-requests/:id/approve', authMiddleware, async (req, res) => {
     try {
-      // Use the proper leave request approval via api
-      const request = await api.updateLeaveRequestStatus(
-        req.params.id,
-        'approved',
-        'Approved from HR dashboard',
-        'hr'
+      const leaveRequest = await LeaveRequestModel.findById(req.params.id);
+      if (!leaveRequest) {
+        return res.status(404).json({ message: 'Leave request not found' });
+      }
+
+      const currentUserId = String(req.user?._id || '');
+      const currentUserEmail = String(req.user?.email || '').toLowerCase().trim();
+      const currentUserName = String(req.user?.fullName || '').toLowerCase().trim();
+
+      const pendingStep = Array.isArray(leaveRequest.approvalChain)
+        ? leaveRequest.approvalChain.find((step) => step?.status === 'pending')
+        : null;
+
+      const isPendingStepApprover = !!pendingStep && (
+        (pendingStep.approverId && String(pendingStep.approverId).trim() === currentUserId) ||
+        (pendingStep.approverEmail && String(pendingStep.approverEmail).toLowerCase().trim() === currentUserEmail) ||
+        (pendingStep.approverName && String(pendingStep.approverName).toLowerCase().trim() === currentUserName)
       );
-      res.json({ message: 'Approved', success: true, data: request });
+
+      const isHrFallbackApprover =
+        String(leaveRequest.status || '').toLowerCase() === 'pending_hr' &&
+        ['hr', 'admin'].includes(String(req.user?.role || '').toLowerCase());
+
+      if (!isPendingStepApprover && !isHrFallbackApprover) {
+        return res.status(403).json({ message: 'Only the assigned approver can approve this leave request' });
+      }
+
+      if (pendingStep) {
+        pendingStep.status = 'approved';
+        pendingStep.approvedAt = new Date();
+        pendingStep.comments = 'Approved from HR dashboard';
+
+        const nextStep = leaveRequest.approvalChain.find((step) => step?.status === 'awaiting');
+        if (nextStep) {
+          nextStep.status = 'pending';
+          leaveRequest.currentApprovalLevel = nextStep.level || leaveRequest.currentApprovalLevel || 1;
+          leaveRequest.status = 'pending_manager';
+          await leaveRequest.save();
+          return res.json({ message: 'Approved and forwarded to next approver', success: true, data: leaveRequest });
+        }
+      }
+
+      leaveRequest.status = 'approved';
+      leaveRequest.hrApprovedAt = new Date();
+      leaveRequest.hrComments = 'Approved from HR dashboard';
+      await leaveRequest.save();
+
+      res.json({ message: 'Approved', success: true, data: leaveRequest });
     } catch (err) {
       console.error('Error approving leave:', err);
       res.status(500).json({ message: 'Failed to approve', error: err.message });
     }
   });
 
-  app.post('/api/hr/leave-requests/:id/reject', async (req, res) => {
+  app.post('/api/hr/leave-requests/:id/reject', authMiddleware, async (req, res) => {
     try {
-      // Use the proper leave request rejection via api
-      const request = await api.updateLeaveRequestStatus(
-        req.params.id,
-        'rejected',
-        'Rejected from HR dashboard',
-        'hr'
+      const leaveRequest = await LeaveRequestModel.findById(req.params.id);
+      if (!leaveRequest) {
+        return res.status(404).json({ message: 'Leave request not found' });
+      }
+
+      const currentUserId = String(req.user?._id || '');
+      const currentUserEmail = String(req.user?.email || '').toLowerCase().trim();
+      const currentUserName = String(req.user?.fullName || '').toLowerCase().trim();
+
+      const pendingStep = Array.isArray(leaveRequest.approvalChain)
+        ? leaveRequest.approvalChain.find((step) => step?.status === 'pending')
+        : null;
+
+      const isPendingStepApprover = !!pendingStep && (
+        (pendingStep.approverId && String(pendingStep.approverId).trim() === currentUserId) ||
+        (pendingStep.approverEmail && String(pendingStep.approverEmail).toLowerCase().trim() === currentUserEmail) ||
+        (pendingStep.approverName && String(pendingStep.approverName).toLowerCase().trim() === currentUserName)
       );
-      res.json({ message: 'Rejected', success: true, data: request });
+
+      const isHrFallbackApprover =
+        String(leaveRequest.status || '').toLowerCase() === 'pending_hr' &&
+        ['hr', 'admin'].includes(String(req.user?.role || '').toLowerCase());
+
+      if (!isPendingStepApprover && !isHrFallbackApprover) {
+        return res.status(403).json({ message: 'Only the assigned approver can reject this leave request' });
+      }
+
+      if (pendingStep) {
+        pendingStep.status = 'rejected';
+        pendingStep.approvedAt = new Date();
+        pendingStep.comments = 'Rejected from HR dashboard';
+      }
+
+      leaveRequest.status = 'rejected';
+      leaveRequest.hrRejectedAt = new Date();
+      leaveRequest.hrComments = 'Rejected from HR dashboard';
+      await leaveRequest.save();
+
+      res.json({ message: 'Rejected', success: true, data: leaveRequest });
     } catch (err) {
       console.error('Error rejecting leave:', err);
       res.status(500).json({ message: 'Failed to reject', error: err.message });

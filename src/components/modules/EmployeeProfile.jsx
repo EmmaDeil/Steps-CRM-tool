@@ -47,6 +47,7 @@ const EmployeeProfile = ({
   const isHR = currentUser?.role === "HR" || currentUser?.role === "Admin";
   // Determine if viewing own profile
   const isOwnProfile = !employeeData || employee?._id === currentUser?._id;
+  const isSelfProfileFromAvatar = isOwnProfile && fromProfile;
 
   const tabs = [
     { id: "overview", label: "Overview" },
@@ -421,8 +422,6 @@ const EmployeeProfile = ({
       setValidationErrors({});
 
       const payload = {
-        firstName: editingEmployee.firstName,
-        lastName: editingEmployee.lastName,
         email: editingEmployee.email,
         phone: editingEmployee.phone || "",
         dateOfBirth: editingEmployee.dateOfBirth || "",
@@ -430,6 +429,11 @@ const EmployeeProfile = ({
         emergencyContact: editingEmployee.emergencyContact || {},
         updatedBy: currentUser?._id || "unknown",
       };
+
+      if (!isSelfProfileFromAvatar) {
+        payload.firstName = editingEmployee.firstName;
+        payload.lastName = editingEmployee.lastName;
+      }
 
       // Only HR can update these fields
       if (isHR) {
@@ -518,8 +522,8 @@ const EmployeeProfile = ({
     } catch (error) {
       toast.error(
         error.serverData?.error ||
-        error.response?.data?.error ||
-        "Failed to resend verification email"
+          error.response?.data?.error ||
+          "Failed to resend verification email",
       );
     } finally {
       setIsResendingEmail(false);
@@ -570,32 +574,44 @@ const EmployeeProfile = ({
                 <div className="flex flex-col justify-center flex-1">
                   {isEditing ? (
                     <>
-                      <div className="flex gap-2 mb-2">
-                        <input
-                          type="text"
-                          placeholder="First Name"
-                          value={editingEmployee?.firstName || ""}
-                          onChange={(e) =>
-                            setEditingEmployee({
-                              ...editingEmployee,
-                              firstName: e.target.value,
-                            })
-                          }
-                          className="w-full text-2xl md:text-3xl font-bold text-gray-900 dark:text-white px-2 py-1 border border-gray-300 dark:border-gray-600 rounded input-focus"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Last Name"
-                          value={editingEmployee?.lastName || ""}
-                          onChange={(e) =>
-                            setEditingEmployee({
-                              ...editingEmployee,
-                              lastName: e.target.value,
-                            })
-                          }
-                          className="w-full text-2xl md:text-3xl font-bold text-gray-900 dark:text-white px-2 py-1 border border-gray-300 dark:border-gray-600 rounded input-focus"
-                        />
-                      </div>
+                      {isSelfProfileFromAvatar ? (
+                        <div className="mb-2">
+                          <h1 className="text-gray-900 dark:text-white text-2xl md:text-3xl font-bold">
+                            {`${editingEmployee?.firstName || ""} ${editingEmployee?.lastName || ""}`.trim() ||
+                              "Unnamed Employee"}
+                          </h1>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Name is managed from your signup account details.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            placeholder="First Name"
+                            value={editingEmployee?.firstName || ""}
+                            onChange={(e) =>
+                              setEditingEmployee({
+                                ...editingEmployee,
+                                firstName: e.target.value,
+                              })
+                            }
+                            className="w-full text-2xl md:text-3xl font-bold text-gray-900 dark:text-white px-2 py-1 border border-gray-300 dark:border-gray-600 rounded input-focus"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Last Name"
+                            value={editingEmployee?.lastName || ""}
+                            onChange={(e) =>
+                              setEditingEmployee({
+                                ...editingEmployee,
+                                lastName: e.target.value,
+                              })
+                            }
+                            className="w-full text-2xl md:text-3xl font-bold text-gray-900 dark:text-white px-2 py-1 border border-gray-300 dark:border-gray-600 rounded input-focus"
+                          />
+                        </div>
+                      )}
                       {isHR && (
                         <input
                           type="text"
@@ -613,7 +629,8 @@ const EmployeeProfile = ({
                   ) : (
                     <>
                       <h1 className="text-gray-900 dark:text-white text-2xl md:text-3xl font-bold">
-                        {`${employee?.firstName || ""} ${employee?.lastName || ""}`.trim() || "Unnamed Employee"}
+                        {`${employee?.firstName || ""} ${employee?.lastName || ""}`.trim() ||
+                          "Unnamed Employee"}
                       </h1>
                       <p className="text-gray-500 dark:text-gray-400 text-base">
                         {employee?.jobTitle}
@@ -741,28 +758,33 @@ const EmployeeProfile = ({
                       ) : (
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                           {employee?.email}
-                          {isOwnProfile && currentUser?.isEmailVerified !== undefined && (
-                            <span className="ml-2 inline-flex items-center gap-1.5 align-middle">
-                              {currentUser?.isEmailVerified ? (
-                                <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
-                                  <i className="fa-solid fa-check-circle text-green-500"></i> Verified
-                                </span>
-                              ) : (
-                                <>
-                                  <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
-                                    <i className="fa-solid fa-triangle-exclamation text-yellow-500"></i> Unverified
+                          {isOwnProfile &&
+                            currentUser?.isEmailVerified !== undefined && (
+                              <span className="ml-2 inline-flex items-center gap-1.5 align-middle">
+                                {currentUser?.isEmailVerified ? (
+                                  <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                                    <i className="fa-solid fa-check-circle text-green-500"></i>{" "}
+                                    Verified
                                   </span>
-                                  <button
-                                    onClick={handleResendVerification}
-                                    disabled={isResendingEmail}
-                                    className="ml-1 text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium disabled:opacity-50"
-                                  >
-                                    {isResendingEmail ? 'Sending...' : 'Resend Verification email'}
-                                  </button>
-                                </>
-                              )}
-                            </span>
-                          )}
+                                ) : (
+                                  <>
+                                    <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
+                                      <i className="fa-solid fa-triangle-exclamation text-yellow-500"></i>{" "}
+                                      Unverified
+                                    </span>
+                                    <button
+                                      onClick={handleResendVerification}
+                                      disabled={isResendingEmail}
+                                      className="ml-1 text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium disabled:opacity-50"
+                                    >
+                                      {isResendingEmail
+                                        ? "Sending..."
+                                        : "Resend Verification email"}
+                                    </button>
+                                  </>
+                                )}
+                              </span>
+                            )}
                         </p>
                       )}
                     </div>
