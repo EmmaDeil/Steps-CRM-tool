@@ -76,13 +76,14 @@ const PurchaseOrders = () => {
       // Map activeFilter to status
       if (activeFilter && activeFilter !== "all") {
         params.status = activeFilter;
-              <button
-                className="flex items-center justify-center gap-2 overflow-hidden rounded-lg h-10 px-5 bg-[#137fec] hover:bg-blue-600 transition-colors text-white text-sm font-bold leading-normal tracking-[0.015em] shadow-sm"
-                onClick={() => setShowCreatePoForm(true)}
-              >
-                <i className="fa-solid fa-plus text-[16px]"></i>
-                <span className="truncate">Create Purchase Order</span>
-              </button>
+      } else if (selectedStatus) {
+        params.status = selectedStatus;
+      }
+
+      const response = await apiService.get("/api/purchase-orders", {
+        params,
+      });
+
       if (response.orders) {
         setPurchaseOrders(response.orders);
         setTotal(response.total || 0);
