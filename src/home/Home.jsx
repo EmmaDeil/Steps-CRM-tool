@@ -20,9 +20,9 @@ const ModuleLoadingState = ({ moduleName = "Module", subtitle }) => {
   const safeName = moduleName || "Module";
 
   return (
-    <div className="flex-1 flex items-center justify-center px-4 py-10">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-white/95 backdrop-blur-sm px-4">
       <div className="text-center">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mb-4"></div>
+        <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600 mb-4"></div>
         <h3 className="text-lg font-semibold mb-1 text-[#111418]">
           Loading {safeName} module
         </h3>
@@ -307,12 +307,14 @@ export default function Home() {
       return (
         <div className="min-h-screen flex flex-col">
           <Navbar user={user} />
-          <ModuleLoadingState
-            moduleName={requestedModuleName}
-            subtitle={
-              error ? "Waiting for server connection..." : "Please wait"
-            }
-          />
+          <div className="flex-1 relative">
+            <ModuleLoadingState
+              moduleName={requestedModuleName}
+              subtitle={
+                error ? "Waiting for server connection..." : "Please wait"
+              }
+            />
+          </div>
         </div>
       );
     }
@@ -477,7 +479,7 @@ export default function Home() {
         </div>
 
         {/* Modules Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-6xl rounded-2xl border border-[#dbe0e6] p-6 bg-white shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-6xl rounded-l-xl border border-[#dbe0e6] p-6 bg-white shadow-sm">
           {loading &&
             Array.from({ length: 8 }).map((_, i) => (
               <div
@@ -537,7 +539,7 @@ export default function Home() {
                   key={getModuleRouteId(m) || m.name}
                   onClick={() => handleOpenModule(getModuleRouteId(m))}
                   aria-label={`Open ${m.name} module`}
-                  className="group relative flex flex-col items-center p-8 bg-transparent rounded-sm border border-[#dbe0e6] shadow-sm h-[260px] hover:shadow-xl transition-shadow"
+                  className="group relative flex flex-col items-center p-2 bg-transparent rounded-2xl border border-[#dbe0e6] shadow-sm h-[200px] hover:shadow-xl transition-shadow"
                 >
                   <div
                     className={`size-20 bg-gradient-to-br ${colorClass} flex items-center justify-center mb-6 shadow-sm border rounded-full border-transparent group-hover:border-current transition-colors`}

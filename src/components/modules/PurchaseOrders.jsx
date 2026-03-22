@@ -817,16 +817,24 @@ const PurchaseOrders = () => {
     {
       header: (
         <div className="flex items-center gap-1 group cursor-pointer hover:text-[#137fec]">
-          Vendor{" "}
+          Request Title{" "}
           <i className="fa-solid fa-arrow-down text-[12px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
         </div>
       ),
-      accessorKey: "vendor",
+      accessorKey: "requestTitle",
       className: "px-4 py-3",
       cellClassName: "px-4 py-3",
       cell: (po, index) => {
+        const requestTitle =
+          po.requestTitle ||
+          po.linkedMaterialRequestId?.requestTitle ||
+          po.linkedMaterialRequestId?.requestId ||
+          po.linkedMaterialRequestId?.reason ||
+          po.linkedMaterialRequestId?.lineItems?.[0]?.description ||
+          po.notes ||
+          "Untitled Request";
         const vendorName = po.vendor || "Unknown Vendor";
-        const vendorInitials = getVendorInitials(vendorName);
+        const vendorInitials = getVendorInitials(requestTitle);
         const vendorColor = getRandomVendorColor(index);
         return (
           <div className="flex items-center gap-3">
@@ -835,9 +843,12 @@ const PurchaseOrders = () => {
             >
               {vendorInitials}
             </div>
-            <span className="text-sm text-[#111418] font-medium">
-              {vendorName}
-            </span>
+            <div className="min-w-0">
+              <p className="text-sm text-[#111418] font-medium truncate">
+                {requestTitle}
+              </p>
+              <p className="text-xs text-[#617589] truncate">{vendorName}</p>
+            </div>
           </div>
         );
       },
@@ -1198,7 +1209,13 @@ const PurchaseOrders = () => {
                       <p className="text-[#617589]">Request Title</p>
                       <p className="text-[#111418] font-semibold">
                         {selectedPo?.linkedMaterialRequestId?.requestTitle ||
-                          "N/A"}
+                          selectedPo?.linkedMaterialRequestId?.requestId ||
+                          selectedPo?.linkedMaterialRequestId?.reason ||
+                          selectedPo?.linkedMaterialRequestId?.lineItems?.[0]
+                            ?.description ||
+                          selectedPo?.requestTitle ||
+                          selectedPo?.notes ||
+                          "Untitled Request"}
                       </p>
                     </div>
                     <div>
@@ -1303,9 +1320,7 @@ const PurchaseOrders = () => {
 
             <div className="mt-6 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50 flex items-center justify-between">
-                <h3 className="text-lg font-bold text-[#111418]">
-                  PO Line Items
-                </h3>
+                <h3 className="text-lg font-bold text-[#111418]">Items</h3>
                 <button
                   type="button"
                   onClick={() => toggleSection("lineItems")}
@@ -1332,7 +1347,7 @@ const PurchaseOrders = () => {
                           Unit Cost
                         </th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
-                          Line Total
+                          Total
                         </th>
                       </tr>
                     </thead>

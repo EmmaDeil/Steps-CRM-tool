@@ -514,7 +514,10 @@ router.get('/purchase-orders', async (req, res) => {
 
     const [orders, total] = await Promise.all([
       PurchaseOrder.find(query)
-        .populate('linkedMaterialRequestId', 'currency')
+        .populate(
+          'linkedMaterialRequestId',
+          'currency requestTitle requestId reason requestedBy department requestType lineItems'
+        )
         .sort({ orderDate: -1, createdAt: -1 })
         .skip(skip)
         .limit(limitNum),
