@@ -149,7 +149,7 @@ const ForgotPassword = () => {
         {/* Footer */}
         <div className="text-center mt-6">
           <p className="text-sm text-gray-600">
-            © 2025 Your Company. All rights reserved.
+            {new Date().getFullYear()} Ladeil Innovation Ltd. All rights reserved.
           </p>
         </div>
       </div>

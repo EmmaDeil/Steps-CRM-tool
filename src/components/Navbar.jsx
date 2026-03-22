@@ -129,7 +129,7 @@ const Navbar = ({ user }) => {
                     className="w-full text-left px-4 py-2 text-sm text-[#111418] hover:bg-gray-100 flex items-center gap-3 transition-colors"
                   >
                     <i className="fa-solid fa-user text-sm w-4"></i>
-                    <span>View Profile</span>
+                    <span>Profile</span>
                   </button>
 
                   {/* Settings */}

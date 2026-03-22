@@ -19,7 +19,7 @@ const PrivateRoute = ({ children }) => {
           </div>
           {/* Loading Text */}
           <p className="text-gray-600 font-medium text-lg">
-            Loading your workspace...
+            Loading your workspace.....
           </p>
         </div>
       </div>

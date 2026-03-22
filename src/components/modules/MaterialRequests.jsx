@@ -121,6 +121,8 @@ const MaterialRequests = () => {
   const [isRejecting, setIsRejecting] = useState(false);
   const viewCommentRef = useRef(null);
   const backendRetryTimerRef = useRef(null);
+  const backendOfflineLoggedRef = useRef(false);
+  const usersFetchErrorLoggedRef = useRef(false);
 
   const quantityTypeOptions = [
     "Pieces",
@@ -399,8 +401,21 @@ const MaterialRequests = () => {
         department: user.department,
       }));
       setUserList(formattedUsers);
+      usersFetchErrorLoggedRef.current = false;
     } catch (error) {
-      console.error("Failed to fetch users:", error);
+      if (!usersFetchErrorLoggedRef.current) {
+        if (!error?.response) {
+          console.warn(
+            "MaterialRequests: could not fetch users while backend is unavailable.",
+          );
+        } else {
+          console.error(
+            "MaterialRequests: failed to fetch users.",
+            error?.response?.status,
+          );
+        }
+        usersFetchErrorLoggedRef.current = true;
+      }
       setUserList([]);
     }
   };
@@ -595,6 +610,7 @@ const MaterialRequests = () => {
       const response = await apiService.get("/api/material-requests");
       setRequests(response.data || response || []);
       setError(null);
+      backendOfflineLoggedRef.current = false;
       if (backendRetryTimerRef.current) {
         clearTimeout(backendRetryTimerRef.current);
         backendRetryTimerRef.current = null;
@@ -609,10 +625,12 @@ const MaterialRequests = () => {
       } else if (status === 403) {
         setError("You do not have permission to view material requests.");
       } else if (!err?.response) {
-        console.warn(
-          "MaterialRequests: backend unavailable at http://localhost:4000. Retrying in 5 seconds.",
-          err,
-        );
+        if (!backendOfflineLoggedRef.current) {
+          console.warn(
+            "MaterialRequests: backend unavailable at http://localhost:4000. Auto-retrying every 5 seconds.",
+          );
+          backendOfflineLoggedRef.current = true;
+        }
         setError(null);
         if (!backendRetryTimerRef.current) {
           backendRetryTimerRef.current = setTimeout(() => {
