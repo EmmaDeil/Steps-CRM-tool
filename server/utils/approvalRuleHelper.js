@@ -84,6 +84,7 @@ function evaluateConditions(conditions, requestData) {
 async function getApproverByRole(approverRole, requestData) {
   const Employee = require('../models/Employee');
   const User = require('../models/User');
+  const Department = require('../models/Department');
 
   try {
     let approver = null;
@@ -145,6 +146,28 @@ async function getApproverByRole(approverRole, requestData) {
       case 'Department Head':
         // Find department head for the request's department
         if (requestData.department) {
+          const departmentConfig = await Department.findOne({
+            name: requestData.department,
+          }).lean();
+
+          if (departmentConfig?.headEmployeeId) {
+            const headId = String(departmentConfig.headEmployeeId).trim();
+            let configuredHead = await Employee.findOne({ employeeId: headId });
+            if (!configuredHead && headId.match(/^[0-9a-fA-F]{24}$/)) {
+              configuredHead = await Employee.findById(headId);
+            }
+
+            if (configuredHead) {
+              approver = {
+                id: String(configuredHead.userRef || configuredHead._id || configuredHead.employeeId || ''),
+                name: toDisplayName(configuredHead),
+                email: configuredHead.email,
+                role: 'Department Head'
+              };
+              break;
+            }
+          }
+
           const deptHead = await Employee.findOne({
             department: requestData.department,
             $or: [

@@ -106,12 +106,21 @@ const HRM = () => {
   const [showEmployeeProfile, setShowEmployeeProfile] = useState(false);
   const [showEmployeeDirectoryPage, setShowEmployeeDirectoryPage] =
     useState(false);
+  const [showOrganogramPage, setShowOrganogramPage] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
   const failureToastShownRef = useRef(false);
   const searchEffectInitializedRef = useRef(false);
+  const fetchAllInFlightRef = useRef(false);
+  const fetchEmployeesInFlightRef = useRef(false);
+  const networkToastShownRef = useRef(false);
   const [startEmployeeInEditMode, setStartEmployeeInEditMode] = useState(false);
+  const [organogramEmployees, setOrganogramEmployees] = useState([]);
+  const [organogramLoading, setOrganogramLoading] = useState(false);
+  const [organogramSaving, setOrganogramSaving] = useState(false);
+  const [managerDrafts, setManagerDrafts] = useState({});
+  const [departmentHeadDrafts, setDepartmentHeadDrafts] = useState({});
 
   // Leave allocations state
   const [leaveAllocations, setLeaveAllocations] = useState([]);
@@ -208,7 +217,13 @@ const HRM = () => {
   };
 
   const fetchEmployees = async (pageToLoad = employeePage) => {
+    if (fetchEmployeesInFlightRef.current) {
+      return true;
+    }
+
+    fetchEmployeesInFlightRef.current = true;
     setEmployeesLoading(true);
+
     try {
       const params = new URLSearchParams({
         page: String(pageToLoad),
@@ -241,19 +256,41 @@ const HRM = () => {
           ),
       );
       setSelectedEmployees([]);
+      networkToastShownRef.current = false;
       return true;
     } catch (error) {
       setEmployees([]);
       setEmployeeTotal(0);
       setEmployeeTotalPages(1);
-      console.warn("Failed to load employees:", error);
+
+      const isConnectionIssue =
+        error?.code === "ERR_NETWORK" ||
+        error?.code === "ECONNABORTED" ||
+        !error?.response;
+
+      if (isConnectionIssue && !networkToastShownRef.current) {
+        toast.error("Backend unavailable. Start the server on port 4000.");
+        networkToastShownRef.current = true;
+      }
+
+      console.warn("Failed to load employees", {
+        code: error?.code,
+        message: error?.message,
+      });
       return false;
     } finally {
       setEmployeesLoading(false);
+      fetchEmployeesInFlightRef.current = false;
     }
   };
 
   const fetchAll = async () => {
+    if (fetchAllInFlightRef.current) {
+      return;
+    }
+
+    fetchAllInFlightRef.current = true;
+
     try {
       setEmployeesLoading(true);
       const dashboardPromise = Promise.allSettled([
@@ -345,6 +382,7 @@ const HRM = () => {
       toast.error("Failed to load HR dashboard data");
       setEmployeesLoading(false);
     } finally {
+      fetchAllInFlightRef.current = false;
       // employee loading is cleared when employeePromise settles.
     }
   };
@@ -353,6 +391,159 @@ const HRM = () => {
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
+
+  const loadOrganogramData = async () => {
+    setOrganogramLoading(true);
+    try {
+      const batchLimit = 100;
+      let page = 1;
+      let totalPages = 1;
+      const allEmployees = [];
+
+      while (page <= totalPages) {
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: String(batchLimit),
+        });
+        const response = await apiService.get(
+          `/api/hr/employees?${params.toString()}`,
+        );
+        const payload = toObjectPayload(response, {});
+        const pageEmployees = Array.isArray(payload?.data)
+          ? payload.data
+          : toArrayPayload(response);
+
+        allEmployees.push(...pageEmployees);
+        totalPages = payload?.pagination?.totalPages || 1;
+        page += 1;
+      }
+
+      const sortedEmployees = [...allEmployees].sort((a, b) =>
+        String(a.name || "").localeCompare(String(b.name || "")),
+      );
+
+      setOrganogramEmployees(sortedEmployees);
+      setManagerDrafts(
+        sortedEmployees.reduce((acc, employee) => {
+          acc[employee.id] = employee.managerId || "";
+          return acc;
+        }, {}),
+      );
+      setDepartmentHeadDrafts(
+        (departments || []).reduce((acc, department) => {
+          if (department?._id) {
+            acc[department._id] = department.headEmployeeId || "";
+          }
+          return acc;
+        }, {}),
+      );
+    } catch (error) {
+      console.error("Failed to load organogram data:", error);
+      toast.error("Failed to load organogram data");
+    } finally {
+      setOrganogramLoading(false);
+    }
+  };
+
+  const saveOrganogramChanges = async () => {
+    const actingUserId =
+      user?.id || user?._id || user?.userId || user?.sub || "system";
+
+    const managerUpdates = organogramEmployees.filter(
+      (employee) =>
+        (managerDrafts[employee.id] || "") !== (employee.managerId || ""),
+    );
+    const departmentHeadUpdates = (departments || []).filter((department) => {
+      if (!department?._id) return false;
+      return (
+        (departmentHeadDrafts[department._id] || "") !==
+        (department.headEmployeeId || "")
+      );
+    });
+
+    if (managerUpdates.length === 0 && departmentHeadUpdates.length === 0) {
+      toast("No organogram changes to save");
+      return;
+    }
+
+    setOrganogramSaving(true);
+    try {
+      for (const employee of managerUpdates) {
+        const selectedManagerId = managerDrafts[employee.id] || "";
+        const selectedManager = organogramEmployees.find(
+          (candidate) => candidate.id === selectedManagerId,
+        );
+
+        await apiService.put(`/api/hr/employees/${employee.id}`, {
+          managerId: selectedManagerId,
+          managerName: selectedManager?.name || "",
+          updatedBy: actingUserId,
+        });
+      }
+
+      for (const department of departmentHeadUpdates) {
+        const selectedHeadId = departmentHeadDrafts[department._id] || "";
+        const selectedHead = organogramEmployees.find(
+          (candidate) => candidate.id === selectedHeadId,
+        );
+
+        await apiService.put(`/api/departments/${department._id}`, {
+          name: department.name,
+          code: department.code || "",
+          icon: department.icon || "fa-building",
+          color: department.color || "#3B82F6",
+          headEmployeeId: selectedHeadId,
+          headEmployeeName: selectedHead?.name || "",
+        });
+      }
+
+      await refreshDepartments();
+      await loadOrganogramData();
+      await fetchEmployees(employeePage);
+      toast.success("Organogram updated successfully");
+    } catch (error) {
+      console.error("Failed to save organogram changes:", error);
+      toast.error(
+        error?.response?.data?.message || "Failed to save organogram",
+      );
+    } finally {
+      setOrganogramSaving(false);
+    }
+  };
+
+  const organogramDepartments = useMemo(() => {
+    const grouped = new Map();
+
+    (departments || []).forEach((department) => {
+      const deptName = department?.name || "Unassigned";
+      grouped.set(deptName, {
+        department,
+        name: deptName,
+        employees: [],
+      });
+    });
+
+    organogramEmployees.forEach((employee) => {
+      const deptName = employee.department || "Unassigned";
+      if (!grouped.has(deptName)) {
+        grouped.set(deptName, {
+          department: null,
+          name: deptName,
+          employees: [],
+        });
+      }
+      grouped.get(deptName).employees.push(employee);
+    });
+
+    return Array.from(grouped.values())
+      .map((entry) => ({
+        ...entry,
+        employees: entry.employees.sort((a, b) =>
+          String(a.name || "").localeCompare(String(b.name || "")),
+        ),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [departments, organogramEmployees]);
 
   // Debounced search
   useEffect(() => {
@@ -785,6 +976,194 @@ const HRM = () => {
     );
   }
 
+  if (showOrganogramPage) {
+    return (
+      <div className="w-full min-h-screen bg-gray-50 px-1">
+        <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
+          <div className="flex h-full grow flex-col w-full">
+            <Breadcrumb
+              items={[
+                { label: "Home", href: "/home", icon: "fa-house" },
+                {
+                  label: "Dashboard",
+                  icon: "fa-user-tie",
+                  onClick: () => setShowOrganogramPage(false),
+                },
+                { label: "Organogram", icon: "fa-sitemap" },
+              ]}
+            />
+
+            <div className="p-2 space-y-4">
+              <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i className="fa-solid fa-sitemap text-primary"></i>
+                    Organogram Configuration
+                  </h2>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Configure department heads and direct reporting lines used
+                    by approval flow roles.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={loadOrganogramData}
+                    disabled={organogramLoading || organogramSaving}
+                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-semibold text-slate-700 dark:text-slate-200 disabled:opacity-50"
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    onClick={saveOrganogramChanges}
+                    disabled={organogramLoading || organogramSaving}
+                    className="px-3 py-2 rounded-lg bg-primary hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-50"
+                  >
+                    {organogramSaving ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </div>
+
+              {organogramLoading ? (
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 text-sm text-slate-500">
+                  Loading organogram...
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {organogramDepartments.map((departmentBucket) => {
+                    const selectedDepartmentHead = departmentBucket.department
+                      ?._id
+                      ? departmentHeadDrafts[departmentBucket.department._id] ||
+                        ""
+                      : "";
+
+                    return (
+                      <div
+                        key={
+                          departmentBucket.department?._id ||
+                          departmentBucket.name
+                        }
+                        className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden"
+                      >
+                        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                          <div>
+                            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                              {departmentBucket.name}
+                            </h3>
+                            <p className="text-xs text-slate-500">
+                              {departmentBucket.employees.length} employees
+                            </p>
+                          </div>
+
+                          {departmentBucket.department?._id ? (
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs font-semibold text-slate-500">
+                                Department Head
+                              </label>
+                              <select
+                                value={selectedDepartmentHead}
+                                onChange={(event) =>
+                                  setDepartmentHeadDrafts((prev) => ({
+                                    ...prev,
+                                    [departmentBucket.department._id]:
+                                      event.target.value,
+                                  }))
+                                }
+                                className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white"
+                              >
+                                <option value="">Not set</option>
+                                {departmentBucket.employees.map((employee) => (
+                                  <option key={employee.id} value={employee.id}>
+                                    {employee.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-amber-600 font-semibold">
+                              Create this department to store head assignment
+                            </span>
+                          )}
+                        </div>
+
+                        {departmentBucket.employees.length === 0 ? (
+                          <div className="px-4 py-4 text-sm text-slate-500">
+                            No employees in this department.
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                              <thead className="bg-slate-50 dark:bg-slate-900/30 border-b border-slate-100 dark:border-slate-700">
+                                <tr>
+                                  <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                    Employee
+                                  </th>
+                                  <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                    Job Title
+                                  </th>
+                                  <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                    Reports To (Direct Manager)
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                {departmentBucket.employees.map((employee) => (
+                                  <tr key={employee.id}>
+                                    <td className="px-4 py-2.5 text-slate-900 dark:text-white font-medium">
+                                      {employee.name}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">
+                                      {employee.jobTitle ||
+                                        employee.role ||
+                                        "Employee"}
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                      <select
+                                        value={managerDrafts[employee.id] || ""}
+                                        onChange={(event) =>
+                                          setManagerDrafts((prev) => ({
+                                            ...prev,
+                                            [employee.id]: event.target.value,
+                                          }))
+                                        }
+                                        className="w-full max-w-xs px-2.5 py-1.5 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white"
+                                      >
+                                        <option value="">No manager</option>
+                                        {organogramEmployees
+                                          .filter(
+                                            (candidate) =>
+                                              candidate.id !== employee.id,
+                                          )
+                                          .map((candidate) => (
+                                            <option
+                                              key={candidate.id}
+                                              value={candidate.id}
+                                            >
+                                              {candidate.name}
+                                              {candidate.department
+                                                ? ` (${candidate.department})`
+                                                : ""}
+                                            </option>
+                                          ))}
+                                      </select>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full min-h-screen bg-gray-50 px-1">
       <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
@@ -822,6 +1201,16 @@ const HRM = () => {
                 >
                   <i className="fa-solid fa-plus text-[16px]"></i>
                   <span className="truncate">Create Job</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowOrganogramPage(true);
+                    loadOrganogramData();
+                  }}
+                  className="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-white border border-slate-200 text-slate-700 text-sm font-bold shadow-sm hover:bg-slate-50 transition-colors"
+                >
+                  <i className="fa-solid fa-sitemap text-[16px]"></i>
+                  <span className="truncate">Organogram</span>
                 </button>
                 <button
                   onClick={() => setShowAddEmployeeModal(true)}

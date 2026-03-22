@@ -4592,7 +4592,7 @@ async function start() {
   // Create a new department
   app.post('/api/departments', async (req, res) => {
     try {
-      const { name, code, icon, color } = req.body;
+      const { name, code, icon, color, headEmployeeId, headEmployeeName } = req.body;
       if (!name || !name.trim()) {
         return res.status(400).json({ message: 'Department name is required' });
       }
@@ -4600,7 +4600,14 @@ async function start() {
       if (existing) {
         return res.status(409).json({ message: 'A department with this name already exists' });
       }
-      const dept = await DepartmentModel.create({ name: name.trim(), code: (code || '').trim(), icon: icon || null, color: color || null });
+      const dept = await DepartmentModel.create({
+        name: name.trim(),
+        code: (code || '').trim(),
+        icon: icon || null,
+        color: color || null,
+        headEmployeeId: headEmployeeId ? String(headEmployeeId) : '',
+        headEmployeeName: headEmployeeName ? String(headEmployeeName) : '',
+      });
       res.status(201).json({ department: dept });
     } catch (err) {
       console.error('Error creating department:', err);
@@ -4611,7 +4618,7 @@ async function start() {
   // Update a department
   app.put('/api/departments/:id', async (req, res) => {
     try {
-      const { name, code, icon, color } = req.body;
+      const { name, code, icon, color, headEmployeeId, headEmployeeName } = req.body;
       if (!name || !name.trim()) {
         return res.status(400).json({ message: 'Department name is required' });
       }
@@ -4620,7 +4627,18 @@ async function start() {
       if (existing) {
         return res.status(409).json({ message: 'A department with this name already exists' });
       }
-      const updated = await DepartmentModel.findByIdAndUpdate(req.params.id, { name: name.trim(), code: (code || '').trim(), icon: icon || null, color: color || null }, { new: true });
+      const updated = await DepartmentModel.findByIdAndUpdate(
+        req.params.id,
+        {
+          name: name.trim(),
+          code: (code || '').trim(),
+          icon: icon || null,
+          color: color || null,
+          headEmployeeId: headEmployeeId ? String(headEmployeeId) : '',
+          headEmployeeName: headEmployeeName ? String(headEmployeeName) : '',
+        },
+        { new: true },
+      );
       if (!updated) return res.status(404).json({ message: 'Department not found' });
       res.json({ department: updated });
     } catch (err) {
@@ -5103,7 +5121,7 @@ async function start() {
         : await EmployeeModel.estimatedDocumentCount();
       
       const employees = await EmployeeModel.find(query)
-        .select('name firstName lastName email phone dateOfBirth department role jobTitle startDate status avatar employeeId')
+        .select('name firstName lastName email phone dateOfBirth department role jobTitle startDate status avatar employeeId managerId managerName')
         .sort({ _id: -1 })
         .skip(skip)
         .limit(limit)
@@ -5124,6 +5142,8 @@ async function start() {
         status: emp.status,
         avatar: emp.avatar || '',
         employeeId: emp.employeeId,
+        managerId: emp.managerId || '',
+        managerName: emp.managerName || '',
       }));
 
       res.json({

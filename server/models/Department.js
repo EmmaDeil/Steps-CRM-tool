@@ -5,6 +5,8 @@ const departmentSchema = new mongoose.Schema({
   code: { type: String, trim: true },
   icon: { type: String, default: null },
   color: { type: String, default: null },
+  headEmployeeId: { type: String, default: '' },
+  headEmployeeName: { type: String, default: '' },
 }, {
   timestamps: true,
 });
