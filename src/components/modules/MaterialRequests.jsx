@@ -2651,22 +2651,23 @@ const MaterialRequests = () => {
                           {selectedRequest.department || "Not specified"}
                         </p>
                       </div>
-                      <div className="flex flex-col gap-1">
-                        <p className="text-[#617589] text-sm">
-                          Selected Approver
-                        </p>
-                        <p className="text-[#111418] text-base font-medium">
-                          {selectedRequest.approver || "Not specified"}
-                        </p>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <p className="text-[#617589] text-sm">
-                          Current Approver
-                        </p>
-                        <p className="text-[#111418] text-base font-medium">
-                          {resolveApproverDisplay(selectedRequest)}
-                        </p>
-                      </div>
+                      {(!Array.isArray(selectedRequest.approvalChain) || selectedRequest.approvalChain.length === 0) ? (
+                        <div className="flex flex-col gap-1">
+                          <p className="text-[#617589] text-sm">Approver</p>
+                          <p className="text-[#111418] text-base font-medium">
+                            {selectedRequest.approver || "Not specified"}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          <p className="text-[#617589] text-sm">
+                            Current Approver
+                          </p>
+                          <p className="text-[#111418] text-base font-medium">
+                            {resolveApproverDisplay(selectedRequest)}
+                          </p>
+                        </div>
+                      )}
                       <div className="flex flex-col gap-1">
                         <p className="text-[#617589] text-sm">
                           Required By Date
