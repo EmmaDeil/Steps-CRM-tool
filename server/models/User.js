@@ -79,6 +79,10 @@ const userSchema = new mongoose.Schema({
   emailVerificationToken: String,
   emailVerificationExpires: Date,
   lastLogin: Date,
+  lastLoginIP: {
+    type: String,
+    default: null,
+  },
   invitedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

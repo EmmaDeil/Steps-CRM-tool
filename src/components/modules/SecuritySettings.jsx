@@ -4,6 +4,7 @@ import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import webSocketService from "../../services/websocket";
+import AuditLogDetail from "../common/AuditLogDetail";
 
 const SecuritySettings = () => {
   // eslint-disable-next-line no-unused-vars
@@ -1296,7 +1297,7 @@ const SecuritySettings = () => {
 
       {/* Log Details Modal */}
       {showLogDetailsModal && selectedLog && (
-        <LogDetailsModal
+        <AuditLogDetail
           log={selectedLog}
           onClose={() => setShowLogDetailsModal(false)}
         />
@@ -2077,129 +2078,7 @@ const SessionControlModal = ({
   );
 };
 
-// Log Details Modal Component
-const LogDetailsModal = ({ log, onClose }) => {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-gray-900">Log Details</h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <i className="fa-solid fa-times text-xl"></i>
-            </button>
-          </div>
-        </div>
-
-        <div className="p-6 space-y-6">
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                Timestamp
-              </label>
-              <p className="text-lg font-semibold text-gray-900 mt-1">
-                {new Date(log.timestamp).toLocaleString()}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                Action
-              </label>
-              <p className="text-lg font-semibold text-gray-900 mt-1">
-                {log.action}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Actor</label>
-              <div className="flex items-center gap-2 mt-1">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
-                  {log.actor?.initials || "??"}
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900">
-                    {log.actor?.userName || "Unknown"}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {log.actor?.userEmail || "N/A"}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                IP Address
-              </label>
-              <p className="text-lg font-mono font-semibold text-gray-900 mt-1">
-                {log.ipAddress || "N/A"}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                Status
-              </label>
-              <span
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium mt-1 ${
-                  log.status === "Success"
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                <i
-                  className={`fa-solid ${
-                    log.status === "Success"
-                      ? "fa-circle-check"
-                      : "fa-circle-xmark"
-                  }`}
-                ></i>
-                {log.status}
-              </span>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                User Agent
-              </label>
-              <p className="text-sm text-gray-900 mt-1 break-all">
-                {log.userAgent || "N/A"}
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-gray-500">
-              Description
-            </label>
-            <p className="text-gray-900 mt-1">{log.description}</p>
-          </div>
-
-          {log.metadata && (
-            <div>
-              <label className="text-sm font-medium text-gray-500 mb-2 block">
-                Additional Metadata
-              </label>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <pre className="text-sm text-gray-900 overflow-x-auto">
-                  {JSON.stringify(log.metadata, null, 2)}
-                </pre>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+// Old LogDetailsModal replaced with enhanced AuditLogDetail component (see imports)
 
 // Custom Date Range Modal Component
 const CustomDateRangeModal = ({

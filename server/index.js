@@ -180,6 +180,44 @@ const authLimiter = rateLimit({
   message: 'Too many failed requests, please try again later.',
 });
 
+// Trust proxy - enables correct client IP extraction when behind reverse proxy
+app.set('trust proxy', true);
+
+// Utility function to extract complete client IP address
+const getClientIP = (req) => {
+  // Check X-Forwarded-For header (set by proxies like Nginx, CloudFlare, load balancers)
+  if (req.headers['x-forwarded-for']) {
+    // x-forwarded-for can be a comma-separated list, take the first one (original client)
+    return req.headers['x-forwarded-for'].split(',')[0].trim();
+  }
+  
+  // Check CF-Connecting-IP (Cloudflare)
+  if (req.headers['cf-connecting-ip']) {
+    return req.headers['cf-connecting-ip'];
+  }
+  
+  // Check X-Real-IP (common proxy header)
+  if (req.headers['x-real-ip']) {
+    return req.headers['x-real-ip'];
+  }
+  
+  // Use Express req.ip (works with app.set('trust proxy', true))
+  if (req.ip) {
+    return req.ip;
+  }
+  
+  // Fallback to direct connection
+  if (req.socket?.remoteAddress) {
+    return req.socket.remoteAddress;
+  }
+  
+  if (req.connection?.remoteAddress) {
+    return req.connection.remoteAddress;
+  }
+  
+  return 'Unknown';
+};
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(morgan('dev'));
@@ -621,6 +659,7 @@ async function start() {
           // User needs to setup MFA — give them a full token but flag it
           const token = generateToken(user._id, user.role);
           user.lastLogin = new Date();
+          user.lastLoginIP = getClientIP(req);
           await user.save();
           const userData = {
             _id: user._id,
@@ -648,6 +687,7 @@ async function start() {
 
       // Update last login
       user.lastLogin = new Date();
+      user.lastLoginIP = getClientIP(req);
       await user.save();
 
       // Generate token with role for enhanced security
@@ -3468,7 +3508,7 @@ async function start() {
       };
 
       const activeUsers = await UserModel.find({ status: 'Active' })
-        .select('firstName lastName fullName email role lastLogin createdAt department jobTitle')
+        .select('firstName lastName fullName email role lastLogin lastLoginIP createdAt department jobTitle')
         .sort({ lastLogin: -1 })
         .lean();
 
@@ -3492,7 +3532,7 @@ async function start() {
           role: user.role,
           department: user.department || null,
           jobTitle: user.jobTitle || null,
-          ipAddress: 'N/A',
+          ipAddress: user.lastLoginIP || 'Unknown',
           location: 'N/A',
           device: 'Web App',
           userAgent: '',
@@ -3525,7 +3565,7 @@ async function start() {
             .toUpperCase(),
         },
         description: `Session ${sessionId} was forcibly terminated`,
-        ipAddress: req.ip,
+        ipAddress: getClientIP(req),
         userAgent: req.headers['user-agent'],
         status: 'Success'
       });
@@ -3699,7 +3739,7 @@ async function start() {
             .slice(0, 2)
             .toUpperCase(),
         },
-        ipAddress: req.body.ipAddress || req.ip || req.connection.remoteAddress || 'Unknown',
+        ipAddress: getClientIP(req),
         userAgent: req.body.userAgent || req.get('user-agent'),
       });
 
@@ -4244,7 +4284,7 @@ async function start() {
         },
         action: 'MFA Enabled',
         actionColor: 'green',
-        ipAddress: req.ip || req.connection?.remoteAddress || '127.0.0.1',
+        ipAddress: getClientIP(req),
         userAgent: req.headers['user-agent'],
         description: `MFA enabled by ${req.user.email}`,
         status: 'Success',
@@ -4444,7 +4484,7 @@ async function start() {
           userEmail: req.user?.email || 'admin@system.com',
           initials: String(req.user?.fullName || req.user?.email || 'SA').slice(0, 2).toUpperCase(),
         },
-        ipAddress: req.ip || req.connection.remoteAddress,
+        ipAddress: getClientIP(req),
         actionColor: 'red',
         timestamp: new Date(),
       });
