@@ -11,13 +11,28 @@ import useBarcodeScanner from "../../hooks/useBarcodeScanner";
 import BarcodeScannerModal from "./BarcodeScannerModal";
 
 const PAGE_SIZE = 20;
-const DEFAULT_UNIT_OPTIONS = ["pcs", "box", "kg", "g", "ltr", "ml"];
+const DEFAULT_UNIT_OPTIONS = [];
 
 const formatDateForInput = (value) => {
   if (!value) return "";
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return "";
   return dt.toISOString().slice(0, 10);
+};
+
+const parseUnitFromName = (name) => {
+  const match = String(name || "").match(
+    /\bof\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\b/i,
+  );
+  if (!match) return null;
+  const qty = Number(match[1]);
+  if (!Number.isFinite(qty) || qty <= 0) return null;
+  return {
+    baseQuantity: qty,
+    baseUnitLabel: String(match[2] || "")
+      .trim()
+      .toLowerCase(),
+  };
 };
 
 const Inventory = () => {
@@ -56,6 +71,9 @@ const Inventory = () => {
     name: "",
     symbol: "",
     description: "",
+    unitCategory: "custom",
+    baseQuantity: 1,
+    baseUnitLabel: "unit",
     sortOrder: 0,
   });
 
@@ -74,7 +92,7 @@ const Inventory = () => {
     reorderPoint: 20,
     location: "",
     description: "",
-    unit: "pcs",
+    unit: "",
     addQuantity: 1,
     lotNumber: "",
     refNumber: "",
@@ -209,14 +227,12 @@ const Inventory = () => {
           .map((unit) => String(unit?.name || "").trim())
           .filter(Boolean);
 
-        const merged = Array.from(
-          new Set([...DEFAULT_UNIT_OPTIONS, ...activeNames]),
-        );
+        const merged = Array.from(new Set([...activeNames]));
         setUnitOptions(merged.length > 0 ? merged : DEFAULT_UNIT_OPTIONS);
 
         setFormData((prev) => {
           if (prev.unit && merged.includes(prev.unit)) return prev;
-          return { ...prev, unit: merged[0] || "pcs" };
+          return { ...prev, unit: merged[0] || "" };
         });
       } catch {
         setUnitOptions(DEFAULT_UNIT_OPTIONS);
@@ -296,7 +312,7 @@ const Inventory = () => {
         reorderPoint: 20,
         location: locations.length > 0 ? locations[0].name : "General Store",
         description: "",
-        unit: unitOptions[0] || "pcs",
+        unit: unitOptions[0] || "",
         addQuantity: 0,
         lotNumber: "",
         refNumber: "",
@@ -317,7 +333,7 @@ const Inventory = () => {
           item.location ||
           (locations.length > 0 ? locations[0].name : "General Store"),
         description: item.description || "",
-        unit: item.unit || unitOptions[0] || "pcs",
+        unit: item.unit || unitOptions[0] || "",
         addQuantity: 1,
         lotNumber: item.lotNumber || "",
         refNumber: item.refNumber || "",
@@ -345,6 +361,9 @@ const Inventory = () => {
       name: unit?.name || "",
       symbol: unit?.symbol || "",
       description: unit?.description || "",
+      unitCategory: unit?.unitCategory || "custom",
+      baseQuantity: Number(unit?.baseQuantity || 1),
+      baseUnitLabel: unit?.baseUnitLabel || "unit",
       sortOrder: Number(unit?.sortOrder || 0),
     });
     setIsUnitModalOpen(true);
@@ -353,14 +372,40 @@ const Inventory = () => {
   const handleCloseUnitModal = () => {
     setIsUnitModalOpen(false);
     setEditingUnit(null);
-    setUnitForm({ name: "", symbol: "", description: "", sortOrder: 0 });
+    setUnitForm({
+      name: "",
+      symbol: "",
+      description: "",
+      unitCategory: "custom",
+      baseQuantity: 1,
+      baseUnitLabel: "unit",
+      sortOrder: 0,
+    });
   };
 
   const handleUnitFormChange = (e) => {
     const { name, value } = e.target;
+    if (name === "name") {
+      const parsed = parseUnitFromName(value);
+      setUnitForm((prev) => ({
+        ...prev,
+        name: value,
+        baseQuantity:
+          parsed && (prev.baseQuantity === 1 || !prev.baseQuantity)
+            ? parsed.baseQuantity
+            : prev.baseQuantity,
+        baseUnitLabel:
+          parsed && !String(prev.baseUnitLabel || "").trim()
+            ? parsed.baseUnitLabel || prev.baseUnitLabel
+            : prev.baseUnitLabel,
+      }));
+      return;
+    }
     setUnitForm((prev) => ({
       ...prev,
-      [name]: name === "sortOrder" ? Number(value) : value,
+      [name]: ["sortOrder", "baseQuantity"].includes(name)
+        ? Number(value)
+        : value,
     }));
   };
 
@@ -373,6 +418,17 @@ const Inventory = () => {
       toast.error("Unit name is required");
       return;
     }
+    if (
+      !Number.isFinite(Number(unitForm.baseQuantity)) ||
+      Number(unitForm.baseQuantity) <= 0
+    ) {
+      toast.error("Base quantity must be a positive number");
+      return;
+    }
+    if (!String(unitForm.baseUnitLabel || "").trim()) {
+      toast.error("Base unit is required");
+      return;
+    }
 
     try {
       setIsUnitSubmitting(true);
@@ -380,6 +436,9 @@ const Inventory = () => {
         name,
         symbol: String(unitForm.symbol || "").trim(),
         description: String(unitForm.description || "").trim(),
+        unitCategory: String(unitForm.unitCategory || "custom").trim(),
+        baseQuantity: Number(unitForm.baseQuantity || 1),
+        baseUnitLabel: String(unitForm.baseUnitLabel || "unit").trim(),
         sortOrder: Number(unitForm.sortOrder || 0),
       };
 
@@ -451,6 +510,12 @@ const Inventory = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      if ((modalMode === "add" || modalMode === "edit") && !formData.unit) {
+        toast.error("Select a unit from Unit Setup before saving this item");
+        setIsSubmitting(false);
+        return;
+      }
+
       if (modalMode === "add") {
         await apiService.post("/api/inventory", {
           name: formData.name,
@@ -829,7 +894,7 @@ const Inventory = () => {
                   onClick={() => handleOpenUnitModal()}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-medium transition-colors shadow-sm flex items-center gap-2"
                 >
-                  <i className="fa-solid fa-ruler-combined"></i> Manage Units
+                  <i className="fa-solid fa-ruler-combined"></i> Unit Setup
                 </button>
               )}
               <button
@@ -1048,9 +1113,7 @@ const Inventory = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <h3 className="text-xl font-bold text-gray-800">
-                Unit of Measure Setup
-              </h3>
+              <h3 className="text-xl font-bold text-gray-800">Unit Setup</h3>
               <button
                 onClick={handleCloseUnitModal}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -1062,36 +1125,90 @@ const Inventory = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 overflow-y-auto">
               <div className="border border-gray-200 rounded-lg p-4">
                 <h4 className="text-base font-semibold text-gray-800 mb-3">
-                  {editingUnit ? "Edit Unit" : "Create Unit"}
+                  {editingUnit ? "Edit Unit Option" : "Create Unit Option"}
                 </h4>
                 <form onSubmit={handleSaveUnit} className="space-y-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Name *
+                      Unit Name *
                     </label>
                     <input
                       type="text"
                       name="name"
                       value={unitForm.name}
                       onChange={handleUnitFormChange}
-                      placeholder="e.g. Pieces"
+                      placeholder="e.g. Pack of 12"
                       required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      This is what users will see in item forms.
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Symbol
+                      Short Label (optional)
                     </label>
                     <input
                       type="text"
                       name="symbol"
                       value={unitForm.symbol}
                       onChange={handleUnitFormChange}
-                      placeholder="e.g. pcs"
+                      placeholder="e.g. pack"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Type
+                      </label>
+                      <select
+                        name="unitCategory"
+                        value={unitForm.unitCategory}
+                        onChange={handleUnitFormChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      >
+                        <option value="count">Count</option>
+                        <option value="volume">Volume</option>
+                        <option value="weight">Weight</option>
+                        <option value="length">Length</option>
+                        <option value="area">Area</option>
+                        <option value="custom">Custom</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Base Quantity *
+                      </label>
+                      <input
+                        type="number"
+                        name="baseQuantity"
+                        min="0.000001"
+                        step="any"
+                        value={unitForm.baseQuantity}
+                        onChange={handleUnitFormChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Base Unit *
+                      </label>
+                      <input
+                        type="text"
+                        name="baseUnitLabel"
+                        value={unitForm.baseUnitLabel}
+                        onChange={handleUnitFormChange}
+                        placeholder="pcs, ltrs, kg"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-500 -mt-1">
+                    Example: Pack of 12 = 12 pcs, Carton of 23 = 23 pcs, Gallon
+                    of 50L = 50 ltrs.
+                  </p>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Description
@@ -1101,13 +1218,13 @@ const Inventory = () => {
                       name="description"
                       value={unitForm.description}
                       onChange={handleUnitFormChange}
-                      placeholder="Optional usage note"
+                      placeholder="Optional note for admins"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Sort Order
+                      Display Order
                     </label>
                     <input
                       type="number"
@@ -1145,7 +1262,7 @@ const Inventory = () => {
               <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-base font-semibold text-gray-800">
-                    Existing Units
+                    Existing Unit Options
                   </h4>
                   <button
                     onClick={() =>
@@ -1177,6 +1294,10 @@ const Inventory = () => {
                                 ({unit.symbol})
                               </span>
                             ) : null}
+                          </p>
+                          <p className="text-xs text-blue-700">
+                            1 {unit.name} = {Number(unit.baseQuantity || 1)}{" "}
+                            {unit.baseUnitLabel || "unit"}
                           </p>
                           <p className="text-xs text-gray-500">
                             {unit.description || "No description"}
@@ -1555,8 +1676,12 @@ const Inventory = () => {
                         name="unit"
                         value={formData.unit}
                         onChange={handleFormChange}
+                        disabled={unitOptions.length === 0}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white"
                       >
+                        {unitOptions.length === 0 && (
+                          <option value="">No active units configured</option>
+                        )}
                         {Array.from(
                           new Set(
                             [...(unitOptions || []), formData.unit].filter(
@@ -1565,13 +1690,25 @@ const Inventory = () => {
                           ),
                         ).map((unit) => (
                           <option key={unit} value={unit}>
-                            {unit}
+                            {(() => {
+                              const meta = (unitsOfMeasure || []).find(
+                                (row) =>
+                                  String(row?.name || "").trim() === unit,
+                              );
+                              if (!meta) return unit;
+                              return `${unit} (1 = ${Number(meta.baseQuantity || 1)} ${meta.baseUnitLabel || "unit"})`;
+                            })()}
                           </option>
                         ))}
                       </select>
                       {isUnitsLoading && (
                         <p className="text-[10px] text-gray-400 mt-1">
                           Loading units...
+                        </p>
+                      )}
+                      {!isUnitsLoading && unitOptions.length === 0 && (
+                        <p className="text-[11px] text-amber-700 mt-1">
+                          Ask an admin to add unit options in Unit Setup.
                         </p>
                       )}
                     </div>

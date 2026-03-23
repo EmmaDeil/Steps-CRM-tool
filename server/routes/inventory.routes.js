@@ -93,6 +93,25 @@ function isAdminUser(user) {
   return role === 'admin' || role === 'administrator';
 }
 
+function parseUnitValuesFromName(name = '') {
+  const match = String(name).match(/\bof\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\b/i);
+  if (!match) return null;
+  const qty = Number(match[1]);
+  if (!Number.isFinite(qty) || qty <= 0) return null;
+  return {
+    baseQuantity: qty,
+    baseUnitLabel: String(match[2] || '').trim().toLowerCase(),
+  };
+}
+
+async function findActiveUnitByName(unitName = '') {
+  const normalized = String(unitName || '').trim().toLowerCase();
+  if (!normalized) return null;
+  return UnitOfMeasure.findOne({ nameKey: normalized, isActive: true })
+    .select('_id name')
+    .lean();
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 // GET fast lookup by barcode/SKU
@@ -279,7 +298,7 @@ router.get('/units', authMiddleware, async (req, res) => {
 
     const units = await UnitOfMeasure.find(query)
       .sort({ sortOrder: 1, name: 1 })
-      .select('_id name symbol description sortOrder isActive')
+      .select('_id name symbol description unitCategory baseQuantity baseUnitLabel sortOrder isActive')
       .lean();
 
     res.json({ items: units });
@@ -299,6 +318,25 @@ router.post('/units', authMiddleware, async (req, res) => {
     const name = String(req.body?.name || '').trim();
     if (!name) return res.status(400).json({ message: 'name is required' });
 
+    const parsedFromName = parseUnitValuesFromName(name) || {};
+    const baseQuantityRaw = req.body?.baseQuantity;
+    const baseQuantity = Number.isFinite(Number(baseQuantityRaw)) && Number(baseQuantityRaw) > 0
+      ? Number(baseQuantityRaw)
+      : parsedFromName.baseQuantity || 1;
+
+    const baseUnitLabel = String(
+      req.body?.baseUnitLabel || parsedFromName.baseUnitLabel || req.body?.symbol || 'unit'
+    ).trim();
+    if (!baseUnitLabel) {
+      return res.status(400).json({ message: 'baseUnitLabel is required (e.g. pcs, ltrs, kg)' });
+    }
+
+    const allowedCategories = ['count', 'volume', 'weight', 'length', 'area', 'custom'];
+    const unitCategory = String(req.body?.unitCategory || 'custom').trim().toLowerCase();
+    if (!allowedCategories.includes(unitCategory)) {
+      return res.status(400).json({ message: 'unitCategory is invalid' });
+    }
+
     const existing = await UnitOfMeasure.findOne({ nameKey: name.toLowerCase() }).select('_id').lean();
     if (existing) {
       return res.status(409).json({ message: 'A unit with this name already exists' });
@@ -308,6 +346,9 @@ router.post('/units', authMiddleware, async (req, res) => {
       name,
       symbol: String(req.body?.symbol || '').trim(),
       description: String(req.body?.description || '').trim(),
+      unitCategory,
+      baseQuantity,
+      baseUnitLabel,
       sortOrder: Number.isFinite(Number(req.body?.sortOrder)) ? Number(req.body.sortOrder) : 0,
       isActive: req.body?.isActive !== false,
       createdBy: req.user?._id,
@@ -340,6 +381,28 @@ router.put('/units/:unitId', authMiddleware, async (req, res) => {
     }
     if (req.body?.symbol !== undefined) updates.symbol = String(req.body.symbol || '').trim();
     if (req.body?.description !== undefined) updates.description = String(req.body.description || '').trim();
+    if (req.body?.unitCategory !== undefined) {
+      const allowedCategories = ['count', 'volume', 'weight', 'length', 'area', 'custom'];
+      const unitCategory = String(req.body.unitCategory || '').trim().toLowerCase();
+      if (!allowedCategories.includes(unitCategory)) {
+        return res.status(400).json({ message: 'unitCategory is invalid' });
+      }
+      updates.unitCategory = unitCategory;
+    }
+    if (req.body?.baseQuantity !== undefined) {
+      const baseQuantity = Number(req.body.baseQuantity);
+      if (!Number.isFinite(baseQuantity) || baseQuantity <= 0) {
+        return res.status(400).json({ message: 'baseQuantity must be a positive number' });
+      }
+      updates.baseQuantity = baseQuantity;
+    }
+    if (req.body?.baseUnitLabel !== undefined) {
+      const baseUnitLabel = String(req.body.baseUnitLabel || '').trim();
+      if (!baseUnitLabel) {
+        return res.status(400).json({ message: 'baseUnitLabel cannot be empty' });
+      }
+      updates.baseUnitLabel = baseUnitLabel;
+    }
     if (req.body?.sortOrder !== undefined) {
       const sortOrder = Number(req.body.sortOrder);
       if (!Number.isFinite(sortOrder)) return res.status(400).json({ message: 'sortOrder must be a number' });
@@ -400,6 +463,19 @@ router.get('/:id', authMiddleware, async (req, res) => {
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const errors = validateInventoryBody(req.body, true);
+    const requestedUnit = String(req.body?.unit || '').trim();
+    if (!requestedUnit) {
+      errors.push('unit is required and must match an active Unit Setup option');
+    }
+
+    let activeUnit = null;
+    if (requestedUnit) {
+      activeUnit = await findActiveUnitByName(requestedUnit);
+      if (!activeUnit) {
+        errors.push('unit must match an active Unit Setup option');
+      }
+    }
+
     if (errors.length) {
       return res.status(400).json({ message: 'Validation failed', errors });
     }
@@ -428,7 +504,7 @@ router.post('/', authMiddleware, async (req, res) => {
       name:         req.body.name.trim(),
       category:     req.body.category,
       description:  req.body.description || '',
-      unit:         req.body.unit || 'pcs',
+      unit:         activeUnit?.name || requestedUnit,
       quantity:     Number(req.body.quantity),
       maxStock:     Number(req.body.maxStock),
       reorderPoint: req.body.reorderPoint !== undefined ? Number(req.body.reorderPoint) : Math.floor(Number(req.body.maxStock) * 0.2),
@@ -471,6 +547,20 @@ router.post('/', authMiddleware, async (req, res) => {
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
     const errors = validateInventoryBody(req.body, false);
+
+    let activeUnit = null;
+    if (req.body.unit !== undefined) {
+      const requestedUnit = String(req.body.unit || '').trim();
+      if (!requestedUnit) {
+        errors.push('unit cannot be empty');
+      } else {
+        activeUnit = await findActiveUnitByName(requestedUnit);
+        if (!activeUnit) {
+          errors.push('unit must match an active Unit Setup option');
+        }
+      }
+    }
+
     if (errors.length) {
       return res.status(400).json({ message: 'Validation failed', errors });
     }
@@ -483,6 +573,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
       if (req.body[f] !== undefined) {
         if (['maxStock', 'reorderPoint'].includes(f)) {
           updates[f] = Number(req.body[f]);
+        } else if (f === 'unit') {
+          updates.unit = activeUnit?.name || String(req.body.unit || '').trim();
         } else if (['productionDate', 'manufacturingDate', 'expiryDate'].includes(f)) {
           updates[f] = parseOptionalDate(req.body[f]);
         } else {
