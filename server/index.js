@@ -315,8 +315,17 @@ async function start() {
 
   // API endpoints using centralized server API helpers
   const api = require('./api');
-  const { authMiddleware, generateToken, generateMfaPendingToken, verifyMfaPendingToken } = require('./middleware/auth');
+  const { authMiddleware, requireRole, generateToken, generateMfaPendingToken, verifyMfaPendingToken } = require('./middleware/auth');
   const crypto = require('crypto');
+
+  const hasAdminPrivileges = (user) =>
+    ['admin', 'security admin'].includes(
+      String(user?.role || '').trim().toLowerCase(),
+    );
+
+  const canManageVendors = (user) =>
+    hasAdminPrivileges(user) ||
+    ['editor'].includes(String(user?.role || '').trim().toLowerCase());
 
   // ==================== HEALTH CHECK ROUTE ====================
 
@@ -364,10 +373,8 @@ async function start() {
   });
 
   // Signup
-  app.post('/api/auth/signup', async (req, res) => {
+  app.post('/api/auth/signup', authLimiter, async (req, res) => {
     try {
-      console.log('Signup payload:', req.body);
-
       // Sanitize inputs
       const firstName = (req.body.firstName || '').toString().trim();
       const lastName = (req.body.lastName || '').toString().trim();
@@ -542,10 +549,8 @@ async function start() {
   });
 
   // Login
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', authLimiter, async (req, res) => {
     try {
-      console.log('Login payload:', req.body);
-
       // Sanitize inputs
       const email = (req.body.email || '').toString().trim().toLowerCase();
       const password = (req.body.password || '').toString();
@@ -801,7 +806,7 @@ async function start() {
   });
 
   // Forgot password
-  app.post('/api/auth/forgot-password', async (req, res) => {
+  app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
     try {
       const { email } = req.body;
 
@@ -845,7 +850,7 @@ async function start() {
   });
 
   // Reset password
-  app.post('/api/auth/reset-password', async (req, res) => {
+  app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
     try {
       const { token, newPassword } = req.body;
 
@@ -2701,19 +2706,38 @@ async function start() {
   });
 
   // ========== DOCUMENT MANAGEMENT ROUTES ==========
+
+  const canAccessDocument = (document, user) => {
+    const actorId = String(user?._id || '');
+    const actorEmail = String(user?.email || '').trim().toLowerCase();
+    const uploader = String(document?.uploadedBy || '').trim().toLowerCase();
+    const isRecipient = Array.isArray(document?.recipients)
+      ? document.recipients.some((rec) =>
+          [String(rec?.email || '').trim().toLowerCase(), String(rec?.id || '').trim()].includes(actorEmail) ||
+          [String(rec?.email || '').trim().toLowerCase(), String(rec?.id || '').trim()].includes(actorId),
+        )
+      : false;
+
+    return hasAdminPrivileges(user) || uploader === actorId.toLowerCase() || uploader === actorEmail || isRecipient;
+  };
   
   // Get all documents for a user
-  app.get('/api/documents', async (req, res) => {
+  app.get('/api/documents', authMiddleware, async (req, res) => {
     try {
       const { userId } = req.query;
-      if (!userId) {
-        return res.status(400).json({ message: 'userId is required' });
-      }
+      const actorId = String(req.user?._id || '');
+      const actorEmail = String(req.user?.email || '').trim().toLowerCase();
+
+      const target = hasAdminPrivileges(req.user) && userId
+        ? String(userId).trim().toLowerCase()
+        : actorId.toLowerCase();
       
       const documents = await DocumentModel.find({
         $or: [
-          { uploadedBy: userId },
-          { 'recipients.email': userId },
+          { uploadedBy: target },
+          { uploadedBy: actorEmail },
+          { 'recipients.email': target },
+          { 'recipients.email': actorEmail },
         ],
       }).sort({ createdAt: -1 });
       
@@ -2725,12 +2749,17 @@ async function start() {
   });
 
   // Get a single document by ID
-  app.get('/api/documents/:id', async (req, res) => {
+  app.get('/api/documents/:id', authMiddleware, async (req, res) => {
     try {
       const document = await DocumentModel.findById(req.params.id);
       if (!document) {
         return res.status(404).json({ message: 'Document not found' });
       }
+
+      if (!canAccessDocument(document, req.user)) {
+        return res.status(403).json({ message: 'Insufficient permissions' });
+      }
+
       res.json(document);
     } catch (err) {
       console.error('Error fetching document:', err);
@@ -2739,9 +2768,15 @@ async function start() {
   });
 
   // Create a new document
-  app.post('/api/documents', async (req, res) => {
+  app.post('/api/documents', authMiddleware, async (req, res) => {
     try {
-      const document = new DocumentModel(req.body);
+      const payload = {
+        ...req.body,
+        uploadedBy: String(req.user?._id || ''),
+        uploadedByName: req.user?.fullName || req.user?.email || '',
+      };
+
+      const document = new DocumentModel(payload);
       const saved = await document.save();
       
       // Send email to all recipients
@@ -2781,8 +2816,17 @@ async function start() {
   });
 
   // Update document (add signatures, change status, etc.)
-  app.patch('/api/documents/:id', async (req, res) => {
+  app.patch('/api/documents/:id', authMiddleware, async (req, res) => {
     try {
+      const existing = await DocumentModel.findById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: 'Document not found' });
+      }
+
+      if (!hasAdminPrivileges(req.user) && String(existing.uploadedBy || '') !== String(req.user?._id || '')) {
+        return res.status(403).json({ message: 'Only the document owner can update this document' });
+      }
+
       const updated = await DocumentModel.findByIdAndUpdate(
         req.params.id,
         req.body,
@@ -2799,33 +2843,63 @@ async function start() {
   });
 
   // Sign document (complete signing process)
-  app.post('/api/documents/:id/sign', async (req, res) => {
+  app.post('/api/documents/:id/sign', authMiddleware, async (req, res) => {
     try {
-      const { signatures, recipients, userId, userName } = req.body;
+      const { signatures } = req.body;
       
       const document = await DocumentModel.findById(req.params.id);
       if (!document) {
         return res.status(404).json({ message: 'Document not found' });
       }
 
-      // Add signatures with timestamp and signer info
-      const timestampedSignatures = signatures.map(sig => ({
-        ...sig,
-        signedAt: new Date(),
-        signedBy: userId,
-      }));
-
-      document.signatures = timestampedSignatures;
-      document.status = 'Completed';
-      document.completedAt = new Date();
-      
-      // Update recipients if provided
-      if (recipients && recipients.length > 0) {
-        document.recipients = recipients.map(rec => ({
-          ...rec,
-          status: rec.email === userId ? 'signed' : 'pending',
-        }));
+      if (!canAccessDocument(document, req.user)) {
+        return res.status(403).json({ message: 'Insufficient permissions' });
       }
+
+      const actorId = String(req.user?._id || '');
+      const actorEmail = String(req.user?.email || '').trim().toLowerCase();
+      const signaturePayload = Array.isArray(signatures) && signatures.length > 0 ? signatures[0] : null;
+      if (!signaturePayload) {
+        return res.status(400).json({ message: 'Signature payload is required' });
+      }
+
+      // Add signatures with timestamp and signer info
+      const timestampedSignature = {
+        ...signaturePayload,
+        signedAt: new Date(),
+        signedBy: actorId,
+      };
+
+      const existingSignatureIndex = (document.signatures || []).findIndex(
+        (sig) => String(sig?.signedBy || '') === actorId,
+      );
+      if (existingSignatureIndex >= 0) {
+        document.signatures[existingSignatureIndex] = timestampedSignature;
+      } else {
+        document.signatures.push(timestampedSignature);
+      }
+
+      if (Array.isArray(document.recipients) && document.recipients.length > 0) {
+        document.recipients = document.recipients.map((rec) => {
+          const recEmail = String(rec?.email || '').trim().toLowerCase();
+          const recId = String(rec?.id || '').trim();
+          if (recEmail === actorEmail || recId === actorId) {
+            return {
+              ...rec.toObject(),
+              status: 'signed',
+              signedAt: new Date(),
+            };
+          }
+          return rec;
+        });
+      }
+
+      const hasPendingRecipient = Array.isArray(document.recipients)
+        ? document.recipients.some((rec) => rec.status !== 'signed')
+        : false;
+
+      document.status = hasPendingRecipient ? 'Action Required' : 'Completed';
+      document.completedAt = hasPendingRecipient ? null : new Date();
 
       await document.save();
 
@@ -2840,8 +2914,17 @@ async function start() {
   });
 
   // Delete a document
-  app.delete('/api/documents/:id', async (req, res) => {
+  app.delete('/api/documents/:id', authMiddleware, async (req, res) => {
     try {
+      const existing = await DocumentModel.findById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: 'Document not found' });
+      }
+
+      if (!hasAdminPrivileges(req.user) && String(existing.uploadedBy || '') !== String(req.user?._id || '')) {
+        return res.status(403).json({ message: 'Only the document owner can delete this document' });
+      }
+
       const deleted = await DocumentModel.findByIdAndDelete(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: 'Document not found' });
@@ -2856,7 +2939,7 @@ async function start() {
   // ==================== USER MANAGEMENT ROUTES ====================
 
   // Get all users with optional filtering
-  app.get('/api/users', async (req, res) => {
+  app.get('/api/users', authMiddleware, async (req, res) => {
     try {
       const { role, status, search } = req.query;
       
@@ -2943,8 +3026,13 @@ async function start() {
   });
 
   // Get single user by ID
-  app.get('/api/users/:id', async (req, res) => {
+  app.get('/api/users/:id', authMiddleware, async (req, res) => {
     try {
+      const isSelf = String(req.user?._id || '') === String(req.params.id || '');
+      if (!isSelf && !hasAdminPrivileges(req.user)) {
+        return res.status(403).json({ message: 'Insufficient permissions' });
+      }
+
       const user = await UserModel.findById(req.params.id)
         .select('-resetPasswordToken -resetPasswordExpires')
         .populate('invitedBy', 'fullName email');
@@ -2961,7 +3049,7 @@ async function start() {
   });
 
   // Create new user
-  app.post('/api/users', async (req, res) => {
+  app.post('/api/users', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const { fullName, email, role, permissions, invitedBy } = req.body;
 
@@ -3036,7 +3124,7 @@ async function start() {
   });
 
   // Update user
-  app.patch('/api/users/:id', async (req, res) => {
+  app.patch('/api/users/:id', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const { fullName, email, role, status, permissions } = req.body;
       
@@ -3090,7 +3178,7 @@ async function start() {
   });
 
   // Delete user
-  app.delete('/api/users/:id', async (req, res) => {
+  app.delete('/api/users/:id', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const user = await UserModel.findByIdAndDelete(req.params.id);
 
@@ -3115,7 +3203,7 @@ async function start() {
   });
 
   // Request password reset
-  app.post('/api/users/:id/reset-password', async (req, res) => {
+  app.post('/api/users/:id/reset-password', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const user = await UserModel.findById(req.params.id);
 
@@ -3145,7 +3233,7 @@ async function start() {
   });
 
   // Update user status (activate/deactivate)
-  app.patch('/api/users/:id/status', async (req, res) => {
+  app.patch('/api/users/:id/status', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const { status } = req.body;
 
@@ -3356,7 +3444,7 @@ async function start() {
   });
 
   // Get active users count
-  app.get('/api/security/active-users', async (req, res) => {
+  app.get('/api/security/active-users', checkSecurityPermission('viewLogs'), async (req, res) => {
     try {
       const activeUsers = await UserModel.countDocuments({ status: 'Active' });
       res.json({ count: activeUsers });
@@ -3599,10 +3687,18 @@ async function start() {
   });
 
   // Create audit log entry
-  app.post('/api/audit-logs', async (req, res) => {
+  app.post('/api/audit-logs', authMiddleware, async (req, res) => {
     try {
       const log = new AuditLogModel({
         ...req.body,
+        actor: {
+          userId: String(req.user?._id || ''),
+          userName: req.user?.fullName || req.user?.email || 'Unknown',
+          userEmail: req.user?.email || 'unknown@local',
+          initials: String(req.user?.fullName || req.user?.email || 'UN')
+            .slice(0, 2)
+            .toUpperCase(),
+        },
         ipAddress: req.body.ipAddress || req.ip || req.connection.remoteAddress || 'Unknown',
         userAgent: req.body.userAgent || req.get('user-agent'),
       });
@@ -3996,7 +4092,7 @@ async function start() {
   // ==================== MFA ENDPOINTS ====================
 
   // Verify MFA code during login
-  app.post('/api/auth/mfa-verify', async (req, res) => {
+  app.post('/api/auth/mfa-verify', authLimiter, async (req, res) => {
     try {
       const { authenticator } = require('otplib');
       const { mfaPendingToken, code } = req.body;
@@ -4311,7 +4407,7 @@ async function start() {
   });
 
   // Get settings history
-  app.get('/api/security/settings-history', async (req, res) => {
+  app.get('/api/security/settings-history', checkSecurityPermission('viewLogs'), async (req, res) => {
     try {
       const settings = await SecuritySettingsModel.findOne();
       if (!settings || !settings.settingsHistory) {
@@ -4329,7 +4425,7 @@ async function start() {
   });
 
   // Panic logout - terminate all sessions
-  app.post('/api/security/panic-logout', async (req, res) => {
+  app.post('/api/security/panic-logout', checkSecurityPermission('manageSessions'), async (req, res) => {
     try {
       // In a real implementation, this would:
       // 1. Clear all session tokens
@@ -4343,9 +4439,10 @@ async function start() {
         description: 'Emergency logout initiated for all users',
         status: 'Success',
         actor: {
-          userName: req.body.userName || 'System Administrator',
-          userEmail: req.body.userEmail || 'admin@system.com',
-          initials: req.body.initials || 'SA',
+          userId: String(req.user?._id || ''),
+          userName: req.user?.fullName || req.user?.email || 'System Administrator',
+          userEmail: req.user?.email || 'admin@system.com',
+          initials: String(req.user?.fullName || req.user?.email || 'SA').slice(0, 2).toUpperCase(),
         },
         ipAddress: req.ip || req.connection.remoteAddress,
         actionColor: 'red',
@@ -7552,7 +7649,7 @@ async function start() {
   // ==================== VENDOR MANAGEMENT ROUTES ====================
 
   // Get all vendors
-  app.get('/api/vendors', async (req, res) => {
+  app.get('/api/vendors', authMiddleware, async (req, res) => {
     try {
       const { status, serviceType, search, page = 1, limit = 12 } = req.query;
       
@@ -7593,8 +7690,12 @@ async function start() {
   });
 
   // Create new vendor with base64 document upload
-  app.post('/api/vendors', async (req, res) => {
+  app.post('/api/vendors', authMiddleware, async (req, res) => {
     try {
+      if (!canManageVendors(req.user)) {
+        return res.status(403).json({ success: false, error: 'Insufficient permissions' });
+      }
+
       const vendorData = req.body;
       const { documents: base64Documents } = req.body;
       
@@ -7668,8 +7769,12 @@ async function start() {
   });
 
   // Update vendor
-  app.put('/api/vendors/:id', async (req, res) => {
+  app.put('/api/vendors/:id', authMiddleware, async (req, res) => {
     try {
+      if (!canManageVendors(req.user)) {
+        return res.status(403).json({ success: false, error: 'Insufficient permissions' });
+      }
+
       const { id } = req.params;
       const updates = req.body;
       const { documents: base64Documents } = req.body;
@@ -7724,8 +7829,12 @@ async function start() {
   });
 
   // Delete vendor
-  app.delete('/api/vendors/:id', async (req, res) => {
+  app.delete('/api/vendors/:id', authMiddleware, async (req, res) => {
     try {
+      if (!canManageVendors(req.user)) {
+        return res.status(403).json({ success: false, error: 'Insufficient permissions' });
+      }
+
       const { id } = req.params;
       
       const vendor = await VendorModel.findById(id);
@@ -7747,7 +7856,7 @@ async function start() {
   });
 
   // Get vendor document by index
-  app.get('/api/vendors/:id/documents/:docIndex', async (req, res) => {
+  app.get('/api/vendors/:id/documents/:docIndex', authMiddleware, async (req, res) => {
     try {
       const { id, docIndex } = req.params;
       
@@ -7781,8 +7890,12 @@ async function start() {
   });
 
   // Delete specific vendor document
-  app.delete('/api/vendors/:id/documents/:docIndex', async (req, res) => {
+  app.delete('/api/vendors/:id/documents/:docIndex', authMiddleware, async (req, res) => {
     try {
+      if (!canManageVendors(req.user)) {
+        return res.status(403).json({ success: false, error: 'Insufficient permissions' });
+      }
+
       const { id, docIndex } = req.params;
       
       const vendor = await VendorModel.findById(id);
@@ -7816,7 +7929,7 @@ async function start() {
   // =====================================================
 
   // Get system statistics
-  app.get('/api/admin/system-stats', async (req, res) => {
+  app.get('/api/admin/system-stats', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const [users, employees] = await Promise.all([
         UserModel.countDocuments(),
@@ -7851,7 +7964,7 @@ async function start() {
   });
 
   // Get service status
-  app.get('/api/admin/service-status', async (req, res) => {
+  app.get('/api/admin/service-status', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const services = [];
 

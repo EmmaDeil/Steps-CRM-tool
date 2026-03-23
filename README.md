@@ -690,6 +690,7 @@ VITE_API_BASE_URL=http://localhost:4000
 ```env
 MONGODB_URI=mongodb://localhost:27017/steps-crm
 JWT_SECRET=change_me
+JWT_REFRESH_SECRET=change_me_refresh
 PORT=4000
 INVENTORY_EXPIRY_ALERT_DAYS=30
 INVENTORY_ALERT_EMAILS=ops@company.com,warehouse@company.com

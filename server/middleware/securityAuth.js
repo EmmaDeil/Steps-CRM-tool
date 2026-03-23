@@ -2,6 +2,12 @@ const jwt = require('jsonwebtoken');
 const UserModel = require('../models/User');
 const RoleModel = require('../models/Role');
 
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET must be set in environment variables');
+}
+
 /**
  * Middleware to check if user has specific security permission
  */
@@ -20,7 +26,7 @@ const checkSecurityPermission = (requiredPermission) => {
       const token = authHeader.substring(7); // Remove 'Bearer ' prefix
       
       // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, JWT_SECRET);
       
       // Get user with permissions
       const user = await UserModel.findById(decoded.userId);
@@ -108,7 +114,7 @@ const checkSecurityRole = (allowedRoles) => {
       }
 
       const token = authHeader.substring(7);
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, JWT_SECRET);
       const user = await UserModel.findById(decoded.userId);
       
       if (!user) {
