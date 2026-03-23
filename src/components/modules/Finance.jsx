@@ -69,6 +69,7 @@ const Finance = () => {
           limit: 10,
           page: 1,
         },
+        timeout: 12000,
       });
 
       const rows =
@@ -89,6 +90,12 @@ const Finance = () => {
       setRecentPOs(filtered.slice(0, 10));
     } catch (err) {
       console.error("Error fetching recent POs:", err);
+      setRecentPOs([]);
+      if (!err?.response) {
+        toast.error(
+          "Finance data source is taking too long. Showing empty recent purchase orders.",
+        );
+      }
     } finally {
       setPoLoading(false);
     }

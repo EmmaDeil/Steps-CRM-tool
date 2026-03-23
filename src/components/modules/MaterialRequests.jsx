@@ -1562,8 +1562,8 @@ const MaterialRequests = () => {
                       {formData.requestType === "Internal Transfer" && (
                         <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
                           <i className="fa-solid fa-info-circle"></i>
-                          Items will be pulled from existing inventory if
-                          available
+                          {/* Items will be pulled from existing inventory if
+                          available */}
                         </p>
                       )}
                     </label>
@@ -1638,7 +1638,7 @@ const MaterialRequests = () => {
 
                     <label className="flex flex-col gap-2 sm:col-span-2">
                       <span className="text-sm font-medium text-[#111418]">
-                        Budget Category
+                        Budget
                       </span>
                       <div className="relative">
                         <i className="fa-solid fa-wallet absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
@@ -1648,9 +1648,9 @@ const MaterialRequests = () => {
                           onChange={handleFormChange}
                           className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
                         >
-                          <option value="">-- Select Budget Category --</option>
+                          <option value="">-- Select Budget --</option>
                           {budgetLoading ? (
-                            <option disabled>Loading categories...</option>
+                            <option disabled>Loading Budget...</option>
                           ) : (
                             budgetCategories.map((cat) => (
                               <option
@@ -1719,8 +1719,8 @@ const MaterialRequests = () => {
                           <i className="fa-solid fa-chart-line absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] text-sm"></i>
                           <input
                             type="number"
-                            min="0.00000"
-                            step="0.00000"
+                            min="0.0"
+                            step="0.0"
                             name="exchangeRate"
                             value={formData.exchangeRate || ""}
                             onChange={handleFormChange}
@@ -1802,7 +1802,7 @@ const MaterialRequests = () => {
                 <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                   <h3 className="text-base font-bold text-[#111418]">
                     <i className="fa-solid fa-boxes-stacked text-[#137fec] mr-2"></i>
-                    Material Details
+                    Material Request Breakdown
                   </h3>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-medium text-[#617589] bg-white px-2.5 py-1 rounded-full border border-gray-200">
@@ -1906,7 +1906,7 @@ const MaterialRequests = () => {
                           <input
                             type="number"
                             className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
-                            min="1"
+                            min="0"
                             placeholder="0"
                             value={item.quantity}
                             onChange={(e) =>
@@ -1969,7 +1969,7 @@ const MaterialRequests = () => {
                         </label>
                         <div className="flex flex-col gap-1">
                           <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
-                            Line Total
+                            Total
                           </span>
                           <div className="flex items-center h-[42px] px-3 rounded-lg bg-gray-50 border border-gray-200">
                             <div className="flex flex-col leading-tight">
@@ -2012,7 +2012,7 @@ const MaterialRequests = () => {
                       className="flex items-center gap-2 text-[#137fec] hover:text-[#0d6efd] font-semibold text-sm px-3 py-2 rounded-lg hover:bg-[#137fec]/10 border border-dashed border-[#137fec]/40 transition-colors"
                     >
                       <i className="fa-solid fa-plus text-sm"></i>
-                      Add Another Item
+                      {/* Add Another Item */}
                     </button>
                     <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-lg border border-gray-200 shadow-sm">
                       <div className="flex flex-col">
@@ -2382,7 +2382,7 @@ const MaterialRequests = () => {
                       ? "Submitting..."
                       : isEditMode
                         ? selectedRequest?.status === "draft"
-                          ? "Complete Draft & Submit"
+                          ? "Complete & Submit"
                           : "Update Request"
                         : "Submit Request"}
                   </button>

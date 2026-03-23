@@ -447,12 +447,43 @@ const PurchaseOrders = () => {
   }, [loading, purchaseOrders, openPurchaseOrderByNumber]);
 
   const filteredMentionUsers = activeUsers
-    .map((user) => user?.fullName || user?.name || "")
-    .filter(Boolean)
-    .filter((name) =>
-      name.toLowerCase().includes(commentMentionSearch.toLowerCase()),
+    .map((activeUser) => ({
+      id: activeUser?._id || activeUser?.id,
+      name: activeUser?.fullName || activeUser?.name || "",
+    }))
+    .filter((activeUser) => Boolean(activeUser.name))
+    .filter((activeUser) =>
+      activeUser.name
+        .toLowerCase()
+        .includes(commentMentionSearch.toLowerCase()),
     )
-    .slice(0, 6);
+    .slice(0, 8);
+
+  const insertCommentAtCursor = (insertText) => {
+    const textarea = commentInputRef.current;
+    const currentText = editForm.comment || "";
+
+    if (!textarea) {
+      setEditForm((prev) => ({
+        ...prev,
+        comment: `${currentText}${insertText}`,
+      }));
+      return;
+    }
+
+    const cursor = textarea.selectionStart ?? currentText.length;
+    const before = currentText.slice(0, cursor);
+    const after = currentText.slice(cursor);
+    const nextText = `${before}${insertText}${after}`;
+    const nextCursor = before.length + insertText.length;
+
+    setEditForm((prev) => ({ ...prev, comment: nextText }));
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
 
   const insertCommentMention = (name) => {
     const textarea = commentInputRef.current;
@@ -1911,32 +1942,64 @@ const PurchaseOrders = () => {
                           setShowCommentMentionDropdown(true);
                         } else {
                           setShowCommentMentionDropdown(false);
+                          setCommentMentionSearch("");
+                        }
+                      }}
+                      onKeyDown={async (e) => {
+                        if (
+                          e.key === "Enter" &&
+                          !e.shiftKey &&
+                          !showCommentMentionDropdown
+                        ) {
+                          e.preventDefault();
+                          await handleSendPoComment();
                         }
                       }}
                       placeholder={
                         selectedPo?.isLocked
                           ? "Unlock purchase order to edit comments"
-                          : "Add context or @mention teammates..."
+                          : "Add a comment... Use @ to mention someone (Enter to send, Shift+Enter for new line)"
                       }
-                      className="w-full rounded-lg border border-[#dbe0e6] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#137fec]/50 focus:border-[#137fec] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-[#111418] placeholder-[#617589] focus:border-[#137fec] focus:ring-1 focus:ring-[#137fec] min-h-[70px] resize-y outline-none transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     />
-                    {showCommentMentionDropdown &&
-                      filteredMentionUsers.length > 0 && (
-                        <div className="absolute z-50 top-full left-0 right-0 -mt-2 bg-white rounded-lg shadow-lg max-h-44 overflow-y-auto">
-                          {filteredMentionUsers.map((name) => (
+                    {showCommentMentionDropdown && (
+                      <div className="absolute z-50 top-full left-0 right-0 -mt-2 bg-white rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                        {filteredMentionUsers.length > 0 ? (
+                          filteredMentionUsers.map((activeUser) => (
                             <button
-                              key={name}
+                              key={activeUser.id || activeUser.name}
                               type="button"
-                              onClick={() => insertCommentMention(name)}
-                              className="w-full text-left px-3 py-2 text-sm text-[#111418] hover:bg-gray-50"
+                              onClick={() =>
+                                insertCommentMention(activeUser.name)
+                              }
+                              className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
                             >
-                              @{name}
+                              <strong className="text-[#111418] text-sm">
+                                {activeUser.name}
+                              </strong>
                             </button>
-                          ))}
-                        </div>
-                      )}
+                          ))
+                        ) : (
+                          <div className="px-4 py-3 text-center text-[#617589] text-sm">
+                            No users found
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </label>
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-3 flex items-center justify-between">
+                    <button
+                      type="button"
+                      disabled={selectedPo?.isLocked}
+                      onClick={() => {
+                        insertCommentAtCursor("@");
+                        setShowCommentMentionDropdown(true);
+                        setCommentMentionSearch("");
+                      }}
+                      className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-[#617589] hover:text-[#111418] transition-colors rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <i className="fa-solid fa-at text-sm"></i>
+                    </button>
                     <button
                       type="button"
                       onClick={handleSendPoComment}

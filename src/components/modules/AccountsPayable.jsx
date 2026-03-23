@@ -64,7 +64,10 @@ const AccountsPayable = ({ onBack }) => {
       if (
         updatedInvoice &&
         (updatedInvoice.paidAmount !== selectedInvoiceDetail.paidAmount ||
-          updatedInvoice.status !== selectedInvoiceDetail.status)
+          updatedInvoice.status !== selectedInvoiceDetail.status ||
+          updatedInvoice.firstPartiallyPaidAt !==
+            selectedInvoiceDetail.firstPartiallyPaidAt ||
+          updatedInvoice.fullyPaidAt !== selectedInvoiceDetail.fullyPaidAt)
       ) {
         setSelectedInvoiceDetail(updatedInvoice);
       }

@@ -1,5 +1,8 @@
 import React from "react";
 import { formatCurrency } from "../../services/currency";
+import { useNavigate } from "react-router-dom";
+import { useAppContext } from "../../context/useAppContext";
+import toast from "react-hot-toast";
 
 const StatusBadge = ({ status }) => {
   const map = {
@@ -20,8 +23,74 @@ const StatusBadge = ({ status }) => {
 };
 
 const InvoiceDetail = ({ invoice }) => {
+  const navigate = useNavigate();
+  const { modules } = useAppContext();
   // Determine if this is an AR Invoice or an AP PO
   const isAP = invoice._isAP;
+
+  const paymentHistory = Array.isArray(invoice?.paymentHistory)
+    ? invoice.paymentHistory
+    : [];
+
+  const firstPartialPaymentDate =
+    invoice?.firstPartiallyPaidAt ||
+    paymentHistory.find((entry) => {
+      const pct = Number(entry?.percentage || 0);
+      return pct > 0 && pct < 100 && entry?.paidAt;
+    })?.paidAt ||
+    null;
+
+  const fullPaymentCompletedDate =
+    invoice?.fullyPaidAt ||
+    paymentHistory
+      .slice()
+      .reverse()
+      .find((entry) => Number(entry?.balanceAfter || 0) <= 0 && entry?.paidAt)
+      ?.paidAt ||
+    null;
+
+  const requestSourceId =
+    invoice?.linkedMaterialRequestId?.requestId ||
+    invoice?.linkedMaterialRequestId?._id ||
+    "N/A";
+  const purchaseOrderSource =
+    invoice?.poNumber || invoice?.invoiceNumber || "N/A";
+  const purchaseOrderSourceId = invoice?._id || invoice?.id || "";
+
+  const openModuleByName = (targetName) => {
+    const target = (modules || []).find(
+      (moduleItem) =>
+        String(moduleItem?.name || "").toLowerCase() ===
+        String(targetName || "").toLowerCase(),
+    );
+    const moduleId = target?.id || target?._id;
+    if (!moduleId) {
+      toast.error(`${targetName} module not found`);
+      return null;
+    }
+    return moduleId;
+  };
+
+  const openMaterialRequestSource = (requestId) => {
+    if (!requestId) return;
+    const moduleId = openModuleByName("Material Requests");
+    if (!moduleId) return;
+    sessionStorage.setItem("materialRequestsOpenRequestId", String(requestId));
+    navigate(`/home/${moduleId}`);
+  };
+
+  const openPurchaseOrderSource = (poId, poNumber) => {
+    const moduleId = openModuleByName("Purchase Orders");
+    if (!moduleId) return;
+    if (poId) {
+      sessionStorage.setItem("purchaseOrdersOpenPoId", String(poId));
+    }
+    if (poNumber) {
+      sessionStorage.setItem("purchaseOrdersOpenPoNumber", String(poNumber));
+      sessionStorage.setItem("purchaseOrdersSearch", String(poNumber));
+    }
+    navigate(`/home/${moduleId}`);
+  };
 
   const documentNumber = isAP
     ? invoice.apInvoiceNumber || invoice.invoiceNumber || invoice.poNumber
@@ -32,7 +101,7 @@ const InvoiceDetail = ({ invoice }) => {
     : invoice.createdAt;
 
   return (
-    <div className="w-full bg-white min-h-screen p-2 md:p-6 text-gray-800 flex flex-col">
+    <div className="w-full bg-white min-h-screen p-2 text-gray-800 flex flex-col">
       {/* Header controls (Hide in print) */}
       <div className="flex justify-end items-center mb-6 print:hidden">
         <button
@@ -67,7 +136,7 @@ const InvoiceDetail = ({ invoice }) => {
       {/* Printable Area */}
       <div
         id="printable-invoice"
-        className="bg-white border border-gray-200 rounded-xl shadow-sm p-8 max-w-4xl mx-auto w-full print:border-none print:shadow-none print:p-0"
+        className="bg-white border border-gray-200 rounded-xl shadow-sm p-8 w-full print:border-none print:shadow-none print:p-0"
       >
         {/* Document Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 pb-6 mb-6">
@@ -171,6 +240,129 @@ const InvoiceDetail = ({ invoice }) => {
             </table>
           </div>
         </div>
+
+        {isAP && (
+          <div className="mb-8">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 border-b border-gray-200 pb-2">
+              Payment Completion Dates
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">
+                  First Partial Payment
+                </p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {firstPartialPaymentDate
+                    ? new Date(firstPartialPaymentDate).toLocaleString("en-GB")
+                    : "Not yet"}
+                </p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">
+                  Full Payment Completed
+                </p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {fullPaymentCompletedDate
+                    ? new Date(fullPaymentCompletedDate).toLocaleString("en-GB")
+                    : "Not yet"}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isAP && (
+          <div className="mb-8">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 border-b border-gray-200 pb-2">
+              Material Request to Purchase Order Source
+            </h3>
+            <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">
+                      Item
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">
+                      Requested Qty (MR)
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">
+                      Ordered Qty (PO)
+                    </th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">
+                      Unit Cost
+                    </th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">
+                      Total
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">
+                      Material Request Source
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">
+                      Purchase Order Source
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(invoice.lineItems || []).map((item, idx) => {
+                    const qty = Number(item.quantity || item.qty || 0);
+                    const amount = Number(item.amount || item.unitPrice || 0);
+                    const lineTotal = qty * amount;
+                    const qtyLabel =
+                      `${qty || "-"} ${item.quantityType || ""}`.trim();
+
+                    return (
+                      <tr key={`${item.itemName || "item"}-${idx}`}>
+                        <td className="px-4 py-3 text-gray-800 font-medium">
+                          {item.itemName || item.description || "-"}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{qtyLabel}</td>
+                        <td className="px-4 py-3 text-gray-600">{qtyLabel}</td>
+                        <td className="px-4 py-3 text-right text-gray-600">
+                          {formatCurrency(amount)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-800">
+                          {formatCurrency(lineTotal)}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {invoice?.linkedMaterialRequestId?._id ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openMaterialRequestSource(
+                                  invoice?.linkedMaterialRequestId?._id,
+                                )
+                              }
+                              className="text-primary hover:underline font-semibold"
+                            >
+                              {requestSourceId}
+                            </button>
+                          ) : (
+                            requestSourceId
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openPurchaseOrderSource(
+                                purchaseOrderSourceId,
+                                purchaseOrderSource,
+                              )
+                            }
+                            className="text-primary hover:underline font-semibold"
+                          >
+                            {purchaseOrderSource}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Totals & Payment Details Layout */}
         <div className="flex flex-col md:flex-row justify-between gap-8">

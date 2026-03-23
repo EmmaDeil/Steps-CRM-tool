@@ -4,8 +4,12 @@ import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 import { useCurrency } from "../../context/useCurrency";
 import { apiService } from "../../services/api";
+import { useNavigate } from "react-router-dom";
+import { useAppContext } from "../../context/useAppContext";
 
 const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
+  const navigate = useNavigate();
+  const { modules } = useAppContext();
   const { currency } = useCurrency();
   const [payPercentage, setPayPercentage] = useState(100);
   const [isPaying, setIsPaying] = useState(false);
@@ -14,6 +18,9 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
     Number.isFinite(Number(invoice?.taxRate)) ? Number(invoice.taxRate) : 0,
   );
   const [isSavingBillTo, setIsSavingBillTo] = useState(false);
+  const [poDetails, setPoDetails] = useState(null);
+
+  const invoiceId = invoice?._id || invoice?.id;
 
   const billToOptions = useMemo(() => {
     const candidates = [
@@ -43,12 +50,191 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
     invoice?.balanceDue !== undefined
       ? Number(invoice.balanceDue || 0)
       : Math.max(0, totalAmount - currentPaid);
-  const firstPartiallyPaidAt = invoice?.firstPartiallyPaidAt
-    ? new Date(invoice.firstPartiallyPaidAt)
-    : null;
-  const fullyPaidAt = invoice?.fullyPaidAt
-    ? new Date(invoice.fullyPaidAt)
-    : null;
+  const paymentHistory = useMemo(() => {
+    if (
+      Array.isArray(invoice?.paymentHistory) &&
+      invoice.paymentHistory.length
+    ) {
+      return invoice.paymentHistory;
+    }
+    if (
+      Array.isArray(poDetails?.paymentHistory) &&
+      poDetails.paymentHistory.length
+    ) {
+      return poDetails.paymentHistory;
+    }
+    return [];
+  }, [invoice?.paymentHistory, poDetails?.paymentHistory]);
+
+  const firstPartialPaymentDate = useMemo(() => {
+    if (invoice?.firstPartiallyPaidAt)
+      return new Date(invoice.firstPartiallyPaidAt);
+    if (poDetails?.firstPartiallyPaidAt)
+      return new Date(poDetails.firstPartiallyPaidAt);
+
+    const partialEntries = paymentHistory.filter((entry) => {
+      const percentage = Number(entry?.percentage || 0);
+      return percentage > 0 && percentage < 100 && entry?.paidAt;
+    });
+
+    if (!partialEntries.length) return null;
+
+    const earliest = partialEntries
+      .map((entry) => new Date(entry.paidAt))
+      .filter((date) => !Number.isNaN(date.getTime()))
+      .sort((a, b) => a.getTime() - b.getTime())[0];
+
+    return earliest || null;
+  }, [
+    invoice?.firstPartiallyPaidAt,
+    poDetails?.firstPartiallyPaidAt,
+    paymentHistory,
+  ]);
+
+  const fullPaymentCompletedDate = useMemo(() => {
+    if (invoice?.fullyPaidAt) return new Date(invoice.fullyPaidAt);
+    if (poDetails?.fullyPaidAt) return new Date(poDetails.fullyPaidAt);
+
+    const fullEntries = paymentHistory.filter(
+      (entry) => Number(entry?.balanceAfter || 0) <= 0 && entry?.paidAt,
+    );
+    if (!fullEntries.length) return null;
+
+    const latest = fullEntries
+      .map((entry) => new Date(entry.paidAt))
+      .filter((date) => !Number.isNaN(date.getTime()))
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+
+    return latest || null;
+  }, [invoice?.fullyPaidAt, poDetails?.fullyPaidAt, paymentHistory]);
+
+  const poLineItems = useMemo(
+    () => (Array.isArray(poDetails?.lineItems) ? poDetails.lineItems : []),
+    [poDetails?.lineItems],
+  );
+
+  const mrLineItems = useMemo(
+    () =>
+      Array.isArray(poDetails?.linkedMaterialRequestId?.lineItems)
+        ? poDetails.linkedMaterialRequestId.lineItems
+        : [],
+    [poDetails?.linkedMaterialRequestId?.lineItems],
+  );
+
+  const sourceRows = useMemo(() => {
+    const normalize = (value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase();
+    const requestId =
+      poDetails?.linkedMaterialRequestId?.requestId ||
+      poDetails?.linkedMaterialRequestId?._id ||
+      "N/A";
+    const requestObjectId =
+      poDetails?.linkedMaterialRequestId?._id ||
+      poDetails?.linkedMaterialRequestId?.id ||
+      "";
+    const poNumber =
+      poDetails?.poNumber ||
+      invoice?.poNumber ||
+      invoice?.invoiceNumber ||
+      "N/A";
+    const poId =
+      poDetails?._id || poDetails?.id || invoice?._id || invoice?.id || "";
+
+    if (!poLineItems.length && !mrLineItems.length) return [];
+
+    const rows = poLineItems.map((poItem, index) => {
+      const poName = poItem?.itemName || "-";
+      const poQty = Number(poItem?.quantity || 0);
+      const poUnit = poItem?.quantityType || "-";
+      const poAmount = Number(poItem?.amount || 0);
+
+      const matchedMr = mrLineItems.find((mrItem) => {
+        const sameName =
+          normalize(mrItem?.itemName) === normalize(poItem?.itemName);
+        const sameDesc =
+          normalize(mrItem?.description) === normalize(poItem?.description);
+        return sameName || (sameDesc && normalize(mrItem?.description));
+      });
+
+      return {
+        key: `${poName}-${index}`,
+        itemName: poName,
+        poQuantity: `${poQty || "-"} ${poUnit}`.trim(),
+        poUnitAmount: poAmount,
+        poTotal: poQty * poAmount,
+        materialRequestSource: requestId,
+        materialRequestSourceId: requestObjectId,
+        purchaseOrderSource: poNumber,
+        purchaseOrderSourceId: poId,
+        requestedQuantity: matchedMr
+          ? `${Number(matchedMr?.quantity || 0)} ${matchedMr?.quantityType || ""}`.trim()
+          : "-",
+      };
+    });
+
+    if (!rows.length) {
+      return mrLineItems.map((mrItem, index) => ({
+        key: `mr-${index}`,
+        itemName: mrItem?.itemName || "-",
+        poQuantity: "-",
+        poUnitAmount: 0,
+        poTotal: 0,
+        materialRequestSource: requestId,
+        materialRequestSourceId: requestObjectId,
+        purchaseOrderSource: poNumber,
+        purchaseOrderSourceId: poId,
+        requestedQuantity:
+          `${Number(mrItem?.quantity || 0)} ${mrItem?.quantityType || ""}`.trim(),
+      }));
+    }
+
+    return rows;
+  }, [
+    invoice?.invoiceNumber,
+    invoice?.poNumber,
+    mrLineItems,
+    poDetails?.linkedMaterialRequestId?._id,
+    poDetails?.linkedMaterialRequestId?.requestId,
+    poDetails?.poNumber,
+    poLineItems,
+  ]);
+
+  const openModuleByName = (targetName) => {
+    const target = (modules || []).find(
+      (moduleItem) =>
+        String(moduleItem?.name || "").toLowerCase() ===
+        String(targetName || "").toLowerCase(),
+    );
+    const moduleId = target?.id || target?._id;
+    if (!moduleId) {
+      toast.error(`${targetName} module not found`);
+      return null;
+    }
+    return moduleId;
+  };
+
+  const openMaterialRequestSource = (requestId) => {
+    if (!requestId) return;
+    const moduleId = openModuleByName("Material Requests");
+    if (!moduleId) return;
+    sessionStorage.setItem("materialRequestsOpenRequestId", String(requestId));
+    navigate(`/home/${moduleId}`);
+  };
+
+  const openPurchaseOrderSource = (poId, poNumber) => {
+    const moduleId = openModuleByName("Purchase Orders");
+    if (!moduleId) return;
+    if (poId) {
+      sessionStorage.setItem("purchaseOrdersOpenPoId", String(poId));
+    }
+    if (poNumber) {
+      sessionStorage.setItem("purchaseOrdersOpenPoNumber", String(poNumber));
+      sessionStorage.setItem("purchaseOrdersSearch", String(poNumber));
+    }
+    navigate(`/home/${moduleId}`);
+  };
   const maxPayablePercentage =
     totalAmount > 0
       ? Number(((Math.max(0, currentBalance) / totalAmount) * 100).toFixed(2))
@@ -69,6 +255,31 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
       Number.isFinite(Number(invoice?.taxRate)) ? Number(invoice.taxRate) : 0,
     );
   }, [invoice?._id, invoice?.billTo, invoice?.taxRate]);
+
+  useEffect(() => {
+    const fetchPoDetails = async () => {
+      if (!invoiceId) {
+        setPoDetails(null);
+        return;
+      }
+
+      try {
+        const response = await apiService.get(
+          `/api/purchase-orders/${invoiceId}`,
+        );
+        const po = response?.data || response;
+        if (po?._id || po?.id) {
+          setPoDetails(po);
+        } else {
+          setPoDetails(null);
+        }
+      } catch {
+        setPoDetails(null);
+      }
+    };
+
+    fetchPoDetails();
+  }, [invoiceId]);
 
   const handleSaveBillTo = async () => {
     const nextBillTo = String(billTo || "").trim();
@@ -191,8 +402,8 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
         </div>
       </section>
 
-      <main className="flex-1 overflow-auto p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
+      <main className="flex-1 overflow-auto p-2">
+        <div className="w-full space-y-6">
           {/* Invoice Header */}
           <div className="bg-white rounded-lg border border-slate-200 p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -350,8 +561,8 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                     First Partial Payment
                   </p>
                   <p className="text-base font-medium text-slate-900">
-                    {firstPartiallyPaidAt
-                      ? firstPartiallyPaidAt.toLocaleString()
+                    {firstPartialPaymentDate
+                      ? firstPartialPaymentDate.toLocaleString()
                       : "Not yet"}
                   </p>
                 </div>
@@ -361,11 +572,112 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                     Full Payment Completed
                   </p>
                   <p className="text-base font-medium text-slate-900">
-                    {fullyPaidAt ? fullyPaidAt.toLocaleString() : "Not yet"}
+                    {fullPaymentCompletedDate
+                      ? fullPaymentCompletedDate.toLocaleString()
+                      : "Not yet"}
                   </p>
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
+            <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <i className="fa-solid fa-diagram-project text-primary"></i>
+              Requested Line Items and Sources (MR {"->"} PO)
+            </h3>
+
+            {sourceRows.length > 0 ? (
+              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-600">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold">
+                        Item
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold">
+                        Requested (MR)
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold">
+                        Ordered (PO)
+                      </th>
+                      <th className="px-4 py-3 text-right font-semibold">
+                        Unit Cost
+                      </th>
+                      <th className="px-4 py-3 text-right font-semibold">
+                        Line Total
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold">
+                        Material Request Source
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold">
+                        Purchase Order Source
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sourceRows.map((row) => (
+                      <tr key={row.key} className="border-t border-slate-200">
+                        <td className="px-4 py-3 text-slate-900 font-medium">
+                          {row.itemName}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {row.requestedQuantity}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {row.poQuantity}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-700">
+                          {row.poUnitAmount
+                            ? formatCurrency(row.poUnitAmount, { currency })
+                            : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-900 font-semibold">
+                          {row.poTotal
+                            ? formatCurrency(row.poTotal, { currency })
+                            : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {row.materialRequestSourceId ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openMaterialRequestSource(
+                                  row.materialRequestSourceId,
+                                )
+                              }
+                              className="text-primary hover:underline font-semibold"
+                            >
+                              {row.materialRequestSource}
+                            </button>
+                          ) : (
+                            row.materialRequestSource
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openPurchaseOrderSource(
+                                row.purchaseOrderSourceId,
+                                row.purchaseOrderSource,
+                              )
+                            }
+                            className="text-primary hover:underline font-semibold"
+                          >
+                            {row.purchaseOrderSource}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-sm text-slate-500">
+                No source line items found for this invoice.
+              </div>
+            )}
           </div>
 
           {/* Amount Information */}

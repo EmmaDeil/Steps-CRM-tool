@@ -61,10 +61,25 @@ class ModuleErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <ModuleLoadingState
-          moduleName={this.props.moduleName || "Module"}
-          subtitle="Loading module..."
-        />
+        <div className="min-h-[50vh] flex items-center justify-center px-4 py-10">
+          <div className="max-w-md w-full rounded-xl border border-red-200 bg-red-50 p-6 text-center">
+            <h3 className="text-lg font-bold text-red-800 mb-2">
+              Failed To Load Module
+            </h3>
+            <p className="text-sm text-red-700 mb-4">
+              {this.props.moduleName || "This module"} encountered an error
+              while loading.
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md border border-red-300 text-red-800 hover:bg-red-100"
+            >
+              <i className="fa-solid fa-rotate-right text-xs"></i>
+              Retry Loading
+            </button>
+          </div>
+        </div>
       );
     }
 
@@ -83,6 +98,9 @@ const loadModuleComponent = (componentName) => {
   // Aliases keep old DB module names working after component renames.
   const componentAliasMap = {
     financereports: "Finance",
+    finance: "Finance",
+    financemodule: "Finance",
+    financemodules: "Finance",
     admincontrols: "Admin",
     admincontrol: "Admin",
     signaturemanagement: "DocSign",
