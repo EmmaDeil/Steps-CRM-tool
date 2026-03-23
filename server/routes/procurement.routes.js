@@ -223,11 +223,32 @@ router.put('/material-request-types', authMiddleware, requireRole('Admin'), asyn
   }
 });
 
-// GET all Material Requests
-router.get('/material-requests', async (req, res) => {
+// GET all Material Requests (paginated, without attachments/comments)
+router.get('/material-requests', authMiddleware, async (req, res) => {
   try {
-    const requests = await MaterialRequest.find().sort({ createdAt: -1 });
-    res.json(requests);
+    const page = Math.max(1, parseInt(req.query.page || 1, 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || 20, 10)));
+    const skip = (page - 1) * limit;
+
+    const [requests, total] = await Promise.all([
+      MaterialRequest.find()
+        .select('-attachments -comments -activities')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      MaterialRequest.countDocuments(),
+    ]);
+
+    res.json({
+      data: requests,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
   } catch (err) {
     console.error('Error fetching material requests:', err);
     res.status(500).json({ success: false, message: 'Server Error' });

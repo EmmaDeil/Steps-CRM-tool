@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const InventoryItem = require('../models/InventoryItem');
+const UnitOfMeasure = require('../models/UnitOfMeasure');
 const StoreLocation = require('../models/StoreLocation');
 const { authMiddleware } = require('../middleware/auth');
 const {
@@ -85,6 +86,11 @@ function validateInventoryBody(body, requireAllFields = true) {
   });
 
   return errors;
+}
+
+function isAdminUser(user) {
+  const role = String(user?.role || '').trim().toLowerCase();
+  return role === 'admin' || role === 'administrator';
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -261,6 +267,121 @@ router.get('/summary', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Error fetching inventory summary:', err);
     res.status(500).json({ message: 'Failed to fetch inventory summary' });
+  }
+});
+
+// GET list of Unit of Measure options
+router.get('/units', authMiddleware, async (req, res) => {
+  try {
+    const includeInactive = String(req.query.includeInactive || '').toLowerCase() === 'true';
+    const canViewInactive = includeInactive && isAdminUser(req.user);
+    const query = canViewInactive ? {} : { isActive: true };
+
+    const units = await UnitOfMeasure.find(query)
+      .sort({ sortOrder: 1, name: 1 })
+      .select('_id name symbol description sortOrder isActive')
+      .lean();
+
+    res.json({ items: units });
+  } catch (err) {
+    console.error('Error fetching units of measure:', err);
+    res.status(500).json({ message: 'Failed to fetch units of measure' });
+  }
+});
+
+// POST create Unit of Measure (admin only)
+router.post('/units', authMiddleware, async (req, res) => {
+  try {
+    if (!isAdminUser(req.user)) {
+      return res.status(403).json({ message: 'Only admins can create units of measure' });
+    }
+
+    const name = String(req.body?.name || '').trim();
+    if (!name) return res.status(400).json({ message: 'name is required' });
+
+    const existing = await UnitOfMeasure.findOne({ nameKey: name.toLowerCase() }).select('_id').lean();
+    if (existing) {
+      return res.status(409).json({ message: 'A unit with this name already exists' });
+    }
+
+    const unit = await UnitOfMeasure.create({
+      name,
+      symbol: String(req.body?.symbol || '').trim(),
+      description: String(req.body?.description || '').trim(),
+      sortOrder: Number.isFinite(Number(req.body?.sortOrder)) ? Number(req.body.sortOrder) : 0,
+      isActive: req.body?.isActive !== false,
+      createdBy: req.user?._id,
+      updatedBy: req.user?._id,
+    });
+
+    res.status(201).json({ message: 'Unit of measure created', data: unit });
+  } catch (err) {
+    console.error('Error creating unit of measure:', err);
+    if (err?.code === 11000) {
+      return res.status(409).json({ message: 'A unit with this name already exists' });
+    }
+    res.status(500).json({ message: 'Failed to create unit of measure' });
+  }
+});
+
+// PUT update Unit of Measure (admin only)
+router.put('/units/:unitId', authMiddleware, async (req, res) => {
+  try {
+    if (!isAdminUser(req.user)) {
+      return res.status(403).json({ message: 'Only admins can update units of measure' });
+    }
+
+    const updates = {};
+    if (req.body?.name !== undefined) {
+      const name = String(req.body.name || '').trim();
+      if (!name) return res.status(400).json({ message: 'name cannot be empty' });
+      updates.name = name;
+      updates.nameKey = name.toLowerCase();
+    }
+    if (req.body?.symbol !== undefined) updates.symbol = String(req.body.symbol || '').trim();
+    if (req.body?.description !== undefined) updates.description = String(req.body.description || '').trim();
+    if (req.body?.sortOrder !== undefined) {
+      const sortOrder = Number(req.body.sortOrder);
+      if (!Number.isFinite(sortOrder)) return res.status(400).json({ message: 'sortOrder must be a number' });
+      updates.sortOrder = sortOrder;
+    }
+    if (req.body?.isActive !== undefined) updates.isActive = !!req.body.isActive;
+    updates.updatedBy = req.user?._id;
+
+    const unit = await UnitOfMeasure.findByIdAndUpdate(req.params.unitId, updates, {
+      new: true,
+      runValidators: true,
+    });
+    if (!unit) return res.status(404).json({ message: 'Unit not found' });
+
+    res.json({ message: 'Unit of measure updated', data: unit });
+  } catch (err) {
+    console.error('Error updating unit of measure:', err);
+    if (err?.code === 11000) {
+      return res.status(409).json({ message: 'A unit with this name already exists' });
+    }
+    res.status(500).json({ message: 'Failed to update unit of measure' });
+  }
+});
+
+// DELETE deactivate Unit of Measure (admin only)
+router.delete('/units/:unitId', authMiddleware, async (req, res) => {
+  try {
+    if (!isAdminUser(req.user)) {
+      return res.status(403).json({ message: 'Only admins can deactivate units of measure' });
+    }
+
+    const unit = await UnitOfMeasure.findByIdAndUpdate(
+      req.params.unitId,
+      { isActive: false, updatedBy: req.user?._id },
+      { new: true }
+    );
+    if (!unit) return res.status(404).json({ message: 'Unit not found' });
+
+    res.json({ message: 'Unit of measure deactivated', data: unit });
+  } catch (err) {
+    console.error('Error deactivating unit of measure:', err);
+    res.status(500).json({ message: 'Failed to deactivate unit of measure' });
   }
 });
 

@@ -587,8 +587,13 @@ const MaterialRequests = () => {
   const fetchRequests = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiService.get("/api/material-requests");
-      setRequests(response.data || response || []);
+      const response = await apiService.get("/api/material-requests", {
+        params: { page: 1, limit: 50 },
+      });
+      // Handle new paginated response format
+      const requestData =
+        response?.data || response?.data?.data || response || [];
+      setRequests(Array.isArray(requestData) ? requestData : []);
       setError(null);
       backendOfflineLoggedRef.current = false;
       if (backendRetryTimerRef.current) {
@@ -2467,7 +2472,7 @@ const MaterialRequests = () => {
               <hr className="my-4 border-gray-200" />
 
               <h6 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                <i className="fa-solid fa-list-ul"></i>Line Items
+                <i className="fa-solid fa-list-ul"></i>Breakdown Items
               </h6>
               <div className="overflow-x-auto mb-4">
                 <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
@@ -2593,7 +2598,7 @@ const MaterialRequests = () => {
 
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Rejection Reason (if rejecting)
+                  Reason
                 </label>
                 <textarea
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -2836,7 +2841,7 @@ const MaterialRequests = () => {
                         className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 text-white shadow-sm hover:bg-indigo-700 transition-colors text-sm font-bold"
                       >
                         <i className="fa-solid fa-file-export"></i>
-                        <span className="truncate">Generate RFQ</span>
+                        <span className="truncate">RFQ</span>
                       </button>
                       <button
                         type="button"
@@ -2935,9 +2940,7 @@ const MaterialRequests = () => {
                         </p>
                       </div>
                       <div className="flex flex-col gap-1">
-                        <p className="text-[#617589] text-sm">
-                          Budget Code / Project
-                        </p>
+                        <p className="text-[#617589] text-sm">Budget</p>
                         <p className="text-[#111418] text-base font-medium">
                           {selectedRequest.budgetCode || "Not specified"}
                         </p>

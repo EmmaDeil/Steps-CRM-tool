@@ -11,6 +11,7 @@ import useBarcodeScanner from "../../hooks/useBarcodeScanner";
 import BarcodeScannerModal from "./BarcodeScannerModal";
 
 const PAGE_SIZE = 20;
+const DEFAULT_UNIT_OPTIONS = ["pcs", "box", "kg", "g", "ltr", "ml"];
 
 const formatDateForInput = (value) => {
   if (!value) return "";
@@ -21,6 +22,11 @@ const formatDateForInput = (value) => {
 
 const Inventory = () => {
   const { user } = useAuth();
+  const isAdmin = ["admin", "administrator"].includes(
+    String(user?.role || "")
+      .trim()
+      .toLowerCase(),
+  );
 
   // ── Tab state ──────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState("items"); // "items" | "transfers"
@@ -39,6 +45,19 @@ const Inventory = () => {
   const [expiringWindowDays, setExpiringWindowDays] = useState(30);
   const [expiringItems, setExpiringItems] = useState([]);
   const [isExpiringLoading, setIsExpiringLoading] = useState(false);
+  const [unitOptions, setUnitOptions] = useState(DEFAULT_UNIT_OPTIONS);
+  const [unitsOfMeasure, setUnitsOfMeasure] = useState([]);
+  const [isUnitsLoading, setIsUnitsLoading] = useState(false);
+
+  const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
+  const [editingUnit, setEditingUnit] = useState(null);
+  const [isUnitSubmitting, setIsUnitSubmitting] = useState(false);
+  const [unitForm, setUnitForm] = useState({
+    name: "",
+    symbol: "",
+    description: "",
+    sortOrder: 0,
+  });
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -174,6 +193,40 @@ const Inventory = () => {
     [expiringWindowDays],
   );
 
+  const fetchUnitsOfMeasure = useCallback(
+    async ({ includeInactive = false } = {}) => {
+      try {
+        setIsUnitsLoading(true);
+        const endpoint = includeInactive
+          ? "/api/inventory/units?includeInactive=true"
+          : "/api/inventory/units";
+        const res = await apiService.get(endpoint);
+        const units = Array.isArray(res?.items) ? res.items : [];
+        setUnitsOfMeasure(units);
+
+        const activeNames = units
+          .filter((unit) => unit?.isActive !== false)
+          .map((unit) => String(unit?.name || "").trim())
+          .filter(Boolean);
+
+        const merged = Array.from(
+          new Set([...DEFAULT_UNIT_OPTIONS, ...activeNames]),
+        );
+        setUnitOptions(merged.length > 0 ? merged : DEFAULT_UNIT_OPTIONS);
+
+        setFormData((prev) => {
+          if (prev.unit && merged.includes(prev.unit)) return prev;
+          return { ...prev, unit: merged[0] || "pcs" };
+        });
+      } catch {
+        setUnitOptions(DEFAULT_UNIT_OPTIONS);
+      } finally {
+        setIsUnitsLoading(false);
+      }
+    },
+    [],
+  );
+
   const fetchLocations = useCallback(async () => {
     try {
       const res = await apiService.get("/api/store-locations");
@@ -188,6 +241,10 @@ const Inventory = () => {
     fetchLocations();
     fetchCategoryOptions();
   }, [fetchInventory, fetchLocations, fetchCategoryOptions]);
+
+  useEffect(() => {
+    fetchUnitsOfMeasure({ includeInactive: isAdmin });
+  }, [fetchUnitsOfMeasure, isAdmin]);
 
   useEffect(() => {
     const timer = setTimeout(
@@ -239,7 +296,7 @@ const Inventory = () => {
         reorderPoint: 20,
         location: locations.length > 0 ? locations[0].name : "General Store",
         description: "",
-        unit: "pcs",
+        unit: unitOptions[0] || "pcs",
         addQuantity: 0,
         lotNumber: "",
         refNumber: "",
@@ -260,7 +317,7 @@ const Inventory = () => {
           item.location ||
           (locations.length > 0 ? locations[0].name : "General Store"),
         description: item.description || "",
-        unit: item.unit || "pcs",
+        unit: item.unit || unitOptions[0] || "pcs",
         addQuantity: 1,
         lotNumber: item.lotNumber || "",
         refNumber: item.refNumber || "",
@@ -280,6 +337,104 @@ const Inventory = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setActiveItem(null);
+  };
+
+  const handleOpenUnitModal = (unit = null) => {
+    setEditingUnit(unit);
+    setUnitForm({
+      name: unit?.name || "",
+      symbol: unit?.symbol || "",
+      description: unit?.description || "",
+      sortOrder: Number(unit?.sortOrder || 0),
+    });
+    setIsUnitModalOpen(true);
+  };
+
+  const handleCloseUnitModal = () => {
+    setIsUnitModalOpen(false);
+    setEditingUnit(null);
+    setUnitForm({ name: "", symbol: "", description: "", sortOrder: 0 });
+  };
+
+  const handleUnitFormChange = (e) => {
+    const { name, value } = e.target;
+    setUnitForm((prev) => ({
+      ...prev,
+      [name]: name === "sortOrder" ? Number(value) : value,
+    }));
+  };
+
+  const handleSaveUnit = async (e) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+
+    const name = String(unitForm.name || "").trim();
+    if (!name) {
+      toast.error("Unit name is required");
+      return;
+    }
+
+    try {
+      setIsUnitSubmitting(true);
+      const payload = {
+        name,
+        symbol: String(unitForm.symbol || "").trim(),
+        description: String(unitForm.description || "").trim(),
+        sortOrder: Number(unitForm.sortOrder || 0),
+      };
+
+      if (editingUnit?._id) {
+        await apiService.put(
+          `/api/inventory/units/${editingUnit._id}`,
+          payload,
+        );
+        toast.success("Unit of measure updated");
+      } else {
+        await apiService.post("/api/inventory/units", payload);
+        toast.success("Unit of measure created");
+      }
+
+      // Refresh both active units (for form dropdown) and all units (for admin modal)
+      await fetchUnitsOfMeasure({ includeInactive: false });
+      await fetchUnitsOfMeasure({ includeInactive: true });
+      handleCloseUnitModal();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save unit");
+    } finally {
+      setIsUnitSubmitting(false);
+    }
+  };
+
+  const handleDeactivateUnit = async (unitId) => {
+    if (!isAdmin) return;
+    const confirmed = window.confirm("Deactivate this unit of measure?");
+    if (!confirmed) return;
+
+    try {
+      await apiService.delete(`/api/inventory/units/${unitId}`);
+      toast.success("Unit of measure deactivated");
+      // Refresh both active and inactive lists
+      await fetchUnitsOfMeasure({ includeInactive: false });
+      await fetchUnitsOfMeasure({ includeInactive: true });
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to deactivate unit");
+    }
+  };
+
+  const handleReactivateUnit = async (unit) => {
+    if (!isAdmin || !unit?._id) return;
+
+    try {
+      await apiService.put(`/api/inventory/units/${unit._id}`, {
+        isActive: true,
+      });
+      toast.success("Unit of measure reactivated");
+      // Refresh both active and inactive lists
+      await fetchUnitsOfMeasure({ includeInactive: false });
+      await fetchUnitsOfMeasure({ includeInactive: true });
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to reactivate unit");
+    }
   };
 
   const handleFormChange = (e) => {
@@ -668,12 +823,22 @@ const Inventory = () => {
             </p>
           </div>
           {activeTab === "items" && (
-            <button
-              onClick={() => handleOpenModal("add")}
-              className="mt-4 md:mt-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center gap-2"
-            >
-              <i className="fa-solid fa-plus"></i> Add New Item
-            </button>
+            <div className="mt-4 md:mt-0 flex items-center gap-2">
+              {isAdmin && (
+                <button
+                  onClick={() => handleOpenUnitModal()}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-medium transition-colors shadow-sm flex items-center gap-2"
+                >
+                  <i className="fa-solid fa-ruler-combined"></i> Manage Units
+                </button>
+              )}
+              <button
+                onClick={() => handleOpenModal("add")}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center gap-2"
+              >
+                <i className="fa-solid fa-plus"></i> Add New Item
+              </button>
+            </div>
           )}
         </div>
 
@@ -691,7 +856,7 @@ const Inventory = () => {
                 label: "Stock Transfers",
                 icon: "fa-arrow-right-arrow-left",
               },
-              ...(user?.role === "Admin" || user?.role === "Administrator"
+              ...(isAdmin
                 ? [
                     {
                       key: "locations",
@@ -872,14 +1037,188 @@ const Inventory = () => {
         )}
 
         {/* ── Locations Tab ─────────────────────────────────────────────────── */}
-        {activeTab === "locations" &&
-          (user?.role === "Admin" || user?.role === "Administrator") && (
-            <StoreLocations />
-          )}
+        {activeTab === "locations" && isAdmin && <StoreLocations />}
 
         {/* ── Movements Tab ─────────────────────────────────────────────────── */}
         {activeTab === "movements" && <StockMovements />}
       </div>
+
+      {/* ── Units of Measure Modal (Admin) ─────────────────────────────────── */}
+      {isUnitModalOpen && isAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="text-xl font-bold text-gray-800">
+                Unit of Measure Setup
+              </h3>
+              <button
+                onClick={handleCloseUnitModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <i className="fa-solid fa-xmark text-xl"></i>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 overflow-y-auto">
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h4 className="text-base font-semibold text-gray-800 mb-3">
+                  {editingUnit ? "Edit Unit" : "Create Unit"}
+                </h4>
+                <form onSubmit={handleSaveUnit} className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Name *
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={unitForm.name}
+                      onChange={handleUnitFormChange}
+                      placeholder="e.g. Pieces"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Symbol
+                    </label>
+                    <input
+                      type="text"
+                      name="symbol"
+                      value={unitForm.symbol}
+                      onChange={handleUnitFormChange}
+                      placeholder="e.g. pcs"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Description
+                    </label>
+                    <input
+                      type="text"
+                      name="description"
+                      value={unitForm.description}
+                      onChange={handleUnitFormChange}
+                      placeholder="Optional usage note"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Sort Order
+                    </label>
+                    <input
+                      type="number"
+                      name="sortOrder"
+                      value={unitForm.sortOrder}
+                      onChange={handleUnitFormChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isUnitSubmitting}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+                    >
+                      {isUnitSubmitting
+                        ? "Saving..."
+                        : editingUnit
+                          ? "Update Unit"
+                          : "Create Unit"}
+                    </button>
+                    {editingUnit && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenUnitModal()}
+                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-base font-semibold text-gray-800">
+                    Existing Units
+                  </h4>
+                  <button
+                    onClick={() =>
+                      fetchUnitsOfMeasure({ includeInactive: true })
+                    }
+                    className="text-xs px-2.5 py-1.5 border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    <i className="fa-solid fa-rotate-right mr-1"></i>Refresh
+                  </button>
+                </div>
+
+                <div className="max-h-80 overflow-auto divide-y divide-gray-100">
+                  {unitsOfMeasure.length === 0 ? (
+                    <p className="text-sm text-gray-500 py-8 text-center">
+                      No units found yet.
+                    </p>
+                  ) : (
+                    unitsOfMeasure.map((unit) => (
+                      <div
+                        key={unit._id}
+                        className="py-2.5 flex items-center justify-between gap-3"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">
+                            {unit.name}
+                            {unit.symbol ? (
+                              <span className="text-gray-500">
+                                {" "}
+                                ({unit.symbol})
+                              </span>
+                            ) : null}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {unit.description || "No description"}
+                          </p>
+                          {!unit.isActive && (
+                            <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenUnitModal(unit)}
+                            className="px-2.5 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                          >
+                            Edit
+                          </button>
+                          {unit.isActive ? (
+                            <button
+                              onClick={() => handleDeactivateUnit(unit._id)}
+                              className="px-2.5 py-1.5 text-xs border border-red-200 text-red-700 rounded-md hover:bg-red-50"
+                            >
+                              Deactivate
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleReactivateUnit(unit)}
+                              className="px-2.5 py-1.5 text-xs border border-green-200 text-green-700 rounded-md hover:bg-green-50"
+                            >
+                              Reactivate
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── CRUD Modal ────────────────────────────────────────────────────── */}
       {isModalOpen && (
@@ -1208,18 +1547,33 @@ const Inventory = () => {
                         ))}
                       </select>
                     </div>
-                    <div className="w-24">
+                    <div className="w-36">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Unit
                       </label>
-                      <input
-                        type="text"
+                      <select
                         name="unit"
                         value={formData.unit}
                         onChange={handleFormChange}
-                        placeholder="pcs"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white"
+                      >
+                        {Array.from(
+                          new Set(
+                            [...(unitOptions || []), formData.unit].filter(
+                              Boolean,
+                            ),
+                          ),
+                        ).map((unit) => (
+                          <option key={unit} value={unit}>
+                            {unit}
+                          </option>
+                        ))}
+                      </select>
+                      {isUnitsLoading && (
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          Loading units...
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
