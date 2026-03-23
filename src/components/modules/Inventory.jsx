@@ -83,12 +83,15 @@ const Inventory = () => {
   const [activeItem, setActiveItem] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [issueDepartments, setIssueDepartments] = useState([]);
+  const [issuePeople, setIssuePeople] = useState([]);
+  const [isIssueTargetsLoading, setIsIssueTargetsLoading] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
     name: "",
     category: "",
-    maxStock: 100,
+    maxStock: 500,
     reorderPoint: 20,
     location: "",
     description: "",
@@ -252,6 +255,48 @@ const Inventory = () => {
     }
   }, []);
 
+  const fetchIssueDepartments = useCallback(async () => {
+    setIsIssueTargetsLoading(true);
+    try {
+      const response = await apiService.get("/api/departments");
+      const rows = response?.departments || response?.data?.departments || [];
+      const options = rows
+        .map((dept) => String(dept?.name || dept?.code || "").trim())
+        .filter(Boolean);
+      setIssueDepartments(Array.from(new Set(options)));
+    } catch {
+      setIssueDepartments([]);
+    } finally {
+      setIsIssueTargetsLoading(false);
+    }
+  }, []);
+
+  const fetchIssuePeople = useCallback(async () => {
+    setIsIssueTargetsLoading(true);
+    try {
+      const response = await apiService.get("/api/users", {
+        params: { status: "Active" },
+      });
+      const rows = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response)
+          ? response
+          : [];
+      const options = rows
+        .map((person) => {
+          const fullName = String(person?.fullName || "").trim();
+          if (fullName) return fullName;
+          return `${String(person?.firstName || "").trim()} ${String(person?.lastName || "").trim()}`.trim();
+        })
+        .filter(Boolean);
+      setIssuePeople(Array.from(new Set(options)));
+    } catch {
+      setIssuePeople([]);
+    } finally {
+      setIsIssueTargetsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchInventory();
     fetchLocations();
@@ -275,6 +320,25 @@ const Inventory = () => {
       fetchExpiringItems(expiringWindowDays);
     }
   }, [activeTab, expiringWindowDays, fetchExpiringItems]);
+
+  useEffect(() => {
+    if (!isModalOpen || modalMode !== "issue") return;
+
+    if (formData.issueToType === "department") {
+      fetchIssueDepartments();
+      return;
+    }
+
+    if (formData.issueToType === "person") {
+      fetchIssuePeople();
+    }
+  }, [
+    isModalOpen,
+    modalMode,
+    formData.issueToType,
+    fetchIssueDepartments,
+    fetchIssuePeople,
+  ]);
 
   // ── Status Badge ───────────────────────────────────────────────────────────
 
@@ -308,7 +372,7 @@ const Inventory = () => {
       setFormData({
         name: "",
         category: categoryOptions[0] || "",
-        maxStock: 100,
+        maxStock: 500,
         reorderPoint: 20,
         location: locations.length > 0 ? locations[0].name : "General Store",
         description: "",
@@ -377,7 +441,7 @@ const Inventory = () => {
       symbol: "",
       description: "",
       unitCategory: "custom",
-      baseQuantity: 1,
+      baseQuantity: 0,
       baseUnitLabel: "",
       sortOrder: 0,
     });
@@ -492,6 +556,16 @@ const Inventory = () => {
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
+
+    if (name === "issueToType") {
+      setFormData((prev) => ({
+        ...prev,
+        issueToType: value,
+        issueTo: "",
+      }));
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       [name]: ["maxStock", "reorderPoint", "addQuantity"].includes(name)
@@ -1075,6 +1149,7 @@ const Inventory = () => {
                   <option value={30}>Next 30 days</option>
                   <option value={60}>Next 60 days</option>
                   <option value={90}>Next 90 days</option>
+                  <option value={180}>Next 180 days</option>
                 </select>
                 <button
                   onClick={() => fetchExpiringItems(expiringWindowDays)}
@@ -1178,7 +1253,7 @@ const Inventory = () => {
                       <input
                         type="number"
                         name="baseQuantity"
-                        min="0.000001"
+                        min="0.0"
                         step="any"
                         value={unitForm.baseQuantity}
                         onChange={handleUnitFormChange}
@@ -1404,15 +1479,74 @@ const Inventory = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Issue To *
                         </label>
-                        <input
-                          type="text"
-                          name="issueTo"
-                          value={formData.issueTo}
-                          onChange={handleFormChange}
-                          required
-                          placeholder="Name of department, person, or project"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
-                        />
+                        {formData.issueToType === "department" ? (
+                          <select
+                            name="issueTo"
+                            value={formData.issueTo}
+                            onChange={handleFormChange}
+                            required
+                            disabled={isIssueTargetsLoading}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white"
+                          >
+                            <option value="">
+                              {isIssueTargetsLoading
+                                ? "Loading departments..."
+                                : "Select Department"}
+                            </option>
+                            {issueDepartments.map((departmentName) => (
+                              <option
+                                key={departmentName}
+                                value={departmentName}
+                              >
+                                {departmentName}
+                              </option>
+                            ))}
+                          </select>
+                        ) : formData.issueToType === "person" ? (
+                          <select
+                            name="issueTo"
+                            value={formData.issueTo}
+                            onChange={handleFormChange}
+                            required
+                            disabled={isIssueTargetsLoading}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white"
+                          >
+                            <option value="">
+                              {isIssueTargetsLoading
+                                ? "Loading people..."
+                                : "Select Person"}
+                            </option>
+                            {issuePeople.map((personName) => (
+                              <option key={personName} value={personName}>
+                                {personName}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            name="issueTo"
+                            value={formData.issueTo}
+                            onChange={handleFormChange}
+                            required
+                            placeholder="Name of project or other target"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+                          />
+                        )}
+                        {!isIssueTargetsLoading &&
+                          formData.issueToType === "department" &&
+                          issueDepartments.length === 0 && (
+                            <p className="text-[11px] text-amber-700 mt-1">
+                              No departments found from HRM.
+                            </p>
+                          )}
+                        {!isIssueTargetsLoading &&
+                          formData.issueToType === "person" &&
+                          issuePeople.length === 0 && (
+                            <p className="text-[11px] text-amber-700 mt-1">
+                              No active users found.
+                            </p>
+                          )}
                       </div>
                       <div className="w-1/3">
                         <label className="block text-sm font-medium text-gray-700 mb-1">

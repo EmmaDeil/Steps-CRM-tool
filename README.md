@@ -13,6 +13,7 @@ Current implementation highlights:
 - Material request to purchase order lifecycle support
 - Direct purchase order creation and approval controls
 - Accounts payable tracking including partial and full payment flow
+- Centralized unit of measure setup used across Inventory, Material Requests, and Purchase Orders
 - Notification center and activity timelines
 - Audit-oriented admin capabilities
 
@@ -21,12 +22,37 @@ Current implementation highlights:
 - HRM: employees, departments, job titles, leave allocations, leave and travel requests
 - Finance: invoicing, accounts payable, advance and refund requests
 - Procurement: material requests, purchase orders, vendor management, stock-linked fulfillment
-- Inventory: item management, stock movements, internal transfers, issues
+- Inventory: item management, unit setup, stock movements, internal transfers, issues
 - Payroll: payroll run management and related workflows
 - Attendance: attendance records and external attendance integration fallback
 - Security: physical security logs, visitor sign-in, security settings
 - Admin: module setup, users, roles, approval settings, backups, system settings
 - Analytics and Reporting: consolidated operational dashboards and generated reports
+
+## Unit of Measure Standardization (March 2026)
+
+The platform now uses a single Unit Setup source for all quantity unit selection in Inventory, Material Requests, and Purchase Orders.
+
+What changed:
+
+- Admin users can create and manage units in Unit Setup (name, symbol, category, base quantity, base unit label, display order, active status).
+- Inventory item create/update now accepts only active configured units (no free-text unit drift).
+- Material Request line item unit options are fetched from Unit Setup.
+- Purchase Order line item unit options are fetched from Unit Setup.
+- Unit labels in request forms can show conversion context (example: `Carton (1 carton = 24 pcs)`).
+- Unit Setup includes a live preview to confirm conversion intent before saving.
+
+Field notes:
+
+- `baseQuantity` and `baseUnitLabel` describe how one selected unit maps to its base unit.
+- `displayOrder` controls list ordering in dropdowns and setup tables only; it does not affect calculations.
+- `isActive=false` hides a unit from operational forms while preserving historical records.
+
+Example conversion model:
+
+- `Pack of 12`: name = Pack, baseQuantity = 12, baseUnitLabel = pcs
+- `Carton of 24`: name = Carton, baseQuantity = 24, baseUnitLabel = pcs
+- `Gallon of 50 liters`: name = Gallon, baseQuantity = 50, baseUnitLabel = liters
 
 ## Approval Workflow (Current Routing)
 
@@ -720,6 +746,7 @@ Material Requests:
 - POST /api/material-requests/:id/approve
 - POST /api/material-requests/:id/reject
 - POST /api/material-requests/:id/comments
+- List endpoint returns paginated payloads for better performance on larger datasets
 
 Purchase Orders:
 
@@ -734,6 +761,14 @@ Finance / AP:
 
 - GET /api/finance/accounts-payable
 - POST /api/purchase-orders/:id/mark-paid
+
+Inventory / Unit Setup:
+
+- GET /api/inventory/units
+- POST /api/inventory/units
+- PUT /api/inventory/units/:id
+- DELETE /api/inventory/units/:id
+- Inventory item create/update validates unit value against active Unit Setup records
 
 Users and Notifications:
 
