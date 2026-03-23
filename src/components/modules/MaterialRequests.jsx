@@ -80,6 +80,8 @@ const MaterialRequests = () => {
   const [message, setMessage] = useState("");
   const [userList, setUserList] = useState([]);
   const [skuItems, setSkuItems] = useState([]);
+  const [quantityTypeOptions, setQuantityTypeOptions] = useState([]);
+  const [quantityTypeMeta, setQuantityTypeMeta] = useState({});
 
   // Form comment @mention state
   const [showFormMentionDropdown, setShowFormMentionDropdown] = useState(false);
@@ -108,19 +110,6 @@ const MaterialRequests = () => {
   const backendRetryTimerRef = useRef(null);
   const backendOfflineLoggedRef = useRef(false);
   const usersFetchErrorLoggedRef = useRef(false);
-
-  const quantityTypeOptions = [
-    "Pieces",
-    "Boxes",
-    "Cartons",
-    "Pallets",
-    "Sets",
-    "Units",
-    "Kilograms",
-    "Liters",
-    "Meters",
-    "Square Meters",
-  ];
 
   // API integrations
   const { departments: _departments, loading: _departmentsLoading } =
@@ -228,6 +217,55 @@ const MaterialRequests = () => {
       setSkuItems([]);
     }
   };
+
+  const fetchUnitOfMeasureOptions = useCallback(async () => {
+    try {
+      const response = await apiService.get("/api/inventory/units");
+      const rows = Array.isArray(response?.items)
+        ? response.items
+        : Array.isArray(response?.data?.items)
+          ? response.data.items
+          : Array.isArray(response?.data)
+            ? response.data
+            : Array.isArray(response)
+              ? response
+              : [];
+
+      const activeUnitNames = rows
+        .filter((unit) => unit?.isActive !== false)
+        .map((unit) => String(unit?.name || "").trim())
+        .filter(Boolean);
+
+      const metaLookup = rows
+        .filter((unit) => unit?.isActive !== false)
+        .reduce((acc, unit) => {
+          const key = String(unit?.name || "").trim();
+          if (!key) return acc;
+          acc[key] = {
+            baseQuantity: Number(unit?.baseQuantity || 1),
+            baseUnitLabel: String(unit?.baseUnitLabel || "unit").trim(),
+          };
+          return acc;
+        }, {});
+
+      setQuantityTypeOptions(Array.from(new Set(activeUnitNames)));
+      setQuantityTypeMeta(metaLookup);
+    } catch {
+      setQuantityTypeOptions([]);
+      setQuantityTypeMeta({});
+    }
+  }, []);
+
+  const getQuantityTypeLabel = useCallback(
+    (unitName) => {
+      const name = String(unitName || "").trim();
+      if (!name) return "";
+      const meta = quantityTypeMeta[name];
+      if (!meta) return name;
+      return `${name} (1 = ${meta.baseQuantity} ${meta.baseUnitLabel || "unit"})`;
+    },
+    [quantityTypeMeta],
+  );
 
   const fetchRequestTypes = useCallback(async () => {
     try {
@@ -555,13 +593,19 @@ const MaterialRequests = () => {
     fetchBudgetCategories();
     fetchCurrencies();
     fetchSkuItems();
+    fetchUnitOfMeasureOptions();
     fetchRequestTypes();
     fetchVendors();
 
     // Keep create flow fresh: clear legacy persisted in-progress form state.
     localStorage.removeItem("materialRequestsState");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchCurrencies, fetchRequestTypes, fetchVendors]);
+  }, [
+    fetchCurrencies,
+    fetchRequestTypes,
+    fetchUnitOfMeasureOptions,
+    fetchVendors,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -1938,15 +1982,32 @@ const MaterialRequests = () => {
                                 e.target.value,
                               )
                             }
+                            disabled={quantityTypeOptions.length === 0}
                             required
                           >
-                            <option value="">Select...</option>
-                            {quantityTypeOptions.map((option) => (
+                            <option value="">
+                              {quantityTypeOptions.length === 0
+                                ? "No active units"
+                                : "Select..."}
+                            </option>
+                            {Array.from(
+                              new Set(
+                                [
+                                  ...quantityTypeOptions,
+                                  item.quantityType,
+                                ].filter(Boolean),
+                              ),
+                            ).map((option) => (
                               <option key={option} value={option}>
-                                {option}
+                                {getQuantityTypeLabel(option)}
                               </option>
                             ))}
                           </select>
+                          {quantityTypeOptions.length === 0 && (
+                            <span className="text-[11px] text-amber-700">
+                              Ask admin to add units in Unit Setup.
+                            </span>
+                          )}
                         </label>
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">

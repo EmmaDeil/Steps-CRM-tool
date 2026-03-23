@@ -150,6 +150,12 @@ const createPurchaseOrderFromRequest = async ({ request, vendor, actor }) => {
     totalAmount,
     totalAmountNgn: totalAmount * (request.exchangeRateToNgn || 1),
     linkedMaterialRequestId: request._id,
+    requestBreakdown: {
+      requestTitle: request.requestTitle || request.requestId || '',
+      requestedBy: request.requestedBy || '',
+      department: request.department || '',
+      requestType: request.requestType || '',
+    },
     lineItems: poLineItems,
     usesRuleBasedApproval: !!poApprovalInfo?.usesRuleBasedApproval,
     approvalRuleId: poApprovalInfo?.rule?._id,

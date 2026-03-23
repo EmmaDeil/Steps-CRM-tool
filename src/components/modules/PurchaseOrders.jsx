@@ -44,6 +44,8 @@ const PurchaseOrders = () => {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [activeUsers, setActiveUsers] = useState([]);
+  const [unitOptions, setUnitOptions] = useState([]);
+  const [unitMeta, setUnitMeta] = useState({});
   const [showCommentMentionDropdown, setShowCommentMentionDropdown] =
     useState(false);
   const [commentMentionSearch, setCommentMentionSearch] = useState("");
@@ -163,6 +165,7 @@ const PurchaseOrders = () => {
   useEffect(() => {
     fetchVendors();
     fetchActiveUsers();
+    fetchUnitOptions();
   }, []);
 
   useEffect(() => {
@@ -222,6 +225,60 @@ const PurchaseOrders = () => {
     } catch {
       setActiveUsers([]);
     }
+  };
+
+  const fetchUnitOptions = async () => {
+    try {
+      const response = await apiService.get("/api/inventory/units");
+      const rows = Array.isArray(response?.items)
+        ? response.items
+        : Array.isArray(response?.data?.items)
+          ? response.data.items
+          : Array.isArray(response)
+            ? response
+            : [];
+
+      const active = rows.filter((row) => row?.isActive !== false);
+      const names = active
+        .map((row) => String(row?.name || "").trim())
+        .filter(Boolean);
+
+      const nextMeta = active.reduce((acc, row) => {
+        const key = String(row?.name || "").trim();
+        if (!key) return acc;
+        acc[key] = {
+          baseQuantity: Number(row?.baseQuantity || 1),
+          baseUnitLabel: String(row?.baseUnitLabel || "unit").trim(),
+        };
+        return acc;
+      }, {});
+
+      setUnitOptions(Array.from(new Set(names)));
+      setUnitMeta(nextMeta);
+    } catch {
+      setUnitOptions([]);
+      setUnitMeta({});
+    }
+  };
+
+  const getPoUnitLabel = (unitName) => {
+    const cleaned = String(unitName || "").trim();
+    if (!cleaned) return "";
+    const meta = unitMeta[cleaned];
+    if (!meta) return cleaned;
+    return `${cleaned} (1 = ${meta.baseQuantity} ${meta.baseUnitLabel || "unit"})`;
+  };
+
+  const getRequestBreakdownValue = (field) => {
+    const fromOverride = selectedPo?.requestBreakdown?.[field];
+    if (
+      fromOverride !== undefined &&
+      fromOverride !== null &&
+      fromOverride !== ""
+    ) {
+      return fromOverride;
+    }
+    return selectedPo?.linkedMaterialRequestId?.[field] || "";
   };
 
   // Helper function to get vendor initials
@@ -963,7 +1020,7 @@ const PurchaseOrders = () => {
       current.push({
         itemName: "",
         quantity: 1,
-        quantityType: "Units",
+        quantityType: unitOptions[0] || "",
         amount: 0,
         description: "",
       });
@@ -1525,7 +1582,7 @@ const PurchaseOrders = () => {
                     <div>
                       <p className="text-[#617589]">Request Title</p>
                       <p className="text-[#111418] font-semibold">
-                        {selectedPo?.linkedMaterialRequestId?.requestTitle ||
+                        {getRequestBreakdownValue("requestTitle") ||
                           selectedPo?.linkedMaterialRequestId?.requestId ||
                           selectedPo?.linkedMaterialRequestId?.reason ||
                           selectedPo?.linkedMaterialRequestId?.lineItems?.[0]
@@ -1560,22 +1617,19 @@ const PurchaseOrders = () => {
                     <div>
                       <p className="text-[#617589]">Requested By</p>
                       <p className="text-[#111418] font-semibold">
-                        {selectedPo?.linkedMaterialRequestId?.requestedBy ||
-                          "N/A"}
+                        {getRequestBreakdownValue("requestedBy") || "N/A"}
                       </p>
                     </div>
                     <div>
                       <p className="text-[#617589]">Department</p>
                       <p className="text-[#111418] font-semibold">
-                        {selectedPo?.linkedMaterialRequestId?.department ||
-                          "N/A"}
+                        {getRequestBreakdownValue("department") || "N/A"}
                       </p>
                     </div>
                     <div>
                       <p className="text-[#617589]">Request Type</p>
                       <p className="text-[#111418] font-semibold">
-                        {selectedPo?.linkedMaterialRequestId?.requestType ||
-                          "N/A"}
+                        {getRequestBreakdownValue("requestType") || "N/A"}
                       </p>
                     </div>
                   </div>
@@ -1776,8 +1830,7 @@ const PurchaseOrders = () => {
                           </td>
                           <td className="px-4 py-3 text-sm text-[#617589]">
                             {isEditing && !selectedPo?.isLocked ? (
-                              <input
-                                type="text"
+                              <select
                                 value={item.quantityType || ""}
                                 onChange={(e) =>
                                   updatePoLineItem(
@@ -1786,8 +1839,25 @@ const PurchaseOrders = () => {
                                     e.target.value,
                                   )
                                 }
-                                className="w-28 rounded border border-gray-300 px-2 py-1"
-                              />
+                                className="w-56 rounded border border-gray-300 px-2 py-1"
+                              >
+                                <option value="">
+                                  {unitOptions.length === 0
+                                    ? "No active units"
+                                    : "Select unit"}
+                                </option>
+                                {Array.from(
+                                  new Set(
+                                    [...unitOptions, item.quantityType].filter(
+                                      Boolean,
+                                    ),
+                                  ),
+                                ).map((option) => (
+                                  <option key={option} value={option}>
+                                    {getPoUnitLabel(option)}
+                                  </option>
+                                ))}
+                              </select>
                             ) : (
                               item.quantityType || "-"
                             )}

@@ -175,6 +175,12 @@ const purchaseOrderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'MaterialRequest',
     },
+    requestBreakdown: {
+      requestTitle: { type: String, default: '', trim: true },
+      requestedBy: { type: String, default: '', trim: true },
+      department: { type: String, default: '', trim: true },
+      requestType: { type: String, default: '', trim: true },
+    },
     lineItems: [poLineItemSchema],
   },
   {

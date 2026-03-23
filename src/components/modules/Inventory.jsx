@@ -73,7 +73,7 @@ const Inventory = () => {
     description: "",
     unitCategory: "custom",
     baseQuantity: 1,
-    baseUnitLabel: "unit",
+    baseUnitLabel: "",
     sortOrder: 0,
   });
 
@@ -363,7 +363,7 @@ const Inventory = () => {
       description: unit?.description || "",
       unitCategory: unit?.unitCategory || "custom",
       baseQuantity: Number(unit?.baseQuantity || 1),
-      baseUnitLabel: unit?.baseUnitLabel || "unit",
+      baseUnitLabel: unit?.baseUnitLabel || "",
       sortOrder: Number(unit?.sortOrder || 0),
     });
     setIsUnitModalOpen(true);
@@ -378,7 +378,7 @@ const Inventory = () => {
       description: "",
       unitCategory: "custom",
       baseQuantity: 1,
-      baseUnitLabel: "unit",
+      baseUnitLabel: "",
       sortOrder: 0,
     });
   };
@@ -390,14 +390,10 @@ const Inventory = () => {
       setUnitForm((prev) => ({
         ...prev,
         name: value,
-        baseQuantity:
-          parsed && (prev.baseQuantity === 1 || !prev.baseQuantity)
-            ? parsed.baseQuantity
-            : prev.baseQuantity,
-        baseUnitLabel:
-          parsed && !String(prev.baseUnitLabel || "").trim()
-            ? parsed.baseUnitLabel || prev.baseUnitLabel
-            : prev.baseUnitLabel,
+        baseQuantity: parsed ? parsed.baseQuantity : prev.baseQuantity,
+        baseUnitLabel: parsed
+          ? parsed.baseUnitLabel || prev.baseUnitLabel
+          : prev.baseUnitLabel,
       }));
       return;
     }
@@ -466,8 +462,6 @@ const Inventory = () => {
 
   const handleDeactivateUnit = async (unitId) => {
     if (!isAdmin) return;
-    const confirmed = window.confirm("Deactivate this unit of measure?");
-    if (!confirmed) return;
 
     try {
       await apiService.delete(`/api/inventory/units/${unitId}`);
@@ -1205,6 +1199,11 @@ const Inventory = () => {
                       />
                     </div>
                   </div>
+                  <p className="text-xs text-[#137fec] bg-blue-50 border border-blue-100 rounded-md px-3 py-2">
+                    Preview: 1 {unitForm.name || "Unit"} ={" "}
+                    {Number(unitForm.baseQuantity || 1)}{" "}
+                    {unitForm.baseUnitLabel || "base unit"}
+                  </p>
                   <p className="text-[11px] text-gray-500 -mt-1">
                     Example: Pack of 12 = 12 pcs, Carton of 23 = 23 pcs, Gallon
                     of 50L = 50 ltrs.
