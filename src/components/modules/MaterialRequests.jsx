@@ -864,6 +864,68 @@ const MaterialRequests = () => {
     }));
   };
 
+  const parseRateToNgn = useCallback((currencyCode, rateInput) => {
+    if (currencyCode === "NGN") return 1;
+    const parsedRate = parseFloat(rateInput);
+    return parsedRate > 0 ? parsedRate : null;
+  }, []);
+
+  const getCurrencyOptionRateToNgn = useCallback(
+    (currencyCode) => {
+      if (currencyCode === "NGN") return 1;
+      const option = (currencyOptions || []).find(
+        (entry) => String(entry?.code || "").trim() === currencyCode,
+      );
+      const fallbackRate = parseFloat(
+        option?.exchangeRateToNgn ||
+          option?.rateToNgn ||
+          option?.exchangeRate ||
+          option?.rate ||
+          "",
+      );
+      return fallbackRate > 0 ? fallbackRate : null;
+    },
+    [currencyOptions],
+  );
+
+  const formatConvertedAmount = useCallback((value) => {
+    if (!Number.isFinite(value)) return "";
+    return String(Number(value.toFixed(4)));
+  }, []);
+
+  const convertLineItemAmountsBetweenCurrencies = useCallback(
+    ({ fromCurrency, toCurrency, fromRateToNgn, toRateToNgn }) => {
+      if (
+        !fromCurrency ||
+        !toCurrency ||
+        fromCurrency === toCurrency ||
+        !(fromRateToNgn > 0) ||
+        !(toRateToNgn > 0)
+      ) {
+        return false;
+      }
+
+      setLineItems((prevItems) =>
+        prevItems.map((item) => {
+          const originalAmount = parseFloat(item?.amount);
+          if (!Number.isFinite(originalAmount)) return item;
+
+          // Preserve value in NGN, then express it in target currency.
+          const amountInNgn = originalAmount * fromRateToNgn;
+          const convertedAmount = amountInNgn / toRateToNgn;
+
+          return {
+            ...item,
+            amount: formatConvertedAmount(convertedAmount),
+          };
+        }),
+      );
+
+      return true;
+    },
+    [formatConvertedAmount],
+  );
+
   const handleLineItemChange = (index, field, value) => {
     const updatedItems = [...lineItems];
     updatedItems[index][field] = value;
@@ -2107,13 +2169,53 @@ const MaterialRequests = () => {
                           name="currency"
                           value={formData.currency || appCurrency}
                           onChange={(e) => {
-                            handleFormChange(e);
-                            if (e.target.value === "NGN") {
-                              setFormData((prev) => ({
-                                ...prev,
-                                exchangeRate: "",
-                              }));
+                            const nextCurrency = e.target.value;
+                            const previousCurrency =
+                              formData.currency || appCurrency || "NGN";
+                            const previousRateToNgn = parseRateToNgn(
+                              previousCurrency,
+                              formData.exchangeRate,
+                            );
+                            const inferredNextRateToNgn =
+                              getCurrencyOptionRateToNgn(nextCurrency);
+
+                            if (
+                              previousCurrency !== nextCurrency &&
+                              previousRateToNgn > 0 &&
+                              inferredNextRateToNgn > 0
+                            ) {
+                              convertLineItemAmountsBetweenCurrencies({
+                                fromCurrency: previousCurrency,
+                                toCurrency: nextCurrency,
+                                fromRateToNgn: previousRateToNgn,
+                                toRateToNgn: inferredNextRateToNgn,
+                              });
+                            } else if (
+                              previousCurrency !== nextCurrency &&
+                              previousCurrency !== "NGN" &&
+                              nextCurrency === "NGN" &&
+                              previousRateToNgn > 0
+                            ) {
+                              convertLineItemAmountsBetweenCurrencies({
+                                fromCurrency: previousCurrency,
+                                toCurrency: nextCurrency,
+                                fromRateToNgn: previousRateToNgn,
+                                toRateToNgn: 1,
+                              });
                             }
+
+                            setFormData((prev) => {
+                              const shouldKeepRate =
+                                nextCurrency !== "NGN" &&
+                                inferredNextRateToNgn > 0;
+                              return {
+                                ...prev,
+                                currency: nextCurrency,
+                                exchangeRate: shouldKeepRate
+                                  ? String(inferredNextRateToNgn)
+                                  : "",
+                              };
+                            });
                           }}
                           className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
                         >
