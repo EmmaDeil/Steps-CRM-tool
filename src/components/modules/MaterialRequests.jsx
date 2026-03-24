@@ -2991,7 +2991,7 @@ const MaterialRequests = () => {
                               <div class="info-item"><label>Budget Code</label><p>${selectedRequest.budgetCode || "N/A"}</p></div>
                             </div>
 
-                            <h3>Line Items</h3>
+                            <h3>Request Breakdown</h3>
                             <table>
                               <thead><tr><th>#</th><th>Item</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th></tr></thead>
                               <tbody>

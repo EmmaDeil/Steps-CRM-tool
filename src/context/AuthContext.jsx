@@ -125,7 +125,10 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       // Clear auth on explicit server rejection (401) or deactivated account (403)
       if (error.response?.status === 401 || error.response?.status === 403) {
-        console.error("Auth check failed - unauthorized or deactivated:", error);
+        console.error(
+          "Auth check failed - unauthorized or deactivated:",
+          error,
+        );
         setUser(null);
         setIsAuthenticated(false);
         localStorage.removeItem("authToken");
