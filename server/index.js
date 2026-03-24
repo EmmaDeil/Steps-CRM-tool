@@ -1148,6 +1148,10 @@ async function start() {
   const incidentReportRoutes = require('./routes/incidentReport.routes');
   app.use('/api/incident-reports', incidentReportRoutes);
 
+  // ============ MATERIAL REQUEST WORKFLOW ROUTES ============
+  const workflowRoutes = require('./routes/workflow.routes');
+  app.use('/api/workflow', authMiddleware, workflowRoutes);
+
   // ============ SKU ITEMS ROUTES ============
   const SkuItemModel = require('./models/SkuItem');
   const SkuCategoryModel = require('./models/SkuCategory');

@@ -758,6 +758,19 @@ Purchase Orders:
 - POST /api/purchase-orders/:id/lock
 - PUT /api/purchase-orders/:id
 
+Material Request Workflow (RFQ -> PO -> Payment -> Receiving):
+
+- POST /api/workflow/material-requests/:id/generate-rfq
+- GET /api/workflow/rfqs
+- GET /api/workflow/rfqs/:id
+- POST /api/workflow/rfqs/:id/add-quotation
+- POST /api/workflow/rfqs/:id/generate-po
+- POST /api/workflow/pos/:id/record-payment
+- GET /api/workflow/pos/:id/payments
+- POST /api/workflow/pos/:id/receive-items
+- GET /api/workflow/receipts
+- GET /api/workflow/material-requests/:id/progress
+
 Finance / AP:
 
 - GET /api/finance/accounts-payable
@@ -1033,6 +1046,126 @@ sequenceDiagram
    MR->>PO: Auto-create purchase order
    PO->>APV: payment_pending / partly_paid / paid
 ```
+
+## Material Request Workflow (How To Use)
+
+This is the current end-to-end procurement flow you can run in the app and by API.
+
+1. Create and approve a Material Request.
+2. Generate an RFQ from the approved request.
+3. Add one or more vendor quotations.
+4. Select a quotation and generate a PO.
+5. Record payment (partial or full).
+6. Receive items into inventory (allowed only after payment starts).
+7. Track stage/progress from one endpoint.
+
+### Stage Rules
+
+- RFQ generation requires Material Request status = approved.
+- PO generation requires at least one received quotation.
+- Receiving requires PO status = partly_paid or paid.
+- Receiving is blocked when PO status = payment_pending.
+
+### Quick API Walkthrough
+
+Use a valid token in all calls below.
+
+1) Generate RFQ
+
+```http
+POST /api/workflow/material-requests/:materialRequestId/generate-rfq
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+   "vendorId": "<vendor-id>"
+}
+```
+
+2) Add quotation
+
+```http
+POST /api/workflow/rfqs/:rfqId/add-quotation
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+   "quotedAmount": 350000,
+   "quotedBy": "Acme Supplies",
+   "notes": "Delivery in 5 days"
+}
+```
+
+3) Generate PO from quotation
+
+```http
+POST /api/workflow/rfqs/:rfqId/generate-po
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+   "quotationIndex": 0
+}
+```
+
+4) Record payment (partial or full)
+
+```http
+POST /api/workflow/pos/:poId/record-payment
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+   "amount": 150000,
+   "paymentType": "partial",
+   "paymentMethod": "bank_transfer"
+}
+```
+
+5) Receive into inventory
+
+```http
+POST /api/workflow/pos/:poId/receive-items
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+   "receivedItems": [
+      {
+         "itemName": "Laptop",
+         "quantityReceived": 5,
+         "quantityType": "pcs",
+         "condition": "excellent"
+      }
+   ],
+   "storeLocation": {
+      "locationName": "Main Warehouse"
+   }
+}
+```
+
+6) Check end-to-end progress
+
+```http
+GET /api/workflow/material-requests/:materialRequestId/progress
+Authorization: Bearer <token>
+```
+
+### UI Entry Point
+
+The workflow dashboard component is available in the frontend module:
+
+- src/components/modules/MaterialRequestWorkflow.jsx
 
 ## Developer Quickstart
 
