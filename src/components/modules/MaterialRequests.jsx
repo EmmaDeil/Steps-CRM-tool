@@ -3297,6 +3297,33 @@ const MaterialRequests = () => {
                           {selectedRequest.currency || "NGN"}
                         </p>
                       </div>
+                      {(selectedRequest.currency || "NGN") !== "NGN" && (
+                        <div className="flex flex-col gap-1">
+                          <p className="text-[#617589] text-sm">
+                            Exchange Rate to NGN
+                          </p>
+                          <p className="text-[#111418] text-base font-medium">
+                            1 {selectedRequest.currency || "NGN"} ={" "}
+                            {Number(selectedRequest.exchangeRateToNgn) > 0
+                              ? Number(
+                                  selectedRequest.exchangeRateToNgn,
+                                ).toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 6,
+                                })
+                              : "1"}{" "}
+                            NGN
+                          </p>
+                          <p className="text-xs text-[#617589]">
+                            Captured:{" "}
+                            {new Date(
+                              selectedRequest.exchangeRateCapturedAt ||
+                                selectedRequest.createdAt ||
+                                Date.now(),
+                            ).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -3439,6 +3466,20 @@ const MaterialRequests = () => {
                                   {formatCurrency(item.quantity * item.amount, {
                                     currency: selectedRequest.currency,
                                   })}
+                                  {(selectedRequest.currency || "NGN") !==
+                                    "NGN" && (
+                                    <div className="text-xs text-[#617589] mt-1">
+                                      {formatCurrency(
+                                        Number(item.lineTotalNgn) ||
+                                          (Number(item.quantity) || 0) *
+                                            (Number(item.amount) || 0) *
+                                            (Number(
+                                              selectedRequest.exchangeRateToNgn,
+                                            ) || 1),
+                                        { currency: "NGN" },
+                                      )}
+                                    </div>
+                                  )}
                                 </td>
                               </tr>
                             ),
@@ -3460,6 +3501,27 @@ const MaterialRequests = () => {
                                   0,
                                 ),
                                 { currency: selectedRequest.currency },
+                              )}
+                              {(selectedRequest.currency || "NGN") !==
+                                "NGN" && (
+                                <div className="text-xs text-[#617589] mt-1 font-medium">
+                                  {formatCurrency(
+                                    Number(selectedRequest.totalAmountNgn) ||
+                                      (selectedRequest.lineItems || []).reduce(
+                                        (sum, item) =>
+                                          sum +
+                                          (Number(item.lineTotalNgn) ||
+                                            (Number(item.quantity) || 0) *
+                                              (Number(item.amount) || 0) *
+                                              (Number(
+                                                selectedRequest.exchangeRateToNgn,
+                                              ) || 1)),
+                                        0,
+                                      ),
+                                    { currency: "NGN" },
+                                  )}{" "}
+                                  (at submitted rate)
+                                </div>
                               )}
                             </td>
                           </tr>

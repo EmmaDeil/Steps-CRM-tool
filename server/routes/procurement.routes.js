@@ -43,6 +43,78 @@ const normalizeRequestType = (requestType) => {
   return REQUEST_TYPE_MAP[normalized] || rawValue || 'Purchase Request';
 };
 
+const normalizeRateToNgn = ({ currency, rateInput }) => {
+  const normalizedCurrency = String(currency || 'NGN').trim().toUpperCase();
+  if (normalizedCurrency === 'NGN') return 1;
+  const parsed = Number(rateInput);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+};
+
+const normalizeMaterialRequestLineItems = ({ lineItems, exchangeRateToNgn }) => {
+  const rows = Array.isArray(lineItems) ? lineItems : [];
+  return rows.map((item) => {
+    const quantity = Number(item?.quantity) || 0;
+    const amount = Number(item?.amount) || 0;
+    const amountNgn = amount * exchangeRateToNgn;
+    return {
+      ...item,
+      quantity,
+      amount,
+      amountNgn,
+      lineTotalNgn: quantity * amountNgn,
+    };
+  });
+};
+
+const buildCurrencySnapshotFields = ({ payload, existingRequest }) => {
+  const currency = String(
+    payload?.currency || existingRequest?.currency || 'NGN',
+  )
+    .trim()
+    .toUpperCase();
+
+  const rateInput =
+    payload?.exchangeRateToNgn ??
+    payload?.exchangeRate ??
+    existingRequest?.exchangeRateToNgn ??
+    1;
+
+  const exchangeRateToNgn = normalizeRateToNgn({ currency, rateInput });
+
+  const sourceLineItems = Array.isArray(payload?.lineItems)
+    ? payload.lineItems
+    : existingRequest?.lineItems || [];
+
+  const normalizedLineItems = normalizeMaterialRequestLineItems({
+    lineItems: sourceLineItems,
+    exchangeRateToNgn,
+  });
+
+  const totalAmountNgn = normalizedLineItems.reduce(
+    (sum, item) => sum + (Number(item?.lineTotalNgn) || 0),
+    0,
+  );
+
+  const hasCapturedAtInPayload =
+    payload?.exchangeRateCapturedAt !== undefined &&
+    payload?.exchangeRateCapturedAt !== null;
+
+  const exchangeRateCapturedAt =
+    currency === 'NGN'
+      ? null
+      : hasCapturedAtInPayload
+        ? payload.exchangeRateCapturedAt
+        : existingRequest?.exchangeRateCapturedAt || new Date();
+
+  return {
+    currency,
+    exchangeRateToNgn,
+    exchangeRateCapturedAt,
+    lineItems: normalizedLineItems,
+    totalAmountNgn,
+  };
+};
+
 const DEFAULT_MATERIAL_REQUEST_TYPES = [
   'Internal Transfer',
   'RFQ',
@@ -294,6 +366,7 @@ router.post('/material-requests', authMiddleware, requireModuleAction('Material 
       requestId,
       requestType: normalizeRequestType(req.body?.requestType),
       date: req.body?.date || now.toISOString().split('T')[0],
+      ...buildCurrencySnapshotFields({ payload: req.body }),
     };
 
     const newRequest = new MaterialRequest(payload);
@@ -339,11 +412,20 @@ router.post('/material-requests', authMiddleware, requireModuleAction('Material 
 // PUT update Material Request
 router.put('/material-requests/:id', authMiddleware, requireModuleAction('Material Requests', 'edit'), async (req, res) => {
   try {
+    const existingRequest = await MaterialRequest.findById(req.params.id);
+    if (!existingRequest) {
+      return res.status(404).json({ success: false, message: 'Not found' });
+    }
+
     const updatePayload = {
       ...req.body,
       ...(req.body?.requestType
         ? { requestType: normalizeRequestType(req.body.requestType) }
         : {}),
+      ...buildCurrencySnapshotFields({
+        payload: req.body,
+        existingRequest,
+      }),
     };
 
     const updatedRequest = await MaterialRequest.findByIdAndUpdate(
@@ -351,7 +433,6 @@ router.put('/material-requests/:id', authMiddleware, requireModuleAction('Materi
       { $set: updatePayload },
       { new: true, runValidators: true }
     );
-    if (!updatedRequest) return res.status(404).json({ success: false, message: 'Not found' });
     res.json(updatedRequest);
   } catch (err) {
     console.error('Error updating material request:', err);
