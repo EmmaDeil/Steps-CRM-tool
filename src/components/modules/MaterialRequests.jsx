@@ -1680,9 +1680,17 @@ const MaterialRequests = () => {
       header: "Request ID",
       accessorKey: "requestId",
       cell: (req) => (
-        <span className="text-sm font-semibold text-[#137fec]">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleViewRequest(req);
+          }}
+          className="text-sm font-semibold text-[#137fec] hover:text-[#0d6efd]"
+          title="Open request details"
+        >
           {req.requestId}
-        </span>
+        </button>
       ),
     },
     {
@@ -1740,6 +1748,38 @@ const MaterialRequests = () => {
           {new Date(req.date || req.createdAt).toLocaleDateString()}
         </span>
       ),
+    },
+    {
+      header: "Amount",
+      accessorKey: "amount",
+      cell: (req) => {
+        const requestTotal = Array.isArray(req.lineItems)
+          ? req.lineItems.reduce(
+              (sum, item) =>
+                sum +
+                (Number(item?.quantity) || 0) * (Number(item?.amount) || 0),
+              0,
+            )
+          : 0;
+
+        return (
+          <div className="flex flex-col items-end">
+            <span className="text-sm font-semibold text-[#111418]">
+              {formatCurrency(requestTotal, {
+                currency: req.currency || "NGN",
+              })}
+            </span>
+            {(req.currency || "NGN") !== "NGN" &&
+              Number(req.totalAmountNgn) > 0 && (
+                <span className="text-xs text-[#617589]">
+                  {formatCurrency(Number(req.totalAmountNgn), {
+                    currency: "NGN",
+                  })}
+                </span>
+              )}
+          </div>
+        );
+      },
     },
     {
       header: "Approver",

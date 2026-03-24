@@ -1367,7 +1367,7 @@ const PurchaseOrders = () => {
   ];
 
   return (
-    <div className="w-full min-h-screen bg-[#f6f7f8] flex flex-col">
+    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
       <Breadcrumb
         items={
           selectedPo
@@ -1394,7 +1394,7 @@ const PurchaseOrders = () => {
       />
 
       {/* Main Content */}
-      <main className="flex-1 py-3 px-4 max-w-[1440px] mx-auto w-full">
+      <main className="flex-1 max-w-[1490px] mx-auto w-full px-1 py-6">
         {loadingPoDetails && (
           <div className="rounded-xl border border-[#dbe0e6] bg-white p-6 mb-6 text-sm text-[#617589]">
             <i className="fa-solid fa-circle-notch fa-spin mr-2"></i>
