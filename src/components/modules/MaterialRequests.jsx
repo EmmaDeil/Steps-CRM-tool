@@ -357,6 +357,7 @@ const MaterialRequests = () => {
 
   const handleGenerateRfq = async () => {
     if (!selectedRequest?._id) return;
+    if (sendingRfq) return;
     if (selectedRfqVendorIds.length === 0) {
       toast.error("Select at least one vendor");
       return;
@@ -379,7 +380,11 @@ const MaterialRequests = () => {
         );
       }
 
-      toast.success(response?.message || "RFQ sent to selected vendors");
+      if (response?.created === false) {
+        toast("RFQ already exists for selected vendor(s)");
+      } else {
+        toast.success(response?.message || "RFQ sent to selected vendors");
+      }
       setShowRfqModal(false);
       setSelectedRfqVendorIds([]);
     } catch (err) {
@@ -391,6 +396,7 @@ const MaterialRequests = () => {
 
   const handleCreatePoFromApproved = async () => {
     if (!selectedRequest?._id) return;
+    if (creatingPo) return;
     setCreatingPo(true);
     try {
       const response = await apiService.post(
@@ -414,7 +420,11 @@ const MaterialRequests = () => {
         await openPurchaseOrderFromActivity(po.poNumber, po._id || po.id);
       }
 
-      toast.success(response?.message || "Purchase order created");
+      if (response?.created === false) {
+        toast("Purchase order already exists for this request");
+      } else {
+        toast.success(response?.message || "Purchase order created");
+      }
     } catch (err) {
       toast.error(
         err?.response?.data?.message || "Failed to create purchase order",
@@ -1470,8 +1480,15 @@ const MaterialRequests = () => {
     let poModuleId = 11;
 
     const normalizedPoNumber = String(poNumber || "").trim();
-    const candidatePoId =
-      typeof poId === "string" ? poId : poId?._id || poId?.id || "";
+    const candidatePoId = (() => {
+      if (typeof poId === "string") return poId;
+      if (poId?._id || poId?.id) return poId._id || poId.id;
+      if (poId && typeof poId.toString === "function") {
+        const asText = String(poId.toString() || "").trim();
+        if (asText && asText !== "[object Object]") return asText;
+      }
+      return "";
+    })();
     const normalizedPoId = String(candidatePoId || "").trim();
     const hasUsablePoId =
       normalizedPoId &&
@@ -1517,7 +1534,12 @@ const MaterialRequests = () => {
       // Keep fallback module id and continue navigation.
     }
 
-    navigate(`/home/${poModuleId}`);
+    navigate(`/home/${poModuleId}`, {
+      state: {
+        openPoId: hasUsablePoId ? normalizedPoId : "",
+        openPoNumber: normalizedPoNumber,
+      },
+    });
   };
 
   const openRfqFromActivity = async (rfqNumber, rfqId) => {
