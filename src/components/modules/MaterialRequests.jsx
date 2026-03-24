@@ -125,6 +125,22 @@ const MaterialRequests = () => {
     return file.fileName || file.name || "Attachment";
   };
 
+  const openAttachmentInView = (file) => {
+    const fileName = getAttachmentName(file);
+    const fileData =
+      typeof file === "string" ? "" : String(file?.fileData || "").trim();
+
+    if (!fileData) {
+      toast.error(`${fileName} is not available to preview`);
+      return;
+    }
+
+    const opened = window.open(fileData, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      toast.error("Popup blocked. Please allow popups to view attachment.");
+    }
+  };
+
   const normalizePickedAttachments = (files) =>
     files.map((f) => ({
       fileName: f.name,
@@ -437,20 +453,31 @@ const MaterialRequests = () => {
     }
   };
 
-  const fetchRequestForApproval = React.useCallback(async (requestId) => {
-    try {
-      const response = await apiService.get(`/api/material-requests`);
-      const request = response.data.find((r) => r._id === requestId);
-      if (request) {
-        setSelectedRequest(request);
-        setShowViewModal(true);
-      } else {
-        toast.error("Request not found");
-      }
-    } catch {
-      toast.error("Failed to load request");
-    }
+  const fetchMaterialRequestDetails = useCallback(async (requestId) => {
+    if (!requestId) return null;
+    const response = await apiService.get(
+      `/api/material-requests/${requestId}`,
+    );
+    const payload = response?.data?._id ? response.data : response;
+    return payload?._id ? payload : null;
   }, []);
+
+  const fetchRequestForApproval = React.useCallback(
+    async (requestId) => {
+      try {
+        const request = await fetchMaterialRequestDetails(requestId);
+        if (request) {
+          setSelectedRequest(request);
+          setShowViewModal(true);
+        } else {
+          toast.error("Request not found");
+        }
+      } catch {
+        toast.error("Failed to load request");
+      }
+    },
+    [fetchMaterialRequestDetails],
+  );
 
   // Check for approval action from email link
   useEffect(() => {
@@ -982,10 +1009,18 @@ const MaterialRequests = () => {
     }
   };
 
-  const handleViewRequest = (request) => {
-    setSelectedRequest(request);
-    setShowViewModal(true);
-    setActiveDropdown(null);
+  const handleViewRequest = async (request) => {
+    const requestId = String(request?._id || request?.id || "").trim();
+    try {
+      const fullRequest = await fetchMaterialRequestDetails(requestId);
+      setSelectedRequest(fullRequest || request);
+      setShowViewModal(true);
+      setActiveDropdown(null);
+    } catch {
+      setSelectedRequest(request);
+      setShowViewModal(true);
+      setActiveDropdown(null);
+    }
   };
 
   const handleEditRequest = (request) => {
@@ -1014,16 +1049,14 @@ const MaterialRequests = () => {
     setActiveDropdown(null);
   };
 
-  const handleApproveClick = (request) => {
-    setSelectedRequest(request);
-    setShowViewModal(true);
+  const handleApproveClick = async (request) => {
+    await handleViewRequest(request);
     fetchBudgetCategories();
     setActiveDropdown(null);
   };
 
-  const handleRejectClick = (request) => {
-    setSelectedRequest(request);
-    setShowViewModal(true);
+  const handleRejectClick = async (request) => {
+    await handleViewRequest(request);
     setActiveDropdown(null);
   };
 
@@ -1397,9 +1430,18 @@ const MaterialRequests = () => {
       return;
     }
 
-    setSelectedRequest(matchedRequest);
-    setShowViewModal(true);
-  }, [loading, requests]);
+    (async () => {
+      try {
+        const fullRequest = await fetchMaterialRequestDetails(
+          matchedRequest._id || matchedRequest.id,
+        );
+        setSelectedRequest(fullRequest || matchedRequest);
+      } catch {
+        setSelectedRequest(matchedRequest);
+      }
+      setShowViewModal(true);
+    })();
+  }, [loading, requests, fetchMaterialRequestDetails]);
 
   if (loading) {
     return (
@@ -2690,6 +2732,13 @@ const MaterialRequests = () => {
                         Material Request #
                         {selectedRequest.requestId || selectedRequest._id}
                       </h1>
+                      {Array.isArray(selectedRequest.attachments) &&
+                        selectedRequest.attachments.length > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                            <i className="fa-solid fa-paperclip"></i>
+                            {selectedRequest.attachments.length}
+                          </span>
+                        )}
                       <span
                         className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
                           selectedRequest.status === "pending"
@@ -2959,6 +3008,83 @@ const MaterialRequests = () => {
                     </div>
                   </div>
 
+                  {Array.isArray(selectedRequest.attachments) &&
+                    selectedRequest.attachments.length > 0 && (
+                      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <i className="fa-solid fa-paperclip text-gray-500"></i>
+                            <h3 className="text-lg font-bold text-[#111418]">
+                              Attachments
+                            </h3>
+                          </div>
+                          <span className="text-sm text-gray-500 font-medium">
+                            {selectedRequest.attachments.length} file
+                            {selectedRequest.attachments.length === 1
+                              ? ""
+                              : "s"}
+                          </span>
+                        </div>
+                        <div className="p-6 space-y-2">
+                          {selectedRequest.attachments.map((file, idx) => {
+                            const fileName =
+                              typeof file === "string"
+                                ? file
+                                : file?.fileName || file?.name || "Attachment";
+                            const fileData =
+                              typeof file === "string"
+                                ? null
+                                : file?.fileData || null;
+
+                            return (
+                              <div
+                                key={`${fileName}-${idx}`}
+                                className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2"
+                              >
+                                <div className="min-w-0 flex items-center gap-2">
+                                  <i className="fa-solid fa-paperclip text-[#617589] text-sm"></i>
+                                  <button
+                                    type="button"
+                                    onClick={() => openAttachmentInView(file)}
+                                    className="truncate text-sm text-[#137fec] hover:text-[#0d6efd] underline text-left"
+                                  >
+                                    {fileName}
+                                  </button>
+                                </div>
+                                {fileData ? (
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => openAttachmentInView(file)}
+                                      className="rounded-md px-2 py-1 text-xs font-semibold text-[#137fec] hover:bg-blue-50"
+                                    >
+                                      View
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const a = document.createElement("a");
+                                        a.href = fileData;
+                                        a.download = fileName;
+                                        a.click();
+                                      }}
+                                      className="rounded-md px-2 py-1 text-xs font-semibold text-[#137fec] hover:bg-blue-50"
+                                    >
+                                      Download
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-[#617589]">
+                                    Not downloadable
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                   {/* Material Details Table */}
                   <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
@@ -3180,11 +3306,18 @@ const MaterialRequests = () => {
                           Activity & Comments
                         </h3>
                       </div>
-                      <span className="text-sm text-gray-500 font-medium">
-                        {(selectedRequest.activities?.length || 0) +
-                          (selectedRequest.comments?.length || 0)}{" "}
-                        Entries
-                      </span>
+                      {(() => {
+                        const totalEntries =
+                          (selectedRequest.activities?.length || 0) +
+                          (selectedRequest.comments?.length || 0);
+                        if (totalEntries <= 0) return null;
+                        return (
+                          <span className="text-sm text-gray-500 font-medium">
+                            {totalEntries}{" "}
+                            {totalEntries === 1 ? "Entry" : "Entries"}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div className="max-h-[500px] overflow-y-auto p-6 flex flex-col gap-4">
                       {(() => {
@@ -3395,15 +3528,15 @@ const MaterialRequests = () => {
                     </div>
 
                     {/* Add Comment Section */}
-                    <div className="bg-gray-50 p-5 border-t border-gray-200">
-                      <div className="flex gap-3">
-                        <div className="hidden sm:flex bg-blue-100 text-blue-700 h-8 w-8 rounded-full flex-none items-center justify-center text-xs font-bold shrink-0">
-                          {user?.fullName?.charAt(0)?.toUpperCase() || "ME"}
-                        </div>
-                        <div className="flex-1 relative">
+                    <div className="p-6 border-t border-gray-200">
+                      <div className="flex flex-col gap-2">
+                        <span className="text-sm font-medium text-[#111418]">
+                          Comment
+                        </span>
+                        <div className="relative">
                           <textarea
                             ref={viewCommentRef}
-                            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-[#111418] placeholder-[#617589] focus:border-[#137fec] focus:ring-1 focus:ring-[#137fec] min-h-[70px] resize-y outline-none transition-all"
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-4 py-3 min-h-[100px]"
                             placeholder="Add a comment... Use @ to mention someone (Enter to send, Shift+Enter for new line)"
                             value={viewComment}
                             onChange={(e) => {
@@ -3432,14 +3565,14 @@ const MaterialRequests = () => {
                             }}
                           />
                           {showViewMentionDropdown && (
-                            <div className="absolute z-50 top-full left-0 right-0 -mt-2 bg-white rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                            <div className="absolute z-50 bottom-full left-0 right-0 -mt-3 py-2 bg-white rounded-xl shadow-lg max-h-[150px] overflow-y-auto w-[150px]">
                               {userList
                                 .filter((u) =>
                                   u.name
                                     ?.toLowerCase()
                                     .includes(viewMentionSearch),
                                 )
-                                .slice(0, 8)
+                                .slice(0, 5)
                                 .map((u) => (
                                   <button
                                     key={u.id || u._id}
@@ -3469,9 +3602,9 @@ const MaterialRequests = () => {
                                       }, 0);
                                     }}
                                   >
-                                    <strong className="text-[#111418] text-sm">
+                                    <p className="text-[#111418] text-sm">
                                       {u.name}
-                                    </strong>
+                                    </p>
                                   </button>
                                 ))}
                               {userList.filter((u) =>
@@ -3485,47 +3618,16 @@ const MaterialRequests = () => {
                               )}
                             </div>
                           )}
-                          <div className="flex justify-between items-center mt-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const textarea = viewCommentRef.current;
-                                if (!textarea) return;
-                                const pos = textarea.selectionStart;
-                                const before = viewComment.substring(0, pos);
-                                const after = viewComment.substring(pos);
-                                setViewComment(before + "@" + after);
-                                setShowViewMentionDropdown(true);
-                                setViewMentionSearch("");
-                                setTimeout(() => {
-                                  textarea.focus();
-                                  textarea.setSelectionRange(pos + 1, pos + 1);
-                                }, 0);
-                              }}
-                              className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-[#617589] hover:text-[#111418] transition-colors rounded hover:bg-gray-100"
-                            >
-                              <i className="fa-solid fa-at text-sm"></i>
-                            </button>
-                            <button
-                              type="button"
-                              disabled={
-                                !viewComment.trim() || submittingComment
-                              }
-                              onClick={submitViewComment}
-                              className="flex h-8 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#137fec] hover:bg-[#0d6efd] disabled:opacity-50 disabled:cursor-not-allowed px-4 text-white transition-colors text-xs font-bold shadow-sm"
-                            >
-                              {submittingComment ? (
-                                <span className="inline-block animate-spin">
-                                  ⏳
-                                </span>
-                              ) : (
-                                <>
-                                  <i className="fa-solid fa-paper-plane text-xs"></i>
-                                  <span>Post</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
+                        </div>
+                        <div className="flex justify-end items-center mt-1">
+                          <button
+                            type="button"
+                            disabled={!viewComment.trim() || submittingComment}
+                            onClick={submitViewComment}
+                            className="rounded-lg bg-[#137fec] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d6efd] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {submittingComment ? "Posting..." : "Post"}
+                          </button>
                         </div>
                       </div>
                     </div>
