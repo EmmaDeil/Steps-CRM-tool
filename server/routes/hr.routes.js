@@ -3,9 +3,13 @@ const router = express.Router();
 const EmployeeModel = require('../models/Employee');
 const UserModel = require('../models/User');
 const crypto = require('crypto');
+const { authMiddleware } = require('../middleware/auth');
+const { requireModuleAction } = require('../middleware/moduleAccess');
+
+router.use(authMiddleware);
 
 // ================= EMPLOYEES (Live DB) =================
-router.get('/employees', async (req, res) => {
+router.get('/employees', requireModuleAction('hrm', 'view'), async (req, res) => {
   try {
     const { search } = req.query;
     let query = {};
@@ -27,7 +31,7 @@ router.get('/employees', async (req, res) => {
   }
 });
 
-router.post('/employees', async (req, res) => {
+router.post('/employees', requireModuleAction('hrm', 'create'), async (req, res) => {
   try {
     const { name, role, ...rest } = req.body;
     let firstName = req.body.firstName;
@@ -105,7 +109,7 @@ router.post('/employees', async (req, res) => {
   }
 });
 
-router.put('/employees/bulk-update', async (req, res) => {
+router.put('/employees/bulk-update', requireModuleAction('hrm', 'edit'), async (req, res) => {
   try {
     const { employeeIds, updates } = req.body;
     if (!employeeIds || !Array.isArray(employeeIds)) {
@@ -124,7 +128,7 @@ router.put('/employees/bulk-update', async (req, res) => {
   }
 });
 
-router.put('/employees/:id', async (req, res) => {
+router.put('/employees/:id', requireModuleAction('hrm', 'edit'), async (req, res) => {
   try {
     // If name is passed as part of the update, split it back out
     if (req.body.name && (!req.body.firstName || !req.body.lastName)) {
@@ -169,7 +173,7 @@ router.put('/employees/:id', async (req, res) => {
   }
 });
 
-router.delete('/employees/:id', async (req, res) => {
+router.delete('/employees/:id', requireModuleAction('hrm', 'delete'), async (req, res) => {
   try {
     const deleted = await EmployeeModel.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ message: 'Employee not found' });
@@ -193,14 +197,14 @@ router.delete('/employees/:id', async (req, res) => {
 // ================= MOCK ENDPOINTS FOR UI GRAPHS =================
 // Provide realistic mock arrays so the graphs and UI don't break/404 out
 
-router.get('/requisitions', (req, res) => {
+router.get('/requisitions', requireModuleAction('hrm', 'view'), (req, res) => {
   res.json([
     { id: 1, title: 'Senior React Developer', candidates: 12, progressPct: 65 },
     { id: 2, title: 'HR Manager', candidates: 4, progressPct: 20 },
   ]);
 });
 
-router.get('/analytics', (req, res) => {
+router.get('/analytics', requireModuleAction('hrm', 'view'), (req, res) => {
   res.json({ 
     turnoverRates: [2.1, 2.5, 1.8, 1.2, 2.6, 2.0], 
     months: ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 
@@ -208,39 +212,39 @@ router.get('/analytics', (req, res) => {
   });
 });
 
-router.get('/leave-requests', (req, res) => {
+router.get('/leave-requests', requireModuleAction('hrm', 'view'), (req, res) => {
   res.json([
     { id: 'lr1', name: 'Alice Smith', type: 'Annual', range: 'Oct 12 - Oct 15', status: 'pending' },
     { id: 'lr2', name: 'Bob Jones', type: 'Sick', range: 'Oct 02 - Oct 03', status: 'pending' },
   ]);
 });
 
-router.get('/performance', (req, res) => {
+router.get('/performance', requireModuleAction('hrm', 'view'), (req, res) => {
   res.json({ 
     q3CompletedPct: 88, 
     pending: { selfReviews: 4, managerReviews: 2 } 
   });
 });
 
-router.get('/training', (req, res) => {
+router.get('/training', requireModuleAction('hrm', 'view'), (req, res) => {
   res.json([
     { id: 1, name: 'Security Awareness 2026', dueInDays: 3, completionPercent: 0, icon: 'shield' },
     { id: 2, name: 'Harassment Prevention', dueInDays: 12, completionPercent: 40, icon: 'user-shield' }
   ]);
 });
 
-router.get('/payroll-next', (req, res) => {
+router.get('/payroll-next', requireModuleAction('hrm', 'view'), (req, res) => {
   res.json({ 
     date: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(), 
     runApproved: false 
   });
 });
 
-router.get('/leave-allocations', (req, res) => {
+router.get('/leave-allocations', requireModuleAction('hrm', 'view'), (req, res) => {
   res.json([]);
 });
 
-router.post('/leave-requests/:id/approve', (req, res) => res.json({ message: 'Approved' }));
-router.post('/leave-requests/:id/reject', (req, res) => res.json({ message: 'Rejected' }));
+router.post('/leave-requests/:id/approve', requireModuleAction('hrm', 'approve'), (req, res) => res.json({ message: 'Approved' }));
+router.post('/leave-requests/:id/reject', requireModuleAction('hrm', 'approve'), (req, res) => res.json({ message: 'Rejected' }));
 
 module.exports = router;

@@ -79,6 +79,10 @@ const materialRequestSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+    exchangeRateCapturedAt: {
+      type: Date,
+      default: null,
+    },
     totalAmountNgn: {
       type: Number,
       default: 0,

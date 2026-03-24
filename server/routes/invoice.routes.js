@@ -4,9 +4,10 @@ const router  = express.Router();
 const Invoice  = require('../models/Invoice');
 const InventoryIssue = require('../models/InventoryIssue');
 const { authMiddleware } = require('../middleware/auth');
+const { requireModuleAction } = require('../middleware/moduleAccess');
 
 // ── GET all invoices ────────────────────────────────────────────────────────
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, requireModuleAction('finance', 'view'), async (req, res) => {
   try {
     const { page = 1, limit = 20, status, search } = req.query;
     const pageNum  = Math.max(1, parseInt(page));
@@ -36,7 +37,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // ── GET single invoice ──────────────────────────────────────────────────────
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', authMiddleware, requireModuleAction('finance', 'view'), async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id)
       .populate('linkedIssueId', 'issueNumber issuedTo')
@@ -49,7 +50,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // ── PATCH update invoice status ─────────────────────────────────────────────
-router.patch('/:id/status', authMiddleware, async (req, res) => {
+router.patch('/:id/status', authMiddleware, requireModuleAction('finance', 'edit'), async (req, res) => {
   try {
     const { status } = req.body;
     const valid = ['draft', 'sent', 'paid', 'cancelled'];
@@ -70,7 +71,7 @@ router.patch('/:id/status', authMiddleware, async (req, res) => {
 });
 
 // ── GET printable invoice HTML ──────────────────────────────────────────────
-router.get('/:id/print', authMiddleware, async (req, res) => {
+router.get('/:id/print', authMiddleware, requireModuleAction('finance', 'view'), async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id);
     if (!invoice) return res.status(404).json({ message: 'Invoice not found' });

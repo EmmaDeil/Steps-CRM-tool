@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const BudgetCategory = require('../models/BudgetCategory');
 const { authMiddleware } = require('../middleware/auth');
+const { requireModuleAction } = require('../middleware/moduleAccess');
 
 // All routes require authentication
 router.use(authMiddleware);
@@ -21,12 +22,12 @@ const SUPPORTED_CURRENCIES = [
     { code: 'CNY', label: 'Chinese Yuan', symbol: '¥' },
 ];
 
-router.get('/currencies', async (_req, res) => {
+router.get('/currencies', requireModuleAction('budget', 'view'), async (_req, res) => {
     return res.json(SUPPORTED_CURRENCIES);
 });
 
 // ── GET /api/budget/categories?period=Q1 2025 ─────────────
-router.get('/categories', async (req, res) => {
+router.get('/categories', requireModuleAction('budget', 'view'), async (req, res) => {
     try {
         const { period } = req.query;
         const filter = period ? { period } : {};
@@ -39,7 +40,7 @@ router.get('/categories', async (req, res) => {
 });
 
 // ── POST /api/budget/categories ────────────────────────────
-router.post('/categories', async (req, res) => {
+router.post('/categories', requireModuleAction('budget', 'create'), async (req, res) => {
     try {
         const { name, allocated, spent, currency, period, description, icon, color, bar } = req.body;
         if (!name || allocated === undefined) {
@@ -66,7 +67,7 @@ router.post('/categories', async (req, res) => {
 });
 
 // ── PUT /api/budget/categories/:id ─────────────────────────
-router.put('/categories/:id', async (req, res) => {
+router.put('/categories/:id', requireModuleAction('budget', 'edit'), async (req, res) => {
     try {
         const updated = await BudgetCategory.findByIdAndUpdate(
             req.params.id,
@@ -82,7 +83,7 @@ router.put('/categories/:id', async (req, res) => {
 });
 
 // ── DELETE /api/budget/categories/:id ──────────────────────
-router.delete('/categories/:id', async (req, res) => {
+router.delete('/categories/:id', requireModuleAction('budget', 'delete'), async (req, res) => {
     try {
         const deleted = await BudgetCategory.findByIdAndDelete(req.params.id);
         if (!deleted) return res.status(404).json({ message: 'Category not found' });
@@ -94,7 +95,7 @@ router.delete('/categories/:id', async (req, res) => {
 });
 
 // ── GET /api/budget/export?period=Q1 2025&format=csv ───────
-router.get('/export', async (req, res) => {
+router.get('/export', requireModuleAction('budget', 'export'), async (req, res) => {
     try {
         const { period, format = 'csv' } = req.query;
         const filter = period ? { period } : {};
@@ -129,7 +130,7 @@ router.get('/export', async (req, res) => {
 
 // ── POST /api/budget/import ────────────────────────────────
 // Accepts JSON body with { categories: [...], period, replace }
-router.post('/import', async (req, res) => {
+router.post('/import', requireModuleAction('budget', 'create'), async (req, res) => {
     try {
         const { categories = [], period, replace = false } = req.body;
         if (!Array.isArray(categories) || categories.length === 0) {

@@ -3,10 +3,12 @@ const router = express.Router();
 const PayrollRun = require('../models/PayrollRun');
 const Employee = require('../models/Employee');
 const { checkSecurityRole } = require('../middleware/securityAuth');
+const { authMiddleware } = require('../middleware/auth');
+const { requireModuleAction } = require('../middleware/moduleAccess');
 
 // GET prepared employee list for a new payroll run
 // Query param: paymentSchedule (optional) — filters to matching employees only
-router.get('/prepare', async (req, res) => {
+router.get('/prepare', authMiddleware, requireModuleAction('finance', 'view'), async (req, res) => {
   try {
     const { paymentSchedule } = req.query;
 
@@ -56,7 +58,7 @@ router.get('/prepare', async (req, res) => {
 
 
 // GET all historical payroll runs
-router.get('/runs', async (req, res) => {
+router.get('/runs', authMiddleware, requireModuleAction('finance', 'view'), async (req, res) => {
   try {
     const runs = await PayrollRun.find().sort({ createdAt: -1 });
     res.json(runs);
@@ -67,7 +69,7 @@ router.get('/runs', async (req, res) => {
 });
 
 // GET active draft (if any)
-router.get('/draft', async (req, res) => {
+router.get('/draft', authMiddleware, requireModuleAction('finance', 'view'), async (req, res) => {
   try {
     const draft = await PayrollRun.findOne({ status: 'draft' }).sort({ updatedAt: -1 });
     res.json({ data: draft });
@@ -78,7 +80,7 @@ router.get('/draft', async (req, res) => {
 });
 
 // GET single payroll run by ID
-router.get('/runs/:id', async (req, res) => {
+router.get('/runs/:id', authMiddleware, requireModuleAction('finance', 'view'), async (req, res) => {
   try {
     const run = await PayrollRun.findById(req.params.id);
     if (!run) return res.status(404).json({ success: false, message: 'Not found' });
@@ -89,7 +91,7 @@ router.get('/runs/:id', async (req, res) => {
 });
 
 // POST to save/update a draft
-router.post('/draft', async (req, res) => {
+router.post('/draft', authMiddleware, requireModuleAction('finance', 'create'), async (req, res) => {
   try {
     const draftData = req.body;
     draftData.status = 'draft';
@@ -116,7 +118,7 @@ router.post('/draft', async (req, res) => {
 });
 
 // POST to submit a final run
-router.post('/submit', async (req, res) => {
+router.post('/submit', authMiddleware, requireModuleAction('finance', 'approve'), async (req, res) => {
   try {
     const runData = req.body;
     runData.status = 'pending_approval';
@@ -145,7 +147,7 @@ router.post('/submit', async (req, res) => {
 });
 
 // PUT to update status (Admin only)
-router.put('/runs/:id/status', async (req, res) => {
+router.put('/runs/:id/status', authMiddleware, requireModuleAction('finance', 'approve'), async (req, res) => {
     try {
         const { status } = req.body;
         // Validate valid status transitions here if needed

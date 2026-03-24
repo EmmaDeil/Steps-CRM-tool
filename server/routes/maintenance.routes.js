@@ -2,9 +2,10 @@ const express = require("express");
 const router = express.Router();
 const MaintenanceTicket = require("../models/MaintenanceTicket");
 const { verifyToken } = require("../middleware/auth");
+const { requireModuleAction } = require('../middleware/moduleAccess');
 
 // Get all maintenance tickets with filtering and pagination
-router.get("/", verifyToken, async (req, res) => {
+router.get("/", verifyToken, requireModuleAction('facility', 'view'), async (req, res) => {
   try {
     const {
       status,
@@ -68,7 +69,7 @@ router.get("/", verifyToken, async (req, res) => {
 });
 
 // Get dashboard statistics
-router.get("/stats", verifyToken, async (req, res) => {
+router.get("/stats", verifyToken, requireModuleAction('facility', 'view'), async (req, res) => {
   try {
     const [
       totalTickets,
@@ -153,7 +154,7 @@ router.get("/stats", verifyToken, async (req, res) => {
 });
 
 // Get single ticket by ID
-router.get("/:id", verifyToken, async (req, res) => {
+router.get("/:id", verifyToken, requireModuleAction('facility', 'view'), async (req, res) => {
   try {
     const ticket = await MaintenanceTicket.findById(req.params.id)
       .populate("reportedBy", "firstName lastName email department")
@@ -173,7 +174,7 @@ router.get("/:id", verifyToken, async (req, res) => {
 });
 
 // Create new maintenance ticket
-router.post("/", verifyToken, async (req, res) => {
+router.post("/", verifyToken, requireModuleAction('facility', 'create'), async (req, res) => {
   try {
     const ticketData = {
       ...req.body,
@@ -197,7 +198,7 @@ router.post("/", verifyToken, async (req, res) => {
 });
 
 // Update maintenance ticket
-router.put("/:id", verifyToken, async (req, res) => {
+router.put("/:id", verifyToken, requireModuleAction('facility', 'edit'), async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
@@ -239,7 +240,7 @@ router.put("/:id", verifyToken, async (req, res) => {
 });
 
 // Add comment to ticket
-router.post("/:id/comments", verifyToken, async (req, res) => {
+router.post("/:id/comments", verifyToken, requireModuleAction('facility', 'edit'), async (req, res) => {
   try {
     const { id } = req.params;
     const { comment } = req.body;
@@ -273,7 +274,7 @@ router.post("/:id/comments", verifyToken, async (req, res) => {
 });
 
 // Assign ticket to technician
-router.post("/:id/assign", verifyToken, async (req, res) => {
+router.post("/:id/assign", verifyToken, requireModuleAction('facility', 'approve'), async (req, res) => {
   try {
     const { id } = req.params;
     const { assignedTo, assignedTeam } = req.body;
@@ -312,7 +313,7 @@ router.post("/:id/assign", verifyToken, async (req, res) => {
 });
 
 // Delete maintenance ticket
-router.delete("/:id", verifyToken, async (req, res) => {
+router.delete("/:id", verifyToken, requireModuleAction('facility', 'delete'), async (req, res) => {
   try {
     const ticket = await MaintenanceTicket.findByIdAndDelete(req.params.id);
 

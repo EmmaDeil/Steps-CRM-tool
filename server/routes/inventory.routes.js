@@ -6,6 +6,7 @@ const InventoryItem = require('../models/InventoryItem');
 const UnitOfMeasure = require('../models/UnitOfMeasure');
 const StoreLocation = require('../models/StoreLocation');
 const { authMiddleware } = require('../middleware/auth');
+const { requireModuleAction } = require('../middleware/moduleAccess');
 const {
   addBatch,
   consumeBatchesFIFO,
@@ -115,7 +116,7 @@ async function findActiveUnitByName(unitName = '') {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 // GET fast lookup by barcode/SKU
-router.get('/scan/:code', authMiddleware, async (req, res) => {
+router.get('/scan/:code', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
   try {
     const code = req.params.code.trim();
     // Search by exact itemId or exact name (case-insensitive)
@@ -154,7 +155,7 @@ router.get('/scan/:code', authMiddleware, async (req, res) => {
 
 // GET all inventory items (paginated, filtered)
 // /api/inventory?page=1&limit=20&category=Electronics&search=laptop
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
   try {
     const { page = 1, limit = 50, search, category } = req.query;
     const pageNum   = Math.max(1, parseInt(page));
@@ -192,7 +193,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // GET low-stock items (below their reorderPoint) — MUST be before /:id route
-router.get('/alerts/low-stock', authMiddleware, async (req, res) => {
+router.get('/alerts/low-stock', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
   try {
     const items = await InventoryItem.find({
       isDeleted: false,
@@ -206,7 +207,7 @@ router.get('/alerts/low-stock', authMiddleware, async (req, res) => {
 });
 
 // GET expiring inventory batches/items
-router.get('/alerts/expiring', authMiddleware, async (req, res) => {
+router.get('/alerts/expiring', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
   try {
     const days = Math.max(1, parseInt(req.query.days || 30, 10));
     const now = new Date();
@@ -248,7 +249,7 @@ router.get('/alerts/expiring', authMiddleware, async (req, res) => {
 });
 
 // GET inventory summary for analytics dashboards
-router.get('/summary', authMiddleware, async (req, res) => {
+router.get('/summary', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
   try {
     const days = Math.max(1, parseInt(req.query.days || 30, 10));
     const now = new Date();
@@ -290,7 +291,7 @@ router.get('/summary', authMiddleware, async (req, res) => {
 });
 
 // GET list of Unit of Measure options
-router.get('/units', authMiddleware, async (req, res) => {
+router.get('/units', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
   try {
     const includeInactive = String(req.query.includeInactive || '').toLowerCase() === 'true';
     const canViewInactive = includeInactive && isAdminUser(req.user);
@@ -309,7 +310,7 @@ router.get('/units', authMiddleware, async (req, res) => {
 });
 
 // POST create Unit of Measure (admin only)
-router.post('/units', authMiddleware, async (req, res) => {
+router.post('/units', authMiddleware, requireModuleAction('inventory', 'create'), async (req, res) => {
   try {
     if (!isAdminUser(req.user)) {
       return res.status(403).json({ message: 'Only admins can create units of measure' });
@@ -366,7 +367,7 @@ router.post('/units', authMiddleware, async (req, res) => {
 });
 
 // PUT update Unit of Measure (admin only)
-router.put('/units/:unitId', authMiddleware, async (req, res) => {
+router.put('/units/:unitId', authMiddleware, requireModuleAction('inventory', 'edit'), async (req, res) => {
   try {
     if (!isAdminUser(req.user)) {
       return res.status(403).json({ message: 'Only admins can update units of measure' });
@@ -428,7 +429,7 @@ router.put('/units/:unitId', authMiddleware, async (req, res) => {
 });
 
 // DELETE deactivate Unit of Measure (admin only)
-router.delete('/units/:unitId', authMiddleware, async (req, res) => {
+router.delete('/units/:unitId', authMiddleware, requireModuleAction('inventory', 'delete'), async (req, res) => {
   try {
     if (!isAdminUser(req.user)) {
       return res.status(403).json({ message: 'Only admins can deactivate units of measure' });
@@ -449,7 +450,7 @@ router.delete('/units/:unitId', authMiddleware, async (req, res) => {
 });
 
 // GET single inventory item
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
   try {
     const item = await InventoryItem.findOne({ _id: req.params.id, isDeleted: false });
     if (!item) return res.status(404).json({ message: 'Item not found' });
@@ -460,7 +461,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // POST create new inventory item
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, requireModuleAction('inventory', 'create'), async (req, res) => {
   try {
     const errors = validateInventoryBody(req.body, true);
     const requestedUnit = String(req.body?.unit || '').trim();
@@ -544,7 +545,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // PUT update inventory item (edit mode — does NOT change quantity via this route)
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, requireModuleAction('inventory', 'edit'), async (req, res) => {
   try {
     const errors = validateInventoryBody(req.body, false);
 
@@ -623,7 +624,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
 });
 
 // POST restock — INCREMENTS quantity by the supplied amount (not overwrite)
-router.post('/:id/restock', authMiddleware, async (req, res) => {
+router.post('/:id/restock', authMiddleware, requireModuleAction('inventory', 'edit'), async (req, res) => {
   try {
     const addQty = Number(req.body.addQuantity);
     if (isNaN(addQty) || !Number.isInteger(addQty) || addQty <= 0) {
@@ -684,7 +685,7 @@ router.post('/:id/restock', authMiddleware, async (req, res) => {
 });
 
 // POST adjust — manual quantity adjustment (positive or negative delta), audit logged
-router.post('/:id/adjust', authMiddleware, async (req, res) => {
+router.post('/:id/adjust', authMiddleware, requireModuleAction('inventory', 'edit'), async (req, res) => {
   try {
     const delta  = Number(req.body.delta);
     const reason = req.body.reason || 'Manual adjustment';
@@ -721,7 +722,7 @@ router.post('/:id/adjust', authMiddleware, async (req, res) => {
 });
 
 // GET movement history for a single item
-router.get('/:id/movements', authMiddleware, async (req, res) => {
+router.get('/:id/movements', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
   try {
     const StockMovement = require('../models/StockMovement');
     const movements = await StockMovement.find({ inventoryItemId: req.params.id })
@@ -736,7 +737,7 @@ router.get('/:id/movements', authMiddleware, async (req, res) => {
 });
 
 // DELETE (soft delete) inventory item
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, requireModuleAction('inventory', 'delete'), async (req, res) => {
   try {
     const item = await InventoryItem.findOneAndUpdate(
       { _id: req.params.id, isDeleted: false },

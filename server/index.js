@@ -39,6 +39,10 @@ const BudgetCategoryModel = require('./models/BudgetCategory');
 const InventoryItemModel = require('./models/InventoryItem');
 const NotificationModel = require('./models/Notification');
 const { validatePassword, getPasswordPolicy } = require('./utils/passwordValidator');
+const {
+  filterAccessibleModules,
+  hasModuleAction,
+} = require('./utils/moduleAccess');
 
 // Static lists used to seed the DB when empty
 const DEFAULT_ROLES = [
@@ -364,6 +368,35 @@ async function start() {
   const canManageVendors = (user) =>
     hasAdminPrivileges(user) ||
     ['editor'].includes(String(user?.role || '').trim().toLowerCase());
+
+  const getRoleUserManagementPermission = async (roleName, permissionKey) => {
+    const role = await RoleModel.findOne({ name: roleName }).lean();
+    return role?.permissions?.userManagement?.[permissionKey] === true;
+  };
+
+  const hasUserManagementPermission = async (user, permissionKey) => {
+    if (hasAdminPrivileges(user)) return true;
+
+    const userOverride = user?.permissions?.userManagement?.[permissionKey];
+    if (typeof userOverride === 'boolean') return userOverride;
+
+    return getRoleUserManagementPermission(user?.role, permissionKey);
+  };
+
+  const requireUserManagementPermission = (permissionKey) => {
+    return async (req, res, next) => {
+      try {
+        const allowed = await hasUserManagementPermission(req.user, permissionKey);
+        if (!allowed) {
+          return res.status(403).json({ message: 'Insufficient permissions' });
+        }
+        next();
+      } catch (err) {
+        console.error('User-management permission check error:', err);
+        return res.status(500).json({ message: 'Permission check failed' });
+      }
+    };
+  };
 
   // ==================== HEALTH CHECK ROUTE ====================
 
@@ -1024,15 +1057,18 @@ async function start() {
     }
   });
 
-  app.get('/api/modules', async (req, res) => {
+  app.get('/api/modules', authMiddleware, async (req, res) => {
     const mods = await api.getModules();
-    res.json(mods);
+    res.json(filterAccessibleModules(req.user, mods));
   });
 
-  app.get('/api/modules/:id', async (req, res) => {
+  app.get('/api/modules/:id', authMiddleware, async (req, res) => {
     const id = req.params.id;
     const mod = await api.getModuleById(id);
     if (!mod) return res.status(404).json({ message: 'Not found' });
+    if (!hasModuleAction(req.user, mod?.name || mod?.id, 'view')) {
+      return res.status(403).json({ message: 'Insufficient module permissions' });
+    }
     res.json(mod);
   });
 
@@ -2983,7 +3019,7 @@ async function start() {
   // ==================== USER MANAGEMENT ROUTES ====================
 
   // Get all users with optional filtering
-  app.get('/api/users', authMiddleware, async (req, res) => {
+  app.get('/api/users', authMiddleware, requireUserManagementPermission('viewUsers'), async (req, res) => {
     try {
       const { role, status, search } = req.query;
       
@@ -3073,8 +3109,11 @@ async function start() {
   app.get('/api/users/:id', authMiddleware, async (req, res) => {
     try {
       const isSelf = String(req.user?._id || '') === String(req.params.id || '');
-      if (!isSelf && !hasAdminPrivileges(req.user)) {
-        return res.status(403).json({ message: 'Insufficient permissions' });
+      if (!isSelf) {
+        const allowed = await hasUserManagementPermission(req.user, 'viewUsers');
+        if (!allowed) {
+          return res.status(403).json({ message: 'Insufficient permissions' });
+        }
       }
 
       const user = await UserModel.findById(req.params.id)
@@ -3093,7 +3132,7 @@ async function start() {
   });
 
   // Create new user
-  app.post('/api/users', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
+  app.post('/api/users', authMiddleware, requireUserManagementPermission('inviteUsers'), async (req, res) => {
     try {
       const { fullName, email, role, permissions, invitedBy } = req.body;
 
@@ -3168,7 +3207,7 @@ async function start() {
   });
 
   // Update user
-  app.patch('/api/users/:id', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
+  app.patch('/api/users/:id', authMiddleware, requireUserManagementPermission('editUsers'), async (req, res) => {
     try {
       const { fullName, email, role, status, permissions } = req.body;
       
@@ -3222,7 +3261,7 @@ async function start() {
   });
 
   // Delete user
-  app.delete('/api/users/:id', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
+  app.delete('/api/users/:id', authMiddleware, requireUserManagementPermission('editUsers'), async (req, res) => {
     try {
       const user = await UserModel.findByIdAndDelete(req.params.id);
 
@@ -3247,7 +3286,7 @@ async function start() {
   });
 
   // Request password reset
-  app.post('/api/users/:id/reset-password', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
+  app.post('/api/users/:id/reset-password', authMiddleware, requireUserManagementPermission('editUsers'), async (req, res) => {
     try {
       const user = await UserModel.findById(req.params.id);
 
@@ -3277,7 +3316,7 @@ async function start() {
   });
 
   // Update user status (activate/deactivate)
-  app.patch('/api/users/:id/status', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
+  app.patch('/api/users/:id/status', authMiddleware, requireUserManagementPermission('editUsers'), async (req, res) => {
     try {
       const { status } = req.body;
 

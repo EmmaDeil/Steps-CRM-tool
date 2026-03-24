@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const IncidentReport = require('../models/IncidentReport');
 const { verifyToken } = require('../middleware/auth');
+const { requireModuleAction } = require('../middleware/moduleAccess');
 
 const parsePagination = (query) => {
   const page = Math.max(parseInt(query.page, 10) || 1, 1);
@@ -10,7 +11,7 @@ const parsePagination = (query) => {
   return { page, limit, skip };
 };
 
-router.get('/', verifyToken, async (req, res) => {
+router.get('/', verifyToken, requireModuleAction('security', 'view'), async (req, res) => {
   try {
     const { status, severity, incidentType, search } = req.query;
     const { page, limit, skip } = parsePagination(req.query);
@@ -54,7 +55,7 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
-router.get('/:id', verifyToken, async (req, res) => {
+router.get('/:id', verifyToken, requireModuleAction('security', 'view'), async (req, res) => {
   try {
     const report = await IncidentReport.findById(req.params.id).lean();
     if (!report) {
@@ -68,7 +69,7 @@ router.get('/:id', verifyToken, async (req, res) => {
   }
 });
 
-router.post('/', verifyToken, async (req, res) => {
+router.post('/', verifyToken, requireModuleAction('security', 'create'), async (req, res) => {
   try {
     const payload = {
       ...req.body,
@@ -92,7 +93,7 @@ router.post('/', verifyToken, async (req, res) => {
   }
 });
 
-router.put('/:id', verifyToken, async (req, res) => {
+router.put('/:id', verifyToken, requireModuleAction('security', 'edit'), async (req, res) => {
   try {
     const updated = await IncidentReport.findByIdAndUpdate(
       req.params.id,
@@ -115,7 +116,7 @@ router.put('/:id', verifyToken, async (req, res) => {
   }
 });
 
-router.delete('/:id', verifyToken, async (req, res) => {
+router.delete('/:id', verifyToken, requireModuleAction('security', 'delete'), async (req, res) => {
   try {
     const deleted = await IncidentReport.findByIdAndDelete(req.params.id).lean();
 

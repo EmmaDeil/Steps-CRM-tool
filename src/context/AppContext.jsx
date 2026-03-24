@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useCallback } from "react";
 import PropTypes from "prop-types";
 import { useAuth } from "./useAuth";
 import { apiService } from "../services/api";
+import { getEffectiveModulePermission } from "../utils/moduleAccess";
 
 const AppContext = createContext();
 
@@ -161,47 +162,35 @@ export const AppProvider = ({ children }) => {
     });
   };
 
-  // Check module access: per-user grants first, then role-based defaults
-  const hasModuleAccess = (moduleName) => {
-    // Admins always have full access
-    const normalizedRole = (user?.role || "").toLowerCase();
-    if (normalizedRole === "admin" || normalizedRole === "security admin") return true;
+  const getModulePermission = useCallback(
+    (moduleName) =>
+      getEffectiveModulePermission({
+        user,
+        userRole,
+        moduleName,
+      }),
+    [user, userRole],
+  );
 
-    // Check per-user module grants (set by Admin in user management)
-    const userModules = user?.permissions?.modules;
-    if (Array.isArray(userModules) && userModules.length > 0) {
-      // If explicit per-user modules are set, use them exclusively
-      return userModules.some(
-        (m) => m.access === true && (
-          m.moduleName === moduleName ||
-          String(m.moduleName).toLowerCase() === String(moduleName).toLowerCase()
-        )
-      );
-    }
+  // Check module access: per-user grants first, then role defaults.
+  const hasModuleAccess = useCallback(
+    (moduleName) => {
+      const permission = getModulePermission(moduleName);
+      return permission.access === true && permission.actions.view === true;
+    },
+    [getModulePermission],
+  );
 
-    // Fall back to role-based defaults when no per-user overrides exist
-    const rolePermissions = {
-      user: [
-        "Accounting",
-        "Inventory",
-        "Attendance",
-        "Analytics",
-        "Incident Reporting",
-      ],
-      manager: [
-        "Accounting",
-        "Inventory",
-        "HR Management",
-        "Attendance",
-        "Finance",
-        "Analytics",
-        "Incident Reporting",
-      ],
-    };
-
-    const allowedModules = rolePermissions[userRole] || [];
-    return allowedModules.includes("*") || allowedModules.includes(moduleName);
-  };
+  const canModuleAction = useCallback(
+    (moduleName, action = "view") => {
+      const permission = getModulePermission(moduleName);
+      if (!permission.access) return false;
+      if (action === "view") return permission.actions.view === true;
+      if (permission.accessLevel === "manage") return true;
+      return permission.actions?.[action] === true;
+    },
+    [getModulePermission],
+  );
 
   const value = {
     userRole,
@@ -214,6 +203,8 @@ export const AppProvider = ({ children }) => {
     addSearchHistory,
     clearSearchHistory,
     hasModuleAccess,
+    canModuleAction,
+    getModulePermission,
     // Retirement header values
     monthYear,
     setMonthYear,

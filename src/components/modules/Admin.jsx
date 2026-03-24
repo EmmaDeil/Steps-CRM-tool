@@ -9,6 +9,10 @@ import ApprovalSettings from "./ApprovalSettings";
 import SystemSettings from "./SystemSettings";
 import SkuItemManager from "./SkuItemManager";
 import StoreLocations from "./StoreLocations";
+import {
+  getRoleDefaultAccessLevel,
+  normalizeModulePermissionEntry,
+} from "../../utils/moduleAccess";
 
 const DEFAULT_ROLE_PERMISSIONS = {
   userManagement: {
@@ -52,6 +56,14 @@ const withDefaultPermissions = (permissions = {}) => ({
     ...(permissions.security || {}),
   },
 });
+
+const MODULE_ACTION_OPTIONS = [
+  { key: "create", label: "Create" },
+  { key: "edit", label: "Edit" },
+  { key: "delete", label: "Delete" },
+  { key: "approve", label: "Approve" },
+  { key: "export", label: "Export" },
+];
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -479,10 +491,22 @@ const Admin = () => {
   const handleEditUser = (userId) => {
     const user = users.find((u) => u._id === userId);
     if (user) {
+      const normalizedModules = Array.isArray(user.permissions?.modules)
+        ? user.permissions.modules
+            .map((entry) =>
+              normalizeModulePermissionEntry({
+                ...entry,
+                accessLevel:
+                  entry?.accessLevel || getRoleDefaultAccessLevel(user.role),
+              }),
+            )
+            .filter((entry) => entry.moduleId)
+        : [];
+
       setSelectedUser({
         ...user,
         permissions: user.permissions || {},
-        selectedModules: user.permissions?.modules || [],
+        selectedModules: normalizedModules,
       });
       setShowEditUserModal(true);
     }
@@ -599,18 +623,101 @@ const Admin = () => {
       });
     } else {
       // Add module
+      const accessLevel = getRoleDefaultAccessLevel(selectedUser.role);
       setSelectedUser({
         ...selectedUser,
         selectedModules: [
           ...modules,
-          {
+          normalizeModulePermissionEntry({
             moduleId: moduleId,
             moduleName: module?.name || "",
             access: true,
-          },
+            accessLevel,
+          }),
         ],
       });
     }
+  };
+
+  const getSelectedModulePermission = (module) => {
+    if (!selectedUser || !module) return null;
+    return (
+      selectedUser.selectedModules?.find((m) => m.moduleId === module.id) ||
+      null
+    );
+  };
+
+  const setModuleAccessLevel = (module, accessLevel) => {
+    if (!selectedUser || !module) return;
+
+    const modules = selectedUser.selectedModules || [];
+    const nextEntry = normalizeModulePermissionEntry({
+      moduleId: module.id,
+      moduleName: module.name,
+      access: true,
+      accessLevel,
+    });
+
+    const existingIndex = modules.findIndex((m) => m.moduleId === module.id);
+    const nextModules = [...modules];
+
+    if (existingIndex >= 0) {
+      const existing = normalizeModulePermissionEntry(
+        nextModules[existingIndex],
+      );
+      nextModules[existingIndex] = {
+        ...nextEntry,
+        actions: {
+          ...nextEntry.actions,
+          ...(existing.actions || {}),
+          view: true,
+        },
+      };
+    } else {
+      nextModules.push(nextEntry);
+    }
+
+    setSelectedUser({
+      ...selectedUser,
+      selectedModules: nextModules,
+    });
+  };
+
+  const toggleModuleAction = (module, actionKey) => {
+    if (!selectedUser || !module || actionKey === "view") return;
+
+    const modules = selectedUser.selectedModules || [];
+    const existingIndex = modules.findIndex((m) => m.moduleId === module.id);
+    const base =
+      existingIndex >= 0
+        ? normalizeModulePermissionEntry(modules[existingIndex])
+        : normalizeModulePermissionEntry({
+            moduleId: module.id,
+            moduleName: module.name,
+            access: true,
+            accessLevel: getRoleDefaultAccessLevel(selectedUser.role),
+          });
+
+    const nextEntry = {
+      ...base,
+      actions: {
+        ...base.actions,
+        [actionKey]: !base.actions?.[actionKey],
+        view: true,
+      },
+    };
+
+    const nextModules = [...modules];
+    if (existingIndex >= 0) {
+      nextModules[existingIndex] = nextEntry;
+    } else {
+      nextModules.push(nextEntry);
+    }
+
+    setSelectedUser({
+      ...selectedUser,
+      selectedModules: nextModules,
+    });
   };
 
   const hasModuleAccess = (moduleId) => {
@@ -1496,43 +1603,104 @@ const Admin = () => {
                     ) : (
                       <div className="divide-y divide-gray-200">
                         {availableModules.map((module) => (
-                          <div
-                            key={module.id}
-                            className="flex items-center justify-between p-3 hover:bg-gray-50"
-                          >
-                            <div className="flex items-center gap-3">
-                              <i
-                                className={`fa-solid ${
-                                  module.icon || "fa-cube"
-                                } text-blue-600`}
-                              ></i>
-                              <span className="font-medium text-gray-900">
-                                {module.name}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => toggleModuleAccess(module.id)}
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                hasModuleAccess(module.id)
-                                  ? "bg-blue-600"
-                                  : "bg-gray-200"
-                              }`}
-                            >
-                              <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          <div key={module.id} className="p-3 hover:bg-gray-50">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <i
+                                  className={`fa-solid ${
+                                    module.icon || "fa-cube"
+                                  } text-blue-600`}
+                                ></i>
+                                <span className="font-medium text-gray-900 truncate">
+                                  {module.name}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => toggleModuleAccess(module.id)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                   hasModuleAccess(module.id)
-                                    ? "translate-x-6"
-                                    : "translate-x-1"
+                                    ? "bg-blue-600"
+                                    : "bg-gray-200"
                                 }`}
-                              />
-                            </button>
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    hasModuleAccess(module.id)
+                                      ? "translate-x-6"
+                                      : "translate-x-1"
+                                  }`}
+                                />
+                              </button>
+                            </div>
+
+                            {hasModuleAccess(module.id) && (
+                              <div className="mt-3 pl-8 space-y-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Access Level
+                                  </label>
+                                  <select
+                                    value={
+                                      getSelectedModulePermission(module)
+                                        ?.accessLevel || "view"
+                                    }
+                                    onChange={(e) =>
+                                      setModuleAccessLevel(
+                                        module,
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="w-full sm:w-40 px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  >
+                                    <option value="view">View</option>
+                                    <option value="edit">Edit</option>
+                                    <option value="manage">Manage</option>
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-2">
+                                    Allowed Actions
+                                  </label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {MODULE_ACTION_OPTIONS.map((option) => {
+                                      const perm =
+                                        getSelectedModulePermission(module);
+                                      const isActive = Boolean(
+                                        perm?.actions?.[option.key],
+                                      );
+                                      return (
+                                        <button
+                                          key={`${module.id}-${option.key}`}
+                                          type="button"
+                                          onClick={() =>
+                                            toggleModuleAction(
+                                              module,
+                                              option.key,
+                                            )
+                                          }
+                                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                            isActive
+                                              ? "bg-blue-100 border-blue-300 text-blue-700"
+                                              : "bg-white border-gray-300 text-gray-600"
+                                          }`}
+                                        >
+                                          {option.label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Select which modules this user can access
+                    Choose module access and action-level permissions for this
+                    user
                   </p>
                 </div>
 

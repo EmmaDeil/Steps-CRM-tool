@@ -5,10 +5,11 @@ const InventoryIssue = require('../models/InventoryIssue');
 const InventoryItem  = require('../models/InventoryItem');
 const Invoice        = require('../models/Invoice');
 const { authMiddleware } = require('../middleware/auth');
+const { requireModuleAction } = require('../middleware/moduleAccess');
 const { consumeBatchesFIFO, syncItemQuantityAndDates } = require('../utils/inventoryBatchUtils');
 
 // ── GET all issues (paginated, filterable) ──────────────────────────────────
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
   try {
     const { page = 1, limit = 20, status, search } = req.query;
     const pageNum  = Math.max(1, parseInt(page));
@@ -38,7 +39,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // ── GET single issue ────────────────────────────────────────────────────────
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
   try {
     const issue = await InventoryIssue.findById(req.params.id)
       .populate('issuedBy', 'firstName lastName')
@@ -51,7 +52,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // ── POST create a manual inventory issue ────────────────────────────────────
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, requireModuleAction('inventory', 'create'), async (req, res) => {
   try {
     const { issuedTo, issuedToType, lineItems, notes } = req.body;
     if (!issuedTo) return res.status(400).json({ message: 'issuedTo is required' });
@@ -101,7 +102,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // ── POST generate invoice from issue ───────────────────────────────────────
-router.post('/:id/generate-invoice', authMiddleware, async (req, res) => {
+router.post('/:id/generate-invoice', authMiddleware, requireModuleAction('inventory', 'approve'), async (req, res) => {
   try {
     const issue = await InventoryIssue.findById(req.params.id);
     if (!issue) return res.status(404).json({ message: 'Issue not found' });
@@ -148,7 +149,7 @@ router.post('/:id/generate-invoice', authMiddleware, async (req, res) => {
 });
 
 // ── DELETE / cancel an issue ────────────────────────────────────────────────
-router.post('/:id/cancel', authMiddleware, async (req, res) => {
+router.post('/:id/cancel', authMiddleware, requireModuleAction('inventory', 'delete'), async (req, res) => {
   try {
     const issue = await InventoryIssue.findById(req.params.id);
     if (!issue) return res.status(404).json({ message: 'Issue not found' });
