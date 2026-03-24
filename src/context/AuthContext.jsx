@@ -1,9 +1,11 @@
-import { createContext, useState, useEffect, useCallback } from "react";
+import { createContext, useState, useEffect, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import apiService from "../services/api";
 import { toast } from "react-hot-toast";
 
 const AuthContext = createContext(null);
+
+const ACTIVITY_WRITE_INTERVAL_MS = 15000;
 
 // Session configuration
 const SESSION_CONFIG = {
@@ -25,14 +27,19 @@ export const AuthProvider = ({ children }) => {
     !!localStorage.getItem("authToken"),
   );
   const [_sessionConfig, setSessionConfig] = useState(SESSION_CONFIG);
+  const lastActivityWriteRef = useRef(0);
 
   // Update last activity timestamp
   const updateActivity = useCallback(() => {
-    if (isAuthenticated) {
-      const now = Date.now();
-      setSessionConfig((prev) => ({ ...prev, lastActivity: now }));
-      localStorage.setItem("lastActivity", now.toString());
-    }
+    if (!isAuthenticated) return;
+
+    const now = Date.now();
+    const elapsed = now - lastActivityWriteRef.current;
+    if (elapsed < ACTIVITY_WRITE_INTERVAL_MS) return;
+
+    lastActivityWriteRef.current = now;
+    setSessionConfig((prev) => ({ ...prev, lastActivity: now }));
+    localStorage.setItem("lastActivity", now.toString());
   }, [isAuthenticated]);
 
   // Track user activity to maintain session
@@ -40,7 +47,7 @@ export const AuthProvider = ({ children }) => {
     if (isAuthenticated) {
       const events = ["mousedown", "keydown", "scroll", "touchstart"];
       events.forEach((event) => {
-        document.addEventListener(event, updateActivity);
+        document.addEventListener(event, updateActivity, { passive: true });
       });
 
       return () => {

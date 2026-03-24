@@ -2394,7 +2394,7 @@ const MaterialRequests = () => {
                             value={item.amount}
                             thousandSeparator
                             allowNegative={false}
-                            decimalScale={2}
+                            decimalScale={1}
                             fixedDecimalScale
                             placeholder="0.00"
                             prefix={getCurrencySymbol(
@@ -2857,7 +2857,7 @@ const MaterialRequests = () => {
                     },
                   },
                   {
-                    label: `Request #${selectedRequest.requestId || selectedRequest._id}`,
+                    label: `${selectedRequest.requestId || selectedRequest._id}`,
                     // icon: "fa-eye",
                   },
                 ]}
