@@ -435,6 +435,85 @@ const PurchaseOrders = () => {
     }
   };
 
+  const resolveModuleIdByNames = useCallback(
+    async (candidateNames = []) => {
+      const normalize = (value) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
+
+      const targets = new Set(candidateNames.map(normalize).filter(Boolean));
+
+      const fromContext = Array.isArray(modules) ? modules : [];
+      const directMatch = fromContext.find((module) => {
+        const name = normalize(module?.name);
+        const component = normalize(module?.componentName);
+        return targets.has(name) || targets.has(component);
+      });
+
+      if (directMatch?.id || directMatch?._id) {
+        return String(directMatch.id || directMatch._id);
+      }
+
+      try {
+        const modsRes = await apiService.get("/api/modules");
+        const fetched = Array.isArray(modsRes)
+          ? modsRes
+          : Array.isArray(modsRes?.data)
+            ? modsRes.data
+            : [];
+
+        const fetchedMatch = fetched.find((module) => {
+          const name = normalize(module?.name);
+          const component = normalize(module?.componentName);
+          return targets.has(name) || targets.has(component);
+        });
+
+        if (fetchedMatch?.id || fetchedMatch?._id) {
+          return String(fetchedMatch.id || fetchedMatch._id);
+        }
+      } catch {
+        // Ignore and let caller decide fallback.
+      }
+
+      return "";
+    },
+    [modules],
+  );
+
+  const openInvoiceFromActivity = useCallback(
+    async (invoiceNumber) => {
+      const normalizedInvoiceNumber = String(invoiceNumber || "").trim();
+      if (!normalizedInvoiceNumber) return;
+
+      const financeModuleId = await resolveModuleIdByNames([
+        "Finance",
+        "Accounting",
+      ]);
+
+      if (!financeModuleId) {
+        toast.error("Finance module not found.");
+        return;
+      }
+
+      sessionStorage.setItem("financeOpenInvoicing", "1");
+      sessionStorage.setItem("financeInvoiceSearch", normalizedInvoiceNumber);
+      sessionStorage.setItem(
+        "financeInvoiceExactNumber",
+        normalizedInvoiceNumber,
+      );
+
+      navigate(`/home/${financeModuleId}`, {
+        state: {
+          openInvoicing: true,
+          invoiceSearch: normalizedInvoiceNumber,
+          invoiceExactNumber: normalizedInvoiceNumber,
+        },
+      });
+    },
+    [navigate, resolveModuleIdByNames],
+  );
+
   const openPurchaseOrderByNumber = useCallback(
     async (poNumber) => {
       if (!poNumber) return;
@@ -1673,7 +1752,9 @@ const PurchaseOrders = () => {
                                 {entry.author || "System"}
                               </span>{" "}
                               {String(entry.text || "Updated purchase order")
-                                .split(/(@\w+(?:\s\w+)?|Invoice #PO-[\w-]+)/)
+                                .split(
+                                  /(@\w+(?:\s\w+)?|Invoice #[a-zA-Z0-9_-]+)/,
+                                )
                                 .map((part, pIdx) => {
                                   if (/^@\w+/.test(part)) {
                                     return (
@@ -1687,34 +1768,14 @@ const PurchaseOrders = () => {
                                   } else if (
                                     /^Invoice #[a-zA-Z0-9_-]+/.test(part)
                                   ) {
-                                    const invNum = part.replace(
-                                      "Invoice #",
-                                      "",
-                                    );
+                                    const invNum = part.replace("Invoice-", "");
                                     return (
                                       <button
                                         key={pIdx}
                                         type="button"
-                                        onClick={() => {
-                                          const financeModule = modules?.find(
-                                            (m) => m.name === "Finance",
-                                          );
-                                          if (financeModule) {
-                                            navigate(
-                                              `/home/${financeModule.id || financeModule._id}`,
-                                              {
-                                                state: {
-                                                  openInvoicing: true,
-                                                  invoiceSearch: invNum,
-                                                },
-                                              },
-                                            );
-                                          } else {
-                                            toast.error(
-                                              "Finance module not found.",
-                                            );
-                                          }
-                                        }}
+                                        onClick={() =>
+                                          openInvoiceFromActivity(invNum)
+                                        }
                                         className="inline-flex items-center text-[#137fec] hover:text-blue-700 hover:underline font-semibold mx-0.5"
                                       >
                                         {part}
@@ -1749,7 +1810,7 @@ const PurchaseOrders = () => {
                       onClick={addPoLineItem}
                       className="text-xs font-semibold text-[#137fec] hover:text-[#0d6efd]"
                     >
-                      + Add Item
+                      +
                     </button>
                   )}
                   <button
@@ -1867,7 +1928,7 @@ const PurchaseOrders = () => {
                               <input
                                 type="number"
                                 min="0"
-                                step="0.01"
+                                step="0.0"
                                 value={item.amount || 0}
                                 onChange={(e) =>
                                   updatePoLineItem(

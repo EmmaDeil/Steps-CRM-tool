@@ -133,6 +133,7 @@ const materialRequestSchema = new mongoose.Schema(
           'rejection',
           'created',
           'po_created',
+          'rfq_created',
         ],
         default: 'comment'
       },
@@ -142,6 +143,8 @@ const materialRequestSchema = new mongoose.Schema(
       timestamp: { type: Date, default: Date.now },
       poId: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder' },
       poNumber: { type: String },
+      rfqId: { type: mongoose.Schema.Types.ObjectId, ref: 'RFQ' },
+      rfqNumber: { type: String },
       approvalLevel: { type: Number },
       pendingApprover: { type: String },
     }],

@@ -209,15 +209,63 @@ const Invoicing = ({ onBackToFinance }) => {
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
   const [selectedInvoiceView, setSelectedInvoiceView] = useState(null);
+  const [pendingExactInvoiceNumber, setPendingExactInvoiceNumber] =
+    useState("");
 
   const location = useLocation();
 
   useEffect(() => {
+    const sessionInvoiceSearch = sessionStorage.getItem("financeInvoiceSearch");
+    const sessionInvoiceExact = sessionStorage.getItem(
+      "financeInvoiceExactNumber",
+    );
+
     if (location.state?.openInvoicing && location.state?.invoiceSearch) {
       setActiveTab("invoices");
       setInvoiceSearch(location.state.invoiceSearch);
+      setPendingExactInvoiceNumber(location.state.invoiceExactNumber || "");
+      if (sessionInvoiceSearch) {
+        sessionStorage.removeItem("financeInvoiceSearch");
+      }
+      if (sessionInvoiceExact) {
+        sessionStorage.removeItem("financeInvoiceExactNumber");
+      }
+      return;
+    }
+
+    if (sessionInvoiceSearch) {
+      setActiveTab("invoices");
+      setInvoiceSearch(sessionInvoiceSearch);
+      setPendingExactInvoiceNumber(sessionInvoiceExact || "");
+      sessionStorage.removeItem("financeInvoiceSearch");
+      if (sessionInvoiceExact) {
+        sessionStorage.removeItem("financeInvoiceExactNumber");
+      }
     }
   }, [location.state]);
+
+  useEffect(() => {
+    if (!pendingExactInvoiceNumber || !Array.isArray(invoices)) return;
+
+    const target = String(pendingExactInvoiceNumber || "").toLowerCase();
+    if (!target) return;
+
+    const exact = invoices.find((invoice) => {
+      const candidates = [
+        invoice?.invoiceNumber,
+        invoice?.apInvoiceNumber,
+        invoice?.poNumber,
+      ]
+        .map((value) => String(value || "").toLowerCase())
+        .filter(Boolean);
+      return candidates.includes(target);
+    });
+
+    if (exact) {
+      setSelectedInvoiceView(exact);
+      setPendingExactInvoiceNumber("");
+    }
+  }, [invoices, pendingExactInvoiceNumber]);
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchIssues = useCallback(

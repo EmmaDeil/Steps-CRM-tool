@@ -63,11 +63,12 @@ router.post('/material-requests/:id/generate-rfq', async (req, res) => {
  */
 router.get('/rfqs', async (req, res) => {
   try {
-    const { status, vendorId, page = 1, limit = 20 } = req.query;
+    const { status, vendorId, rfqNumber, page = 1, limit = 20 } = req.query;
     const query = {};
 
     if (status) query.status = status;
     if (vendorId) query['vendor.vendorId'] = vendorId;
+    if (rfqNumber) query.rfqNumber = String(rfqNumber).trim();
 
     const skip = (page - 1) * limit;
     const rfqs = await RFQModel.find(query)
@@ -89,6 +90,75 @@ router.get('/rfqs', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching RFQs:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Update RFQ basic editable fields
+ * PUT /api/workflow/rfqs/:id
+ */
+router.put('/rfqs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      status,
+      notes,
+      requiredByDate,
+      expiryDate,
+    } = req.body || {};
+    const user = req.user || { userId: 'system', userName: 'System' };
+
+    const rfq = await RFQModel.findById(id);
+    if (!rfq) {
+      return res.status(404).json({ success: false, error: 'RFQ not found' });
+    }
+
+    const allowedStatuses = new Set([
+      'draft',
+      'sent',
+      'quotation_received',
+      'quotation_accepted',
+      'po_generated',
+      'cancelled',
+    ]);
+
+    if (status !== undefined) {
+      const nextStatus = String(status || '').trim();
+      if (!allowedStatuses.has(nextStatus)) {
+        return res.status(400).json({ success: false, error: 'Invalid RFQ status' });
+      }
+      rfq.status = nextStatus;
+      if (nextStatus === 'sent' && !rfq.sentDate) {
+        rfq.sentDate = new Date();
+      }
+    }
+
+    if (notes !== undefined) {
+      rfq.notes = String(notes || '');
+    }
+
+    if (requiredByDate !== undefined) {
+      rfq.requiredByDate = requiredByDate ? new Date(requiredByDate) : null;
+    }
+
+    if (expiryDate !== undefined) {
+      rfq.expiryDate = expiryDate ? new Date(expiryDate) : null;
+    }
+
+    rfq.activities.push({
+      type: 'created',
+      author: user.userName || 'System',
+      authorId: user.userId,
+      description: 'RFQ updated',
+      timestamp: new Date(),
+    });
+
+    await rfq.save();
+
+    res.json({ success: true, message: 'RFQ updated successfully', data: rfq });
+  } catch (error) {
+    console.error('Error updating RFQ:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

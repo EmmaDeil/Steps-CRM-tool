@@ -47,6 +47,10 @@ const MaterialRequests = () => {
   const [vendors, setVendors] = useState([]);
   const [selectedRfqVendorIds, setSelectedRfqVendorIds] = useState([]);
   const [sendingRfq, setSendingRfq] = useState(false);
+  const [showRfqEditModal, setShowRfqEditModal] = useState(false);
+  const [loadingRfqDetails, setLoadingRfqDetails] = useState(false);
+  const [savingRfqEdit, setSavingRfqEdit] = useState(false);
+  const [rfqEditData, setRfqEditData] = useState(null);
   const [creatingPo, setCreatingPo] = useState(false);
 
   // Form state
@@ -1356,6 +1360,50 @@ const MaterialRequests = () => {
     [selectedRequest],
   );
 
+  const selectedPurchaseOrderLinks = useMemo(() => {
+    if (!selectedRequest) return [];
+    const activities = Array.isArray(selectedRequest.activities)
+      ? selectedRequest.activities
+      : [];
+
+    const seen = new Set();
+    return [...activities]
+      .reverse()
+      .filter((activity) => {
+        const number = String(activity?.poNumber || "").trim();
+        if (!number) return false;
+        if (seen.has(number)) return false;
+        seen.add(number);
+        return true;
+      })
+      .map((activity) => ({
+        poNumber: activity.poNumber,
+        poId: activity.poId,
+      }));
+  }, [selectedRequest]);
+
+  const selectedRfqLinks = useMemo(() => {
+    if (!selectedRequest) return [];
+    const activities = Array.isArray(selectedRequest.activities)
+      ? selectedRequest.activities
+      : [];
+
+    const seen = new Set();
+    return [...activities]
+      .reverse()
+      .filter((activity) => {
+        const number = String(activity?.rfqNumber || "").trim();
+        if (!number) return false;
+        if (seen.has(number)) return false;
+        seen.add(number);
+        return true;
+      })
+      .map((activity) => ({
+        rfqNumber: activity.rfqNumber,
+        rfqId: activity.rfqId,
+      }));
+  }, [selectedRequest]);
+
   const openPurchaseOrderFromActivity = async (poNumber, poId) => {
     let poModuleId = 11;
 
@@ -1410,6 +1458,100 @@ const MaterialRequests = () => {
     navigate(`/home/${poModuleId}`);
   };
 
+  const openRfqFromActivity = async (rfqNumber, rfqId) => {
+    const normalizedRfqNumber = String(rfqNumber || "").trim();
+    const candidateRfqId =
+      typeof rfqId === "string" ? rfqId : rfqId?._id || rfqId?.id || "";
+    const normalizedRfqId = String(candidateRfqId || "").trim();
+    const hasUsableRfqId =
+      normalizedRfqId &&
+      normalizedRfqId !== "[object Object]" &&
+      /^[a-fA-F0-9]{24}$/.test(normalizedRfqId);
+
+    setLoadingRfqDetails(true);
+    try {
+      let rfqResponse = null;
+
+      if (hasUsableRfqId) {
+        rfqResponse = await apiService.get(
+          `/api/workflow/rfqs/${normalizedRfqId}`,
+        );
+      } else if (normalizedRfqNumber) {
+        const listResponse = await apiService.get("/api/workflow/rfqs", {
+          params: { rfqNumber: normalizedRfqNumber, limit: 5 },
+        });
+        const list = Array.isArray(listResponse?.data?.rfqs)
+          ? listResponse.data.rfqs
+          : Array.isArray(listResponse?.rfqs)
+            ? listResponse.rfqs
+            : Array.isArray(listResponse?.data?.data?.rfqs)
+              ? listResponse.data.data.rfqs
+              : Array.isArray(listResponse?.data)
+                ? listResponse.data
+                : [];
+        const match = list.find(
+          (entry) =>
+            String(entry?.rfqNumber || "").toLowerCase() ===
+            normalizedRfqNumber.toLowerCase(),
+        );
+        if (match?._id || match?.id) {
+          rfqResponse = await apiService.get(
+            `/api/workflow/rfqs/${match._id || match.id}`,
+          );
+        }
+      }
+
+      const rfq = rfqResponse?.data || rfqResponse?.data?.data || rfqResponse;
+      if (!rfq?._id && !rfq?.id) {
+        toast.error("RFQ not found");
+        return;
+      }
+
+      setRfqEditData({
+        id: String(rfq._id || rfq.id || ""),
+        rfqNumber: rfq.rfqNumber || normalizedRfqNumber || "",
+        vendorName: rfq?.vendor?.vendorName || "",
+        status: rfq.status || "draft",
+        notes: rfq.notes || "",
+        requiredByDate: rfq.requiredByDate
+          ? new Date(rfq.requiredByDate).toISOString().slice(0, 10)
+          : "",
+        expiryDate: rfq.expiryDate
+          ? new Date(rfq.expiryDate).toISOString().slice(0, 10)
+          : "",
+      });
+      setShowRfqEditModal(true);
+    } catch {
+      toast.error("Failed to open RFQ");
+    } finally {
+      setLoadingRfqDetails(false);
+    }
+  };
+
+  const handleSaveRfqEdit = async () => {
+    if (!rfqEditData?.id) return;
+
+    setSavingRfqEdit(true);
+    try {
+      const payload = {
+        status: rfqEditData.status,
+        notes: rfqEditData.notes || "",
+        requiredByDate: rfqEditData.requiredByDate || null,
+        expiryDate: rfqEditData.expiryDate || null,
+      };
+
+      await apiService.put(`/api/workflow/rfqs/${rfqEditData.id}`, payload);
+
+      toast.success("RFQ updated successfully");
+      setShowRfqEditModal(false);
+      setRfqEditData(null);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Failed to update RFQ");
+    } finally {
+      setSavingRfqEdit(false);
+    }
+  };
+
   useEffect(() => {
     if (loading || requests.length === 0) return;
 
@@ -1455,7 +1597,7 @@ const MaterialRequests = () => {
       accessorKey: "requestId",
       cell: (req) => (
         <span className="text-sm font-semibold text-[#137fec]">
-          #{req.requestId}
+          {req.requestId}
         </span>
       ),
     },
@@ -2729,7 +2871,7 @@ const MaterialRequests = () => {
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-3">
                       <h1 className="text-[#111418] text-3xl font-bold leading-tight tracking-tight">
-                        Material Request #
+                        {/* Material Request # */}
                         {selectedRequest.requestId || selectedRequest._id}
                       </h1>
                       {Array.isArray(selectedRequest.attachments) &&
@@ -2771,6 +2913,32 @@ const MaterialRequests = () => {
                         minute: "2-digit",
                       })}
                     </p>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {selectedPurchaseOrderLinks.map((po) => (
+                        <button
+                          key={String(po.poNumber)}
+                          type="button"
+                          onClick={() =>
+                            openPurchaseOrderFromActivity(po.poNumber, po.poId)
+                          }
+                          className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                        >
+                          PO: {po.poNumber}
+                        </button>
+                      ))}
+                      {selectedRfqLinks.map((rfq) => (
+                        <button
+                          key={String(rfq.rfqNumber)}
+                          type="button"
+                          onClick={() =>
+                            openRfqFromActivity(rfq.rfqNumber, rfq.rfqId)
+                          }
+                          className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100"
+                        >
+                          RFQ: {rfq.rfqNumber}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -3091,7 +3259,7 @@ const MaterialRequests = () => {
                       <div className="flex items-center gap-2">
                         <i className="fa-solid fa-box text-gray-500"></i>
                         <h3 className="text-lg font-bold text-[#111418]">
-                          Material Details
+                          Request Details
                         </h3>
                       </div>
                       <span className="text-sm text-gray-500 font-medium">
@@ -3158,7 +3326,7 @@ const MaterialRequests = () => {
                               className="px-6 py-4 text-sm font-bold text-right text-[#111418] uppercase"
                               colSpan="5"
                             >
-                              Total Estimated Cost
+                              Total Cost
                             </td>
                             <td className="px-6 py-4 text-sm font-bold text-right text-[#137fec]">
                               {formatCurrency(
@@ -3392,6 +3560,7 @@ const MaterialRequests = () => {
                               approval: "fa-circle-check text-green-600",
                               rejection: "fa-circle-xmark text-red-500",
                               po_created: "fa-file-invoice text-indigo-600",
+                              rfq_created: "fa-file-signature text-sky-600",
                             };
                             const icon =
                               iconMap[entry.type] ||
@@ -3410,6 +3579,22 @@ const MaterialRequests = () => {
                                       {entry.author}
                                     </span>{" "}
                                     {entry.text}
+                                    {entry.type === "rfq_created" &&
+                                      entry.rfqNumber && (
+                                        <button
+                                          type="button"
+                                          disabled={loadingRfqDetails}
+                                          onClick={() =>
+                                            openRfqFromActivity(
+                                              entry.rfqNumber,
+                                              entry.rfqId,
+                                            )
+                                          }
+                                          className="ml-2 text-[#137fec] hover:text-[#0d6efd] underline font-semibold disabled:opacity-60"
+                                        >
+                                          {entry.rfqNumber}
+                                        </button>
+                                      )}
                                     {entry.type === "po_created" &&
                                       entry.poNumber && (
                                         <button
@@ -3877,6 +4062,150 @@ const MaterialRequests = () => {
                 className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
                 {sendingRfq ? "Sending..." : "Send RFQ"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRfqEditModal && rfqEditData && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#111418]">
+                Edit RFQ {rfqEditData.rfqNumber || ""}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRfqEditModal(false);
+                  setRfqEditData(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-[#617589]">
+                    Vendor
+                  </label>
+                  <p className="mt-1 text-sm text-[#111418]">
+                    {rfqEditData.vendorName || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-[#617589]">
+                    RFQ Number
+                  </label>
+                  <p className="mt-1 text-sm text-[#111418]">
+                    {rfqEditData.rfqNumber || "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-[#617589]">
+                    Status
+                  </label>
+                  <select
+                    value={rfqEditData.status}
+                    onChange={(e) =>
+                      setRfqEditData((prev) => ({
+                        ...prev,
+                        status: e.target.value,
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="sent">Sent</option>
+                    <option value="quotation_received">
+                      Quotation Received
+                    </option>
+                    <option value="quotation_accepted">
+                      Quotation Accepted
+                    </option>
+                    <option value="po_generated">PO Generated</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-[#617589]">
+                    Required By Date
+                  </label>
+                  <input
+                    type="date"
+                    value={rfqEditData.requiredByDate}
+                    onChange={(e) =>
+                      setRfqEditData((prev) => ({
+                        ...prev,
+                        requiredByDate: e.target.value,
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-[#617589]">
+                    Expiry Date
+                  </label>
+                  <input
+                    type="date"
+                    value={rfqEditData.expiryDate}
+                    onChange={(e) =>
+                      setRfqEditData((prev) => ({
+                        ...prev,
+                        expiryDate: e.target.value,
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#617589]">
+                  Notes
+                </label>
+                <textarea
+                  rows={4}
+                  value={rfqEditData.notes}
+                  onChange={(e) =>
+                    setRfqEditData((prev) => ({
+                      ...prev,
+                      notes: e.target.value,
+                    }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRfqEditModal(false);
+                  setRfqEditData(null);
+                }}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveRfqEdit}
+                disabled={savingRfqEdit}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {savingRfqEdit ? "Saving..." : "Save RFQ"}
               </button>
             </div>
           </div>

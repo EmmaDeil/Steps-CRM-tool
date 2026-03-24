@@ -219,6 +219,14 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
     poLineItems,
   ]);
 
+  const sourceHeadingLabel = useMemo(() => {
+    const firstRow = sourceRows[0] || {};
+    const mrId =
+      String(firstRow.materialRequestSource || "N/A").trim() || "N/A";
+    const poId = String(firstRow.purchaseOrderSource || "N/A").trim() || "N/A";
+    return `${mrId} -> ${poId}`;
+  }, [sourceRows]);
+
   const openModuleByName = (targetName) => {
     const normalize = (value) =>
       String(value || "")
@@ -566,7 +574,7 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
           <div className="bg-white rounded-lg border border-slate-200 p-6">
             <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
               <i className="fa-solid fa-diagram-project text-primary"></i>
-              Requested Line Items and Sources (MR {"->"} PO)
+              {sourceHeadingLabel}
             </h3>
 
             {sourceRows.length > 0 ? (
@@ -588,12 +596,6 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                       </th>
                       <th className="px-4 py-3 text-right font-semibold">
                         Line Total
-                      </th>
-                      <th className="px-4 py-3 text-left font-semibold">
-                        Material Request Source
-                      </th>
-                      <th className="px-4 py-3 text-left font-semibold">
-                        Purchase Order Source
                       </th>
                     </tr>
                   </thead>
@@ -618,37 +620,6 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                           {row.poTotal
                             ? formatCurrency(row.poTotal, { currency })
                             : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {row.materialRequestSourceId ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openMaterialRequestSource(
-                                  row.materialRequestSourceId,
-                                )
-                              }
-                              className="text-primary hover:underline font-semibold"
-                            >
-                              {row.materialRequestSource}
-                            </button>
-                          ) : (
-                            row.materialRequestSource
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openPurchaseOrderSource(
-                                row.purchaseOrderSourceId,
-                                row.purchaseOrderSource,
-                              )
-                            }
-                            className="text-primary hover:underline font-semibold"
-                          >
-                            {row.purchaseOrderSource}
-                          </button>
                         </td>
                       </tr>
                     ))}

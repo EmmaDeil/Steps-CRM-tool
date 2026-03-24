@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const PDFDocument = require('pdfkit');
 const MaterialRequest = require('../models/MaterialRequest');
 const PurchaseOrder = require('../models/PurchaseOrder');
+const RFQ = require('../models/RFQ');
 const BudgetCategory = require('../models/BudgetCategory');
 const Vendor = require('../models/Vendor');
 const SystemSettings = require('../models/SystemSettings');
@@ -628,6 +629,79 @@ router.post('/material-requests/:id/generate-rfq', authMiddleware, async (req, r
     const pdfBuffer = await buildRfqPdfBuffer(request, recipients);
     const actorName = req.user?.fullName || req.user?.email || 'System';
 
+    const existingRfqs = await RFQ.find({ materialRequestId: request._id })
+      .select('vendor.vendorId')
+      .lean();
+    const existingVendorIdSet = new Set(
+      (existingRfqs || [])
+        .map((rfq) => String(rfq?.vendor?.vendorId || ''))
+        .filter(Boolean),
+    );
+
+    const createdRfqs = [];
+    for (const vendor of recipients) {
+      const vendorObjectId = String(vendor?._id || '');
+      if (!vendorObjectId || existingVendorIdSet.has(vendorObjectId)) {
+        continue;
+      }
+
+      const rfq = await RFQ.create({
+        materialRequestId: request._id,
+        requestType: 'store',
+        vendor: {
+          vendorId: vendor._id,
+          vendorName: vendor.companyName || 'Vendor',
+          vendorEmail: vendor.email || '',
+          vendorPhone: vendor.phone || '',
+        },
+        requestedBy: {
+          userId: String(req.user?._id || ''),
+          userName: actorName,
+          userEmail: req.user?.email || '',
+        },
+        department: request.department || '',
+        currency: request.currency || 'NGN',
+        exchangeRateToNgn: Number(request.exchangeRateToNgn) || 1,
+        lineItems: (request.lineItems || []).map((item) => ({
+          itemName: item.itemName,
+          quantity: Number(item.quantity) || 0,
+          quantityType: item.quantityType,
+          estimatedAmount: Number(item.amount) || 0,
+          description: item.description || '',
+        })),
+        totalEstimatedAmount: (request.lineItems || []).reduce(
+          (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.amount) || 0),
+          0,
+        ),
+        totalEstimatedAmountNgn: Number(request.totalAmountNgn) || 0,
+        requiredByDate: request.requiredByDate || null,
+        expiryDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        status: 'sent',
+        sentDate: new Date(),
+        notes: request.message || '',
+        activities: [
+          {
+            type: 'created',
+            author: actorName,
+            authorId: req.user?._id,
+            description: `RFQ created from Material Request ${request.requestId || request._id}`,
+          },
+          {
+            type: 'sent',
+            author: actorName,
+            authorId: req.user?._id,
+            description: `RFQ sent to ${vendor.companyName || 'vendor'}`,
+          },
+        ],
+      });
+
+      createdRfqs.push({
+        id: rfq._id,
+        number: rfq.rfqNumber,
+      });
+      existingVendorIdSet.add(vendorObjectId);
+    }
+
     const sendResults = [];
     for (const vendor of recipients) {
       try {
@@ -663,6 +737,17 @@ router.post('/material-requests/:id/generate-rfq', authMiddleware, async (req, r
 
     const successCount = sendResults.filter((r) => r.success).length;
     request.activities = Array.isArray(request.activities) ? request.activities : [];
+    createdRfqs.forEach((rfq) => {
+      request.activities.push({
+        type: 'rfq_created',
+        author: actorName,
+        authorId: req.user?._id,
+        text: `RFQ ${rfq.number} created`,
+        timestamp: new Date(),
+        rfqId: rfq.id,
+        rfqNumber: rfq.number,
+      });
+    });
     request.activities.push({
       type: 'status_change',
       author: actorName,

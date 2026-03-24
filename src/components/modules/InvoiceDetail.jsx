@@ -1,8 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { formatCurrency } from "../../services/currency";
-import { useNavigate } from "react-router-dom";
-import { useAppContext } from "../../context/useAppContext";
-import toast from "react-hot-toast";
+import { apiService } from "../../services/api";
 
 const StatusBadge = ({ status }) => {
   const map = {
@@ -23,54 +21,46 @@ const StatusBadge = ({ status }) => {
 };
 
 const InvoiceDetail = ({ invoice }) => {
-  const navigate = useNavigate();
-  const { modules } = useAppContext();
   // Determine if this is an AR Invoice or an AP PO
   const isAP = invoice._isAP;
+  const [apVendorName, setApVendorName] = useState("");
+  const [apPoDetails, setApPoDetails] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchApVendor = async () => {
+      if (!isAP) return;
+
+      const poId = String(invoice?._id || invoice?.id || "").trim();
+      if (!poId) return;
+
+      try {
+        const response = await apiService.get(`/api/purchase-orders/${poId}`);
+        const po = response?.data || response;
+        const vendorFromPo = String(po?.vendor || "").trim();
+        if (isMounted) {
+          setApVendorName(vendorFromPo);
+          setApPoDetails(po || null);
+        }
+      } catch {
+        if (isMounted) {
+          setApVendorName("");
+          setApPoDetails(null);
+        }
+      }
+    };
+
+    fetchApVendor();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAP, invoice?._id, invoice?.id]);
 
   const paymentHistory = Array.isArray(invoice?.paymentHistory)
     ? invoice.paymentHistory
     : [];
-
-  const fullPaymentCompletedDate =
-    invoice?.fullyPaidAt ||
-    paymentHistory
-      .slice()
-      .reverse()
-      .find((entry) => Number(entry?.balanceAfter || 0) <= 0 && entry?.paidAt)
-      ?.paidAt ||
-    null;
-
-  const partialPaymentEntries = paymentHistory
-    .filter((entry) => {
-      const pct = Number(entry?.percentage || 0);
-      const balanceAfter = Number(entry?.balanceAfter);
-      const isPartialByPct = pct > 0 && pct < 100;
-      const isPartialByBalance =
-        Number.isFinite(balanceAfter) && balanceAfter > 0;
-      return entry?.paidAt && (isPartialByPct || isPartialByBalance);
-    })
-    .sort(
-      (a, b) => new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime(),
-    );
-
-  const firstPartialPaymentDate = (() => {
-    const firstPartialFromHistory = partialPaymentEntries[0]?.paidAt || null;
-    const firstPartial =
-      firstPartialFromHistory || invoice?.firstPartiallyPaidAt || null;
-
-    if (!firstPartial || !fullPaymentCompletedDate) return firstPartial;
-
-    const firstTime = new Date(firstPartial).getTime();
-    const fullTime = new Date(fullPaymentCompletedDate).getTime();
-    if (Number.isNaN(firstTime) || Number.isNaN(fullTime)) return firstPartial;
-
-    if (firstTime === fullTime && partialPaymentEntries.length === 0) {
-      return null;
-    }
-
-    return firstPartial;
-  })();
 
   const requestSourceId =
     invoice?.linkedMaterialRequestId?.requestId ||
@@ -78,61 +68,18 @@ const InvoiceDetail = ({ invoice }) => {
     "N/A";
   const purchaseOrderSource =
     invoice?.poNumber || invoice?.invoiceNumber || "N/A";
-  const purchaseOrderSourceId = invoice?._id || invoice?.id || "";
-
-  const openModuleByName = (targetName) => {
-    const normalize = (value) =>
-      String(value || "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
-
-    const aliasMap = {
-      materialrequests: ["materialrequests", "materialrequest"],
-      purchaseorders: ["purchaseorders", "purchaseorder"],
-    };
-
-    const normalizedTarget = normalize(targetName);
-    const candidates = aliasMap[normalizedTarget] || [normalizedTarget];
-
-    const target = (modules || []).find((moduleItem) => {
-      const byName = normalize(moduleItem?.name);
-      const byComponent = normalize(moduleItem?.componentName);
-      return candidates.includes(byName) || candidates.includes(byComponent);
-    });
-
-    const moduleId = target?.id || target?._id;
-    if (!moduleId) {
-      toast.error(`${targetName} module not found`);
-      return null;
-    }
-    return moduleId;
-  };
-
-  const openMaterialRequestSource = (requestId) => {
-    if (!requestId) return;
-    const moduleId = openModuleByName("Material Requests");
-    if (!moduleId) return;
-    sessionStorage.setItem("materialRequestsOpenRequestId", String(requestId));
-    navigate(`/home/${moduleId}`);
-  };
-
-  const openPurchaseOrderSource = (poId, poNumber) => {
-    const moduleId = openModuleByName("Purchase Orders");
-    if (!moduleId) return;
-    if (poId) {
-      sessionStorage.setItem("purchaseOrdersOpenPoId", String(poId));
-    }
-    if (poNumber) {
-      sessionStorage.setItem("purchaseOrdersOpenPoNumber", String(poNumber));
-      sessionStorage.setItem("purchaseOrdersSearch", String(poNumber));
-    }
-    navigate(`/home/${moduleId}`);
-  };
 
   const documentNumber = isAP
     ? invoice.apInvoiceNumber || invoice.invoiceNumber || invoice.poNumber
     : invoice.invoiceNumber;
-  const billTo = isAP ? invoice.billTo || invoice.vendor : invoice.billTo;
+  const billTo = isAP
+    ? apVendorName || invoice.vendor || invoice.billTo
+    : invoice.billTo;
+  const apDepartment =
+    apPoDetails?.requestBreakdown?.department ||
+    apPoDetails?.linkedMaterialRequestId?.department ||
+    invoice?.linkedMaterialRequestId?.department ||
+    "";
   const dateStr = isAP
     ? invoice.paidDate || invoice.createdAt
     : invoice.createdAt;
@@ -152,20 +99,59 @@ const InvoiceDetail = ({ invoice }) => {
 
       {/* Print styles */}
       <style>{`
+        @page {
+          size: A4;
+          margin: 6mm 10mm 10mm;
+        }
+
         @media print {
           body * {
             visibility: hidden;
           }
+
+          body {
+            background: #fff !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
           #printable-invoice, #printable-invoice * {
             visibility: visible;
           }
+
           #printable-invoice {
             position: absolute;
             left: 0;
             top: 0;
-            margin: 0;
-            padding: 0;
+            margin: 0 !important;
+            padding: 0 !important;
             width: 100%;
+            color: #111827;
+          }
+
+          #printable-invoice table {
+            border-collapse: collapse;
+            width: 100%;
+          }
+
+          #printable-invoice th,
+          #printable-invoice td {
+            border-color: #e5e7eb !important;
+          }
+
+          #printable-invoice h1 {
+            font-size: 24px;
+          }
+
+          #printable-invoice h3,
+          #printable-invoice h4 {
+            break-after: avoid;
+          }
+
+          #printable-invoice tr,
+          #printable-invoice .print-keep {
+            break-inside: avoid;
+            page-break-inside: avoid;
           }
         }
       `}</style>
@@ -199,7 +185,7 @@ const InvoiceDetail = ({ invoice }) => {
         </div>
 
         {/* Parties Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 bg-gray-50 p-6 rounded-lg print:bg-transparent print:p-0 print:gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 bg-gray-50 p-6 rounded-lg print:bg-transparent print:p-0 print:gap-6 print:!grid-cols-2 print:items-start">
           <div>
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
               From (Our Company)
@@ -212,10 +198,8 @@ const InvoiceDetail = ({ invoice }) => {
               {isAP ? "Paid To (Vendor)" : "Bill To (Customer)"}
             </h3>
             <p className="font-semibold text-gray-800 text-lg">{billTo}</p>
-            {isAP && invoice.linkedMaterialRequestId?.department && (
-              <p className="text-sm text-gray-500 mt-1">
-                Dept: {invoice.linkedMaterialRequestId.department}
-              </p>
+            {isAP && apDepartment && (
+              <p className="text-sm text-gray-500 mt-1">Dept: {apDepartment}</p>
             )}
           </div>
         </div>
@@ -281,37 +265,7 @@ const InvoiceDetail = ({ invoice }) => {
         {isAP && (
           <div className="mb-8">
             <h3 className="text-lg font-bold text-gray-800 mb-4 border-b border-gray-200 pb-2">
-              Payment Completion Dates
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">
-                  First Partial Payment
-                </p>
-                <p className="text-sm font-semibold text-gray-800">
-                  {firstPartialPaymentDate
-                    ? new Date(firstPartialPaymentDate).toLocaleString("en-GB")
-                    : "Not yet"}
-                </p>
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">
-                  Full Payment Completed
-                </p>
-                <p className="text-sm font-semibold text-gray-800">
-                  {fullPaymentCompletedDate
-                    ? new Date(fullPaymentCompletedDate).toLocaleString("en-GB")
-                    : "Not yet"}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isAP && (
-          <div className="mb-8">
-            <h3 className="text-lg font-bold text-gray-800 mb-4 border-b border-gray-200 pb-2">
-              Material Request to Purchase Order Source
+              {`${requestSourceId} -> ${purchaseOrderSource}`}
             </h3>
             <div className="overflow-x-auto border border-gray-200 rounded-lg">
               <table className="w-full text-sm">
@@ -331,12 +285,6 @@ const InvoiceDetail = ({ invoice }) => {
                     </th>
                     <th className="px-4 py-3 text-right font-semibold text-gray-600">
                       Total
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">
-                      Material Request Source
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">
-                      Purchase Order Source
                     </th>
                   </tr>
                 </thead>
@@ -361,37 +309,6 @@ const InvoiceDetail = ({ invoice }) => {
                         <td className="px-4 py-3 text-right font-semibold text-gray-800">
                           {formatCurrency(lineTotal)}
                         </td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {invoice?.linkedMaterialRequestId?._id ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openMaterialRequestSource(
-                                  invoice?.linkedMaterialRequestId?._id,
-                                )
-                              }
-                              className="text-primary hover:underline font-semibold"
-                            >
-                              {requestSourceId}
-                            </button>
-                          ) : (
-                            requestSourceId
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openPurchaseOrderSource(
-                                purchaseOrderSourceId,
-                                purchaseOrderSource,
-                              )
-                            }
-                            className="text-primary hover:underline font-semibold"
-                          >
-                            {purchaseOrderSource}
-                          </button>
-                        </td>
                       </tr>
                     );
                   })}
@@ -405,16 +322,16 @@ const InvoiceDetail = ({ invoice }) => {
         <div className="flex flex-col md:flex-row justify-between gap-8">
           {/* Payment History (AP Only) */}
           <div className="flex-1">
-            {isAP && invoice.paymentHistory?.length > 0 && (
-              <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 print:border-none">
+            {isAP && paymentHistory.length > 0 && (
+              <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 print:border-none print-keep">
                 <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
                   <i className="fa-solid fa-clock-rotate-left"></i> Payment
                   History
                 </h4>
                 <div className="space-y-2">
-                  {invoice.paymentHistory.map((ph, idx) => {
+                  {paymentHistory.map((ph, idx) => {
                     const paidAt = ph?.paidAt ? new Date(ph.paidAt) : null;
-                    const cumulativePercentage = invoice.paymentHistory
+                    const cumulativePercentage = paymentHistory
                       .slice(0, idx + 1)
                       .reduce(
                         (sum, item) => sum + Number(item?.percentage || 0),

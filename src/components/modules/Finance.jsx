@@ -38,8 +38,15 @@ const Finance = () => {
   const location = useLocation();
 
   useEffect(() => {
-    if (location.state?.openInvoicing) {
+    const shouldOpenFromState = Boolean(location.state?.openInvoicing);
+    const shouldOpenFromSession =
+      sessionStorage.getItem("financeOpenInvoicing") === "1";
+
+    if (shouldOpenFromState || shouldOpenFromSession) {
       setShowInvoicing(true);
+      if (shouldOpenFromSession) {
+        sessionStorage.removeItem("financeOpenInvoicing");
+      }
     }
   }, [location.state]);
 
