@@ -81,11 +81,25 @@ const InvoiceDetail = ({ invoice }) => {
   const purchaseOrderSourceId = invoice?._id || invoice?.id || "";
 
   const openModuleByName = (targetName) => {
-    const target = (modules || []).find(
-      (moduleItem) =>
-        String(moduleItem?.name || "").toLowerCase() ===
-        String(targetName || "").toLowerCase(),
-    );
+    const normalize = (value) =>
+      String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
+    const aliasMap = {
+      materialrequests: ["materialrequests", "materialrequest"],
+      purchaseorders: ["purchaseorders", "purchaseorder"],
+    };
+
+    const normalizedTarget = normalize(targetName);
+    const candidates = aliasMap[normalizedTarget] || [normalizedTarget];
+
+    const target = (modules || []).find((moduleItem) => {
+      const byName = normalize(moduleItem?.name);
+      const byComponent = normalize(moduleItem?.componentName);
+      return candidates.includes(byName) || candidates.includes(byComponent);
+    });
+
     const moduleId = target?.id || target?._id;
     if (!moduleId) {
       toast.error(`${targetName} module not found`);

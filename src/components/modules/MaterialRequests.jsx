@@ -30,7 +30,6 @@ const MaterialRequests = () => {
   const [dateFilter, setDateFilter] = useState("last30");
   const [sortBy, setSortBy] = useState("newest");
   const [showForm, setShowForm] = useState(false);
-  const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -444,7 +443,7 @@ const MaterialRequests = () => {
       const request = response.data.find((r) => r._id === requestId);
       if (request) {
         setSelectedRequest(request);
-        setShowApprovalModal(true);
+        setShowViewModal(true);
       } else {
         toast.error("Request not found");
       }
@@ -460,7 +459,7 @@ const MaterialRequests = () => {
     const requestId = params.get("id");
 
     if (action === "approve" && requestId) {
-      // Fetch the specific request and show approval modal
+      // Fetch the specific request and open the unified details/review page
       fetchRequestForApproval(requestId);
     }
   }, [location.search, fetchRequestForApproval]);
@@ -506,7 +505,6 @@ const MaterialRequests = () => {
         );
       }
 
-      setShowApprovalModal(false);
       const updatedRequest = response?.request || response?.data?.request;
       if (updatedRequest?._id) {
         setSelectedRequest(updatedRequest);
@@ -540,7 +538,7 @@ const MaterialRequests = () => {
         },
       );
       toast.success("Request rejected");
-      setShowApprovalModal(false);
+      setShowViewModal(false);
       setSelectedRequest(null);
       setRejectionReason("");
       fetchRequests();
@@ -1018,14 +1016,14 @@ const MaterialRequests = () => {
 
   const handleApproveClick = (request) => {
     setSelectedRequest(request);
-    setShowApprovalModal(true);
+    setShowViewModal(true);
     fetchBudgetCategories();
     setActiveDropdown(null);
   };
 
   const handleRejectClick = (request) => {
     setSelectedRequest(request);
-    setShowApprovalModal(true);
+    setShowViewModal(true);
     setActiveDropdown(null);
   };
 
@@ -1138,6 +1136,192 @@ const MaterialRequests = () => {
     const isDraft = request.status === "draft";
     return isRequester && isDraft;
   };
+
+  const hasRfqBeenSent = (request) => {
+    if (!request) return false;
+
+    if (
+      request.rfqSentAt ||
+      request.rfqGeneratedAt ||
+      request.rfqGenerated === true ||
+      (Array.isArray(request.rfqs) && request.rfqs.length > 0)
+    ) {
+      return true;
+    }
+
+    const activities = Array.isArray(request.activities)
+      ? request.activities
+      : [];
+    return activities.some((activity) => {
+      const activityType = String(activity?.type || "")
+        .toLowerCase()
+        .trim();
+      const activityText = String(activity?.text || "").toLowerCase();
+      return (
+        activityType === "rfq_sent" ||
+        activityType === "rfq_generated" ||
+        /\brfq\b/.test(activityType) ||
+        /\brfq sent\b/.test(activityText) ||
+        /request for quotation/.test(activityText)
+      );
+    });
+  };
+
+  const hasPurchaseOrderBeenCreated = (request) => {
+    if (!request) return false;
+
+    if (
+      request.poId ||
+      request.purchaseOrderId ||
+      request.purchaseOrder?._id ||
+      request.purchaseOrder?.id
+    ) {
+      return true;
+    }
+
+    const activities = Array.isArray(request.activities)
+      ? request.activities
+      : [];
+    return activities.some((activity) => {
+      const activityType = String(activity?.type || "")
+        .toLowerCase()
+        .trim();
+      const activityText = String(activity?.text || "").toLowerCase();
+      return (
+        activityType === "po_created" || /purchase\s*order/.test(activityText)
+      );
+    });
+  };
+
+  const getApprovalDisplayInfo = (request) => {
+    if (!request) {
+      return { approverName: "Approver", approvedAtLabel: "Recently" };
+    }
+
+    const parseTime = (value) => {
+      const time = new Date(value || "").getTime();
+      return Number.isFinite(time) && !Number.isNaN(time) ? time : 0;
+    };
+
+    let latestName = "";
+    let latestTime = 0;
+
+    if (Array.isArray(request.approvalChain)) {
+      request.approvalChain.forEach((step) => {
+        if (String(step?.status || "").toLowerCase() !== "approved") return;
+        const candidateTime = parseTime(step?.approvedAt);
+        if (candidateTime >= latestTime) {
+          latestTime = candidateTime;
+          latestName = String(step?.approverName || "").trim();
+        }
+      });
+    }
+
+    if (Array.isArray(request.activities)) {
+      request.activities.forEach((activity) => {
+        if (String(activity?.type || "").toLowerCase() !== "approval") return;
+        const candidateTime = parseTime(activity?.timestamp);
+        if (candidateTime >= latestTime) {
+          latestTime = candidateTime;
+          latestName = String(activity?.author || "").trim();
+        }
+      });
+    }
+
+    if (!latestTime) {
+      latestTime = parseTime(request?.approvedDate || request?.updatedAt);
+    }
+
+    if (!latestName) {
+      latestName = String(
+        request?.approvedBy || request?.approver || "",
+      ).trim();
+    }
+
+    return {
+      approverName: latestName || "Approver",
+      approvedAtLabel: latestTime
+        ? new Date(latestTime).toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "Recently",
+    };
+  };
+
+  const selectedApprovalInfo = useMemo(
+    () => getApprovalDisplayInfo(selectedRequest),
+    [selectedRequest],
+  );
+
+  const getRejectionDisplayInfo = (request) => {
+    if (!request) {
+      return { rejectorName: "Approver", rejectedAtLabel: "Recently" };
+    }
+
+    const parseTime = (value) => {
+      const time = new Date(value || "").getTime();
+      return Number.isFinite(time) && !Number.isNaN(time) ? time : 0;
+    };
+
+    let latestName = "";
+    let latestTime = 0;
+
+    if (Array.isArray(request.approvalChain)) {
+      request.approvalChain.forEach((step) => {
+        if (String(step?.status || "").toLowerCase() !== "rejected") return;
+        const candidateTime = parseTime(
+          step?.approvedAt || request?.rejectedDate,
+        );
+        if (candidateTime >= latestTime) {
+          latestTime = candidateTime;
+          latestName = String(step?.approverName || "").trim();
+        }
+      });
+    }
+
+    if (Array.isArray(request.activities)) {
+      request.activities.forEach((activity) => {
+        if (String(activity?.type || "").toLowerCase() !== "rejection") return;
+        const candidateTime = parseTime(activity?.timestamp);
+        if (candidateTime >= latestTime) {
+          latestTime = candidateTime;
+          latestName = String(activity?.author || "").trim();
+        }
+      });
+    }
+
+    if (!latestTime) {
+      latestTime = parseTime(request?.rejectedDate || request?.updatedAt);
+    }
+
+    if (!latestName) {
+      latestName = String(
+        request?.rejectedBy || request?.approver || "",
+      ).trim();
+    }
+
+    return {
+      rejectorName: latestName || "Approver",
+      rejectedAtLabel: latestTime
+        ? new Date(latestTime).toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "Recently",
+    };
+  };
+
+  const selectedRejectionInfo = useMemo(
+    () => getRejectionDisplayInfo(selectedRequest),
+    [selectedRequest],
+  );
 
   const openPurchaseOrderFromActivity = async (poNumber, poId) => {
     let poModuleId = 11;
@@ -1421,7 +1605,7 @@ const MaterialRequests = () => {
           ]}
         />
 
-        {!showForm && !showApprovalModal && !showViewModal && (
+        {!showForm && !showViewModal && (
           <div className="max-w-[1490px] mx-auto px-1 py-6">
             {/* Page Header */}
             <div className="flex justify-between items-start mb-6">
@@ -2467,265 +2651,6 @@ const MaterialRequests = () => {
         )}
       </div>
 
-      {/* Approval Modal */}
-      {showApprovalModal && selectedRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
-              <h5 className="text-xl font-semibold flex items-center gap-2">
-                <i className="fa-solid fa-clipboard-check"></i>
-                Approve Material Request
-              </h5>
-              <button
-                type="button"
-                className="text-white hover:text-gray-200 transition-colors"
-                onClick={() => {
-                  setShowApprovalModal(false);
-                  setShowViewModal(true);
-                  setRejectionReason("");
-                }}
-              >
-                <i className="fa-solid fa-times text-xl"></i>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <strong className="text-gray-700">Request ID:</strong>{" "}
-                  <span className="text-gray-900">
-                    {selectedRequest._id || selectedRequest.requestId}
-                  </span>
-                </div>
-                <div>
-                  <strong className="text-gray-700">Request Type:</strong>{" "}
-                  <span className="inline-flex items-center px-2 py-1 rounded text-sm font-medium bg-blue-100 text-blue-800">
-                    {selectedRequest.requestType}
-                  </span>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <strong className="text-gray-700">Requested By:</strong>{" "}
-                  <span className="text-gray-900">
-                    {selectedRequest.requestedBy}
-                  </span>
-                </div>
-                <div>
-                  <strong className="text-gray-700">Department:</strong>{" "}
-                  <span className="text-gray-900">
-                    {selectedRequest.department}
-                  </span>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <strong className="text-gray-700">Date:</strong>{" "}
-                  <span className="text-gray-900">
-                    {selectedRequest.requestDate
-                      ? new Date(
-                          selectedRequest.requestDate,
-                        ).toLocaleDateString()
-                      : new Date(
-                          selectedRequest.createdAt,
-                        ).toLocaleDateString()}
-                  </span>
-                </div>
-                <div>
-                  <strong className="text-gray-700">Approver:</strong>{" "}
-                  <span className="text-gray-900">
-                    {selectedRequest.approver}
-                  </span>
-                </div>
-              </div>
-
-              <hr className="my-4 border-gray-200" />
-
-              <h6 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                <i className="fa-solid fa-list-ul"></i>Breakdown Items
-              </h6>
-              <div className="overflow-x-auto mb-4">
-                <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        Item
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        Quantity
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        Unit
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        Amount
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        Description
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {selectedRequest.lineItems?.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-900">
-                          {item.itemName}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">
-                          {item.quantity}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">
-                          {item.quantityType}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">
-                          {formatCurrency(item.amount, {
-                            currency: selectedRequest.currency,
-                          })}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">
-                          {item.description || "-"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {selectedRequest.message && (
-                <div className="mb-4">
-                  <strong className="text-gray-700">Message:</strong>
-                  <div className="p-3 bg-gray-100 rounded mt-2 text-gray-900">
-                    {selectedRequest.message}
-                  </div>
-                </div>
-              )}
-
-              {selectedRequest.attachments &&
-                selectedRequest.attachments.length > 0 && (
-                  <div className="mb-4">
-                    <strong className="text-gray-700">Attachments:</strong>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {selectedRequest.attachments.map((file, idx) => {
-                        const fileName =
-                          typeof file === "string" ? file : file.fileName;
-                        const fileData =
-                          typeof file === "string" ? null : file.fileData;
-                        return (
-                          <div
-                            key={idx}
-                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-800 border border-gray-200"
-                          >
-                            <i className="fa-solid fa-file text-gray-500"></i>
-                            <span className="truncate max-w-[150px]">
-                              {fileName}
-                            </span>
-                            {fileData && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const a = document.createElement("a");
-                                  a.href = fileData;
-                                  a.download = fileName;
-                                  a.click();
-                                }}
-                                className="text-blue-600 hover:text-blue-800 ml-1"
-                                title="Download"
-                              >
-                                <i className="fa-solid fa-download text-xs"></i>
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-              <hr className="my-4 border-gray-200" />
-
-              <h6 className="text-lg font-semibold mb-3 text-green-600 flex items-center gap-2">
-                <i className="fa-solid fa-circle-check"></i>
-                Approval Action
-              </h6>
-
-              {selectedRequest.requestType === "Internal Transfer" && (
-                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <i className="fa-solid fa-warehouse text-blue-600 text-xl mt-1"></i>
-                    <div>
-                      <h6 className="font-semibold text-blue-900 mb-1">
-                        Internal Transfer Request
-                      </h6>
-                      <p className="text-sm text-blue-700">
-                        Upon approval, items will be automatically pulled from
-                        existing inventory if available. Insufficient stock will
-                        be noted in the fulfillment report.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Reason
-                </label>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows="3"
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  placeholder="Enter reason for rejection..."
-                ></textarea>
-              </div>
-            </div>
-            <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex flex-col-reverse sm:flex-row justify-end gap-3">
-              <button
-                type="button"
-                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium flex items-center justify-center gap-2"
-                onClick={() => {
-                  setShowApprovalModal(false);
-                  setShowViewModal(true);
-                  setRejectionReason("");
-                }}
-              >
-                <i className="fa-solid fa-circle-xmark"></i>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleRejectRequest}
-                disabled={!rejectionReason.trim() || isRejecting || isApproving}
-              >
-                {isRejecting ? (
-                  <i className="fa-solid fa-circle-notch fa-spin"></i>
-                ) : (
-                  <i className="fa-solid fa-xmark"></i>
-                )}
-                {isRejecting ? "Rejecting..." : "Reject Request"}
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleApproveRequest}
-                disabled={isApproving || isRejecting}
-              >
-                {isApproving ? (
-                  <i className="fa-solid fa-circle-notch fa-spin"></i>
-                ) : (
-                  <i className="fa-solid fa-check"></i>
-                )}
-                {isApproving
-                  ? "Approving..."
-                  : selectedRequest.requestType === "Internal Transfer"
-                    ? "Approve & Fulfill from Inventory"
-                    : "Approve Request"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* View/Review Modal - Full Page View */}
       {showViewModal && selectedRequest && (
         <div className="fixed inset-0 z-50 bg-gray-50 overflow-auto">
@@ -2898,9 +2823,13 @@ const MaterialRequests = () => {
                     <i className="fa-solid fa-print"></i>
                     <span className="truncate">Print</span>
                   </button>
-                  {String(selectedRequest.status || "").toLowerCase() ===
-                    "approved" && (
-                    <>
+                  {["approved", "fulfilled"].includes(
+                    String(selectedRequest.status || "").toLowerCase(),
+                  ) &&
+                    String(selectedRequest.requestType || "")
+                      .toLowerCase()
+                      .trim() !== "internal transfer" &&
+                    !hasRfqBeenSent(selectedRequest) && (
                       <button
                         type="button"
                         onClick={() => {
@@ -2912,6 +2841,14 @@ const MaterialRequests = () => {
                         <i className="fa-solid fa-file-export"></i>
                         <span className="truncate">RFQ</span>
                       </button>
+                    )}
+                  {["approved", "fulfilled"].includes(
+                    String(selectedRequest.status || "").toLowerCase(),
+                  ) &&
+                    String(selectedRequest.requestType || "")
+                      .toLowerCase()
+                      .trim() !== "internal transfer" &&
+                    !hasPurchaseOrderBeenCreated(selectedRequest) && (
                       <button
                         type="button"
                         onClick={handleCreatePoFromApproved}
@@ -2927,8 +2864,7 @@ const MaterialRequests = () => {
                           {creatingPo ? "Creating PO..." : "Create PO"}
                         </span>
                       </button>
-                    </>
-                  )}
+                    )}
                 </div>
               </div>
             </div>
@@ -3115,118 +3051,125 @@ const MaterialRequests = () => {
                   </div>
 
                   {/* Approval History (show here first for pending approver flow) */}
-                  {isUserApprover(selectedRequest) &&
-                    String(selectedRequest.status || "").toLowerCase() ===
-                      "pending" && (
-                      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
-                          <i className="fa-solid fa-clock-rotate-left text-gray-500"></i>
-                          <h3 className="text-lg font-bold text-[#111418]">
-                            Approval History
-                          </h3>
+                  <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
+                      <i className="fa-solid fa-clock-rotate-left text-gray-500"></i>
+                      <h3 className="text-lg font-bold text-[#111418]">
+                        Approval History
+                      </h3>
+                    </div>
+                    <div className="p-6">
+                      <div className="relative pl-4 border-l-2 border-gray-200 space-y-8">
+                        {/* Request Submitted */}
+                        <div className="relative">
+                          <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-green-500 ring-4 ring-white"></div>
+                          <div className="flex flex-col gap-1">
+                            <p className="text-sm font-bold text-[#111418]">
+                              Request Submitted
+                            </p>
+                            <p className="text-xs text-[#617589]">
+                              {new Date(
+                                selectedRequest.date ||
+                                  selectedRequest.createdAt,
+                              ).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <div className="bg-gray-200 text-gray-600 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold">
+                                {selectedRequest.requestedBy
+                                  ?.charAt(0)
+                                  ?.toUpperCase() || "U"}
+                              </div>
+                              <span className="text-sm text-[#111418]">
+                                {selectedRequest.requestedBy}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="p-6">
-                          <div className="relative pl-4 border-l-2 border-gray-200 space-y-8">
-                            {/* Request Submitted */}
+
+                        {/* Current Status */}
+                        {selectedRequest.status === "pending" && (
+                          <div className="relative">
+                            <div className="absolute -left-[23px] top-0 h-4 w-4 rounded-full border-2 border-[#137fec] bg-white animate-pulse"></div>
+                            <div className="flex flex-col gap-1">
+                              <p className="text-sm font-bold text-[#137fec]">
+                                Pending Review
+                              </p>
+                              <p className="text-xs text-[#617589]">
+                                Awaiting Action
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-sm text-[#617589]">
+                                  Assigned to:{" "}
+                                  {selectedRequest.approver || "Not assigned"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedRequest.status === "approved" && (
+                          <div className="relative">
+                            <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-green-500 ring-4 ring-white"></div>
+                            <div className="flex flex-col gap-1">
+                              <p className="text-sm font-bold text-[#111418]">
+                                Approved
+                              </p>
+                              <p className="text-xs text-[#617589]">
+                                {selectedApprovalInfo.approvedAtLabel}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="bg-green-100 text-green-700 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold">
+                                  {selectedApprovalInfo.approverName
+                                    ?.charAt(0)
+                                    ?.toUpperCase() || "A"}
+                                </div>
+                                <span className="text-sm text-[#111418]">
+                                  {selectedApprovalInfo.approverName}
+                                </span>
+                              </div>
+                              <span className="ml-auto text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded w-fit">
+                                {/* Approved */}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedRequest.status === "rejected" &&
+                          selectedRequest.rejectionReason && (
                             <div className="relative">
-                              <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-green-500 ring-4 ring-white"></div>
+                              <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-red-500 ring-4 ring-white"></div>
                               <div className="flex flex-col gap-1">
                                 <p className="text-sm font-bold text-[#111418]">
-                                  Request Submitted
+                                  Rejected
                                 </p>
                                 <p className="text-xs text-[#617589]">
-                                  {new Date(
-                                    selectedRequest.date ||
-                                      selectedRequest.createdAt,
-                                  ).toLocaleDateString("en-US", {
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
+                                  {selectedRejectionInfo.rejectedAtLabel}
                                 </p>
                                 <div className="flex items-center gap-2 mt-1">
-                                  <div className="bg-gray-200 text-gray-600 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold">
-                                    {selectedRequest.requestedBy
+                                  <div className="bg-red-100 text-red-700 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold">
+                                    {selectedRejectionInfo.rejectorName
                                       ?.charAt(0)
-                                      ?.toUpperCase() || "U"}
+                                      ?.toUpperCase() || "R"}
                                   </div>
                                   <span className="text-sm text-[#111418]">
-                                    {selectedRequest.requestedBy}
+                                    {selectedRejectionInfo.rejectorName}
                                   </span>
+                                </div>
+                                <div className="mt-2 rounded bg-gray-50 p-2 text-xs italic text-gray-600 border border-gray-100">
+                                  "{selectedRequest.rejectionReason}"
                                 </div>
                               </div>
                             </div>
-
-                            {/* Current Status */}
-                            {selectedRequest.status === "pending" && (
-                              <div className="relative">
-                                <div className="absolute -left-[23px] top-0 h-4 w-4 rounded-full border-2 border-[#137fec] bg-white animate-pulse"></div>
-                                <div className="flex flex-col gap-1">
-                                  <p className="text-sm font-bold text-[#137fec]">
-                                    Pending Review
-                                  </p>
-                                  <p className="text-xs text-[#617589]">
-                                    Awaiting Action
-                                  </p>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-sm text-[#617589]">
-                                      Assigned to:{" "}
-                                      {selectedRequest.approver ||
-                                        "Not assigned"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {selectedRequest.status === "approved" && (
-                              <div className="relative">
-                                <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-green-500 ring-4 ring-white"></div>
-                                <div className="flex flex-col gap-1">
-                                  <p className="text-sm font-bold text-[#111418]">
-                                    Approved
-                                  </p>
-                                  <p className="text-xs text-[#617589]">
-                                    {selectedRequest.approvedDate
-                                      ? new Date(
-                                          selectedRequest.approvedDate,
-                                        ).toLocaleDateString()
-                                      : "Recently"}
-                                  </p>
-                                  <span className="ml-auto text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded w-fit">
-                                    Approved
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-
-                            {selectedRequest.status === "rejected" &&
-                              selectedRequest.rejectionReason && (
-                                <div className="relative">
-                                  <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-red-500 ring-4 ring-white"></div>
-                                  <div className="flex flex-col gap-1">
-                                    <p className="text-sm font-bold text-[#111418]">
-                                      Rejected
-                                    </p>
-                                    <p className="text-xs text-[#617589]">
-                                      {selectedRequest.rejectedDate
-                                        ? new Date(
-                                            selectedRequest.rejectedDate,
-                                          ).toLocaleDateString()
-                                        : "Recently"}
-                                    </p>
-                                    <div className="mt-2 rounded bg-gray-50 p-2 text-xs italic text-gray-600 border border-gray-100">
-                                      "{selectedRequest.rejectionReason}"
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                          </div>
-                        </div>
+                          )}
                       </div>
-                    )}
+                    </div>
+                  </div>
 
                   {/* Activity & Comments */}
                   <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -3578,7 +3521,7 @@ const MaterialRequests = () => {
                               ) : (
                                 <>
                                   <i className="fa-solid fa-paper-plane text-xs"></i>
-                                  <span>Post Comment</span>
+                                  <span>Post</span>
                                 </>
                               )}
                             </button>
@@ -3608,7 +3551,7 @@ const MaterialRequests = () => {
                             <label className="text-sm font-semibold text-[#111418]">
                               Approver Comments{" "}
                               <span className="font-normal text-[#617589]">
-                                (Required for rejection)
+                                {/* (Required for rejection) */}
                               </span>
                             </label>
                             <textarea
@@ -3631,18 +3574,20 @@ const MaterialRequests = () => {
                                 className="w-full sm:w-auto flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:border-red-300 transition-colors text-sm font-bold shadow-sm px-6"
                               >
                                 <i className="fa-solid fa-ban"></i>
-                                <span className="truncate">Reject Request</span>
+                                <span className="truncate">Reject</span>
                               </button>
                               <button
-                                onClick={() => {
-                                  setShowViewModal(false);
-                                  setShowApprovalModal(true);
-                                }}
+                                onClick={handleApproveRequest}
+                                disabled={isApproving || isRejecting}
                                 className="w-full sm:w-auto flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-green-600 px-8 text-white shadow-sm hover:bg-green-700 transition-colors text-sm font-bold"
                               >
-                                <i className="fa-solid fa-circle-check"></i>
+                                {isApproving ? (
+                                  <i className="fa-solid fa-circle-notch fa-spin"></i>
+                                ) : (
+                                  <i className="fa-solid fa-circle-check"></i>
+                                )}
                                 <span className="truncate">
-                                  Approve Request
+                                  {isApproving ? "Approving..." : "Approve"}
                                 </span>
                               </button>
                             </div>
@@ -3650,210 +3595,6 @@ const MaterialRequests = () => {
                         </div>
                       </div>
                     )}
-                </div>
-
-                {/* Right Column - Sidebar (Hidden) */}
-                <div className="hidden flex-col gap-6">
-                  {/* Approval History */}
-                  {!(
-                    isUserApprover(selectedRequest) &&
-                    String(selectedRequest.status || "").toLowerCase() ===
-                      "pending"
-                  ) && (
-                    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                      <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
-                        <i className="fa-solid fa-clock-rotate-left text-gray-500"></i>
-                        <h3 className="text-lg font-bold text-[#111418]">
-                          Approval History
-                        </h3>
-                      </div>
-                      <div className="p-6">
-                        <div className="relative pl-4 border-l-2 border-gray-200 space-y-8">
-                          {/* Request Submitted */}
-                          <div className="relative">
-                            <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-green-500 ring-4 ring-white"></div>
-                            <div className="flex flex-col gap-1">
-                              <p className="text-sm font-bold text-[#111418]">
-                                Request Submitted
-                              </p>
-                              <p className="text-xs text-[#617589]">
-                                {new Date(
-                                  selectedRequest.date ||
-                                    selectedRequest.createdAt,
-                                ).toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <div className="bg-gray-200 text-gray-600 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold">
-                                  {selectedRequest.requestedBy
-                                    ?.charAt(0)
-                                    ?.toUpperCase() || "U"}
-                                </div>
-                                <span className="text-sm text-[#111418]">
-                                  {selectedRequest.requestedBy}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Current Status */}
-                          {selectedRequest.status === "pending" && (
-                            <div className="relative">
-                              <div className="absolute -left-[23px] top-0 h-4 w-4 rounded-full border-2 border-[#137fec] bg-white animate-pulse"></div>
-                              <div className="flex flex-col gap-1">
-                                <p className="text-sm font-bold text-[#137fec]">
-                                  Pending Review
-                                </p>
-                                <p className="text-xs text-[#617589]">
-                                  Awaiting Action
-                                </p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-sm text-[#617589]">
-                                    Assigned to:{" "}
-                                    {selectedRequest.approver || "Not assigned"}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {selectedRequest.status === "approved" && (
-                            <div className="relative">
-                              <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-green-500 ring-4 ring-white"></div>
-                              <div className="flex flex-col gap-1">
-                                <p className="text-sm font-bold text-[#111418]">
-                                  Approved
-                                </p>
-                                <p className="text-xs text-[#617589]">
-                                  {selectedRequest.approvedDate
-                                    ? new Date(
-                                        selectedRequest.approvedDate,
-                                      ).toLocaleDateString()
-                                    : "Recently"}
-                                </p>
-                                <span className="ml-auto text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded w-fit">
-                                  Approved
-                                </span>
-                              </div>
-                            </div>
-                          )}
-
-                          {selectedRequest.status === "rejected" &&
-                            selectedRequest.rejectionReason && (
-                              <div className="relative">
-                                <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-red-500 ring-4 ring-white"></div>
-                                <div className="flex flex-col gap-1">
-                                  <p className="text-sm font-bold text-[#111418]">
-                                    Rejected
-                                  </p>
-                                  <p className="text-xs text-[#617589]">
-                                    {selectedRequest.rejectedDate
-                                      ? new Date(
-                                          selectedRequest.rejectedDate,
-                                        ).toLocaleDateString()
-                                      : "Recently"}
-                                  </p>
-                                  <div className="mt-2 rounded bg-gray-50 p-2 text-xs italic text-gray-600 border border-gray-100">
-                                    "{selectedRequest.rejectionReason}"
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Attachments */}
-                  {selectedRequest.attachments &&
-                    selectedRequest.attachments.length > 0 && (
-                      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <i className="fa-solid fa-paperclip text-gray-500"></i>
-                            <h3 className="text-lg font-bold text-[#111418]">
-                              Attachments
-                            </h3>
-                          </div>
-                          <span className="text-xs text-gray-500 font-medium">
-                            {selectedRequest.attachments.length} file
-                            {selectedRequest.attachments.length !== 1
-                              ? "s"
-                              : ""}
-                          </span>
-                        </div>
-                        <div className="p-6">
-                          <div className="space-y-2">
-                            {selectedRequest.attachments.map((file, idx) => {
-                              const fileName =
-                                typeof file === "string" ? file : file.fileName;
-                              const fileData =
-                                typeof file === "string" ? null : file.fileData;
-                              return (
-                                <div
-                                  key={idx}
-                                  className="flex items-center justify-between rounded-lg border border-gray-100 p-3"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <i className="fa-solid fa-file text-gray-400"></i>
-                                    <span className="truncate text-sm text-[#111418]">
-                                      {fileName}
-                                    </span>
-                                  </div>
-                                  {fileData && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const a = document.createElement("a");
-                                        a.href = fileData;
-                                        a.download = fileName;
-                                        a.click();
-                                      }}
-                                      className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors"
-                                      title="Download"
-                                    >
-                                      <i className="fa-solid fa-download text-sm"></i>
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                  {/* Preferred Vendor */}
-                  {selectedRequest.preferredVendor && (
-                    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                      <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
-                        <i className="fa-solid fa-store text-gray-500"></i>
-                        <h3 className="text-lg font-bold text-[#111418]">
-                          Preferred Vendor
-                        </h3>
-                      </div>
-                      <div className="p-6">
-                        <div className="flex items-start gap-4">
-                          <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center border border-gray-200">
-                            <i className="fa-solid fa-building text-gray-400 text-xl"></i>
-                          </div>
-                          <div>
-                            <p className="text-base font-bold text-[#111418]">
-                              {selectedRequest.preferredVendor}
-                            </p>
-                            <p className="text-sm text-[#617589]">
-                              Selected Vendor
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
