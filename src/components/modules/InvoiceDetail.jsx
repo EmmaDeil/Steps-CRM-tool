@@ -32,14 +32,6 @@ const InvoiceDetail = ({ invoice }) => {
     ? invoice.paymentHistory
     : [];
 
-  const firstPartialPaymentDate =
-    invoice?.firstPartiallyPaidAt ||
-    paymentHistory.find((entry) => {
-      const pct = Number(entry?.percentage || 0);
-      return pct > 0 && pct < 100 && entry?.paidAt;
-    })?.paidAt ||
-    null;
-
   const fullPaymentCompletedDate =
     invoice?.fullyPaidAt ||
     paymentHistory
@@ -48,6 +40,37 @@ const InvoiceDetail = ({ invoice }) => {
       .find((entry) => Number(entry?.balanceAfter || 0) <= 0 && entry?.paidAt)
       ?.paidAt ||
     null;
+
+  const partialPaymentEntries = paymentHistory
+    .filter((entry) => {
+      const pct = Number(entry?.percentage || 0);
+      const balanceAfter = Number(entry?.balanceAfter);
+      const isPartialByPct = pct > 0 && pct < 100;
+      const isPartialByBalance =
+        Number.isFinite(balanceAfter) && balanceAfter > 0;
+      return entry?.paidAt && (isPartialByPct || isPartialByBalance);
+    })
+    .sort(
+      (a, b) => new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime(),
+    );
+
+  const firstPartialPaymentDate = (() => {
+    const firstPartialFromHistory = partialPaymentEntries[0]?.paidAt || null;
+    const firstPartial =
+      firstPartialFromHistory || invoice?.firstPartiallyPaidAt || null;
+
+    if (!firstPartial || !fullPaymentCompletedDate) return firstPartial;
+
+    const firstTime = new Date(firstPartial).getTime();
+    const fullTime = new Date(fullPaymentCompletedDate).getTime();
+    if (Number.isNaN(firstTime) || Number.isNaN(fullTime)) return firstPartial;
+
+    if (firstTime === fullTime && partialPaymentEntries.length === 0) {
+      return null;
+    }
+
+    return firstPartial;
+  })();
 
   const requestSourceId =
     invoice?.linkedMaterialRequestId?.requestId ||

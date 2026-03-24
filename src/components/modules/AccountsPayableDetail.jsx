@@ -17,7 +17,6 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
   const [taxRate, setTaxRate] = useState(
     Number.isFinite(Number(invoice?.taxRate)) ? Number(invoice.taxRate) : 0,
   );
-  const [isSavingBillTo, setIsSavingBillTo] = useState(false);
   const [poDetails, setPoDetails] = useState(null);
 
   const invoiceId = invoice?._id || invoice?.id;
@@ -66,47 +65,66 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
     return [];
   }, [invoice?.paymentHistory, poDetails?.paymentHistory]);
 
-  const firstPartialPaymentDate = useMemo(() => {
-    if (invoice?.firstPartiallyPaidAt)
-      return new Date(invoice.firstPartiallyPaidAt);
-    if (poDetails?.firstPartiallyPaidAt)
-      return new Date(poDetails.firstPartiallyPaidAt);
+  const fullPaymentCompletedDate = useMemo(() => {
+    const fromInvoice = invoice?.fullyPaidAt
+      ? new Date(invoice.fullyPaidAt)
+      : null;
+    const fromPo = poDetails?.fullyPaidAt
+      ? new Date(poDetails.fullyPaidAt)
+      : null;
 
-    const partialEntries = paymentHistory.filter((entry) => {
-      const percentage = Number(entry?.percentage || 0);
-      return percentage > 0 && percentage < 100 && entry?.paidAt;
-    });
-
-    if (!partialEntries.length) return null;
-
-    const earliest = partialEntries
+    const fullEntries = paymentHistory
+      .filter((entry) => Number(entry?.balanceAfter || 0) <= 0 && entry?.paidAt)
       .map((entry) => new Date(entry.paidAt))
-      .filter((date) => !Number.isNaN(date.getTime()))
-      .sort((a, b) => a.getTime() - b.getTime())[0];
+      .filter((date) => !Number.isNaN(date.getTime()));
 
-    return earliest || null;
+    const fromHistory =
+      fullEntries.sort((a, b) => b.getTime() - a.getTime())[0] || null;
+    return fromInvoice || fromPo || fromHistory;
+  }, [invoice?.fullyPaidAt, poDetails?.fullyPaidAt, paymentHistory]);
+
+  const firstPartialPaymentDate = useMemo(() => {
+    const partialEntries = paymentHistory
+      .filter((entry) => {
+        const percentage = Number(entry?.percentage || 0);
+        const balanceAfter = Number(entry?.balanceAfter);
+        const isPartialByPercent = percentage > 0 && percentage < 100;
+        const isPartialByBalance =
+          Number.isFinite(balanceAfter) && balanceAfter > 0;
+        return entry?.paidAt && (isPartialByPercent || isPartialByBalance);
+      })
+      .map((entry) => new Date(entry.paidAt))
+      .filter((date) => !Number.isNaN(date.getTime()));
+
+    let firstPartial =
+      partialEntries.sort((a, b) => a.getTime() - b.getTime())[0] || null;
+
+    if (!firstPartial) {
+      const status = String(invoice?.status || "").toLowerCase();
+      if (status === "partly paid" || status === "partly_paid") {
+        const fallback =
+          invoice?.firstPartiallyPaidAt || poDetails?.firstPartiallyPaidAt;
+        firstPartial = fallback ? new Date(fallback) : null;
+      }
+    }
+
+    if (
+      firstPartial &&
+      fullPaymentCompletedDate &&
+      firstPartial.getTime() === fullPaymentCompletedDate.getTime() &&
+      partialEntries.length === 0
+    ) {
+      return null;
+    }
+
+    return firstPartial;
   }, [
+    paymentHistory,
+    invoice?.status,
     invoice?.firstPartiallyPaidAt,
     poDetails?.firstPartiallyPaidAt,
-    paymentHistory,
+    fullPaymentCompletedDate,
   ]);
-
-  const fullPaymentCompletedDate = useMemo(() => {
-    if (invoice?.fullyPaidAt) return new Date(invoice.fullyPaidAt);
-    if (poDetails?.fullyPaidAt) return new Date(poDetails.fullyPaidAt);
-
-    const fullEntries = paymentHistory.filter(
-      (entry) => Number(entry?.balanceAfter || 0) <= 0 && entry?.paidAt,
-    );
-    if (!fullEntries.length) return null;
-
-    const latest = fullEntries
-      .map((entry) => new Date(entry.paidAt))
-      .filter((date) => !Number.isNaN(date.getTime()))
-      .sort((a, b) => b.getTime() - a.getTime())[0];
-
-    return latest || null;
-  }, [invoice?.fullyPaidAt, poDetails?.fullyPaidAt, paymentHistory]);
 
   const poLineItems = useMemo(
     () => (Array.isArray(poDetails?.lineItems) ? poDetails.lineItems : []),
@@ -281,43 +299,6 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
     fetchPoDetails();
   }, [invoiceId]);
 
-  const handleSaveBillTo = async () => {
-    const nextBillTo = String(billTo || "").trim();
-    if (!nextBillTo) {
-      toast.error("Bill To is required");
-      return;
-    }
-
-    if (
-      !Number.isFinite(Number(taxRate)) ||
-      Number(taxRate) < 0 ||
-      Number(taxRate) > 100
-    ) {
-      toast.error("Tax rate must be between 0 and 100");
-      return;
-    }
-
-    try {
-      setIsSavingBillTo(true);
-      const response = await apiService.patch(
-        `/api/finance/accounts-payable/${invoice._id}/bill-to`,
-        { billTo: nextBillTo, taxRate: Number(taxRate) },
-      );
-
-      if (response?.success) {
-        toast.success(response.message || "Bill To updated");
-        if (onPaymentSuccess) {
-          onPaymentSuccess();
-        }
-      }
-    } catch (error) {
-      console.error("Error updating Bill To:", error);
-      toast.error(error?.serverData?.error || "Failed to update Bill To");
-    } finally {
-      setIsSavingBillTo(false);
-    }
-  };
-
   const handlePay = async () => {
     if (!invoice) return;
 
@@ -488,19 +469,6 @@ const AccountsPayableDetail = ({ invoice, onBack, onPaymentSuccess }) => {
                     className="w-full px-3 py-2.5 border border-slate-300 rounded-md text-sm text-slate-900 focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
-                <button
-                  onClick={handleSaveBillTo}
-                  disabled={
-                    isSavingBillTo ||
-                    !String(billTo || "").trim() ||
-                    !Number.isFinite(Number(taxRate)) ||
-                    Number(taxRate) < 0 ||
-                    Number(taxRate) > 100
-                  }
-                  className="self-start px-4 py-2 rounded-md bg-slate-900 hover:bg-slate-950 text-white text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSavingBillTo ? "Saving..." : "Save Billing Setup"}
-                </button>
               </div>
             </div>
 

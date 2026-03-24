@@ -413,7 +413,7 @@ const MaterialRequests = () => {
       const users = response.data || response || [];
       const formattedUsers = users.map((user) => ({
         id: user._id,
-        name: user.fullName,
+        name: String(user.fullName || user.name || "").trim(),
         role: user.jobTitle || user.role || "Staff",
         email: user.email,
         department: user.department,
@@ -1142,13 +1142,22 @@ const MaterialRequests = () => {
   const openPurchaseOrderFromActivity = async (poNumber, poId) => {
     let poModuleId = 11;
 
-    if (poNumber) {
-      sessionStorage.setItem("purchaseOrdersSearch", poNumber);
+    const normalizedPoNumber = String(poNumber || "").trim();
+    const candidatePoId =
+      typeof poId === "string" ? poId : poId?._id || poId?.id || "";
+    const normalizedPoId = String(candidatePoId || "").trim();
+    const hasUsablePoId =
+      normalizedPoId &&
+      normalizedPoId !== "[object Object]" &&
+      /^[a-fA-F0-9]{24}$/.test(normalizedPoId);
+
+    if (normalizedPoNumber) {
+      sessionStorage.setItem("purchaseOrdersSearch", normalizedPoNumber);
+      sessionStorage.setItem("purchaseOrdersOpenPoNumber", normalizedPoNumber);
     }
-    if (poId) {
-      sessionStorage.setItem("purchaseOrdersOpenPoId", String(poId));
-    } else if (poNumber) {
-      sessionStorage.setItem("purchaseOrdersOpenPoNumber", String(poNumber));
+
+    if (hasUsablePoId) {
+      sessionStorage.setItem("purchaseOrdersOpenPoId", normalizedPoId);
     }
 
     try {
@@ -1672,14 +1681,13 @@ const MaterialRequests = () => {
                           className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] pl-10 pr-8 py-2.5 appearance-none"
                         >
                           <option value="">Select Approver</option>
-                          {(userList || []).map((usr) => (
-                            <option
-                              key={usr._id || usr.id}
-                              value={usr.fullName || usr.email}
-                            >
-                              {usr.fullName || usr.email}
-                            </option>
-                          ))}
+                          {(userList || [])
+                            .filter((usr) => String(usr?.name || "").trim())
+                            .map((usr) => (
+                              <option key={usr._id || usr.id} value={usr.name}>
+                                {usr.name}
+                              </option>
+                            ))}
                         </select>
                         {/* <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#617589] text-xs"></i> */}
                       </div>
