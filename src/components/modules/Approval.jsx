@@ -78,7 +78,7 @@ const Approval = () => {
     transactionDate: "",
     approver: "",
     approverEmail: "",
-    currency: "USD",
+    currency: "NGN",
   });
 
   // Get current user's info
@@ -367,7 +367,7 @@ const Approval = () => {
         reason: "",
         approver: "",
         approverEmail: "",
-        currency: "USD",
+        currency: "NGN",
         purpose: "",
       });
       toast.success("Request submitted successfully");
@@ -432,7 +432,7 @@ const Approval = () => {
         transactionDate: "",
         approver: "",
         approverEmail: "",
-        currency: "USD",
+        currency: "NGN",
       });
       toast.success("Refund request submitted successfully");
       fetchData(); // Refresh data
@@ -765,10 +765,10 @@ const Approval = () => {
                 <i className="fa-solid fa-history text-purple-600 text-3xl"></i>
               </div>
               <h3 className="text-2xl font-bold text-[#111418] mb-2">
-                Retirement History
+                Reconciliation
               </h3>
               <p className="text-sm text-[#617589] mb-6">
-                View retirement breakdown history
+                Submit and view reconciliation history
               </p>
               <div className="flex flex-col gap-3">
                 <button
