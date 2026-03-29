@@ -1453,6 +1453,9 @@ const Approval = () => {
                             Total Items
                           </th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Evidence
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                             Submissions
                           </th>
                         </tr>
@@ -1471,6 +1474,7 @@ const Approval = () => {
                                 totalInflow: 0,
                                 totalExpenses: 0,
                                 totalItems: 0,
+                                totalEvidence: 0,
                                 submissions: 0,
                                 latestBalance: 0,
                               };
@@ -1481,6 +1485,8 @@ const Approval = () => {
                               breakdown.totalExpenses || 0;
                             monthlyData[monthKey].totalItems +=
                               breakdown.lineItems?.length || 0;
+                            monthlyData[monthKey].totalEvidence +=
+                              breakdown.evidenceFiles?.length || 0;
                             monthlyData[monthKey].submissions += 1;
                             monthlyData[monthKey].latestBalance =
                               breakdown.newOpeningBalance || 0;
@@ -1540,6 +1546,12 @@ const Approval = () => {
                                   {monthData.totalItems} items
                                 </td>
                                 <td className="px-6 py-4 text-sm text-[#617589]">
+                                  {monthData.totalEvidence || 0} file
+                                  {(monthData.totalEvidence || 0) === 1
+                                    ? ""
+                                    : "s"}
+                                </td>
+                                <td className="px-6 py-4 text-sm text-[#617589]">
                                   {monthData.submissions} submission
                                   {monthData.submissions > 1 ? "s" : ""}
                                 </td>
@@ -1574,6 +1586,7 @@ const Approval = () => {
                           totalInflow: 0,
                           totalExpenses: 0,
                           totalItems: 0,
+                          totalEvidence: 0,
                           submissions: 0,
                           latestBalance: 0,
                         };
@@ -1584,6 +1597,8 @@ const Approval = () => {
                         breakdown.totalExpenses || 0;
                       monthlyData[monthKey].totalItems +=
                         breakdown.lineItems?.length || 0;
+                      monthlyData[monthKey].totalEvidence +=
+                        breakdown.evidenceFiles?.length || 0;
                       monthlyData[monthKey].submissions += 1;
                       monthlyData[monthKey].latestBalance =
                         breakdown.newOpeningBalance || 0;
@@ -1603,6 +1618,7 @@ const Approval = () => {
                       "Total Expenses",
                       "Closing Balance",
                       "Total Items",
+                      "Evidence Files",
                       "Submissions",
                     ];
 
@@ -1627,6 +1643,7 @@ const Approval = () => {
                         monthData.totalExpenses,
                         monthData.latestBalance,
                         monthData.totalItems,
+                        monthData.totalEvidence || 0,
                         monthData.submissions,
                       ];
                     });
@@ -1730,12 +1747,19 @@ const Approval = () => {
                       );
 
                       const allLineItems = [];
+                      const allEvidenceFiles = [];
                       monthBreakdowns.forEach((breakdown) => {
                         if (
                           breakdown.lineItems &&
                           breakdown.lineItems.length > 0
                         ) {
                           allLineItems.push(...breakdown.lineItems);
+                        }
+                        if (
+                          breakdown.evidenceFiles &&
+                          breakdown.evidenceFiles.length > 0
+                        ) {
+                          allEvidenceFiles.push(...breakdown.evidenceFiles);
                         }
                       });
 
@@ -1777,6 +1801,17 @@ const Approval = () => {
                         ...rows.map((row) => row.join(",")),
                         "",
                         `Total,${formatCurrency(totalExpenses)}`,
+                        "",
+                        "Evidence Files",
+                        "Name,Type,Uploaded At,Uploaded By",
+                        ...allEvidenceFiles.map((evidence) =>
+                          [
+                            evidence.fileName || "Evidence",
+                            evidence.fileType || "Unknown",
+                            evidence.uploadedAt || "",
+                            evidence.uploadedBy || "",
+                          ].join(","),
+                        ),
                       ].join("\n");
 
                       const blob = new Blob([csvContent], {
@@ -1842,9 +1877,16 @@ const Approval = () => {
 
                   // Combine all line items from all submissions
                   const allLineItems = [];
+                  const allEvidenceFiles = [];
                   monthBreakdowns.forEach((breakdown) => {
                     if (breakdown.lineItems && breakdown.lineItems.length > 0) {
                       allLineItems.push(...breakdown.lineItems);
+                    }
+                    if (
+                      breakdown.evidenceFiles &&
+                      breakdown.evidenceFiles.length > 0
+                    ) {
+                      allEvidenceFiles.push(...breakdown.evidenceFiles);
                     }
                   });
 
@@ -2143,6 +2185,58 @@ const Approval = () => {
                             </p>
                           </div>
                         )}
+                      </div>
+
+                      {/* Evidence Files */}
+                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                          <h3 className="text-lg font-bold text-[#111418] flex items-center gap-2">
+                            <i className="fa-solid fa-paperclip text-blue-600"></i>
+                            Evidence Files ({allEvidenceFiles.length})
+                          </h3>
+                        </div>
+                        <div className="p-6">
+                          {allEvidenceFiles.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {allEvidenceFiles.map((file, fileIdx) => {
+                                const href = file?.fileData || file?.url || "";
+                                const fileName =
+                                  file?.fileName ||
+                                  file?.name ||
+                                  `Evidence ${fileIdx + 1}`;
+
+                                return (
+                                  <div
+                                    key={`${fileName}-${fileIdx}`}
+                                    className="p-3 rounded-lg border border-gray-200 bg-gray-50"
+                                  >
+                                    {href ? (
+                                      <a
+                                        href={href}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-sm font-medium text-blue-700 hover:underline break-words"
+                                      >
+                                        {fileName}
+                                      </a>
+                                    ) : (
+                                      <p className="text-sm font-medium text-gray-800 break-words">
+                                        {fileName}
+                                      </p>
+                                    )}
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {file?.fileType || "Unknown type"}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500">
+                              No evidence uploaded for this month.
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );

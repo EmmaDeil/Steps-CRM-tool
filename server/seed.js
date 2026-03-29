@@ -405,3 +405,4 @@ async function main() {
 // Run the seeder
 main();
 
+//no matter the currency that was provided everything needs to be recorded in naira for consistency and accurate reporting. The exchange rate and the captured date will help us maintain accurate financial records and allow for proper conversions when needed. 

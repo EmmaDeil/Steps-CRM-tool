@@ -1387,6 +1387,13 @@ async function start() {
         purchases = await PurchaseOrderModel.find().lean();
       } catch(e) {}
 
+      const getUsdAmountFromPurchase = (po) => {
+        const currency = String(po?.currency || '').trim().toUpperCase();
+        if (currency !== 'USD') return 0;
+        const amount = Number(po?.totalAmount ?? po?.amount ?? 0);
+        return Number.isFinite(amount) && amount > 0 ? amount : 0;
+      };
+
       const allRequests = [...leaves, ...travels, ...purchases];
       let approvedCount = 0;
       let pendingCount = 0;
@@ -1424,11 +1431,12 @@ async function start() {
       if (purchases.length > 0) {
         const byMonth = {};
         purchases.forEach(po => {
+          const amount = getUsdAmountFromPurchase(po);
+          if (amount <= 0) return;
           const date = new Date(po.createdAt || po.date || Date.now());
           const monthName = date.toLocaleString('en-US', { month: 'short' });
           const key = `${date.getFullYear()}-${date.getMonth()}`;
           if (!byMonth[key]) byMonth[key] = { name: monthName, revenue: 0, expenses: 0 };
-          const amount = Number(po.totalAmount || po.amount || 0);
           byMonth[key].expenses += amount;
           byMonth[key].revenue += Math.floor(amount * 1.35);
         });
@@ -1515,7 +1523,10 @@ async function start() {
         const finRejected = purchases.filter(p => (p.status || '').toLowerCase().includes('rejected')).length;
         const finPending = purchases.length - finApproved - finRejected;
         let finTotalAmount = 0;
-        purchases.forEach(p => { finTotalAmount += Number(p.totalAmount || p.amount || 0); });
+        purchases.forEach(p => { finTotalAmount += getUsdAmountFromPurchase(p); });
+        const nonUsdOrders = purchases.filter(
+          p => String(p?.currency || '').trim().toUpperCase() !== 'USD',
+        ).length;
         customData.push({
           name: 'Finance',
           total: purchases.length,
@@ -1526,6 +1537,7 @@ async function start() {
           stats: [
             { label: 'Purchase Orders', value: purchases.length, icon: 'fa-file-invoice-dollar', color: 'blue' },
             { label: 'Total Amount', value: '$' + finTotalAmount.toLocaleString(), icon: 'fa-dollar-sign', color: 'green' },
+            { label: 'Non-USD Excluded', value: nonUsdOrders, icon: 'fa-filter-circle-xmark', color: 'orange' },
             { label: 'Approved', value: finApproved, icon: 'fa-circle-check', color: 'green' },
             { label: 'Pending', value: finPending, icon: 'fa-hourglass-half', color: 'orange' },
           ],
@@ -1617,7 +1629,7 @@ async function start() {
       // Calculate financial metrics from real data
       let totalExpenses = 0;
       purchases.forEach(po => {
-        totalExpenses += Number(po.totalAmount || po.amount || 0);
+        totalExpenses += getUsdAmountFromPurchase(po);
       });
       const totalRevenue = Math.floor(totalExpenses * 1.35);
       const netProfit = totalRevenue - totalExpenses;
@@ -1864,14 +1876,21 @@ async function start() {
       } else if (reportType === 'Financial Report') {
         const query = hasDateFilter ? { createdAt: dateFilter } : {};
         const purchases = await PurchaseOrderModel.find(query).lean();
+        const usdPurchases = purchases.filter(
+          po => String(po?.currency || '').trim().toUpperCase() === 'USD',
+        );
         let totalExpenses = 0;
-        purchases.forEach(po => { totalExpenses += Number(po.totalAmount || po.amount || 0); });
+        usdPurchases.forEach(po => {
+          totalExpenses += Number(po.totalAmount || po.amount || 0);
+        });
         reportData = {
-          totalPurchaseOrders: purchases.length,
+          totalPurchaseOrders: usdPurchases.length,
+          excludedNonUsdOrders: purchases.length - usdPurchases.length,
+          currency: 'USD',
           totalExpenses,
-          avgOrderValue: purchases.length > 0 ? Math.floor(totalExpenses / purchases.length) : 0,
-          summary: purchases.length > 0
-            ? `${purchases.length} purchase orders totaling $${totalExpenses.toLocaleString()}.`
+          avgOrderValue: usdPurchases.length > 0 ? Math.floor(totalExpenses / usdPurchases.length) : 0,
+          summary: usdPurchases.length > 0
+            ? `${usdPurchases.length} USD purchase orders totaling $${totalExpenses.toLocaleString()}.`
             : 'No financial records found for the selected period.'
         };
       } else if (reportType === 'Approval Statistics') {

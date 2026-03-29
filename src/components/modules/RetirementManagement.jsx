@@ -14,6 +14,7 @@ const RetirementManagement = ({ onBack }) => {
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
     "Employee";
   const [lineItems, setLineItems] = useState([]);
+  const [evidenceFiles, setEvidenceFiles] = useState([]);
   const [newItem, setNewItem] = useState({
     date: "",
     description: "",
@@ -110,6 +111,54 @@ const RetirementManagement = ({ onBack }) => {
 
   const calculateTotal = () =>
     lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+  const getEvidenceName = (file, fallbackIndex = 0) =>
+    file?.fileName || file?.name || `Evidence ${fallbackIndex + 1}`;
+
+  const getEvidenceHref = (file) => file?.fileData || file?.url || "";
+
+  const normalizePickedEvidence = (files) =>
+    Array.from(files || []).map((file, idx) => ({
+      id: `${Date.now()}-${idx}`,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      source: file,
+    }));
+
+  const serializeEvidenceFiles = async (items) =>
+    Promise.all(
+      (items || []).map(async (item) => {
+        if (!item) return null;
+        if (item.fileData) {
+          return {
+            fileName: item.fileName || item.name || "Evidence",
+            fileType: item.fileType || item.type || "application/octet-stream",
+            fileData: item.fileData,
+            uploadedAt: item.uploadedAt || new Date().toISOString(),
+            uploadedBy: item.uploadedBy || resolvedEmployeeName,
+          };
+        }
+
+        if (!item.source) return null;
+
+        const fileData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(item.source);
+        });
+
+        return {
+          fileName: item.name || "Evidence",
+          fileType: item.type || "application/octet-stream",
+          fileData,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: resolvedEmployeeName,
+        };
+      }),
+    ).then((result) => result.filter(Boolean));
+
   const calculateNewOpeningBalance = () =>
     (Number(previousClosingBalance) || 0) +
     (Number(inflowAmount) || 0) -
@@ -128,7 +177,7 @@ const RetirementManagement = ({ onBack }) => {
       return;
     }
     if (lineItems.length === 0)
-      return toast.error("Please add at least one expense item");
+      return toast.error("Please add at least one expense");
     if (!monthYear) return toast.error("Please select the month and year");
     if (previousClosingBalance === "")
       return toast.error("Please enter previous closing balance");
@@ -141,6 +190,7 @@ const RetirementManagement = ({ onBack }) => {
         previousClosingBalance: Number(previousClosingBalance) || 0,
         inflowAmount: Number(inflowAmount) || 0,
         lineItems,
+        evidenceFiles: await serializeEvidenceFiles(evidenceFiles),
         totalExpenses: calculateTotal(),
         newOpeningBalance: calculateNewOpeningBalance(),
         status: "submitted",
@@ -168,6 +218,7 @@ const RetirementManagement = ({ onBack }) => {
         previousClosingBalance: Number(previousClosingBalance) || 0,
         inflowAmount: Number(inflowAmount) || 0,
         lineItems,
+        evidenceFiles: await serializeEvidenceFiles(evidenceFiles),
         totalExpenses: calculateTotal(),
         newOpeningBalance: calculateNewOpeningBalance(),
         status: "draft",
@@ -183,6 +234,7 @@ const RetirementManagement = ({ onBack }) => {
 
   const handleReset = () => {
     setLineItems([]);
+    setEvidenceFiles([]);
     setNewItem({ date: "", description: "", quantity: "", amount: "" });
     toast.success("Expense breakdown cleared");
   };
@@ -193,11 +245,11 @@ const RetirementManagement = ({ onBack }) => {
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
           {
-            label: "Aprovals",
+            label: "Approvals",
             onClick: onBack,
             icon: "fa-calculator",
           },
-          { label: "Retire", icon: "fa-umbrella" },
+          { label: "Reconcile", icon: "fa-umbrella" },
         ]}
       />
       <div className="p-4">
@@ -205,7 +257,7 @@ const RetirementManagement = ({ onBack }) => {
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Retirement
+              Reconcile Retirement Expenses
             </h1>
             <p className="text-gray-600">
               Record the breakdown of how you spent the inflow payment from
@@ -233,7 +285,7 @@ const RetirementManagement = ({ onBack }) => {
                 value={previousClosingBalance}
                 onChange={(e) => setPreviousClosingBalance(e.target.value)}
                 placeholder="0.00"
-                step="0.01"
+                step="0.0"
                 min="0"
                 className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm w-40"
               />
@@ -247,7 +299,7 @@ const RetirementManagement = ({ onBack }) => {
                 value={inflowAmount}
                 onChange={(e) => setInflowAmount(e.target.value)}
                 placeholder="0.00"
-                step="0.01"
+                step="0.0"
                 min="0"
                 className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm w-40"
               />
@@ -334,7 +386,7 @@ const RetirementManagement = ({ onBack }) => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
                       placeholder="0.00"
-                      step="0.01"
+                      step="0.0"
                       min="0"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                     />
@@ -395,6 +447,98 @@ const RetirementManagement = ({ onBack }) => {
           </div>
         </div>
 
+        <div className="bg-white rounded-lg border border-gray-200 shadow p-6 mb-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">
+                Evidence Upload
+              </h3>
+              <p className="text-sm text-gray-600">
+                Attach receipts or supporting evidence for this reconciliation
+                entry.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                id="retirement-evidence-input"
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+                className="hidden"
+                onChange={(e) => {
+                  const files = e.target.files;
+                  if (!files || files.length === 0) return;
+                  setEvidenceFiles((prev) => [
+                    ...prev,
+                    ...normalizePickedEvidence(files),
+                  ]);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  document.getElementById("retirement-evidence-input")?.click()
+                }
+                className="px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium inline-flex items-center gap-2"
+              >
+                <i className="fa-solid fa-upload"></i>
+                Upload
+              </button>
+            </div>
+          </div>
+
+          {evidenceFiles.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              No evidence files uploaded yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {evidenceFiles.map((file, idx) => {
+                const href = getEvidenceHref(file);
+                return (
+                  <div
+                    key={`${getEvidenceName(file, idx)}-${idx}`}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-200"
+                  >
+                    <div className="min-w-0">
+                      {href ? (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm font-medium text-blue-700 hover:underline truncate"
+                        >
+                          {getEvidenceName(file, idx)}
+                        </a>
+                      ) : (
+                        <p className="text-sm font-medium text-gray-800 truncate">
+                          {getEvidenceName(file, idx)}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        {file?.type || file?.fileType || "Unknown type"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEvidenceFiles((prev) =>
+                          prev.filter((_, index) => index !== idx),
+                        )
+                      }
+                      className="text-red-600 hover:text-red-700 text-sm"
+                      title="Remove file"
+                    >
+                      <i className="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Summary Section */}
         <div className="bg-white rounded-lg border border-gray-200 shadow p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -428,7 +572,7 @@ const RetirementManagement = ({ onBack }) => {
             <div className="flex items-center md:justify-end">
               <div className="text-right">
                 <div className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                  New Opening Balance
+                  Opening Balance
                 </div>
                 <div className="text-4xl font-bold text-green-600">
                   {formatCurrency(calculateNewOpeningBalance())}
@@ -455,7 +599,7 @@ const RetirementManagement = ({ onBack }) => {
               }`}
             >
               <i className="fa-solid fa-floppy-disk"></i>
-              Save Draft
+              Save
             </button>
             <button
               onClick={handleSubmitBreakdown}
@@ -473,7 +617,7 @@ const RetirementManagement = ({ onBack }) => {
               }`}
             >
               <i className="fa-solid fa-check"></i>
-              Submit to Finance
+              Submit
             </button>
           </div>
         </div>

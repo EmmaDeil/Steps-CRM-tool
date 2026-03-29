@@ -13,6 +13,13 @@ const retirementBreakdownSchema = new mongoose.Schema({
     quantity: { type: Number },
     amount: { type: Number },
   }],
+  evidenceFiles: [{
+    fileName: { type: String },
+    fileType: { type: String },
+    fileData: { type: String },
+    uploadedAt: { type: String },
+    uploadedBy: { type: String },
+  }],
   totalExpenses: { type: Number, default: 0 },
   newOpeningBalance: { type: Number, default: 0 },
   status: { type: String, enum: ['draft', 'submitted'], default: 'draft' },
