@@ -1009,7 +1009,7 @@ const Approval = () => {
                       })
                     }
                     min="0"
-                    step="0.01"
+                    step="0.0"
                     required
                   />
                 </div>
@@ -1089,7 +1089,7 @@ const Approval = () => {
                 </div>
 
                 {/* Auto-Approval Routing Info */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                {/* <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
                     <div>
@@ -1104,7 +1104,7 @@ const Approval = () => {
                       </p>
                     </div>
                   </div>
-                </div>
+                </div> */}
 
                 <div style={{ display: "none" }}>
                   <div className="relative">
@@ -1151,7 +1151,7 @@ const Approval = () => {
                     className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
                   >
                     <i className="fa-solid fa-check"></i>
-                    Submit Request
+                    Submit
                   </button>
                   <button
                     type="button"
@@ -1202,7 +1202,7 @@ const Approval = () => {
                       })
                     }
                     min="0"
-                    step="0.01"
+                    step="0.0"
                     required
                   />
                 </div>
@@ -1314,7 +1314,7 @@ const Approval = () => {
                 </div>
 
                 {/* Auto-Approval Routing Info */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                {/* <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
                     <div>
@@ -1329,7 +1329,7 @@ const Approval = () => {
                       </p>
                     </div>
                   </div>
-                </div>
+                </div> */}
 
                 <div style={{ display: "none" }}>
                   <div className="relative">
@@ -1376,7 +1376,7 @@ const Approval = () => {
                     className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
                   >
                     <i className="fa-solid fa-check"></i>
-                    Submit Request
+                    Submit
                   </button>
                   <button
                     type="button"
@@ -1398,7 +1398,7 @@ const Approval = () => {
               <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 flex items-center justify-between rounded-t-xl flex-shrink-0">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <i className="fa-solid fa-history"></i>
-                  Retirement Breakdown History
+                  Reconciliation History
                 </h2>
                 <button
                   onClick={() => setShowRetirementHistory(false)}
@@ -1413,10 +1413,10 @@ const Approval = () => {
                   <div className="text-center py-12">
                     <i className="fa-solid fa-inbox text-6xl text-gray-300 mb-4"></i>
                     <p className="text-lg text-[#617589] mb-2">
-                      No retirement breakdowns found
+                      No reconciliation breakdowns found
                     </p>
                     <p className="text-sm text-[#617589] mb-6">
-                      Create a new retirement breakdown to get started
+                      Create a new reconciliation to get started
                     </p>
                     <button
                       onClick={() => {
@@ -1426,7 +1426,7 @@ const Approval = () => {
                       className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold inline-flex items-center gap-2"
                     >
                       <i className="fa-solid fa-plus"></i>
-                      Create New Breakdown
+                      Create New
                     </button>
                   </div>
                 ) : (
@@ -1796,7 +1796,7 @@ const Approval = () => {
                         `Total Expenses,${formatCurrency(totalExpenses)}`,
                         `Closing Balance,${formatCurrency(closingBalance)}`,
                         "",
-                        "Line Items",
+                        "Expense",
                         headers.join(","),
                         ...rows.map((row) => row.join(",")),
                         "",
@@ -1956,7 +1956,7 @@ const Approval = () => {
                         <div className="px-6 py-4 bg-gradient-to-r from-purple-600 to-purple-700">
                           <h3 className="text-lg font-bold text-white flex items-center gap-2">
                             <i className="fa-solid fa-list-check"></i>
-                            All Expense Line Items ({allLineItems.length} total
+                            Expense ({allLineItems.length} total
                             items)
                           </h3>
                         </div>
@@ -2065,7 +2065,7 @@ const Approval = () => {
                                               })
                                             }
                                             className="w-full px-2 py-1 border border-gray-300 rounded bg-white text-[#111418] text-sm"
-                                            step="0.01"
+                                            step="0.0"
                                             min="0"
                                           />
                                         ) : (
@@ -2087,7 +2087,7 @@ const Approval = () => {
                                               })
                                             }
                                             className="w-full px-2 py-1 border border-gray-300 rounded bg-white text-[#111418] text-sm text-right"
-                                            step="0.01"
+                                            step="0.0"
                                             min="0"
                                           />
                                         ) : (
@@ -2495,7 +2495,7 @@ const Approval = () => {
                   )}
 
                   {/* Auto-Approval Routing Info */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  {/* <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <div className="flex items-start gap-3">
                       <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
                       <div>
@@ -2510,7 +2510,7 @@ const Approval = () => {
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </div> */}
 
                   <div style={{ display: "none" }}>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -2849,7 +2849,7 @@ const Approval = () => {
                         })
                       }
                       min="0"
-                      step="0.01"
+                      step="0.0"
                       className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
                     />
                     <p className="text-xs text-slate-500 mt-1">
@@ -2877,7 +2877,7 @@ const Approval = () => {
                   </div>
 
                   {/* Auto-Approval Routing Info */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  {/* <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <div className="flex items-start gap-3">
                       <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
                       <div>
@@ -2892,7 +2892,7 @@ const Approval = () => {
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </div> */}
 
                   <div style={{ display: "none" }}>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
