@@ -3050,6 +3050,10 @@ async function start() {
   app.get('/api/users', authMiddleware, requireUserManagementPermission('viewUsers'), async (req, res) => {
     try {
       const { role, status, search } = req.query;
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const requestedLimit = parseInt(req.query.limit, 10);
+      const hasPagination = Number.isFinite(requestedLimit);
+      const limit = hasPagination ? Math.min(Math.max(requestedLimit, 1), 100) : null;
       
       let userQuery = {};
       if (role) userQuery.role = role;
@@ -3062,11 +3066,16 @@ async function start() {
       }
 
       // Fetch users from UserModel
-      const users = await UserModel.find(userQuery)
+      const baseQuery = UserModel.find(userQuery)
         .select('-resetPasswordToken -resetPasswordExpires')
         .sort({ createdAt: -1 })
         .populate('invitedBy', 'fullName email')
         .lean();
+
+      const total = await UserModel.countDocuments(userQuery);
+      const users = hasPagination
+        ? await baseQuery.skip((page - 1) * limit).limit(limit)
+        : await baseQuery;
 
       // Auto-link unlinked employees: create User accounts for employees without one
       try {
@@ -3120,13 +3129,25 @@ async function start() {
       }
 
       // Re-fetch users after auto-linking (includes newly created user accounts)
-      const allUsers = await UserModel.find(userQuery)
-        .select('-resetPasswordToken -resetPasswordExpires')
-        .sort({ createdAt: -1 })
-        .populate('invitedBy', 'fullName email')
-        .lean();
+      if (!hasPagination) {
+        const allUsers = await UserModel.find(userQuery)
+          .select('-resetPasswordToken -resetPasswordExpires')
+          .sort({ createdAt: -1 })
+          .populate('invitedBy', 'fullName email')
+          .lean();
 
-      res.json(allUsers);
+        return res.json(allUsers);
+      }
+
+      return res.json({
+        data: users,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.max(Math.ceil(total / limit), 1),
+        },
+      });
     } catch (err) {
       console.error('Error fetching users:', err);
       res.status(500).json({ message: 'Failed to fetch users', error: err.message });

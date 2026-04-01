@@ -98,6 +98,10 @@ const Admin = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterRole, setFilterRole] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersTotal, setUsersTotal] = useState(0);
+  const [usersTotalPages, setUsersTotalPages] = useState(1);
+  const USERS_PAGE_SIZE = 20;
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [isAddingUser, setIsAddingUser] = useState(false);
@@ -137,37 +141,63 @@ const Admin = () => {
     Editor: withDefaultPermissions(),
     Viewer: withDefaultPermissions(),
   });
+  const usersTableTopRef = useRef(null);
 
-  const fetchUsers = useCallback(async () => {
-    setUsersLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (filterRole) params.append("role", filterRole);
-      if (filterStatus) params.append("status", filterStatus);
-      if (searchQuery) params.append("search", searchQuery);
+  const fetchUsers = useCallback(
+    async (pageToLoad = 1) => {
+      setUsersLoading(true);
+      try {
+        const params = new URLSearchParams();
+        params.append("page", String(pageToLoad));
+        params.append("limit", String(USERS_PAGE_SIZE));
+        if (filterRole) params.append("role", filterRole);
+        if (filterStatus) params.append("status", filterStatus);
+        if (searchQuery) params.append("search", searchQuery);
 
-      const response = await apiService.get(`/api/users?${params.toString()}`);
-      setUsers(Array.isArray(response) ? response : response?.data || []);
-      // Reset error flag on success
-      if (errorToastShownRef.current["users"]) {
-        errorToastShownRef.current["users"] = false;
-      }
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      if (!errorToastShownRef.current["users"]) {
-        toast.error("Failed to load users");
-        errorToastShownRef.current["users"] = true;
-        // Reset after 3 seconds
-        if (resetToastTimerRef.current)
-          clearTimeout(resetToastTimerRef.current);
-        resetToastTimerRef.current = setTimeout(() => {
+        const response = await apiService.get(
+          `/api/users?${params.toString()}`,
+        );
+        const responseUsers = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.data)
+            ? response.data
+            : [];
+        const pagination = response?.pagination || {};
+
+        setUsers(responseUsers);
+        setUsersPage(pagination.page || pageToLoad);
+        setUsersTotal(pagination.total || responseUsers.length);
+        setUsersTotalPages(
+          pagination.pages ||
+            Math.max(
+              Math.ceil(
+                (pagination.total || responseUsers.length) / USERS_PAGE_SIZE,
+              ),
+              1,
+            ),
+        );
+        // Reset error flag on success
+        if (errorToastShownRef.current["users"]) {
           errorToastShownRef.current["users"] = false;
-        }, 3000);
+        }
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        if (!errorToastShownRef.current["users"]) {
+          toast.error("Failed to load users");
+          errorToastShownRef.current["users"] = true;
+          // Reset after 3 seconds
+          if (resetToastTimerRef.current)
+            clearTimeout(resetToastTimerRef.current);
+          resetToastTimerRef.current = setTimeout(() => {
+            errorToastShownRef.current["users"] = false;
+          }, 3000);
+        }
+      } finally {
+        setUsersLoading(false);
       }
-    } finally {
-      setUsersLoading(false);
-    }
-  }, [filterRole, filterStatus, searchQuery]);
+    },
+    [filterRole, filterStatus, searchQuery],
+  );
 
   const fetchModules = useCallback(async () => {
     setModulesLoading(true);
@@ -268,7 +298,7 @@ const Admin = () => {
     fetchModules();
     fetchRoles();
     if (activeView === "users") {
-      fetchUsers();
+      fetchUsers(1);
     }
     if (activeView === "logs") {
       fetchLogs();
@@ -382,11 +412,21 @@ const Admin = () => {
   useEffect(() => {
     if (activeView === "users") {
       const timer = setTimeout(() => {
-        fetchUsers();
+        setUsersPage(1);
+        fetchUsers(1);
       }, 500);
       return () => clearTimeout(timer);
     }
   }, [searchQuery, filterRole, filterStatus, activeView, fetchUsers]);
+
+  useEffect(() => {
+    if (activeView === "users") {
+      usersTableTopRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [usersPage, activeView]);
 
   // Fetch modules when Edit User modal opens
   useEffect(() => {
@@ -415,7 +455,7 @@ const Admin = () => {
       toast.success("User added successfully!");
       setShowAddUserModal(false);
       setNewUser({ fullName: "", email: "", password: "", role: "Editor" });
-      fetchUsers();
+      fetchUsers(usersPage);
     } catch (error) {
       console.error("Error adding user:", error);
       toast.error(error.response?.data?.message || "Failed to add user");
@@ -532,7 +572,7 @@ const Admin = () => {
       toast.success("User updated successfully!");
       setShowEditUserModal(false);
       setSelectedUser(null);
-      fetchUsers();
+      fetchUsers(usersPage);
     } catch (error) {
       console.error("Error updating user:", error);
       toast.error("Failed to update user");
@@ -558,7 +598,7 @@ const Admin = () => {
       toast.success("User deleted successfully");
       setShowDeleteUserModal(false);
       setSelectedUser(null);
-      fetchUsers();
+      fetchUsers(Math.min(usersPage, Math.max(usersTotalPages - 1, 1)));
     } catch (error) {
       console.error("Error deleting user:", error);
       toast.error("Failed to delete user");
@@ -731,14 +771,16 @@ const Admin = () => {
 
   const applyFilters = () => {
     setShowFilterModal(false);
-    fetchUsers();
+    setUsersPage(1);
+    fetchUsers(1);
   };
 
   const clearFilters = () => {
     setFilterRole("");
     setFilterStatus("");
     setShowFilterModal(false);
-    fetchUsers();
+    setUsersPage(1);
+    fetchUsers(1);
   };
 
   const filteredUsers = users;
@@ -1240,7 +1282,10 @@ const Admin = () => {
           </div>
 
           {/* Users Table */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div
+            ref={usersTableTopRef}
+            className="bg-white rounded-lg border border-gray-200 overflow-hidden"
+          >
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -1369,8 +1414,31 @@ const Admin = () => {
                 )}
               </tbody>
             </table>
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 text-sm text-gray-600">
-              Showing {filteredUsers.length} of {users.length} results
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 text-sm text-gray-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <span>
+                Showing {filteredUsers.length} of {usersTotal} results
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fetchUsers(Math.max(usersPage - 1, 1))}
+                  disabled={usersLoading || usersPage <= 1}
+                  className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span className="px-2 text-xs sm:text-sm font-medium text-gray-500">
+                  Page {usersPage} of {usersTotalPages}
+                </span>
+                <button
+                  onClick={() =>
+                    fetchUsers(Math.min(usersPage + 1, usersTotalPages))
+                  }
+                  disabled={usersLoading || usersPage >= usersTotalPages}
+                  className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
         </div>

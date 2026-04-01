@@ -115,6 +115,7 @@ const HRM = () => {
   const fetchAllInFlightRef = useRef(false);
   const fetchEmployeesInFlightRef = useRef(false);
   const networkToastShownRef = useRef(false);
+  const employeeDirectoryTopRef = useRef(null);
   const [startEmployeeInEditMode, setStartEmployeeInEditMode] = useState(false);
   const [organogramEmployees, setOrganogramEmployees] = useState([]);
   const [organogramLoading, setOrganogramLoading] = useState(false);
@@ -608,6 +609,15 @@ const HRM = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, employeePageSize]);
 
+  useEffect(() => {
+    if (showEmployeeDirectoryPage) {
+      employeeDirectoryTopRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [employeePage, employeePageSize, showEmployeeDirectoryPage]);
+
   const approveLeave = async (id) => {
     try {
       const response = await apiService.post(
@@ -1028,7 +1038,7 @@ const HRM = () => {
                 { label: "Employee Directory", icon: "fa-people-group" },
               ]}
             />
-            <div className="p-0 sm:p-2">
+            <div ref={employeeDirectoryTopRef} className="p-0 sm:p-2">
               {renderEmployeeDirectorySection({ fullPage: true })}
             </div>
           </div>
