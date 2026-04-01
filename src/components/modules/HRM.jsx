@@ -2647,7 +2647,7 @@ const HRM = () => {
                             ) : (
                               leaveAllocationEmployees.map((emp) => (
                                 <option key={emp.id} value={emp.id}>
-                                  {emp.name} - {emp.role}
+                                  {emp.name}
                                 </option>
                               ))
                             )}
