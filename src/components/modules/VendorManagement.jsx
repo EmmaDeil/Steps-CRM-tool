@@ -21,6 +21,9 @@ const VendorManagement = ({ onBack }) => {
   const [isUpdatingVendor, setIsUpdatingVendor] = useState(false);
   const [contractFiles, setContractFiles] = useState([]);
   const [existingContracts, setExistingContracts] = useState([]);
+  const [deletingContractIndex, setDeletingContractIndex] = useState(null);
+  const [downloadingContractIndex, setDownloadingContractIndex] =
+    useState(null);
   const contractInputRef = useRef(null);
   const [editForm, setEditForm] = useState({
     companyName: "",
@@ -156,6 +159,74 @@ const VendorManagement = ({ onBack }) => {
     setContractFiles((prev) =>
       prev.filter((_, index) => index !== indexToRemove),
     );
+  };
+
+  const handleDownloadExistingContract = async (docIndex) => {
+    if (!editingVendorId) return;
+    try {
+      setDownloadingContractIndex(docIndex);
+      const response = await apiService.get(
+        `/api/vendors/${editingVendorId}/documents/${docIndex}`,
+      );
+
+      const documentData = response?.data || response;
+      const base64Data = documentData?.data;
+      const fileName = documentData?.name || `contract-${docIndex + 1}`;
+
+      if (!base64Data) {
+        toast.error("Unable to download contract");
+        return;
+      }
+
+      const link = window.document.createElement("a");
+      link.href = base64Data;
+      link.download = fileName;
+      window.document.body.appendChild(link);
+      link.click();
+      window.document.body.removeChild(link);
+    } catch (error) {
+      console.error("Error downloading contract:", error);
+      toast.error("Failed to download contract");
+    } finally {
+      setDownloadingContractIndex(null);
+    }
+  };
+
+  const handleDeleteExistingContract = async (docIndex) => {
+    if (!editingVendorId) return;
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this contract attachment?",
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingContractIndex(docIndex);
+      const response = await apiService.delete(
+        `/api/vendors/${editingVendorId}/documents/${docIndex}`,
+      );
+
+      const updatedVendor = response?.data || response;
+      const nextDocuments = Array.isArray(updatedVendor?.documents)
+        ? updatedVendor.documents
+        : [];
+
+      setExistingContracts(nextDocuments);
+      setVendors((prev) =>
+        prev.map((vendor) => {
+          const id = String(vendor?._id || vendor?.id || "");
+          return id === editingVendorId
+            ? { ...vendor, documents: nextDocuments }
+            : vendor;
+        }),
+      );
+
+      toast.success("Contract deleted successfully");
+    } catch (error) {
+      console.error("Error deleting contract:", error);
+      toast.error("Failed to delete contract");
+    } finally {
+      setDeletingContractIndex(null);
+    }
   };
 
   const handleEditFormChange = (e) => {
@@ -305,308 +376,358 @@ const VendorManagement = ({ onBack }) => {
 
         <main className="flex-1 overflow-auto">
           <div className="w-full px-2 py-6">
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
-              <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">
-                    Edit Vendor
-                  </h3>
-                  <p className="text-sm text-slate-500 mt-1">
-                    Update vendor details and save changes.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeEditScreen}
-                  className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50"
-                >
-                  Back
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveVendorEdit} className="p-6 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">
-                      Company Name *
-                    </span>
-                    <input
-                      type="text"
-                      name="companyName"
-                      value={editForm.companyName}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                      required
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">
-                      Contact Person
-                    </span>
-                    <input
-                      type="text"
-                      name="contactPerson"
-                      value={editForm.contactPerson}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">
-                      Contact Title
-                    </span>
-                    <input
-                      type="text"
-                      name="contactTitle"
-                      value={editForm.contactTitle}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">Email *</span>
-                    <input
-                      type="email"
-                      name="email"
-                      value={editForm.email}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                      required
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">Phone *</span>
-                    <input
-                      type="text"
-                      name="phone"
-                      value={editForm.phone}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                      required
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">Service Type</span>
-                    <input
-                      type="text"
-                      name="serviceType"
-                      value={editForm.serviceType}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">Website</span>
-                    <input
-                      type="url"
-                      name="website"
-                      value={editForm.website}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                      placeholder="https://example.com"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">Tax ID</span>
-                    <input
-                      type="text"
-                      name="taxId"
-                      value={editForm.taxId}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">Status</span>
-                    <select
-                      name="status"
-                      value={editForm.status}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Pending">Pending</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </label>
-                  <label className="flex flex-col gap-1 md:col-span-2">
-                    <span className="text-sm text-slate-600">Address</span>
-                    <input
-                      type="text"
-                      name="address"
-                      value={editForm.address}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">City</span>
-                    <input
-                      type="text"
-                      name="city"
-                      value={editForm.city}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">State</span>
-                    <input
-                      type="text"
-                      name="state"
-                      value={editForm.state}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">Zip Code</span>
-                    <input
-                      type="text"
-                      name="zipCode"
-                      value={editForm.zipCode}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">
-                      Payment Method
-                    </span>
-                    <input
-                      type="text"
-                      name="paymentMethod"
-                      value={editForm.paymentMethod}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">
-                      Payment Terms
-                    </span>
-                    <input
-                      type="text"
-                      name="paymentTerms"
-                      value={editForm.paymentTerms}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">Bank Name</span>
-                    <input
-                      type="text"
-                      name="bankName"
-                      value={editForm.bankName}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">
-                      Account Number
-                    </span>
-                    <input
-                      type="text"
-                      name="accountNumber"
-                      value={editForm.accountNumber}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-slate-600">
-                      Routing Number
-                    </span>
-                    <input
-                      type="text"
-                      name="routingNumber"
-                      value={editForm.routingNumber}
-                      onChange={handleEditFormChange}
-                      className="px-3 py-2 rounded-lg border border-slate-300"
-                    />
-                  </label>
-                </div>
-
-                <div className="border-t border-slate-200 pt-4 space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <h4 className="text-sm font-semibold text-slate-900">
-                      Contracts
-                    </h4>
-                    <button
-                      type="button"
-                      onClick={() => contractInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm"
-                    >
-                      <i className="fa-solid fa-paperclip mr-2"></i>
-                      Add Attachment
-                    </button>
-                    <input
-                      ref={contractInputRef}
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                      multiple
-                      onChange={handleContractUpload}
-                    />
+            <div className="max-w-5xl mx-auto">
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+                <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">
+                      Edit Vendor
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Update vendor details and save changes.
+                    </p>
                   </div>
-
-                  {existingContracts.length > 0 && (
-                    <p className="text-xs text-slate-500">
-                      Existing contracts: {existingContracts.length}
-                    </p>
-                  )}
-
-                  {contractFiles.length === 0 ? (
-                    <p className="text-sm text-slate-500">
-                      No new attachment selected.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {contractFiles.map((file, index) => (
-                        <div
-                          key={`${file.name}-${index}`}
-                          className="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm text-slate-900 truncate">
-                              {file.name}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {(file.size / 1024).toFixed(1)} KB
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeContractFile(index)}
-                            className="text-red-600 hover:text-red-700 text-sm"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-2 flex justify-end gap-3">
                   <button
                     type="button"
                     onClick={closeEditScreen}
-                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700"
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50"
                   >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isUpdatingVendor}
-                    className="px-4 py-2 rounded-lg bg-primary text-white disabled:opacity-60"
-                  >
-                    {isUpdatingVendor ? "Saving..." : "Save Changes"}
+                    Back
                   </button>
                 </div>
-              </form>
+
+                <form onSubmit={handleSaveVendorEdit} className="p-6 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">
+                        Company Name *
+                      </span>
+                      <input
+                        type="text"
+                        name="companyName"
+                        value={editForm.companyName}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                        required
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">
+                        Contact Person
+                      </span>
+                      <input
+                        type="text"
+                        name="contactPerson"
+                        value={editForm.contactPerson}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">
+                        Contact Title
+                      </span>
+                      <input
+                        type="text"
+                        name="contactTitle"
+                        value={editForm.contactTitle}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">Email *</span>
+                      <input
+                        type="email"
+                        name="email"
+                        value={editForm.email}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                        required
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">Phone *</span>
+                      <input
+                        type="text"
+                        name="phone"
+                        value={editForm.phone}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                        required
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">
+                        Service Type
+                      </span>
+                      <input
+                        type="text"
+                        name="serviceType"
+                        value={editForm.serviceType}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">Website</span>
+                      <input
+                        type="url"
+                        name="website"
+                        value={editForm.website}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                        placeholder="https://example.com"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">Tax ID</span>
+                      <input
+                        type="text"
+                        name="taxId"
+                        value={editForm.taxId}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">Status</span>
+                      <select
+                        name="status"
+                        value={editForm.status}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 md:col-span-2">
+                      <span className="text-sm text-slate-600">Address</span>
+                      <input
+                        type="text"
+                        name="address"
+                        value={editForm.address}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">City</span>
+                      <input
+                        type="text"
+                        name="city"
+                        value={editForm.city}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">State</span>
+                      <input
+                        type="text"
+                        name="state"
+                        value={editForm.state}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">Zip Code</span>
+                      <input
+                        type="text"
+                        name="zipCode"
+                        value={editForm.zipCode}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">
+                        Payment Method
+                      </span>
+                      <input
+                        type="text"
+                        name="paymentMethod"
+                        value={editForm.paymentMethod}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">
+                        Payment Terms
+                      </span>
+                      <input
+                        type="text"
+                        name="paymentTerms"
+                        value={editForm.paymentTerms}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">Bank Name</span>
+                      <input
+                        type="text"
+                        name="bankName"
+                        value={editForm.bankName}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">
+                        Account Number
+                      </span>
+                      <input
+                        type="text"
+                        name="accountNumber"
+                        value={editForm.accountNumber}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm text-slate-600">
+                        Routing Number
+                      </span>
+                      <input
+                        type="text"
+                        name="routingNumber"
+                        value={editForm.routingNumber}
+                        onChange={handleEditFormChange}
+                        className="px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="border-t border-slate-200 pt-4 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-sm font-semibold text-slate-900">
+                        Contracts
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => contractInputRef.current?.click()}
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm"
+                      >
+                        <i className="fa-solid fa-paperclip mr-2"></i>
+                        Add Attachment
+                      </button>
+                      <input
+                        ref={contractInputRef}
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                        multiple
+                        onChange={handleContractUpload}
+                      />
+                    </div>
+
+                    {existingContracts.length > 0 ? (
+                      <div className="space-y-2">
+                        {existingContracts.map((contract, index) => (
+                          <div
+                            key={`existing-${contract?.name || "doc"}-${index}`}
+                            className="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm text-slate-900 truncate">
+                                {contract?.name || `Contract ${index + 1}`}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {(contract?.size || 0) > 0
+                                  ? `${((contract.size || 0) / 1024).toFixed(1)} KB`
+                                  : "Stored contract"}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDownloadExistingContract(index)
+                                }
+                                disabled={downloadingContractIndex === index}
+                                className="text-primary hover:text-blue-700 text-sm disabled:opacity-60"
+                              >
+                                {downloadingContractIndex === index
+                                  ? "Downloading..."
+                                  : "Download"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteExistingContract(index)
+                                }
+                                disabled={deletingContractIndex === index}
+                                className="text-red-600 hover:text-red-700 text-sm disabled:opacity-60"
+                              >
+                                {deletingContractIndex === index
+                                  ? "Deleting..."
+                                  : "Delete"}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500">
+                        No existing contracts.
+                      </p>
+                    )}
+
+                    {contractFiles.length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        No new attachment selected.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {contractFiles.map((file, index) => (
+                          <div
+                            key={`${file.name}-${index}`}
+                            className="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm text-slate-900 truncate">
+                                {file.name}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {(file.size / 1024).toFixed(1)} KB
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeContractFile(index)}
+                              className="text-red-600 hover:text-red-700 text-sm"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={closeEditScreen}
+                      className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isUpdatingVendor}
+                      className="px-4 py-2 rounded-lg bg-primary text-white disabled:opacity-60"
+                    >
+                      {isUpdatingVendor ? "Saving..." : "Save Changes"}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         </main>
