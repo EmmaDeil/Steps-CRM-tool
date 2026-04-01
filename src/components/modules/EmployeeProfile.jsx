@@ -148,7 +148,7 @@ const EmployeeProfile = ({
     const fetchEditOptions = async () => {
       try {
         const [employeesRes, locationsRes] = await Promise.all([
-          apiService.get("/api/hr/employees", { timeout: 30000 }),
+          apiService.get("/api/hr/employees?limit=500", { timeout: 30000 }),
           apiService.get("/api/store-locations"),
         ]);
 
@@ -174,6 +174,7 @@ const EmployeeProfile = ({
     const fetchOrgEmployees = async () => {
       try {
         const employeesRes = await apiService.get("/api/hr/employees", {
+          params: { limit: 500 },
           timeout: 30000,
         });
         const employeeRows = Array.isArray(employeesRes)
