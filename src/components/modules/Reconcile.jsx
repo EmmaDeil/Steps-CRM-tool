@@ -4,6 +4,7 @@ import Breadcrumb from "../Breadcrumb";
 import apiService from "../../services/api";
 import BankStatementImportModal from "./BankStatementImportModal";
 import { formatCurrency } from "../../services/currency";
+import ModuleLoader from "../common/ModuleLoader";
 
 const Reconcile = ({ onBack }) => {
   const [loading, setLoading] = useState(true);
@@ -168,25 +169,7 @@ const Reconcile = ({ onBack }) => {
   );
 
   if (loading) {
-    return (
-      <div className="flex flex-col h-screen">
-        <Breadcrumb
-          items={[
-            { label: "Home", href: "/home", icon: "fa-house" },
-            { label: "Finance", icon: "fa-coins", onClick: onBack },
-            { label: "Reconcile", icon: "fa-scale-balanced" },
-          ]}
-        />
-        <div className="flex-1 flex items-center justify-center bg-slate-50">
-          <div className="flex flex-col items-center gap-3">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-            <p className="text-slate-600 text-sm">
-              Loading reconciliation data...
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    return <ModuleLoader moduleName="Reconcile" />;
   }
 
   return (

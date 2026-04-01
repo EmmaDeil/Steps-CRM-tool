@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import AuthContext from "../../context/AuthContext";
+import ModuleLoader from "../common/ModuleLoader";
 
 import axios from "axios";
 
@@ -123,17 +124,7 @@ const Attendance = () => {
   };
 
   if (loading) {
-    return (
-      <div className="p-4 text-center">
-        <div
-          className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"
-          role="status"
-        >
-          <span className="sr-only">Loading...</span>
-        </div>
-        <p className="mt-3 text-gray-600">Loading attendance data...</p>
-      </div>
-    );
+    return <ModuleLoader moduleName="Attendance" />;
   }
 
   if (error) {

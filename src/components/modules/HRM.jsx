@@ -102,6 +102,9 @@ const HRM = () => {
   const [showLeaveAllocationModal, setShowLeaveAllocationModal] =
     useState(false);
   const [leaveAllocationLoading, setLeaveAllocationLoading] = useState(false);
+  const [leaveAllocationEmployees, setLeaveAllocationEmployees] = useState([]);
+  const [leaveAllocationEmployeesLoading, setLeaveAllocationEmployeesLoading] =
+    useState(false);
   const [showPayroll, setShowPayroll] = useState(false);
   const [showEmployeeProfile, setShowEmployeeProfile] = useState(false);
   const [showEmployeeDirectoryPage, setShowEmployeeDirectoryPage] =
@@ -215,6 +218,55 @@ const HRM = () => {
       return unwrapped;
     }
     return fallback;
+  };
+
+  const fetchAllEmployeesForLeaveAllocation = async () => {
+    if (leaveAllocationEmployeesLoading) {
+      return;
+    }
+
+    setLeaveAllocationEmployeesLoading(true);
+    try {
+      const pageSize = 100;
+      let page = 1;
+      let totalPages = 1;
+      const allEmployees = [];
+
+      while (page <= totalPages) {
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: String(pageSize),
+        });
+
+        const response = await apiService.get(
+          `/api/hr/employees?${params.toString()}`,
+        );
+        const payload = toObjectPayload(response, {});
+        const pageEmployees = Array.isArray(payload?.data)
+          ? payload.data
+          : toArrayPayload(response);
+
+        allEmployees.push(...pageEmployees);
+        totalPages = payload?.pagination?.totalPages || 1;
+        page += 1;
+      }
+
+      const normalizedEmployees = allEmployees
+        .map((emp) => ({
+          id: emp.id || emp._id,
+          name: emp.name || emp.fullName || emp.email || "",
+          department: emp.department || "",
+          role: emp.role || emp.jobTitle || "Employee",
+        }))
+        .filter((emp) => Boolean(emp.id && emp.name));
+
+      setLeaveAllocationEmployees(normalizedEmployees);
+    } catch (error) {
+      console.error("Error fetching leave allocation employees:", error);
+      setLeaveAllocationEmployees([]);
+    } finally {
+      setLeaveAllocationEmployeesLoading(false);
+    }
   };
 
   const fetchEmployees = async (
@@ -399,6 +451,13 @@ const HRM = () => {
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
+
+  useEffect(() => {
+    if (showLeaveAllocationModal) {
+      fetchAllEmployeesForLeaveAllocation();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showLeaveAllocationModal]);
 
   const loadOrganogramData = async () => {
     setOrganogramLoading(true);
@@ -2453,7 +2512,7 @@ const HRM = () => {
                             required
                             value={leaveAllocationForm.employeeId}
                             onChange={(e) => {
-                              const selectedEmp = employees.find(
+                              const selectedEmp = leaveAllocationEmployees.find(
                                 (emp) => emp.id === e.target.value,
                               );
                               setLeaveAllocationForm({
@@ -2465,11 +2524,17 @@ const HRM = () => {
                             className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 appearance-none focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer"
                           >
                             <option value="">Select Employee</option>
-                            {employees.map((emp) => (
-                              <option key={emp.id} value={emp.id}>
-                                {emp.name} - {emp.department}
-                              </option>
-                            ))}
+                            {leaveAllocationEmployeesLoading ? (
+                              <option value="">Loading employees...</option>
+                            ) : leaveAllocationEmployees.length === 0 ? (
+                              <option value="">No employees found</option>
+                            ) : (
+                              leaveAllocationEmployees.map((emp) => (
+                                <option key={emp.id} value={emp.id}>
+                                  {emp.name} - {emp.department}
+                                </option>
+                              ))
+                            )}
                           </select>
                         </label>
 
@@ -2562,9 +2627,10 @@ const HRM = () => {
                             required
                             value={leaveAllocationForm.managerId}
                             onChange={(e) => {
-                              const selectedManager = employees.find(
-                                (emp) => emp.id === e.target.value,
-                              );
+                              const selectedManager =
+                                leaveAllocationEmployees.find(
+                                  (emp) => emp.id === e.target.value,
+                                );
                               setLeaveAllocationForm({
                                 ...leaveAllocationForm,
                                 managerId: e.target.value,
@@ -2574,11 +2640,17 @@ const HRM = () => {
                             className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 appearance-none focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer"
                           >
                             <option value="">Select Manager</option>
-                            {employees.map((emp) => (
-                              <option key={emp.id} value={emp.id}>
-                                {emp.name} - {emp.role}
-                              </option>
-                            ))}
+                            {leaveAllocationEmployeesLoading ? (
+                              <option value="">Loading employees...</option>
+                            ) : leaveAllocationEmployees.length === 0 ? (
+                              <option value="">No employees found</option>
+                            ) : (
+                              leaveAllocationEmployees.map((emp) => (
+                                <option key={emp.id} value={emp.id}>
+                                  {emp.name} - {emp.role}
+                                </option>
+                              ))
+                            )}
                           </select>
                         </label>
                       </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
+import ModuleLoader from "../common/ModuleLoader";
 
 const FM = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -368,10 +369,7 @@ const FM = () => {
           {/* Tickets List */}
           <div className="p-6">
             {loading ? (
-              <div className="text-center py-12">
-                <i className="fa-solid fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
-                <p className="text-gray-600">Loading tickets...</p>
-              </div>
+              <ModuleLoader moduleName="Facilities Management" />
             ) : tickets.length === 0 ? (
               <div className="text-center py-12">
                 <i className="fa-solid fa-inbox text-6xl text-gray-300 mb-4"></i>

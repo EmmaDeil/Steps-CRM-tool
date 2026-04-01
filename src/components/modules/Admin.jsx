@@ -143,6 +143,15 @@ const Admin = () => {
   });
   const usersTableTopRef = useRef(null);
 
+  const scrollUsersTableToTop = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      usersTableTopRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, []);
+
   const fetchUsers = useCallback(
     async (pageToLoad = 1) => {
       setUsersLoading(true);
@@ -194,9 +203,10 @@ const Admin = () => {
         }
       } finally {
         setUsersLoading(false);
+        scrollUsersTableToTop();
       }
     },
-    [filterRole, filterStatus, searchQuery],
+    [filterRole, filterStatus, searchQuery, scrollUsersTableToTop],
   );
 
   const fetchModules = useCallback(async () => {
@@ -418,15 +428,6 @@ const Admin = () => {
       return () => clearTimeout(timer);
     }
   }, [searchQuery, filterRole, filterStatus, activeView, fetchUsers]);
-
-  useEffect(() => {
-    if (activeView === "users") {
-      usersTableTopRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }
-  }, [usersPage, activeView]);
 
   // Fetch modules when Edit User modal opens
   useEffect(() => {

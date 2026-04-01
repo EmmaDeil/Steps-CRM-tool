@@ -3,6 +3,7 @@ import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
+import ModuleLoader from "../common/ModuleLoader";
 import { useAuth } from "../../context/useAuth";
 import { useDepartments } from "../../context/useDepartments";
 import { validateEmployeeProfile, validateFile } from "../../utils/validation";
@@ -538,14 +539,7 @@ const EmployeeProfile = ({
   };
 
   if (loading) {
-    return (
-      <div className={fullWidth ? "w-full p-4" : "p-6"}>
-        <div className="animate-pulse space-y-4">
-          <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
-          <div className="h-96 bg-gray-200 dark:bg-gray-700 rounded"></div>
-        </div>
-      </div>
-    );
+    return <ModuleLoader moduleName="Employee Profile" />;
   }
 
   return (

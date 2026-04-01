@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import ModuleLoader from "../common/ModuleLoader";
 import {
   FileText,
   ShoppingCart,
@@ -85,11 +86,7 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
   ];
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
+    return <ModuleLoader moduleName="Material Request Workflow" />;
   }
 
   return (

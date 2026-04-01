@@ -11,6 +11,7 @@ import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
 import DataTable from "../common/DataTable";
+import ModuleLoader from "../common/ModuleLoader";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const PurchaseOrders = () => {
@@ -601,22 +602,27 @@ const PurchaseOrders = () => {
       const { id, number } = pendingOpenPoRef.current;
       if (!id && !number) return;
 
+      pendingOpenPoRef.current = { id: "", number: "" };
+
       if (id) {
-        await openPurchaseOrderDetails({ _id: id });
-        pendingOpenPoRef.current = { id: "", number: "" };
-        return;
+        const match = purchaseOrders.find(
+          (po) => String(po._id || po.id) === String(id),
+        );
+        if (match) {
+          await openPurchaseOrderDetails(match);
+          return;
+        }
       }
 
       if (number) {
         await openPurchaseOrderByNumber(number);
-        pendingOpenPoRef.current = { id: "", number: "" };
       }
     };
 
-    if (!loading) {
+    if (purchaseOrders.length > 0) {
       runPendingOpen();
     }
-  }, [loading, purchaseOrders, openPurchaseOrderByNumber]);
+  }, [purchaseOrders, openPurchaseOrderByNumber]);
 
   const filteredMentionUsers = activeUsers
     .map((activeUser) => ({

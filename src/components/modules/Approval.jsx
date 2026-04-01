@@ -4,6 +4,7 @@ import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
+import ModuleLoader from "../common/ModuleLoader";
 import RetirementManagement from "./RetirementManagement";
 
 const Approval = () => {
@@ -863,10 +864,7 @@ const Approval = () => {
             </div>
 
             {loading ? (
-              <div className="p-8 text-center text-[#617589]">
-                <i className="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
-                <p>Loading requests...</p>
-              </div>
+              <ModuleLoader moduleName="Approvals" />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -1956,8 +1954,7 @@ const Approval = () => {
                         <div className="px-6 py-4 bg-gradient-to-r from-purple-600 to-purple-700">
                           <h3 className="text-lg font-bold text-white flex items-center gap-2">
                             <i className="fa-solid fa-list-check"></i>
-                            Expense ({allLineItems.length} total
-                            items)
+                            Expense ({allLineItems.length} total items)
                           </h3>
                         </div>
 

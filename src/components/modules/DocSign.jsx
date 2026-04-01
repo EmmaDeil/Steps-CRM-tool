@@ -5,6 +5,7 @@ import { toast } from "react-hot-toast";
 import { useAuth } from "../../context/useAuth";
 import DocSignRequest from "./DocSignRequest";
 import DocSignTemplateCreate from "./DocSignTemplateCreate";
+import ModuleLoader from "../common/ModuleLoader";
 
 const DocSign = () => {
   const { user } = useAuth();
@@ -278,12 +279,7 @@ const DocSign = () => {
       <main className="w-full flex-1 overflow-y-auto py-0 scroll-smooth">
         <div className="w-full space-y-10 px-3 py-6">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#137fec]"></div>
-              <p className="text-sm text-[#617589] mt-4">
-                Loading documents...
-              </p>
-            </div>
+            <ModuleLoader moduleName="Document Signing" />
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-20">
               <i className="fa-solid fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>

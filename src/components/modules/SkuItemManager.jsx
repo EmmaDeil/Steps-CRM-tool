@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
 import bwipjs from "bwip-js/browser"; // For generating printable barcodes in the browser
+import ModuleLoader from "../common/ModuleLoader";
 
 const SkuItemManager = () => {
   const [items, setItems] = useState([]);
@@ -295,9 +296,7 @@ const SkuItemManager = () => {
       {/* Table */}
       <div className="flex-1 overflow-auto bg-white rounded-xl border border-gray-200 shadow-sm">
         {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <i className="fa-solid fa-spinner fa-spin text-2xl text-blue-500"></i>
-          </div>
+          <ModuleLoader moduleName="SKU Item Manager" />
         ) : filteredItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-500">
             <i className="fa-solid fa-box-open text-4xl mb-3 opacity-30"></i>

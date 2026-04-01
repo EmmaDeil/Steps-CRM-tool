@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
 import { useCurrency } from "../../context/useCurrency";
 import { useAuth } from "../../context/useAuth";
+import ModuleLoader from "../common/ModuleLoader";
 
 const SystemSettings = () => {
   const { user } = useAuth();
@@ -163,11 +164,7 @@ const SystemSettings = () => {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-full pt-10">
-        <i className="fa-solid fa-spinner fa-spin text-3xl text-blue-500"></i>
-      </div>
-    );
+    return <ModuleLoader moduleName="System Settings" />;
   }
 
   return (

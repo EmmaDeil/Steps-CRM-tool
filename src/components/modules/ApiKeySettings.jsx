@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
+import ModuleLoader from "../common/ModuleLoader";
 
 const formatDateTime = (value) => {
   if (!value) return "Never";
@@ -108,11 +109,7 @@ const ApiKeySettings = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-[360px] bg-white rounded-xl border border-gray-200">
-        <i className="fa-solid fa-spinner fa-spin text-3xl text-blue-500"></i>
-      </div>
-    );
+    return <ModuleLoader moduleName="API Key Settings" />;
   }
 
   return (

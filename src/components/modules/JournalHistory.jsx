@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import Pagination from "../Pagination";
 import apiService from "../../services/api";
+import ModuleLoader from "../common/ModuleLoader";
 
 const JournalHistory = ({ onBack, onNewEntry }) => {
   const [loading, setLoading] = useState(true);
@@ -96,23 +97,7 @@ const JournalHistory = ({ onBack, onNewEntry }) => {
   };
 
   if (loading) {
-    return (
-      <div className="flex flex-col h-screen">
-        <Breadcrumb
-          items={[
-            { label: "Home", href: "/home", icon: "fa-house" },
-            { label: "Finance", icon: "fa-coins", onClick: onBack },
-            { label: "Journal History", icon: "fa-book" },
-          ]}
-        />
-        <div className="flex-1 flex items-center justify-center bg-slate-50">
-          <div className="flex flex-col items-center gap-3">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-            <p className="text-slate-600 text-sm">Loading journal entries...</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <ModuleLoader moduleName="Journal History" />;
   }
 
   return (
