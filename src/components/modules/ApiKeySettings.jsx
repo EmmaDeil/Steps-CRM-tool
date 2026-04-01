@@ -10,17 +10,25 @@ const formatDateTime = (value) => {
 };
 
 const ApiKeySettings = () => {
-  const [attendanceApiKey, setAttendanceApiKey] = useState("");
+  const [appApiKey, setAppApiKey] = useState("");
   const [lastUsedAt, setLastUsedAt] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
 
   useEffect(() => {
     const loadSettings = async () => {
       try {
         const response = await apiService.get("/api/admin/system-settings");
-        setAttendanceApiKey(String(response?.attendanceApiKey || ""));
-        setLastUsedAt(response?.attendanceApiKeyLastUsedAt || null);
+        setAppApiKey(
+          String(response?.appApiKey || response?.attendanceApiKey || ""),
+        );
+        setLastUsedAt(
+          response?.appApiKeyLastUsedAt ||
+            response?.attendanceApiKeyLastUsedAt ||
+            null,
+        );
       } catch (error) {
         console.error("Error loading API key settings:", error);
         toast.error("Failed to load API key settings");
@@ -36,15 +44,15 @@ const ApiKeySettings = () => {
     setGenerating(true);
     try {
       const response = await apiService.post(
-        "/api/admin/system-settings/attendance-api-key/generate",
+        "/api/admin/system-settings/app-api-key/generate",
       );
-      const generatedKey = String(response?.attendanceApiKey || "").trim();
+      const generatedKey = String(response?.appApiKey || "").trim();
       if (!generatedKey) {
         throw new Error("API key generation returned no key");
       }
-      setAttendanceApiKey(generatedKey);
-      setLastUsedAt(response?.attendanceApiKeyLastUsedAt || null);
-      toast.success("New API key generated");
+      setAppApiKey(generatedKey);
+      setLastUsedAt(response?.appApiKeyLastUsedAt || null);
+      toast.success("New application API key generated");
     } catch (error) {
       console.error("Error generating API key:", error);
       toast.error(error?.serverData?.message || "Failed to generate API key");
@@ -54,7 +62,7 @@ const ApiKeySettings = () => {
   };
 
   const handleCopy = async () => {
-    const key = String(attendanceApiKey || "").trim();
+    const key = String(appApiKey || "").trim();
     if (!key) {
       toast.error("No API key to copy");
       return;
@@ -66,6 +74,36 @@ const ApiKeySettings = () => {
     } catch (error) {
       console.error("Clipboard copy failed:", error);
       toast.error("Unable to copy API key");
+    }
+  };
+
+  const handleFetchPreview = async () => {
+    const key = String(appApiKey || "").trim();
+    if (!key) {
+      toast.error("No API key available to test");
+      return;
+    }
+
+    setPreviewLoading(true);
+    try {
+      const response = await apiService.get("/api/app/data", {
+        headers: {
+          "x-app-api-key": key,
+        },
+        params: {
+          sections:
+            "users,employees,vendors,inventory,materials,purchaseOrders,documents,auditLogs",
+          limit: 3,
+        },
+      });
+
+      setPreviewData(response?.data || null);
+      toast.success("App data fetched with the application key");
+    } catch (error) {
+      console.error("Error fetching app data preview:", error);
+      toast.error(error?.serverData?.message || "Failed to fetch app data");
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -90,11 +128,10 @@ const ApiKeySettings = () => {
         <div className="flex items-start justify-between gap-4 mb-3">
           <div>
             <h3 className="text-base font-semibold text-gray-900">
-              Service API Key
+              Application API Key
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              Used for remote attendance synchronization endpoint
-              authentication.
+              Used for application-wide API access and internal integrations.
             </p>
           </div>
           <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 bg-white text-gray-700">
@@ -103,9 +140,6 @@ const ApiKeySettings = () => {
           </span>
         </div>
 
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Key Value
-        </label>
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
           <button
             type="button"
@@ -115,11 +149,11 @@ const ApiKeySettings = () => {
           >
             <div className="flex items-center justify-between gap-3">
               <p className="font-mono text-sm text-gray-900 truncate">
-                {attendanceApiKey || "No API key available"}
+                {appApiKey || "No API key available"}
               </p>
               <span className="shrink-0 text-xs font-medium text-gray-600 inline-flex items-center gap-1">
                 <i className="fa-solid fa-copy"></i>
-                Copy
+                {/* Copy */}
               </span>
             </div>
           </button>
@@ -147,6 +181,67 @@ const ApiKeySettings = () => {
         <p className="mt-2 text-xs text-gray-500">
           Last used: {formatDateTime(lastUsedAt)}
         </p>
+
+        <div className="mt-4 flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={handleFetchPreview}
+            disabled={previewLoading}
+            className="w-full md:w-fit px-4 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-60"
+          >
+            {previewLoading ? (
+              <>
+                <i className="fa-solid fa-spinner fa-spin mr-2"></i>
+                Fetching app data...
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-database mr-2"></i>
+                Test app data access
+              </>
+            )}
+          </button>
+
+          {previewData ? (
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h4 className="text-sm font-semibold text-gray-900">
+                  App data preview
+                </h4>
+                <span className="text-xs text-gray-500">
+                  {previewData.requestedAt
+                    ? formatDateTime(previewData.requestedAt)
+                    : "Now"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                {Object.entries(previewData.sections || {}).map(
+                  ([sectionName, sectionData]) => (
+                    <div
+                      key={sectionName}
+                      className="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                    >
+                      <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+                        {sectionName}
+                      </p>
+                      <p className="mt-1 text-lg font-bold text-gray-900">
+                        {sectionData?.count ?? 0}
+                      </p>
+                      <p className="mt-2 text-xs text-gray-500">
+                        Showing{" "}
+                        {Array.isArray(sectionData?.records)
+                          ? sectionData.records.length
+                          : 0}{" "}
+                        record(s)
+                      </p>
+                    </div>
+                  ),
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

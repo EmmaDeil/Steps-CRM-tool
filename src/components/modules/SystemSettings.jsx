@@ -23,7 +23,7 @@ const SystemSettings = () => {
   const [integrations, setIntegrations] = useState({
     slackEnabled: false,
     emailSmtp: "smtp.mailtrap.io",
-    attendanceApiKey: "",
+    appApiKey: "",
   });
 
   const [maintenanceMode, setMaintenanceMode] = useState(false);
@@ -61,7 +61,7 @@ const SystemSettings = () => {
           setIntegrations({
             slackEnabled: response.slackEnabled || false,
             emailSmtp: response.emailSmtp || "smtp.mailtrap.io",
-            attendanceApiKey: response.attendanceApiKey || "",
+            appApiKey: response.appApiKey || response.attendanceApiKey || "",
           });
           setMaintenanceMode(Boolean(response.maintenanceMode));
         }
@@ -533,14 +533,14 @@ const SystemSettings = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Attendance App API Key
+                  Application API Key
                 </label>
                 <input
                   type="password"
-                  name="attendanceApiKey"
-                  value={integrations.attendanceApiKey}
+                  name="appApiKey"
+                  value={integrations.appApiKey}
                   onChange={handleIntegrationChange}
-                  placeholder="Enter token for module 8"
+                  placeholder="Enter application API key"
                   className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-1 focus:ring-blue-500 transition-shadow"
                 />
               </div>

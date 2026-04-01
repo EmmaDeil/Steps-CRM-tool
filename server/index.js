@@ -126,6 +126,7 @@ const DEFAULT_JOB_TITLES = [
 ];
 const VendorModel = require('./models/Vendor');
 const approvalRuleRoutes = require('./routes/approvalRule.routes');
+const appRoutes = require('./routes/app.routes');
 const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP, sendInventoryExpiryAlertEmail, sendWelcomeVerificationEmail } = require('./utils/emailService');
 const { sendSMSOTP } = require('./utils/smsService');
 const { buildApprovalChain } = require('./utils/approvalRuleHelper');
@@ -1137,6 +1138,9 @@ async function start() {
   // ============ ADMIN ROUTES (logs + backup) ============
   const adminRoutes = require('./routes/admin.routes');
   app.use('/api/admin', adminRoutes);
+
+  // ============ APP DATA ROUTES (application API key) ============
+  app.use('/api/app', appRoutes);
 
   // ============ BUDGET ROUTES ============
   const budgetRoutes = require('./routes/budget.routes');
@@ -5313,8 +5317,8 @@ async function start() {
     try {
       const { search } = req.query;
       const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-      const requestedLimit = parseInt(req.query.limit, 10) || 20;
-      const limit = Math.min(Math.max(requestedLimit, 1), 100);
+      const requestedLimit = parseInt(req.query.limit, 10) || 100;
+      const limit = Math.min(Math.max(requestedLimit, 1), 500);
       const skip = (page - 1) * limit;
       let query = {};
 

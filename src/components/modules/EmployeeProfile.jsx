@@ -12,6 +12,7 @@ const EmployeeProfile = ({
   fromProfile = false,
   employeeData = null,
   initialEditMode = false,
+  fullWidth = false,
 }) => {
   const { user: currentUser } = useAuth();
   const { departments, loading: departmentsLoading } = useDepartments();
@@ -199,6 +200,12 @@ const EmployeeProfile = ({
     (location) => location.name || location.code,
   );
   const currentEmployeeId = String(employee?._id || employee?.id || "");
+  const pageSectionClass = fullWidth
+    ? "w-full px-0 sm:px-2"
+    : "mx-auto max-w-7xl px-4";
+  const pageRootClass = fullWidth
+    ? "w-full min-h-screen bg-gray-50 px-0"
+    : "w-full min-h-screen bg-gray-50 px-1";
   const currentManager = orgEmployees.find(
     (option) =>
       String(option?._id || option?.id || "") ===
@@ -532,7 +539,7 @@ const EmployeeProfile = ({
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className={fullWidth ? "w-full p-4" : "p-6"}>
         <div className="animate-pulse space-y-4">
           <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
           <div className="h-96 bg-gray-200 dark:bg-gray-700 rounded"></div>
@@ -542,14 +549,14 @@ const EmployeeProfile = ({
   }
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 px-1">
+    <div className={pageRootClass}>
       {employee ? (
         <div>
           {/* Breadcrumbs */}
           <Breadcrumb items={breadcrumbItems} />
 
           {/* Profile Header Section */}
-          <div className="mx-auto max-w-7xl px-4 mt-6 mb-8">
+          <div className={`${pageSectionClass} mt-6 mb-8`}>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg p-6 md:p-8">
               <div className="flex gap-4 items-center">
                 <div className="relative group">
@@ -697,7 +704,7 @@ const EmployeeProfile = ({
           </div>
 
           {/* Tabs */}
-          <div className="mx-auto max-w-7xl px-4 mb-6">
+          <div className={`${pageSectionClass} mb-6`}>
             <div className="flex border-b border-gray-200 dark:border-gray-700 gap-8 overflow-x-auto">
               {tabs.map((tab) => (
                 <button
@@ -717,7 +724,7 @@ const EmployeeProfile = ({
 
           {/* Dashboard Grid Content */}
           {activeTab === "overview" && (
-            <div className="mx-auto max-w-7xl px-4">
+            <div className={pageSectionClass}>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 {/* Personal Information */}
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5 flex flex-col h-full card-animate">
@@ -1429,7 +1436,7 @@ const EmployeeProfile = ({
 
           {/* Personal Tab */}
           {activeTab === "personal" && (
-            <div className="mx-auto max-w-7xl px-4">
+            <div className={pageSectionClass}>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Contact Details */}
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 flex flex-col gap-5 card-animate">
@@ -1740,7 +1747,7 @@ const EmployeeProfile = ({
 
           {/* Employment Tab */}
           {activeTab === "employment" && (
-            <div className="mx-auto max-w-7xl px-4">
+            <div className={pageSectionClass}>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Role & Status */}
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 flex flex-col gap-5 card-animate">
@@ -2247,7 +2254,7 @@ const EmployeeProfile = ({
 
           {/* Activity Log Tab (HR Only) */}
           {activeTab === "activity" && isHR && (
-            <div className="mx-auto max-w-7xl px-4">
+            <div className={pageSectionClass}>
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 animate-fade-in">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -2338,7 +2345,7 @@ const EmployeeProfile = ({
 
           {/* Security Tab */}
           {activeTab === "security" && isOwnProfile && fromProfile && (
-            <div className="mx-auto max-w-7xl px-4">
+            <div className={pageSectionClass}>
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 animate-fade-in">
                 <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
                   <i className="fa-solid fa-shield-halved text-blue-600"></i>
@@ -2673,7 +2680,7 @@ const EmployeeProfile = ({
           <div className="h-20"></div>
         </div>
       ) : (
-        <div className="mx-auto max-w-7xl px-4">
+        <div className={pageSectionClass}>
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-8 text-center">
             <i className="fa-solid fa-user-slash text-4xl text-gray-400 mb-4"></i>
             <p className="text-gray-600 dark:text-gray-400">

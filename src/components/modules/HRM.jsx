@@ -60,7 +60,7 @@ const HRM = () => {
   const [employeePage, setEmployeePage] = useState(1);
   const [employeeTotal, setEmployeeTotal] = useState(0);
   const [employeeTotalPages, setEmployeeTotalPages] = useState(1);
-  const EMPLOYEES_PAGE_SIZE = 20;
+  const [employeePageSize, setEmployeePageSize] = useState(20);
 
   // Department management state
   const [showDeptModal, setShowDeptModal] = useState(false);
@@ -216,7 +216,10 @@ const HRM = () => {
     return fallback;
   };
 
-  const fetchEmployees = async (pageToLoad = employeePage) => {
+  const fetchEmployees = async (
+    pageToLoad = employeePage,
+    pageSize = employeePageSize,
+  ) => {
     if (fetchEmployeesInFlightRef.current) {
       return true;
     }
@@ -227,7 +230,7 @@ const HRM = () => {
     try {
       const params = new URLSearchParams({
         page: String(pageToLoad),
-        limit: String(EMPLOYEES_PAGE_SIZE),
+        limit: String(pageSize),
       });
 
       if (search) {
@@ -237,10 +240,13 @@ const HRM = () => {
       const empRes = await apiService.get(
         `/api/hr/employees?${params.toString()}`,
       );
-      const responsePayload = toObjectPayload(empRes, {});
+      const responsePayload =
+        empRes && typeof empRes === "object" ? empRes : {};
       const employeeList = Array.isArray(responsePayload?.data)
         ? responsePayload.data
-        : toArrayPayload(empRes);
+        : Array.isArray(empRes)
+          ? empRes
+          : [];
       const pagination = responsePayload?.pagination || {};
 
       setEmployees(employeeList);
@@ -249,9 +255,7 @@ const HRM = () => {
       setEmployeeTotalPages(
         pagination.totalPages ||
           Math.max(
-            Math.ceil(
-              (pagination.total || employeeList.length) / EMPLOYEES_PAGE_SIZE,
-            ),
+            Math.ceil((pagination.total || employeeList.length) / pageSize),
             1,
           ),
       );
@@ -303,7 +307,10 @@ const HRM = () => {
         apiService.get("/api/hr/leave-allocations"),
       ]);
 
-      const employeesLoaded = await fetchEmployees(employeePage);
+      const employeesLoaded = await fetchEmployees(
+        employeePage,
+        employeePageSize,
+      );
 
       const [reqRes, anaRes, leaveRes, perfRes, trainRes, payRes, allocRes] =
         await dashboardPromise;
@@ -395,7 +402,7 @@ const HRM = () => {
   const loadOrganogramData = async () => {
     setOrganogramLoading(true);
     try {
-      const batchLimit = 100;
+      const batchLimit = 20;
       let page = 1;
       let totalPages = 1;
       const allEmployees = [];
@@ -541,7 +548,7 @@ const HRM = () => {
 
       await refreshDepartments();
       await loadOrganogramData();
-      await fetchEmployees(employeePage);
+      await fetchEmployees(employeePage, employeePageSize);
       toast.success("Organogram updated successfully");
     } catch (error) {
       console.error("Failed to save organogram changes:", error);
@@ -599,7 +606,7 @@ const HRM = () => {
     }, 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search, employeePageSize]);
 
   const approveLeave = async (id) => {
     try {
@@ -876,6 +883,7 @@ const HRM = () => {
         }}
         employeeData={selectedEmployee}
         initialEditMode={startEmployeeInEditMode}
+        fullWidth
       />
     );
   }
@@ -920,7 +928,11 @@ const HRM = () => {
           )}
           {fullPage ? (
             <button
-              onClick={() => setShowEmployeeDirectoryPage(false)}
+              onClick={() => {
+                setEmployeePageSize(20);
+                setShowEmployeeDirectoryPage(false);
+                fetchEmployees(1, 20);
+              }}
               className="text-primary text-sm font-bold hover:underline"
             >
               Back to Dashboard
@@ -929,7 +941,9 @@ const HRM = () => {
             <button
               onClick={() => {
                 setSearch("");
+                setEmployeePageSize(50);
                 setShowEmployeeDirectoryPage(true);
+                fetchEmployees(1, 50);
               }}
               className="text-primary text-sm font-bold hover:underline"
             >
@@ -964,13 +978,15 @@ const HRM = () => {
           Showing{" "}
           {employees.length === 0
             ? 0
-            : (employeePage - 1) * EMPLOYEES_PAGE_SIZE + 1}
-          -{Math.min(employeePage * EMPLOYEES_PAGE_SIZE, totalEmployees)} of{" "}
+            : (employeePage - 1) * employeePageSize + 1}
+          -{Math.min(employeePage * employeePageSize, totalEmployees)} of{" "}
           {totalEmployees}
         </span>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => fetchEmployees(Math.max(employeePage - 1, 1))}
+            onClick={() =>
+              fetchEmployees(Math.max(employeePage - 1, 1), employeePageSize)
+            }
             disabled={employeesLoading || employeePage <= 1}
             className="px-2.5 py-1 border border-slate-200 dark:border-slate-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -981,7 +997,10 @@ const HRM = () => {
           </span>
           <button
             onClick={() =>
-              fetchEmployees(Math.min(employeePage + 1, employeeTotalPages))
+              fetchEmployees(
+                Math.min(employeePage + 1, employeeTotalPages),
+                employeePageSize,
+              )
             }
             disabled={employeesLoading || employeePage >= employeeTotalPages}
             className="px-2.5 py-1 border border-slate-200 dark:border-slate-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
@@ -995,7 +1014,7 @@ const HRM = () => {
 
   if (showEmployeeDirectoryPage) {
     return (
-      <div className="w-full min-h-screen bg-gray-50 px-1">
+      <div className="w-full min-h-screen bg-gray-50 px-0">
         <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
           <div className="flex h-full grow flex-col w-full">
             <Breadcrumb
@@ -1009,7 +1028,7 @@ const HRM = () => {
                 { label: "Employee Directory", icon: "fa-people-group" },
               ]}
             />
-            <div className="p-2">
+            <div className="p-0 sm:p-2">
               {renderEmployeeDirectorySection({ fullPage: true })}
             </div>
           </div>
