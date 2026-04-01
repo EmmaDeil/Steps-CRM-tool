@@ -1,7 +1,7 @@
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 
-const VendorDetails = ({ vendor, onBack }) => {
+const VendorDetails = ({ vendor, onBack, onEdit }) => {
   const handleDeactivate = () => {
     if (window.confirm("Are you sure you want to deactivate this vendor?")) {
       toast("Deactivate vendor feature coming soon");
@@ -13,7 +13,11 @@ const VendorDetails = ({ vendor, onBack }) => {
   };
 
   const handleEdit = () => {
-    toast("Edit vendor feature coming soon");
+    if (typeof onEdit === "function") {
+      onEdit(vendor);
+      return;
+    }
+    toast.error("Edit action is not available");
   };
 
   const getStatusBadge = (status) => {
@@ -91,7 +95,7 @@ const VendorDetails = ({ vendor, onBack }) => {
           { label: "Finance", icon: "fa-coins" },
           { label: "Vendor Management", icon: "fa-users", onClick: onBack },
           {
-            label: vendor.name || "Vendor Details",
+            label: vendor.companyName || vendor.name || "Vendor Details",
             icon: "fa-building",
           },
         ]}
@@ -105,7 +109,7 @@ const VendorDetails = ({ vendor, onBack }) => {
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-3">
                 <h1 className="text-slate-900 text-3xl md:text-4xl font-black leading-tight tracking-tight">
-                  {vendor.name}
+                  {vendor.companyName || vendor.name || "Vendor"}
                 </h1>
                 <span
                   className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold ring-1 ring-inset ${getStatusBadge(
@@ -185,15 +189,19 @@ const VendorDetails = ({ vendor, onBack }) => {
                     </span>
                     <div className="flex items-center gap-3 mt-1">
                       <div className="size-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-semibold">
-                        {vendor.contactName
-                          ?.split(" ")
+                        {String(
+                          vendor.contactPerson || vendor.contactName || "",
+                        )
+                          .split(" ")
+                          .filter(Boolean)
                           .map((n) => n[0])
                           .join("")
-                          .toUpperCase() || "N/A"}
+                          .toUpperCase()
+                          .slice(0, 2) || "N/A"}
                       </div>
                       <div>
                         <p className="text-slate-900 text-sm font-bold">
-                          {vendor.contactName || "N/A"}
+                          {vendor.contactPerson || vendor.contactName || "N/A"}
                         </p>
                         <p className="text-slate-500 text-xs">
                           {vendor.contactTitle || "Contact Person"}

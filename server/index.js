@@ -2147,6 +2147,11 @@ async function start() {
       const apiKey = settings?.attendanceApiKey;
 
       if (apiKey) {
+        await SystemSettingsModel.updateOne(
+          { _id: settings._id },
+          { $set: { attendanceApiKeyLastUsedAt: new Date() } },
+        );
+
         const endpoints = [
           'https://attendance-app-swart-iota.vercel.app/api/attendance',
           'https://attendance-app-swart-iota.vercel.app/api/hr/employees',

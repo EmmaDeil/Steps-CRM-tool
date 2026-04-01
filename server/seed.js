@@ -23,12 +23,14 @@ const AnalyticsModel = require('./models/Analytics');
 const AttendanceModel = require('./models/Attendance');
 const PolicyModel = require('./models/Policy');
 const SecuritySettingsModel = require('./models/SecuritySettings');
+const EmployeeModel = require('./models/Employee');
 
 // Parse command line arguments
 const args = process.argv.slice(2);
 const shouldClear = args.includes('--clear');
 const seedUsersOnly = args.includes('--users');
 const seedAll = args.includes('--all') || args.length === 0;
+const BULK_EMPLOYEE_USER_COUNT = 300;
 
 // Seed data
 const seedData = {
@@ -204,6 +206,7 @@ async function clearCollections() {
   
   const models = [
     UserModel,
+    EmployeeModel,
     ModuleModel,
     DepartmentModel,
     JobTitleModel,
@@ -278,23 +281,111 @@ async function seedJobTitles() {
 async function seedUsers() {
   console.log('\n👤 Seeding users...');
   try {
-    const count = await UserModel.countDocuments();
-    if (count === 0 || shouldClear) {
-      for (const userData of seedData.users) {
-        // Don't hash password here - the User model's pre-save hook will do it
-        const user = {
+    let baseUsersCreated = 0;
+    let bulkUsersCreated = 0;
+    let bulkEmployeesCreated = 0;
+
+    const createUserIfMissing = async (userData) => {
+      const email = String(userData.email || '').trim().toLowerCase();
+      if (!email) return null;
+
+      let user = await UserModel.findOne({ email });
+      if (!user) {
+        user = await UserModel.create({
           ...userData,
+          email,
           fullName: `${userData.firstName} ${userData.lastName}`,
-        };
-        await UserModel.create(user);
+        });
+        return { user, created: true };
       }
-      console.log(`   ✓ Seeded ${seedData.users.length} users`);
-      console.log('\n   Default credentials:');
-      console.log('   Admin: admin@netlink.com / Admin@123');
-      console.log('   User: john.doe@netlink.com / User@123');
-    } else {
-      console.log('   ⊘ Users already exist (use --clear to reset)');
+
+      return { user, created: false };
+    };
+
+    for (const userData of seedData.users) {
+      const result = await createUserIfMissing(userData);
+      if (result?.created) baseUsersCreated += 1;
     }
+
+    const departmentNames = seedData.departments.map((dept) => dept.name);
+    const roleCycle = ['user', 'Editor', 'Viewer'];
+    const now = new Date();
+
+    for (let index = 1; index <= BULK_EMPLOYEE_USER_COUNT; index += 1) {
+      const sequence = String(index).padStart(3, '0');
+      const email = `employee${sequence}@netlink.com`;
+      const password = `Emp#${sequence}Pwd`;
+      const firstName = 'Employee';
+      const lastName = sequence;
+      const department = departmentNames[index % departmentNames.length];
+      const jobTitle = seedData.jobTitles[index % seedData.jobTitles.length];
+      const role = roleCycle[index % roleCycle.length];
+      const employeeId = `EMP${sequence}`;
+
+      const userResult = await createUserIfMissing({
+        firstName,
+        lastName,
+        email,
+        password,
+        role,
+        status: 'Active',
+        department,
+        jobTitle,
+      });
+
+      if (userResult?.created) {
+        bulkUsersCreated += 1;
+      }
+
+      const linkedUser = userResult?.user;
+      if (!linkedUser) continue;
+
+      let employee = await EmployeeModel.findOne({
+        $or: [{ email }, { employeeId }],
+      });
+
+      if (!employee) {
+        employee = await EmployeeModel.create({
+          firstName,
+          lastName,
+          email,
+          phone: `+234800${String(index).padStart(6, '0')}`,
+          department,
+          jobTitle,
+          role,
+          employeeId,
+          status: 'Active',
+          startDate: now,
+          userRef: linkedUser._id,
+        });
+        bulkEmployeesCreated += 1;
+      } else if (!employee.userRef || String(employee.userRef) !== String(linkedUser._id)) {
+        employee.userRef = linkedUser._id;
+        employee.updatedAt = new Date();
+        await employee.save();
+      }
+
+      if (!linkedUser.employeeRef || String(linkedUser.employeeRef) !== String(employee._id)) {
+        linkedUser.employeeRef = employee._id;
+        linkedUser.department = linkedUser.department || department;
+        linkedUser.jobTitle = linkedUser.jobTitle || jobTitle;
+        await linkedUser.save();
+      }
+    }
+
+    console.log(`   ✓ Ensured default users (${seedData.users.length})`);
+    console.log(`   ✓ Created ${baseUsersCreated} missing default users`);
+    console.log(`   ✓ Ensured ${BULK_EMPLOYEE_USER_COUNT} employee users`);
+    console.log(`   ✓ Created ${bulkUsersCreated} new employee users`);
+    console.log(`   ✓ Created ${bulkEmployeesCreated} new employee records`);
+    console.log('\n   Default credentials:');
+    console.log('   Admin: admin@netlink.com / Admin@123');
+    console.log('   User: john.doe@netlink.com / User@123');
+    console.log('   Editor: jane.smith@netlink.com / User@123');
+    console.log('\n   Bulk employee credential pattern:');
+    console.log('   employee001@netlink.com / Emp#001Pwd');
+    console.log('   employee002@netlink.com / Emp#002Pwd');
+    console.log('   ... up to employee300@netlink.com / Emp#300Pwd');
   } catch (error) {
     console.error('   ✗ Error seeding users:', error.message);
   }

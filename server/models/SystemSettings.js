@@ -26,6 +26,8 @@ const systemSettingsSchema = new mongoose.Schema({
   slackEnabled: { type: Boolean, default: false },
   emailSmtp: { type: String, default: 'smtp.mailtrap.io' },
   attendanceApiKey: { type: String, default: '' },
+  attendanceApiKeyGeneratedAt: { type: Date, default: null },
+  attendanceApiKeyLastUsedAt: { type: Date, default: null },
   maintenanceMode: { type: Boolean, default: false }
 }, { timestamps: true });
 

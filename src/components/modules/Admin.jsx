@@ -7,6 +7,7 @@ import Breadcrumb from "../Breadcrumb";
 import SecuritySettings from "./SecuritySettings";
 import ApprovalSettings from "./ApprovalSettings";
 import SystemSettings from "./SystemSettings";
+import ApiKeySettings from "./ApiKeySettings";
 import SkuItemManager from "./SkuItemManager";
 import StoreLocations from "./StoreLocations";
 import {
@@ -840,6 +841,28 @@ const Admin = () => {
         />
         <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1">
           <SystemSettings />
+        </div>
+        <Footer variant="admin" />
+      </div>
+    );
+  }
+
+  if (activeView === "api-key-settings") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <Breadcrumb
+          items={[
+            { label: "Home", href: "/home", icon: "fa-house" },
+            {
+              label: "Admin Controls",
+              onClick: () => setSearchParams({ view: "dashboard" }),
+              icon: "fa-user-shield",
+            },
+            { label: "API Key Settings", icon: "fa-key" },
+          ]}
+        />
+        <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1">
+          <ApiKeySettings />
         </div>
         <Footer variant="admin" />
       </div>
@@ -2308,6 +2331,13 @@ const Admin = () => {
           >
             <i className="fa-solid fa-gear"></i>
             System Settings
+          </button>
+          <button
+            onClick={() => setSearchParams({ view: "api-key-settings" })}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-[#111418] rounded-lg font-medium flex items-center gap-2 transition-colors"
+          >
+            <i className="fa-solid fa-key"></i>
+            API Key Settings
           </button>
           <button
             onClick={() => setSearchParams({ view: "sku-items" })}
