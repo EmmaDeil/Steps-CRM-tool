@@ -483,6 +483,24 @@ const EmployeeProfile = ({
             updatedEmployee.profilePicture ||
             previewUrl,
         );
+
+        // Refresh org relationship data so the Direct Reports section reflects
+        // newly saved manager assignments without waiting for a full page reload.
+        try {
+          const employeesRes = await apiService.get("/api/hr/employees", {
+            params: { limit: 500 },
+            timeout: 30000,
+          });
+          const employeeRows = Array.isArray(employeesRes)
+            ? employeesRes
+            : Array.isArray(employeesRes?.data)
+              ? employeesRes.data
+              : [];
+          setOrgEmployees(employeeRows);
+        } catch (refreshError) {
+          console.error("Error refreshing org employees:", refreshError);
+        }
+
         setIsEditing(false);
         setEditingEmployee(null);
         setProfilePictureFile(null);
