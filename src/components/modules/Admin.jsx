@@ -319,16 +319,32 @@ const Admin = () => {
   const fetchAdminData = async () => {
     setStatsLoading(true);
     try {
-      // Fetch all data for dashboard
+      const toArray = (payload) => {
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload?.data)) return payload.data;
+        return [];
+      };
+
+      // Use allSettled so one slow endpoint does not block the entire dashboard.
       const [advanceRes, refundRes, retirementRes, usersRes] =
-        await Promise.all([
-          apiService.get("/api/advance-requests"),
-          apiService.get("/api/refund-requests"),
-          apiService.get("/api/retirement-breakdown"),
-          apiService.get("/api/users"),
+        await Promise.allSettled([
+          apiService.get("/api/advance-requests", { timeout: 12000 }),
+          apiService.get("/api/refund-requests", { timeout: 12000 }),
+          apiService.get("/api/retirement-breakdown", { timeout: 12000 }),
+          apiService.get("/api/users", { timeout: 12000 }),
         ]);
 
-      const users = usersRes.data || [];
+      const advances =
+        advanceRes.status === "fulfilled" ? toArray(advanceRes.value) : [];
+      const refunds =
+        refundRes.status === "fulfilled" ? toArray(refundRes.value) : [];
+      const retirements =
+        retirementRes.status === "fulfilled"
+          ? toArray(retirementRes.value)
+          : [];
+      const users =
+        usersRes.status === "fulfilled" ? toArray(usersRes.value) : [];
+
       const activeUsersCount = users.filter(
         (u) => u.status === "Active",
       ).length;
@@ -338,24 +354,23 @@ const Admin = () => {
 
       // Calculate system stats from real data
       const pendingApprovals =
-        (advanceRes.data?.filter((r) => r.status === "pending").length || 0) +
-        (refundRes.data?.filter((r) => r.status === "pending").length || 0) +
+        advances.filter((r) => r.status === "pending").length +
+        refunds.filter((r) => r.status === "pending").length +
         pendingUsersCount;
 
       setSystemStats({
         activeUsers: activeUsersCount,
         usersGrowth: 0, // Would need historical data to calculate
         pendingApprovals,
-        totalRequests:
-          (advanceRes.data?.length || 0) + (refundRes.data?.length || 0),
+        totalRequests: advances.length + refunds.length,
         totalRevenue: 0, // Would need to be calculated from financial data
         revenueGrowth: 0, // Would need historical data
         systemLoad: 0,
         loadTrend: "stable",
         uptime: 0,
-        totalAdvanceRequests: advanceRes.data?.length || 0,
-        totalRefundRequests: refundRes.data?.length || 0,
-        totalRetirementBreakdowns: retirementRes.data?.length || 0,
+        totalAdvanceRequests: advances.length,
+        totalRefundRequests: refunds.length,
+        totalRetirementBreakdowns: retirements.length,
       });
 
       // Fetch system stats and service status

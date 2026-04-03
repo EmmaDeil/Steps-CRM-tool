@@ -2930,6 +2930,32 @@ async function start() {
     }
   });
 
+  app.post('/api/retirement-breakdown/:id/unlock', authMiddleware, async (req, res) => {
+    try {
+      if (!hasAdminPrivileges(req.user)) {
+        return res.status(403).json({ message: 'Only Admin can unlock this breakdown' });
+      }
+
+      const target = await RetirementBreakdownModel.findById(req.params.id);
+      if (!target) return res.status(404).json({ message: 'Breakdown not found' });
+
+      if (String(target.status || '').toLowerCase() !== 'reconciled') {
+        return res.status(400).json({ message: 'Only reconciled breakdowns can be unlocked' });
+      }
+
+      target.status = 'submitted';
+      target.reconciledDate = undefined;
+      target.reconciledById = undefined;
+      target.reconciledByName = undefined;
+
+      await target.save();
+      return res.json({ message: 'Breakdown unlocked successfully', data: target });
+    } catch (err) {
+      console.error('Error unlocking retirement breakdown:', err);
+      return res.status(500).json({ message: 'Failed to unlock breakdown' });
+    }
+  });
+
   // ========== DOCUMENT MANAGEMENT ROUTES ==========
 
   const canAccessDocument = (document, user) => {

@@ -147,9 +147,12 @@ const EmployeeProfile = ({
   useEffect(() => {
     const fetchEditOptions = async () => {
       try {
+        const employeeLimit = 200;
         const [employeesRes, locationsRes] = await Promise.all([
-          apiService.get("/api/hr/employees?limit=500", { timeout: 30000 }),
-          apiService.get("/api/store-locations"),
+          apiService.get(`/api/hr/employees?limit=${employeeLimit}`, {
+            timeout: 15000,
+          }),
+          apiService.get("/api/store-locations", { timeout: 12000 }),
         ]);
 
         const employeeRows = Array.isArray(employeesRes)
@@ -166,16 +169,17 @@ const EmployeeProfile = ({
     };
 
     if (isHR) {
+      if (managerOptions.length > 0 && locationOptions.length > 0) return;
       fetchEditOptions();
     }
-  }, [isHR]);
+  }, [isHR, managerOptions.length, locationOptions.length]);
 
   useEffect(() => {
     const fetchOrgEmployees = async () => {
       try {
         const employeesRes = await apiService.get("/api/hr/employees", {
-          params: { limit: 500 },
-          timeout: 30000,
+          params: { limit: 200, page: 1 },
+          timeout: 15000,
         });
         const employeeRows = Array.isArray(employeesRes)
           ? employeesRes
@@ -190,9 +194,10 @@ const EmployeeProfile = ({
     };
 
     if (employee?._id) {
+      if (orgEmployees.length > 0) return;
       fetchOrgEmployees();
     }
-  }, [employee?._id]);
+  }, [employee?._id, orgEmployees.length]);
 
   const departmentOptions = departments.map((dept) => dept.name || dept.code);
   const availableManagerOptions = managerOptions.filter(
@@ -309,6 +314,9 @@ const EmployeeProfile = ({
         {
           documents: updatedDocuments,
           updatedBy: currentUser?._id || "system",
+        },
+        {
+          timeout: 60000,
         },
       );
 

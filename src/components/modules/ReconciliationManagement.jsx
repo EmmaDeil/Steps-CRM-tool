@@ -16,6 +16,7 @@ const ReconciliationManagement = ({
   initialEvidenceFiles = [],
   initialPreviousClosingBalance,
   initialInflowAmount,
+  onBreakdownUpdated,
 }) => {
   const { user } = useAuth();
   const resolvedUserId = user?.id || user?._id || user?.userId || "";
@@ -29,6 +30,7 @@ const ReconciliationManagement = ({
   const [userList, setUserList] = useState([]);
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionSearch, setMentionSearch] = useState("");
+  const [reviewedLineItemIds, setReviewedLineItemIds] = useState([]);
   const commentRef = useRef(null);
   const autoFillToastMonthRef = useRef("");
   const [newItem, setNewItem] = useState({
@@ -61,6 +63,7 @@ const ReconciliationManagement = ({
   const normalizedDepartment = String(user?.department || "")
     .trim()
     .toLowerCase();
+  const isAdminUser = normalizedRole === "admin";
   const canReconcile =
     normalizedRole === "admin" ||
     normalizedRole === "security admin" ||
@@ -68,6 +71,8 @@ const ReconciliationManagement = ({
   const isMonthSubmitted = monthStatus === "submitted";
   const isMonthReconciled = monthStatus === "reconciled";
   const isReadOnly = isMonthReconciled || (isMonthSubmitted && !canReconcile);
+  const isFinanceReviewMode =
+    canReconcile && (isMonthSubmitted || isMonthReconciled);
 
   useEffect(() => {
     if (!forceFreshStart) return;
@@ -76,6 +81,7 @@ const ReconciliationManagement = ({
     setEvidenceFiles([]);
     setCommentText("");
     setNewItem({ date: "", description: "", quantity: "", amount: "" });
+    setReviewedLineItemIds([]);
     setMonthStatus("draft");
     setSubmittedOn("");
     setReconciledOn("");
@@ -182,6 +188,7 @@ const ReconciliationManagement = ({
             setSubmittedOn("");
             setReconciledOn("");
             setActiveBreakdownId("");
+            setReviewedLineItemIds([]);
             autoFillToastMonthRef.current = "";
             setMonthYear(nextDraftMonth);
             return;
@@ -210,6 +217,7 @@ const ReconciliationManagement = ({
         setSubmittedOn(submittedRecord?.submittedDate || "");
         setReconciledOn(reconciledRecord?.reconciledDate || "");
         setActiveBreakdownId(activeRecord?._id || "");
+        setReviewedLineItemIds([]);
 
         if (shouldAutoFillPreviousBalance) {
           const [year, month] = monthYear.split("-");
@@ -376,6 +384,15 @@ const ReconciliationManagement = ({
     toast.success("Expense item removed");
   };
 
+  const handleReviewLineItem = (id) => {
+    if (!isFinanceReviewMode) return;
+
+    setReviewedLineItemIds((prev) =>
+      prev.includes(id) ? prev : [...prev, id],
+    );
+    toast.success("Line item marked as reconciled");
+  };
+
   const handleUpdateLineItem = (id, field, value) => {
     if (isReadOnly) return;
 
@@ -512,6 +529,7 @@ const ReconciliationManagement = ({
       setMonthStatus("submitted");
       setSubmittedOn(request.submittedDate);
       setActiveBreakdownId(saved?._id || activeBreakdownId);
+      onBreakdownUpdated?.();
       toast.success("Expense breakdown submitted successfully");
     } catch (error) {
       toast.error("Failed to submit expense breakdown");
@@ -552,6 +570,7 @@ const ReconciliationManagement = ({
       const saved = response?.data || null;
       setMonthStatus("draft");
       setActiveBreakdownId(saved?._id || activeBreakdownId);
+      onBreakdownUpdated?.();
       toast.success("Draft saved");
     } catch (error) {
       toast.error(error?.serverData?.error || "Failed to save draft");
@@ -595,11 +614,41 @@ const ReconciliationManagement = ({
       setReconciledOn(
         reconciled?.reconciledDate || new Date().toISOString().split("T")[0],
       );
+      onBreakdownUpdated?.();
       toast.success("Breakdown reconciled and locked");
     } catch (error) {
       toast.error(
         error?.serverData?.message || "Failed to reconcile breakdown",
       );
+      console.error(error);
+    }
+  };
+
+  const handleUnlockBreakdown = async () => {
+    if (!isMonthReconciled) return;
+
+    if (!isAdminUser) {
+      toast.error("Only Admin can unlock this breakdown");
+      return;
+    }
+
+    if (!activeBreakdownId) {
+      toast.error("No reconciled breakdown found for this month");
+      return;
+    }
+
+    try {
+      const response = await apiService.post(
+        `/api/retirement-breakdown/${activeBreakdownId}/unlock`,
+      );
+      const unlocked = response?.data || null;
+      setMonthStatus(unlocked?.status || "submitted");
+      setReconciledOn("");
+      setReviewedLineItemIds([]);
+      onBreakdownUpdated?.();
+      toast.success("Breakdown unlocked");
+    } catch (error) {
+      toast.error(error?.serverData?.message || "Failed to unlock breakdown");
       console.error(error);
     }
   };
@@ -637,21 +686,57 @@ const ReconciliationManagement = ({
   breadcrumbItems.push({ label: "Reconciliation", icon: "fa-umbrella" });
 
   return (
-    <div className="min-h-screen bg-[#f4f7fb]">
+    <div
+      className={`min-h-screen ${
+        isFinanceReviewMode ? "bg-[#eef4ff]" : "bg-[#f4f7fb]"
+      }`}
+    >
       <Breadcrumb items={breadcrumbItems} />
 
       <main className="min-h-screen w-full p-2">
-        <header className="mb-10">
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
-            {/* Action Required */}
-          </p>
-          <h1 className="mb-2 text-4xl font-extrabold tracking-tight text-slate-900">
-            Reconcile Expenses
-          </h1>
-          <p className="text-slate-600">
-            Record the breakdown of how you spent the inflow payment from
-            finance.
-          </p>
+        <header className="mb-10 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
+              {isFinanceReviewMode ? "Finance Review" : "Employee Submission"}
+            </p>
+            <h1 className="mb-2 text-4xl font-extrabold tracking-tight text-slate-900">
+              {isFinanceReviewMode ? "Review" : "Expenses"}
+            </h1>
+            <p className="text-slate-600">
+              {isFinanceReviewMode
+                ? "Review submitted entries, verify evidence, and lock the month after reconciliation."
+                : "Record the breakdown of how you spent the inflow payment from finance."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {isMonthSubmitted && (
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                <i className="fa-solid fa-clock"></i>
+                Submitted
+              </span>
+            )}
+            {isMonthReconciled && (
+              <button
+                type="button"
+                onClick={handleUnlockBreakdown}
+                disabled={!isAdminUser}
+                title={
+                  isAdminUser
+                    ? `Unlock reconciled month${reconciledOn ? ` (${reconciledOn})` : ""}`
+                    : "Only Admin can unlock this breakdown"
+                }
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                  isAdminUser
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                    : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                }`}
+              >
+                <i className="fa-solid fa-lock"></i>
+                Locked
+              </button>
+            )}
+          </div>
         </header>
 
         <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -670,7 +755,7 @@ const ReconciliationManagement = ({
 
           <div className="rounded-xl border border-slate-200 border-l-4 border-l-emerald-600 bg-white p-6 shadow-sm">
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-              Previous Closing Balance
+              Closing Balance
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xl font-bold text-slate-700">
@@ -691,7 +776,7 @@ const ReconciliationManagement = ({
 
           <div className="rounded-xl border border-slate-200 border-l-4 border-l-orange-500 bg-white p-6 shadow-sm">
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-              Inflow Received
+              Inflow
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xl font-bold text-slate-700">
@@ -711,26 +796,13 @@ const ReconciliationManagement = ({
           </div>
         </div>
 
-        {isMonthSubmitted && (
+        {isMonthSubmitted && !isFinanceReviewMode && (
           <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
             <p className="text-sm font-semibold">
               This month has been submitted.
             </p>
             <p className="mt-1 text-xs">
-              Submitted on {submittedOn || "a previous date"}. Finance/Admin can
-              review and reconcile this month.
-            </p>
-          </div>
-        )}
-
-        {isMonthReconciled && (
-          <div className="mb-6 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-900">
-            <p className="text-sm font-semibold">
-              This month is reconciled and locked.
-            </p>
-            <p className="mt-1 text-xs">
-              Reconciled on {reconciledOn || "a previous date"}. Switch the
-              month to create a new draft.
+              Submitted on {submittedOn || "a previous date"}.
             </p>
           </div>
         )}
@@ -738,7 +810,7 @@ const ReconciliationManagement = ({
         <div className="mb-8 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
             <h4 className="text-lg font-bold text-slate-900">
-              Expense Breakdown
+              {/* Breakdown */}
             </h4>
           </div>
 
@@ -771,81 +843,86 @@ const ReconciliationManagement = ({
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-t border-slate-100 bg-slate-50/50">
-                  <td className="px-4 py-1.5">
-                    <input
-                      type="date"
-                      value={newItem.date}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, date: e.target.value })
-                      }
-                      disabled={isReadOnly}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleAddLineItem();
-                      }}
-                      className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
-                    />
-                  </td>
-                  <td className="px-4 py-1.5">
-                    <input
-                      type="text"
-                      value={newItem.description}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, description: e.target.value })
-                      }
-                      disabled={isReadOnly}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleAddLineItem();
-                      }}
-                      placeholder="e.g., Office Supplies"
-                      className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
-                    />
-                  </td>
-                  <td className="px-4 py-1.5">
-                    <input
-                      type="number"
-                      value={newItem.quantity}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, quantity: e.target.value })
-                      }
-                      disabled={isReadOnly}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleAddLineItem();
-                      }}
-                      placeholder="0"
-                      min="0"
-                      className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
-                    />
-                  </td>
-                  <td className="px-4 py-1.5">
-                    <input
-                      type="number"
-                      value={newItem.amount}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, amount: e.target.value })
-                      }
-                      disabled={isReadOnly}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleAddLineItem();
-                      }}
-                      placeholder="0.00"
-                      step="0"
-                      min="0"
-                      className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
-                    />
-                  </td>
-                  <td className="px-4 py-1.5 text-right">
-                    <button
-                      onClick={handleAddLineItem}
-                      disabled={isReadOnly}
-                      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                      title="Add expense"
-                    >
-                      <i className="fa-solid fa-plus"></i>
-                      {/* Add */}
-                    </button>
-                  </td>
-                </tr>
+                {!isFinanceReviewMode && (
+                  <tr className="border-t border-slate-100 bg-slate-50/50">
+                    <td className="px-4 py-1.5">
+                      <input
+                        type="date"
+                        value={newItem.date}
+                        onChange={(e) =>
+                          setNewItem({ ...newItem, date: e.target.value })
+                        }
+                        disabled={isReadOnly}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddLineItem();
+                        }}
+                        className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
+                      />
+                    </td>
+                    <td className="px-4 py-1.5">
+                      <input
+                        type="text"
+                        value={newItem.description}
+                        onChange={(e) =>
+                          setNewItem({
+                            ...newItem,
+                            description: e.target.value,
+                          })
+                        }
+                        disabled={isReadOnly}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddLineItem();
+                        }}
+                        placeholder="e.g., Office Supplies"
+                        className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
+                      />
+                    </td>
+                    <td className="px-4 py-1.5">
+                      <input
+                        type="number"
+                        value={newItem.quantity}
+                        onChange={(e) =>
+                          setNewItem({ ...newItem, quantity: e.target.value })
+                        }
+                        disabled={isReadOnly}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddLineItem();
+                        }}
+                        placeholder="0"
+                        min="0"
+                        className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
+                      />
+                    </td>
+                    <td className="px-4 py-1.5">
+                      <input
+                        type="number"
+                        value={newItem.amount}
+                        onChange={(e) =>
+                          setNewItem({ ...newItem, amount: e.target.value })
+                        }
+                        disabled={isReadOnly}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddLineItem();
+                        }}
+                        placeholder="0.00"
+                        step="0"
+                        min="0"
+                        className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
+                      />
+                    </td>
+                    <td className="px-4 py-1.5 text-right">
+                      <button
+                        onClick={handleAddLineItem}
+                        disabled={isReadOnly}
+                        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        title="Add expense"
+                      >
+                        <i className="fa-solid fa-plus"></i>
+                        {/* Add */}
+                      </button>
+                    </td>
+                  </tr>
+                )}
 
                 {lineItems.length === 0 ? (
                   <tr>
@@ -858,18 +935,22 @@ const ReconciliationManagement = ({
                           No expenses added yet.
                         </p>
                         <p className="mb-5 text-slate-500">
-                          Start by adding your first expense line item above.
+                          {isFinanceReviewMode
+                            ? "No submitted line items were found for this month."
+                            : "Start by adding your first expense line item above."}
                         </p>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            toast("Bank feed import will be available soon")
-                          }
-                          className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 hover:underline"
-                        >
-                          Import from bank feed
-                          <i className="fa-solid fa-arrow-right text-xs"></i>
-                        </button>
+                        {!isFinanceReviewMode && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toast("Bank feed import will be available soon")
+                            }
+                            className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 hover:underline"
+                          >
+                            Import from bank feed
+                            <i className="fa-solid fa-arrow-right text-xs"></i>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -877,7 +958,12 @@ const ReconciliationManagement = ({
                   lineItems.map((item) => (
                     <tr
                       key={item.id}
-                      className="border-t border-slate-100 transition-colors hover:bg-slate-50"
+                      className={`border-t border-slate-100 transition-colors hover:bg-slate-50 ${
+                        isFinanceReviewMode &&
+                        reviewedLineItemIds.includes(item.id)
+                          ? "bg-emerald-50"
+                          : ""
+                      }`}
                     >
                       <td className="px-4 py-2">
                         <input
@@ -943,14 +1029,33 @@ const ReconciliationManagement = ({
                         />
                       </td>
                       <td className="px-4 py-4 text-right">
-                        <button
-                          onClick={() => handleRemoveLineItem(item.id)}
-                          disabled={isReadOnly}
-                          className="text-sm text-red-600 transition-colors hover:text-red-700 disabled:cursor-not-allowed disabled:text-slate-400"
-                          title="Delete item"
-                        >
-                          <i className="fa-solid fa-trash"></i>
-                        </button>
+                        {isFinanceReviewMode ? (
+                          <button
+                            type="button"
+                            onClick={() => handleReviewLineItem(item.id)}
+                            disabled={reviewedLineItemIds.includes(item.id)}
+                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              reviewedLineItemIds.includes(item.id)
+                                ? "cursor-default border-emerald-300 bg-emerald-100 text-emerald-800"
+                                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                            }`}
+                            title="Mark line item as reconciled"
+                          >
+                            <i className="fa-solid fa-history"></i>
+                            {reviewedLineItemIds.includes(item.id)
+                              ? "Reconciled"
+                              : "Review"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleRemoveLineItem(item.id)}
+                            disabled={isReadOnly}
+                            className="text-sm text-red-600 transition-colors hover:text-red-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                            title="Delete item"
+                          >
+                            <i className="fa-solid fa-trash"></i>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -983,7 +1088,7 @@ const ReconciliationManagement = ({
             <div className="h-full rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
               <h4 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-900">
                 <i className="fa-solid fa-comments text-orange-500"></i>
-                Comments
+                {isFinanceReviewMode ? "Review Notes & Evidence" : "Comments"}
               </h4>
 
               <div className="relative">
@@ -996,7 +1101,11 @@ const ReconciliationManagement = ({
                   }}
                   disabled={isReadOnly}
                   rows={6}
-                  placeholder="Add context for this reconciliation. Use @ to mention a colleague..."
+                  placeholder={
+                    isFinanceReviewMode
+                      ? "Add finance review notes before reconciliation lock..."
+                      : "Add context for this reconciliation. Use @ to mention a colleague..."
+                  }
                   className="min-h-[160px] w-full rounded-xl border border-slate-200 bg-slate-50 p-4 pr-24 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500"
                 />
 
@@ -1108,8 +1217,16 @@ const ReconciliationManagement = ({
             <div className="h-full rounded-xl border border-slate-200 bg-white p-8 text-slate-900 shadow-sm">
               <div>
                 <h4 className="mb-6 flex items-center gap-2 text-lg font-bold">
-                  <i className="fa-solid fa-chart-pie text-blue-600"></i>
-                  Summary for {formatMonthYear(monthYear) || "(select month)"}
+                  <i
+                    className={`fa-solid ${
+                      isFinanceReviewMode ? "fa-shield-halved" : "fa-chart-pie"
+                    } text-blue-600`}
+                  ></i>
+                  {isFinanceReviewMode
+                    ? `Finance Decision Panel - ${
+                        formatMonthYear(monthYear) || "(select month)"
+                      }`
+                    : `Summary for ${formatMonthYear(monthYear) || "(select month)"}`}
                 </h4>
 
                 <div className="mb-8 space-y-4">
@@ -1149,50 +1266,54 @@ const ReconciliationManagement = ({
                 </div>
 
                 <div className="mt-8 flex flex-wrap justify-end gap-3">
-                  <button
-                    onClick={handleReset}
-                    disabled={isReadOnly || isMonthSubmitted}
-                    className="rounded-lg border border-slate-300 px-6 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Clear
-                  </button>
-                  <button
-                    onClick={handleSaveDraft}
-                    disabled={
-                      !monthYear || isMonthSubmitted || isMonthReconciled
-                    }
-                    className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-all ${
-                      !monthYear || isMonthSubmitted || isMonthReconciled
-                        ? "cursor-not-allowed bg-slate-200 text-slate-500"
-                        : "bg-slate-800 text-white hover:bg-slate-900"
-                    }`}
-                  >
-                    <i className="fa-solid fa-floppy-disk"></i>
-                    Save
-                  </button>
-                  <button
-                    onClick={handleSubmitBreakdown}
-                    disabled={
-                      isMonthSubmitted ||
-                      isMonthReconciled ||
-                      lineItems.length === 0 ||
-                      !monthYear ||
-                      previousClosingBalance === ""
-                    }
-                    className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-all ${
-                      isMonthSubmitted ||
-                      isMonthReconciled ||
-                      lineItems.length === 0 ||
-                      !monthYear ||
-                      previousClosingBalance === ""
-                        ? "cursor-not-allowed bg-slate-200 text-slate-500"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                    }`}
-                  >
-                    <i className="fa-solid fa-check"></i>
-                    Submit
-                  </button>
-                  {isMonthSubmitted && canReconcile && (
+                  {!isFinanceReviewMode && (
+                    <>
+                      <button
+                        onClick={handleReset}
+                        disabled={isReadOnly || isMonthSubmitted}
+                        className="rounded-lg border border-slate-300 px-6 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        onClick={handleSaveDraft}
+                        disabled={
+                          !monthYear || isMonthSubmitted || isMonthReconciled
+                        }
+                        className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-all ${
+                          !monthYear || isMonthSubmitted || isMonthReconciled
+                            ? "cursor-not-allowed bg-slate-200 text-slate-500"
+                            : "bg-slate-800 text-white hover:bg-slate-900"
+                        }`}
+                      >
+                        <i className="fa-solid fa-floppy-disk"></i>
+                        Save
+                      </button>
+                      <button
+                        onClick={handleSubmitBreakdown}
+                        disabled={
+                          isMonthSubmitted ||
+                          isMonthReconciled ||
+                          lineItems.length === 0 ||
+                          !monthYear ||
+                          previousClosingBalance === ""
+                        }
+                        className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-all ${
+                          isMonthSubmitted ||
+                          isMonthReconciled ||
+                          lineItems.length === 0 ||
+                          !monthYear ||
+                          previousClosingBalance === ""
+                            ? "cursor-not-allowed bg-slate-200 text-slate-500"
+                            : "bg-blue-600 text-white hover:bg-blue-700"
+                        }`}
+                      >
+                        <i className="fa-solid fa-check"></i>
+                        Submit
+                      </button>
+                    </>
+                  )}
+                  {isFinanceReviewMode && isMonthSubmitted && canReconcile && (
                     <button
                       onClick={handleReconcileBreakdown}
                       className="flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-2 text-sm font-medium text-white transition-all hover:bg-emerald-700"

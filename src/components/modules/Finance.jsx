@@ -33,9 +33,23 @@ const Finance = () => {
   const [showJournalEntry, setShowJournalEntry] = useState(false);
   const [showVendorManagement, setShowVendorManagement] = useState(false);
   const [showBudget, setShowBudget] = useState(false);
+  const [showFinanceReports, setShowFinanceReports] = useState(false);
   const [showInvoicing, setShowInvoicing] = useState(false);
   const [showQuickAction, setShowQuickAction] = useState(false);
   const [reconciliationBreakdowns, setReconciliationBreakdowns] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportRows, setReportRows] = useState([]);
+  const [reportTypeFilter, setReportTypeFilter] = useState("all");
+  const [reportStatusFilter, setReportStatusFilter] = useState("all");
+  const [reportPeriodFilter, setReportPeriodFilter] = useState("last90");
+  const [reportSearch, setReportSearch] = useState("");
+  const [reportPage, setReportPage] = useState(1);
+  const [reportSummary, setReportSummary] = useState({
+    budgetAllocated: 0,
+    budgetSpent: 0,
+    paymentMade: 0,
+    paymentOutstanding: 0,
+  });
   const [showReconciliationManagement, setShowReconciliationManagement] =
     useState(false);
   const [showReconciliationHistory, setShowReconciliationHistory] =
@@ -154,6 +168,152 @@ const Finance = () => {
     }
   }, [currentUserId]);
 
+  const extractPoRows = (response) => {
+    return (
+      (Array.isArray(response?.data?.purchaseOrders) &&
+        response.data.purchaseOrders) ||
+      (Array.isArray(response?.data?.orders) && response.data.orders) ||
+      (Array.isArray(response?.purchaseOrders) && response.purchaseOrders) ||
+      (Array.isArray(response?.orders) && response.orders) ||
+      []
+    );
+  };
+
+  const fetchReportData = useCallback(async () => {
+    setReportLoading(true);
+    try {
+      const [poRes, budgetRes, reconciliationRes] = await Promise.allSettled([
+        apiService.get("/api/purchase-orders", {
+          params: { status: "all", limit: 200, page: 1 },
+          timeout: 15000,
+        }),
+        apiService.get("/api/budget/categories", { timeout: 12000 }),
+        currentUserId
+          ? apiService.get(
+              `/api/retirement-breakdown?userId=${currentUserId}`,
+              {
+                timeout: 12000,
+              },
+            )
+          : Promise.resolve([]),
+      ]);
+
+      const purchaseOrders =
+        poRes.status === "fulfilled" ? extractPoRows(poRes.value) : [];
+      const budgetCategories =
+        budgetRes.status === "fulfilled"
+          ? Array.isArray(budgetRes.value)
+            ? budgetRes.value
+            : Array.isArray(budgetRes.value?.data)
+              ? budgetRes.value.data
+              : []
+          : [];
+      const reconciliations =
+        reconciliationRes.status === "fulfilled"
+          ? Array.isArray(reconciliationRes.value)
+            ? reconciliationRes.value
+            : Array.isArray(reconciliationRes.value?.data)
+              ? reconciliationRes.value.data
+              : []
+          : [];
+
+      const paymentRows = purchaseOrders.map((po) => {
+        const total = Number(po.totalAmount || 0);
+        const paid = Number(po.paidAmount || 0);
+        const outstanding = Math.max(0, total - paid);
+        const normalizedStatus = String(po.status || "").toLowerCase();
+        const paymentStatus =
+          normalizedStatus === "paid"
+            ? "paid"
+            : normalizedStatus === "partly_paid" || paid > 0
+              ? "partly_paid"
+              : normalizedStatus === "payment_pending"
+                ? "payment_pending"
+                : normalizedStatus || "pending";
+
+        return {
+          id: `po-${po._id || po.id || po.poNumber}`,
+          type: "payment",
+          reference: po.poNumber || po._id,
+          title: po.vendor || "Vendor",
+          status: paymentStatus,
+          date: po.orderDate || po.createdAt || "",
+          amount: paid,
+          secondaryAmount: outstanding,
+        };
+      });
+
+      const budgetRows = budgetCategories.map((budget) => {
+        const allocated = Number(budget.allocated || 0);
+        const spent = Number(budget.spent || 0);
+        const utilization = allocated > 0 ? (spent / allocated) * 100 : 0;
+        return {
+          id: `budget-${budget._id || budget.name}`,
+          type: "budget",
+          reference: budget.name || budget._id,
+          title: budget.period || "Budget",
+          status:
+            utilization > 100
+              ? "over_budget"
+              : utilization >= 75
+                ? "high_utilization"
+                : "healthy",
+          date: budget.updatedAt || budget.createdAt || "",
+          amount: spent,
+          secondaryAmount: allocated,
+        };
+      });
+
+      const reconciliationRows = reconciliations.map((entry) => ({
+        id: `recon-${entry._id || `${entry.userId}-${entry.monthYear}`}`,
+        type: "reconciliation",
+        reference: entry.monthYear || entry._id,
+        title: entry.employeeName || "Employee",
+        status: entry.status || "draft",
+        date: entry.updatedAt || entry.createdAt || "",
+        amount: Number(entry.totalExpenses || 0),
+        secondaryAmount: Number(entry.newOpeningBalance || 0),
+      }));
+
+      const budgetAllocated = budgetCategories.reduce(
+        (sum, item) => sum + Number(item.allocated || 0),
+        0,
+      );
+      const budgetSpent = budgetCategories.reduce(
+        (sum, item) => sum + Number(item.spent || 0),
+        0,
+      );
+      const paymentMade = paymentRows.reduce(
+        (sum, item) => sum + Number(item.amount || 0),
+        0,
+      );
+      const paymentOutstanding = paymentRows.reduce(
+        (sum, item) => sum + Number(item.secondaryAmount || 0),
+        0,
+      );
+
+      setReportSummary({
+        budgetAllocated,
+        budgetSpent,
+        paymentMade,
+        paymentOutstanding,
+      });
+      setReportRows([...paymentRows, ...budgetRows, ...reconciliationRows]);
+    } catch (err) {
+      console.error("Error loading finance reports:", err);
+      setReportRows([]);
+      setReportSummary({
+        budgetAllocated: 0,
+        budgetSpent: 0,
+        paymentMade: 0,
+        paymentOutstanding: 0,
+      });
+      toast.error("Unable to load finance reports");
+    } finally {
+      setReportLoading(false);
+    }
+  }, [currentUserId]);
+
   useEffect(() => {
     fetchFinanceData();
   }, []);
@@ -165,6 +325,15 @@ const Finance = () => {
   useEffect(() => {
     fetchReconciliationBreakdowns();
   }, [fetchReconciliationBreakdowns]);
+
+  useEffect(() => {
+    if (!showFinanceReports) return;
+    fetchReportData();
+  }, [showFinanceReports, fetchReportData]);
+
+  useEffect(() => {
+    setReportPage(1);
+  }, [reportTypeFilter, reportStatusFilter, reportPeriodFilter, reportSearch]);
 
   const buildReconciliationPrefillData = (monthYear) => {
     const monthBreakdowns = reconciliationBreakdowns.filter(
@@ -226,6 +395,326 @@ const Finance = () => {
     );
   }
 
+  if (showFinanceReports) {
+    const REPORT_PAGE_SIZE = 12;
+    const now = new Date();
+    const periodCutoff =
+      reportPeriodFilter === "thisMonth"
+        ? new Date(now.getFullYear(), now.getMonth(), 1)
+        : reportPeriodFilter === "last30"
+          ? new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+          : reportPeriodFilter === "last90"
+            ? new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+            : null;
+
+    const filteredRows = reportRows.filter((row) => {
+      const rowDate = row.date ? new Date(row.date) : null;
+      const matchesPeriod =
+        !periodCutoff || (rowDate && rowDate >= periodCutoff);
+      const matchesType =
+        reportTypeFilter === "all" || row.type === reportTypeFilter;
+      const matchesStatus =
+        reportStatusFilter === "all" ||
+        String(row.status || "").toLowerCase() === reportStatusFilter;
+      const needle = reportSearch.trim().toLowerCase();
+      const matchesSearch =
+        !needle ||
+        String(row.reference || "")
+          .toLowerCase()
+          .includes(needle) ||
+        String(row.title || "")
+          .toLowerCase()
+          .includes(needle);
+      return matchesPeriod && matchesType && matchesStatus && matchesSearch;
+    });
+
+    const budgetUtilizationPct =
+      reportSummary.budgetAllocated > 0
+        ? (reportSummary.budgetSpent / reportSummary.budgetAllocated) * 100
+        : 0;
+    const totalReportItems = filteredRows.length;
+    const totalReportPages = Math.max(
+      1,
+      Math.ceil(totalReportItems / REPORT_PAGE_SIZE),
+    );
+    const currentReportPage = Math.min(reportPage, totalReportPages);
+    const reportPageStart = (currentReportPage - 1) * REPORT_PAGE_SIZE;
+    const pagedRows = filteredRows.slice(
+      reportPageStart,
+      reportPageStart + REPORT_PAGE_SIZE,
+    );
+
+    const exportRowsAsCsv = () => {
+      if (filteredRows.length === 0) {
+        toast.error("No report data to export");
+        return;
+      }
+
+      const headers = [
+        "Type",
+        "Reference",
+        "Title",
+        "Status",
+        "Primary Amount",
+        "Secondary Amount",
+        "Date",
+      ];
+      const escapeCell = (value) => {
+        const cell = String(value ?? "").replaceAll('"', '""');
+        return `"${cell}"`;
+      };
+      const lines = [headers.map(escapeCell).join(",")];
+
+      filteredRows.forEach((row) => {
+        lines.push(
+          [
+            row.type,
+            row.reference,
+            row.title,
+            String(row.status || "").replaceAll("_", " "),
+            Number(row.amount || 0).toFixed(2),
+            Number(row.secondaryAmount || 0).toFixed(2),
+            row.date ? new Date(row.date).toISOString().slice(0, 10) : "",
+          ]
+            .map(escapeCell)
+            .join(","),
+        );
+      });
+
+      const blob = new Blob([lines.join("\n")], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `finance-reports-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    };
+
+    const exportRowsAsJson = () => {
+      if (filteredRows.length === 0) {
+        toast.error("No report data to export");
+        return;
+      }
+
+      const blob = new Blob([JSON.stringify(filteredRows, null, 2)], {
+        type: "application/json;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `finance-reports-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    };
+
+    return (
+      <div className="w-full min-h-screen bg-gray-50 px-1">
+        <Breadcrumb
+          items={[
+            { label: "Home", href: "/home", icon: "fa-house" },
+            {
+              label: "Finance",
+              icon: "fa-coins",
+              onClick: () => setShowFinanceReports(false),
+            },
+            { label: "Reports", icon: "fa-chart-bar" },
+          ]}
+        />
+        <div className="p-3 space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Budget Utilization
+              </p>
+              <p className="mt-2 text-3xl font-black text-slate-900">
+                {budgetUtilizationPct.toFixed(1)}%
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {formatCurrency(reportSummary.budgetSpent)} spent of{" "}
+                {formatCurrency(reportSummary.budgetAllocated)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Payment Made
+              </p>
+              <p className="mt-2 text-3xl font-black text-emerald-700">
+                {formatCurrency(reportSummary.paymentMade)}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Captured from purchase orders and AP activities
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Outstanding Payments
+              </p>
+              <p className="mt-2 text-3xl font-black text-rose-700">
+                {formatCurrency(reportSummary.paymentOutstanding)}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Remaining unpaid amount across tracked purchase orders
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <select
+                value={reportTypeFilter}
+                onChange={(e) => setReportTypeFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="all">All Types</option>
+                <option value="payment">Payments</option>
+                <option value="budget">Budget Utilization</option>
+                <option value="reconciliation">Reconciliations</option>
+              </select>
+              <select
+                value={reportStatusFilter}
+                onChange={(e) => setReportStatusFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="all">All Statuses</option>
+                <option value="paid">Paid</option>
+                <option value="payment_pending">Payment Pending</option>
+                <option value="partly_paid">Partly Paid</option>
+                <option value="healthy">Budget Healthy</option>
+                <option value="high_utilization">High Utilization</option>
+                <option value="over_budget">Over Budget</option>
+                <option value="submitted">Submitted</option>
+                <option value="reconciled">Reconciled</option>
+              </select>
+              <select
+                value={reportPeriodFilter}
+                onChange={(e) => setReportPeriodFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="last30">Last 30 days</option>
+                <option value="last90">Last 90 days</option>
+                <option value="thisMonth">This month</option>
+                <option value="all">All time</option>
+              </select>
+              <input
+                value={reportSearch}
+                onChange={(e) => setReportSearch(e.target.value)}
+                placeholder="Search reference or title"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+              <button
+                onClick={exportRowsAsCsv}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <i className="fa-solid fa-file-csv"></i>
+                Export CSV
+              </button>
+              <button
+                onClick={exportRowsAsJson}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <i className="fa-solid fa-file-code"></i>
+                Export JSON
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
+            {reportLoading ? (
+              <div className="p-6">
+                <Skeleton count={4} height={44} />
+              </div>
+            ) : filteredRows.length === 0 ? (
+              <div className="p-8">
+                <EmptyState
+                  icon="📊"
+                  title="No report records found"
+                  description="Adjust your filters to broaden the report data."
+                />
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Type
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Reference
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Title
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Primary Amount
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Secondary Amount
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Date
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pagedRows.map((row) => (
+                    <tr key={row.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-sm capitalize text-slate-700">
+                        {row.type}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-mono text-slate-600">
+                        {row.reference || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-slate-900">
+                        {row.title || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">
+                        {String(row.status || "-").replaceAll("_", " ")}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-semibold text-slate-900">
+                        {formatCurrency(Number(row.amount || 0))}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">
+                        {formatCurrency(Number(row.secondaryAmount || 0))}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-500">
+                        {row.date
+                          ? new Date(row.date).toLocaleDateString()
+                          : "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {!reportLoading && filteredRows.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
+              <Pagination
+                currentPage={currentReportPage}
+                totalPages={totalReportPages}
+                onPageChange={setReportPage}
+                itemsPerPage={REPORT_PAGE_SIZE}
+                totalItems={totalReportItems}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (showInvoicing) {
     return (
       <div className="w-full min-h-screen bg-gray-50 px-1">
@@ -256,6 +745,7 @@ const Finance = () => {
         }}
         showHistoryBreadcrumb={reconciliationOpenedFromHistory}
         forceFreshStart={reconciliationFreshStart}
+        onBreakdownUpdated={fetchReconciliationBreakdowns}
         initialMonthYear={reconciliationPrefillData?.monthYear || ""}
         initialLineItems={reconciliationPrefillData?.lineItems || []}
         initialEvidenceFiles={reconciliationPrefillData?.evidenceFiles || []}
@@ -339,7 +829,7 @@ const Finance = () => {
                 className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-slate-900"
               >
                 <i className="fa-solid fa-plus"></i>
-                New Reconciliation
+                New
               </button>
             </div>
           </div>
@@ -443,7 +933,7 @@ const Finance = () => {
                               }`}
                             >
                               {monthData.latestStatus === "reconciled"
-                                ? "Reconciled"
+                                ? "Locked"
                                 : monthData.latestStatus === "submitted"
                                   ? "Submitted"
                                   : "Draft"}
@@ -462,7 +952,11 @@ const Finance = () => {
                               }
                               className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-900"
                             >
-                              View Details
+                              {monthData.latestStatus === "reconciled"
+                                ? "Open Review"
+                                : monthData.latestStatus === "submitted"
+                                  ? "Review"
+                                  : "View Details"}
                             </button>
                           </td>
                         </tr>
@@ -707,7 +1201,7 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => toast("Reports module coming soon")}
+                onClick={() => setShowFinanceReports(true)}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform">
