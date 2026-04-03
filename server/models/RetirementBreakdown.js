@@ -22,8 +22,15 @@ const retirementBreakdownSchema = new mongoose.Schema({
   }],
   totalExpenses: { type: Number, default: 0 },
   newOpeningBalance: { type: Number, default: 0 },
-  status: { type: String, enum: ['draft', 'submitted'], default: 'draft' },
+  status: {
+    type: String,
+    enum: ['draft', 'submitted', 'reconciled'],
+    default: 'draft',
+  },
   submittedDate: { type: String },
+  reconciledDate: { type: String },
+  reconciledById: { type: String },
+  reconciledByName: { type: String },
 }, { timestamps: true });
 
 module.exports = mongoose.model('RetirementBreakdown', retirementBreakdownSchema);

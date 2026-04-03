@@ -435,14 +435,18 @@ const Finance = () => {
                           <td className="px-6 py-4 text-sm">
                             <span
                               className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                monthData.latestStatus === "submitted"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-amber-100 text-amber-700"
+                                monthData.latestStatus === "reconciled"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : monthData.latestStatus === "submitted"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-700"
                               }`}
                             >
-                              {monthData.latestStatus === "submitted"
-                                ? "Submitted"
-                                : "Draft"}
+                              {monthData.latestStatus === "reconciled"
+                                ? "Reconciled"
+                                : monthData.latestStatus === "submitted"
+                                  ? "Submitted"
+                                  : "Draft"}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-sm">

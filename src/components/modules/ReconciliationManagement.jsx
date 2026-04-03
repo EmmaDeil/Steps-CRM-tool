@@ -37,8 +37,10 @@ const ReconciliationManagement = ({
     quantity: "",
     amount: "",
   });
-  const [isMonthFinalized, setIsMonthFinalized] = useState(false);
-  const [finalizedOn, setFinalizedOn] = useState("");
+  const [monthStatus, setMonthStatus] = useState("draft");
+  const [submittedOn, setSubmittedOn] = useState("");
+  const [reconciledOn, setReconciledOn] = useState("");
+  const [activeBreakdownId, setActiveBreakdownId] = useState("");
   const {
     monthYear,
     setMonthYear,
@@ -53,6 +55,20 @@ const ReconciliationManagement = ({
     initialPreviousClosingBalance === undefined &&
     initialInflowAmount === undefined;
 
+  const normalizedRole = String(user?.role || "")
+    .trim()
+    .toLowerCase();
+  const normalizedDepartment = String(user?.department || "")
+    .trim()
+    .toLowerCase();
+  const canReconcile =
+    normalizedRole === "admin" ||
+    normalizedRole === "security admin" ||
+    normalizedDepartment.includes("finance");
+  const isMonthSubmitted = monthStatus === "submitted";
+  const isMonthReconciled = monthStatus === "reconciled";
+  const isReadOnly = isMonthReconciled || (isMonthSubmitted && !canReconcile);
+
   useEffect(() => {
     if (!forceFreshStart) return;
 
@@ -60,8 +76,10 @@ const ReconciliationManagement = ({
     setEvidenceFiles([]);
     setCommentText("");
     setNewItem({ date: "", description: "", quantity: "", amount: "" });
-    setIsMonthFinalized(false);
-    setFinalizedOn("");
+    setMonthStatus("draft");
+    setSubmittedOn("");
+    setReconciledOn("");
+    setActiveBreakdownId("");
     setMonthYear(new Date().toISOString().slice(0, 7));
     setPreviousClosingBalance("");
     setInflowAmount("");
@@ -112,17 +130,19 @@ const ReconciliationManagement = ({
       };
 
       const findNextDraftMonthYear = (startMonthYear, breakdowns) => {
-        const submittedMonths = new Set(
+        const finalizedMonths = new Set(
           (breakdowns || [])
             .filter(
-              (entry) => entry?.status === "submitted" && entry?.monthYear,
+              (entry) =>
+                ["submitted", "reconciled"].includes(entry?.status) &&
+                entry?.monthYear,
             )
             .map((entry) => entry.monthYear),
         );
 
         let candidate = startMonthYear;
         for (let i = 0; i < 24; i += 1) {
-          if (!submittedMonths.has(candidate)) return candidate;
+          if (!finalizedMonths.has(candidate)) return candidate;
           candidate = addMonthToMonthYear(candidate, 1);
         }
 
@@ -130,8 +150,10 @@ const ReconciliationManagement = ({
       };
 
       if (!monthYear || !resolvedUserId) {
-        setIsMonthFinalized(false);
-        setFinalizedOn("");
+        setMonthStatus("draft");
+        setSubmittedOn("");
+        setReconciledOn("");
+        setActiveBreakdownId("");
         return;
       }
 
@@ -149,27 +171,45 @@ const ReconciliationManagement = ({
           (breakdown) => breakdown.monthYear === monthYear,
         );
 
-        const hasSubmitted = monthBreakdowns.some(
-          (breakdown) => breakdown.status === "submitted",
+        const hasFinalized = monthBreakdowns.some((breakdown) =>
+          ["submitted", "reconciled"].includes(breakdown.status),
         );
 
-        if (forceFreshStart && hasSubmitted) {
+        if (forceFreshStart && hasFinalized) {
           const nextDraftMonth = findNextDraftMonthYear(monthYear, breakdowns);
           if (nextDraftMonth !== monthYear) {
-            setIsMonthFinalized(false);
-            setFinalizedOn("");
+            setMonthStatus("draft");
+            setSubmittedOn("");
+            setReconciledOn("");
+            setActiveBreakdownId("");
             autoFillToastMonthRef.current = "";
             setMonthYear(nextDraftMonth);
             return;
           }
         }
 
-        setIsMonthFinalized(hasSubmitted);
+        const sortedMonthBreakdowns = [...monthBreakdowns].sort((a, b) => {
+          const left = String(a?.updatedAt || a?.createdAt || "");
+          const right = String(b?.updatedAt || b?.createdAt || "");
+          return right.localeCompare(left);
+        });
 
-        const submittedRecord = monthBreakdowns.find(
+        const reconciledRecord = sortedMonthBreakdowns.find(
+          (breakdown) => breakdown.status === "reconciled",
+        );
+        const submittedRecord = sortedMonthBreakdowns.find(
           (breakdown) => breakdown.status === "submitted",
         );
-        setFinalizedOn(submittedRecord?.submittedDate || "");
+        const draftRecord = sortedMonthBreakdowns.find(
+          (breakdown) => breakdown.status === "draft",
+        );
+
+        const activeRecord = reconciledRecord || submittedRecord || draftRecord;
+
+        setMonthStatus(activeRecord?.status || "draft");
+        setSubmittedOn(submittedRecord?.submittedDate || "");
+        setReconciledOn(reconciledRecord?.reconciledDate || "");
+        setActiveBreakdownId(activeRecord?._id || "");
 
         if (shouldAutoFillPreviousBalance) {
           const [year, month] = monthYear.split("-");
@@ -185,7 +225,9 @@ const ReconciliationManagement = ({
           }
 
           const prevMonthData = breakdowns.find(
-            (breakdown) => breakdown.monthYear === prevMonthStr,
+            (breakdown) =>
+              breakdown.monthYear === prevMonthStr &&
+              breakdown.status === "reconciled",
           );
 
           if (prevMonthData) {
@@ -291,8 +333,8 @@ const ReconciliationManagement = ({
   };
 
   const handleAddLineItem = () => {
-    if (isMonthFinalized) {
-      toast.error("This month has been submitted and is read-only");
+    if (isReadOnly) {
+      toast.error("This month is read-only");
       return;
     }
 
@@ -325,8 +367,8 @@ const ReconciliationManagement = ({
   };
 
   const handleRemoveLineItem = (id) => {
-    if (isMonthFinalized) {
-      toast.error("This month has been submitted and is read-only");
+    if (isReadOnly) {
+      toast.error("This month is read-only");
       return;
     }
 
@@ -335,7 +377,7 @@ const ReconciliationManagement = ({
   };
 
   const handleUpdateLineItem = (id, field, value) => {
-    if (isMonthFinalized) return;
+    if (isReadOnly) return;
 
     setLineItems((prev) =>
       prev.map((item) => {
@@ -425,8 +467,15 @@ const ReconciliationManagement = ({
   // Use centralized currency formatter
 
   const handleSubmitBreakdown = async () => {
-    if (isMonthFinalized) {
-      toast.error("This month has already been submitted");
+    if (isMonthReconciled) {
+      toast.error("This month is already reconciled");
+      return;
+    }
+
+    if (isMonthSubmitted) {
+      toast.error(
+        "This month has already been submitted and is awaiting reconciliation",
+      );
       return;
     }
 
@@ -455,7 +504,14 @@ const ReconciliationManagement = ({
         status: "submitted",
         submittedDate: new Date().toISOString().split("T")[0],
       };
-      await apiService.post("/api/retirement-breakdown", request);
+      const response = await apiService.post(
+        "/api/retirement-breakdown",
+        request,
+      );
+      const saved = response?.data || null;
+      setMonthStatus("submitted");
+      setSubmittedOn(request.submittedDate);
+      setActiveBreakdownId(saved?._id || activeBreakdownId);
       toast.success("Expense breakdown submitted successfully");
     } catch (error) {
       toast.error("Failed to submit expense breakdown");
@@ -464,8 +520,8 @@ const ReconciliationManagement = ({
   };
 
   const handleSaveDraft = async () => {
-    if (isMonthFinalized) {
-      toast.error("This month has already been submitted");
+    if (isMonthSubmitted || isMonthReconciled) {
+      toast.error("Cannot save draft after submission");
       return;
     }
 
@@ -489,7 +545,13 @@ const ReconciliationManagement = ({
         status: "draft",
         submittedDate: new Date().toISOString().split("T")[0],
       };
-      await apiService.post("/api/retirement-breakdown", request);
+      const response = await apiService.post(
+        "/api/retirement-breakdown",
+        request,
+      );
+      const saved = response?.data || null;
+      setMonthStatus("draft");
+      setActiveBreakdownId(saved?._id || activeBreakdownId);
       toast.success("Draft saved");
     } catch (error) {
       toast.error(error?.serverData?.error || "Failed to save draft");
@@ -497,9 +559,54 @@ const ReconciliationManagement = ({
     }
   };
 
+  const handleReconcileBreakdown = async () => {
+    if (!isMonthSubmitted) {
+      toast.error("Only submitted months can be reconciled");
+      return;
+    }
+
+    if (!canReconcile) {
+      toast.error("Only Finance/Admin can reconcile this month");
+      return;
+    }
+
+    if (!activeBreakdownId) {
+      toast.error("No submitted breakdown found for this month");
+      return;
+    }
+
+    try {
+      const payload = {
+        monthYear,
+        previousClosingBalance: Number(previousClosingBalance) || 0,
+        inflowAmount: Number(inflowAmount) || 0,
+        lineItems,
+        comment: commentText,
+        evidenceFiles: await serializeEvidenceFiles(evidenceFiles),
+        totalExpenses: calculateTotal(),
+        newOpeningBalance: calculateNewOpeningBalance(),
+      };
+      const response = await apiService.post(
+        `/api/retirement-breakdown/${activeBreakdownId}/reconcile`,
+        payload,
+      );
+      const reconciled = response?.data || null;
+      setMonthStatus("reconciled");
+      setReconciledOn(
+        reconciled?.reconciledDate || new Date().toISOString().split("T")[0],
+      );
+      toast.success("Breakdown reconciled and locked");
+    } catch (error) {
+      toast.error(
+        error?.serverData?.message || "Failed to reconcile breakdown",
+      );
+      console.error(error);
+    }
+  };
+
   const handleReset = () => {
-    if (isMonthFinalized) {
-      toast.error("This month has been submitted and cannot be cleared");
+    if (isReadOnly || isMonthSubmitted) {
+      toast.error("This month cannot be cleared in its current status");
       return;
     }
 
@@ -556,7 +663,7 @@ const ReconciliationManagement = ({
               type="month"
               value={monthYear}
               onChange={(e) => setMonthYear(e.target.value)}
-              disabled={isMonthFinalized}
+              disabled={isReadOnly}
               className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -573,7 +680,7 @@ const ReconciliationManagement = ({
                 type="number"
                 value={previousClosingBalance}
                 onChange={(e) => setPreviousClosingBalance(e.target.value)}
-                disabled={isMonthFinalized}
+                disabled={isReadOnly}
                 placeholder="0.00"
                 step="0"
                 min="0"
@@ -594,7 +701,7 @@ const ReconciliationManagement = ({
                 type="number"
                 value={inflowAmount}
                 onChange={(e) => setInflowAmount(e.target.value)}
-                disabled={isMonthFinalized}
+                disabled={isReadOnly}
                 placeholder="0.00"
                 step="0"
                 min="0"
@@ -604,14 +711,26 @@ const ReconciliationManagement = ({
           </div>
         </div>
 
-        {isMonthFinalized && (
+        {isMonthSubmitted && (
           <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
             <p className="text-sm font-semibold">
-              This month is finalized and read-only.
+              This month has been submitted.
             </p>
             <p className="mt-1 text-xs">
-              Submitted on {finalizedOn || "a previous date"}. Switch the month
-              to create a new draft.
+              Submitted on {submittedOn || "a previous date"}. Finance/Admin can
+              review and reconcile this month.
+            </p>
+          </div>
+        )}
+
+        {isMonthReconciled && (
+          <div className="mb-6 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-900">
+            <p className="text-sm font-semibold">
+              This month is reconciled and locked.
+            </p>
+            <p className="mt-1 text-xs">
+              Reconciled on {reconciledOn || "a previous date"}. Switch the
+              month to create a new draft.
             </p>
           </div>
         )}
@@ -660,7 +779,7 @@ const ReconciliationManagement = ({
                       onChange={(e) =>
                         setNewItem({ ...newItem, date: e.target.value })
                       }
-                      disabled={isMonthFinalized}
+                      disabled={isReadOnly}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
@@ -674,7 +793,7 @@ const ReconciliationManagement = ({
                       onChange={(e) =>
                         setNewItem({ ...newItem, description: e.target.value })
                       }
-                      disabled={isMonthFinalized}
+                      disabled={isReadOnly}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
@@ -689,7 +808,7 @@ const ReconciliationManagement = ({
                       onChange={(e) =>
                         setNewItem({ ...newItem, quantity: e.target.value })
                       }
-                      disabled={isMonthFinalized}
+                      disabled={isReadOnly}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
@@ -705,7 +824,7 @@ const ReconciliationManagement = ({
                       onChange={(e) =>
                         setNewItem({ ...newItem, amount: e.target.value })
                       }
-                      disabled={isMonthFinalized}
+                      disabled={isReadOnly}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
@@ -718,7 +837,7 @@ const ReconciliationManagement = ({
                   <td className="px-4 py-1.5 text-right">
                     <button
                       onClick={handleAddLineItem}
-                      disabled={isMonthFinalized}
+                      disabled={isReadOnly}
                       className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                       title="Add expense"
                     >
@@ -771,7 +890,7 @@ const ReconciliationManagement = ({
                               e.target.value,
                             )
                           }
-                          disabled={isMonthFinalized}
+                          disabled={isReadOnly}
                           className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
                         />
                       </td>
@@ -786,7 +905,7 @@ const ReconciliationManagement = ({
                               e.target.value,
                             )
                           }
-                          disabled={isMonthFinalized}
+                          disabled={isReadOnly}
                           className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm font-medium text-slate-900 outline-none focus:border-blue-500 focus:ring-0"
                         />
                       </td>
@@ -801,7 +920,7 @@ const ReconciliationManagement = ({
                               e.target.value,
                             )
                           }
-                          disabled={isMonthFinalized}
+                          disabled={isReadOnly}
                           min="0"
                           className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
                         />
@@ -817,7 +936,7 @@ const ReconciliationManagement = ({
                               e.target.value,
                             )
                           }
-                          disabled={isMonthFinalized}
+                          disabled={isReadOnly}
                           min="0"
                           step="0"
                           className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
@@ -826,7 +945,7 @@ const ReconciliationManagement = ({
                       <td className="px-4 py-4 text-right">
                         <button
                           onClick={() => handleRemoveLineItem(item.id)}
-                          disabled={isMonthFinalized}
+                          disabled={isReadOnly}
                           className="text-sm text-red-600 transition-colors hover:text-red-700 disabled:cursor-not-allowed disabled:text-slate-400"
                           title="Delete item"
                         >
@@ -848,7 +967,7 @@ const ReconciliationManagement = ({
           accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
           className="hidden"
           onChange={(e) => {
-            if (isMonthFinalized) return;
+            if (isReadOnly) return;
             const files = e.target.files;
             if (!files || files.length === 0) return;
             setEvidenceFiles((prev) => [
@@ -875,7 +994,7 @@ const ReconciliationManagement = ({
                   onBlur={() => {
                     setTimeout(() => setShowMentionDropdown(false), 120);
                   }}
-                  disabled={isMonthFinalized}
+                  disabled={isReadOnly}
                   rows={6}
                   placeholder="Add context for this reconciliation. Use @ to mention a colleague..."
                   className="min-h-[160px] w-full rounded-xl border border-slate-200 bg-slate-50 p-4 pr-24 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500"
@@ -889,7 +1008,7 @@ const ReconciliationManagement = ({
                         .getElementById("reconciliation-evidence-input")
                         ?.click()
                     }
-                    disabled={isMonthFinalized}
+                    disabled={isReadOnly}
                     className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:text-blue-700 disabled:cursor-not-allowed disabled:text-slate-300"
                     title="Attach file"
                   >
@@ -970,7 +1089,7 @@ const ReconciliationManagement = ({
                                 prev.filter((_, index) => index !== idx),
                               )
                             }
-                            disabled={isMonthFinalized}
+                            disabled={isReadOnly}
                             className="inline-flex h-5 w-5 items-center justify-center rounded-full text-xs text-red-600 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:text-slate-300"
                             title="Remove file"
                           >
@@ -986,47 +1105,42 @@ const ReconciliationManagement = ({
           </div>
 
           <div className="lg:col-span-2">
-            <div className="relative h-full overflow-hidden rounded-xl bg-slate-900 p-8 text-white shadow-xl">
-              <div className="pointer-events-none absolute inset-0 opacity-20">
-                <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-white/30 blur-3xl"></div>
-                <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-blue-500/40 blur-3xl"></div>
-              </div>
-
-              <div className="relative z-10">
+            <div className="h-full rounded-xl border border-slate-200 bg-white p-8 text-slate-900 shadow-sm">
+              <div>
                 <h4 className="mb-6 flex items-center gap-2 text-lg font-bold">
-                  <i className="fa-solid fa-chart-pie text-blue-300"></i>
+                  <i className="fa-solid fa-chart-pie text-blue-600"></i>
                   Summary for {formatMonthYear(monthYear) || "(select month)"}
                 </h4>
 
                 <div className="mb-8 space-y-4">
-                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                    <span className="text-sm text-white/70">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <span className="text-sm text-slate-500">
                       Previous Closing Balance
                     </span>
                     <span className="text-lg font-bold">
                       {formatCurrency(Number(previousClosingBalance) || 0)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                    <span className="text-sm text-white/70">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <span className="text-sm text-slate-500">
                       Inflow Received
                     </span>
-                    <span className="text-lg font-bold text-blue-300">
+                    <span className="text-lg font-bold text-blue-600">
                       {formatCurrency(Number(inflowAmount) || 0)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                    <span className="text-sm text-white/70">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <span className="text-sm text-slate-500">
                       Total Expenses
                     </span>
-                    <span className="text-lg font-bold text-rose-300">
+                    <span className="text-lg font-bold text-rose-600">
                       {formatCurrency(calculateTotal())}
                     </span>
                   </div>
                 </div>
 
-                <div className="rounded-xl bg-white/10 p-6 backdrop-blur-sm">
-                  <p className="mb-1 text-xs font-bold uppercase tracking-widest text-blue-200">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-6">
+                  <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-500">
                     Projected Opening Balance
                   </p>
                   <h2 className="text-3xl font-extrabold tracking-tight">
@@ -1037,18 +1151,20 @@ const ReconciliationManagement = ({
                 <div className="mt-8 flex flex-wrap justify-end gap-3">
                   <button
                     onClick={handleReset}
-                    disabled={isMonthFinalized}
-                    className="rounded-lg border border-white/30 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isReadOnly || isMonthSubmitted}
+                    className="rounded-lg border border-slate-300 px-6 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Clear
                   </button>
                   <button
                     onClick={handleSaveDraft}
-                    disabled={!monthYear || isMonthFinalized}
+                    disabled={
+                      !monthYear || isMonthSubmitted || isMonthReconciled
+                    }
                     className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-all ${
-                      !monthYear || isMonthFinalized
-                        ? "cursor-not-allowed bg-white/20 text-white/60"
-                        : "bg-white text-slate-900 hover:bg-slate-100"
+                      !monthYear || isMonthSubmitted || isMonthReconciled
+                        ? "cursor-not-allowed bg-slate-200 text-slate-500"
+                        : "bg-slate-800 text-white hover:bg-slate-900"
                     }`}
                   >
                     <i className="fa-solid fa-floppy-disk"></i>
@@ -1057,23 +1173,34 @@ const ReconciliationManagement = ({
                   <button
                     onClick={handleSubmitBreakdown}
                     disabled={
-                      isMonthFinalized ||
+                      isMonthSubmitted ||
+                      isMonthReconciled ||
                       lineItems.length === 0 ||
                       !monthYear ||
                       previousClosingBalance === ""
                     }
                     className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-all ${
-                      isMonthFinalized ||
+                      isMonthSubmitted ||
+                      isMonthReconciled ||
                       lineItems.length === 0 ||
                       !monthYear ||
                       previousClosingBalance === ""
-                        ? "cursor-not-allowed bg-white/20 text-white/60"
-                        : "bg-blue-500 text-white hover:bg-blue-600"
+                        ? "cursor-not-allowed bg-slate-200 text-slate-500"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
                     }`}
                   >
                     <i className="fa-solid fa-check"></i>
                     Submit
                   </button>
+                  {isMonthSubmitted && canReconcile && (
+                    <button
+                      onClick={handleReconcileBreakdown}
+                      className="flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-2 text-sm font-medium text-white transition-all hover:bg-emerald-700"
+                    >
+                      <i className="fa-solid fa-lock"></i>
+                      Reconcile & Lock
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

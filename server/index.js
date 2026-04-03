@@ -367,6 +367,11 @@ async function start() {
       String(user?.role || '').trim().toLowerCase(),
     );
 
+  const canReconcileBreakdowns = (user) => {
+    if (hasAdminPrivileges(user)) return true;
+    return String(user?.department || '').trim().toLowerCase().includes('finance');
+  };
+
   const canManageVendors = (user) =>
     hasAdminPrivileges(user) ||
     ['editor'].includes(String(user?.role || '').trim().toLowerCase());
@@ -2857,6 +2862,71 @@ async function start() {
     } catch (err) {
       console.error('Error updating retirement breakdown:', err);
       res.status(500).json({ message: 'Failed to update breakdown' });
+    }
+  });
+
+  app.post('/api/retirement-breakdown/:id/reconcile', authMiddleware, async (req, res) => {
+    try {
+      if (!canReconcileBreakdowns(req.user)) {
+        return res.status(403).json({ message: 'Only Finance/Admin can reconcile this breakdown' });
+      }
+
+      const target = await RetirementBreakdownModel.findById(req.params.id);
+      if (!target) return res.status(404).json({ message: 'Breakdown not found' });
+
+      if (String(target.status || '').toLowerCase() === 'reconciled') {
+        return res.status(400).json({ message: 'Breakdown already reconciled' });
+      }
+
+      const actorId = String(req.user?._id || req.user?.id || '').trim();
+      const actorName = String(
+        req.user?.fullName ||
+          [req.user?.firstName, req.user?.lastName].filter(Boolean).join(' ') ||
+          req.user?.name ||
+          req.user?.email ||
+          'Finance',
+      ).trim();
+
+      const nextLineItems = Array.isArray(req.body?.lineItems)
+        ? req.body.lineItems
+        : target.lineItems;
+      const nextTotalExpenses = Number.isFinite(Number(req.body?.totalExpenses))
+        ? Number(req.body.totalExpenses)
+        : (Array.isArray(nextLineItems)
+            ? nextLineItems.reduce(
+                (sum, item) =>
+                  sum + (Number(item?.quantity) || 0) * (Number(item?.amount) || 0),
+                0,
+              )
+            : target.totalExpenses || 0);
+      const nextPreviousClosing = Number.isFinite(Number(req.body?.previousClosingBalance))
+        ? Number(req.body.previousClosingBalance)
+        : Number(target.previousClosingBalance || 0);
+      const nextInflow = Number.isFinite(Number(req.body?.inflowAmount))
+        ? Number(req.body.inflowAmount)
+        : Number(target.inflowAmount || 0);
+      const nextOpeningBalance = Number.isFinite(Number(req.body?.newOpeningBalance))
+        ? Number(req.body.newOpeningBalance)
+        : nextPreviousClosing + nextInflow - nextTotalExpenses;
+
+      target.lineItems = nextLineItems;
+      if (Array.isArray(req.body?.evidenceFiles)) {
+        target.evidenceFiles = req.body.evidenceFiles;
+      }
+      target.previousClosingBalance = nextPreviousClosing;
+      target.inflowAmount = nextInflow;
+      target.totalExpenses = nextTotalExpenses;
+      target.newOpeningBalance = nextOpeningBalance;
+      target.status = 'reconciled';
+      target.reconciledDate = new Date().toISOString().split('T')[0];
+      target.reconciledById = actorId;
+      target.reconciledByName = actorName;
+
+      await target.save();
+      return res.json({ message: 'Breakdown reconciled successfully', data: target });
+    } catch (err) {
+      console.error('Error reconciling retirement breakdown:', err);
+      return res.status(500).json({ message: 'Failed to reconcile breakdown' });
     }
   });
 
