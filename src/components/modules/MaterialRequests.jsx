@@ -2423,14 +2423,14 @@ const MaterialRequests = () => {
                         )}
                       </div>
 
-                      {/* Row 1: Item select + Description */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                        <label className="flex flex-col gap-1">
+                      {/* Row 1: Item select + Description + Qty */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-3">
+                        <label className="flex flex-col gap-1 sm:col-span-3">
                           <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
                             Item / SKU
                           </span>
                           <select
-                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-2 text-sm"
                             value={item.itemName}
                             onChange={(e) => {
                               const selected = itemOptions.find(
@@ -2466,13 +2466,14 @@ const MaterialRequests = () => {
                             ))}
                           </select>
                         </label>
-                        <label className="flex flex-col gap-1">
+
+                        <label className="flex flex-col gap-1 sm:col-span-6">
                           <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
                             Description
                           </span>
                           <input
                             type="text"
-                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-2 text-sm"
                             placeholder="Brief description..."
                             value={item.description}
                             onChange={(e) =>
@@ -2484,17 +2485,14 @@ const MaterialRequests = () => {
                             }
                           />
                         </label>
-                      </div>
 
-                      {/* Row 2: Qty, UoM, Unit Cost, Total */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <label className="flex flex-col gap-1">
+                        <label className="flex flex-col gap-1 sm:col-span-3">
                           <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
                             Qty
                           </span>
                           <input
                             type="number"
-                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-2 text-sm"
                             min="0"
                             placeholder="0"
                             value={item.quantity}
@@ -2508,12 +2506,16 @@ const MaterialRequests = () => {
                             required
                           />
                         </label>
+                      </div>
+
+                      {/* Row 2: UoM, Unit Cost, Total */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
                             Unit
                           </span>
                           <select
-                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-2 text-sm"
                             value={item.quantityType}
                             onChange={(e) =>
                               handleLineItemChange(
@@ -2549,12 +2551,13 @@ const MaterialRequests = () => {
                             </span>
                           )}
                         </label>
+
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
                             Unit Cost
                           </span>
                           <NumericFormat
-                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-2 text-sm"
                             value={item.amount}
                             thousandSeparator
                             allowNegative={false}
@@ -2573,11 +2576,12 @@ const MaterialRequests = () => {
                             }}
                           />
                         </label>
+
                         <div className="flex flex-col gap-1">
                           <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
                             Total
                           </span>
-                          <div className="flex items-center h-[42px] px-3 rounded-lg bg-gray-50 border border-gray-200">
+                          <div className="flex items-center h-[38px] px-1 bg-transparent border-0 border-b border-gray-200">
                             <div className="flex flex-col leading-tight">
                               <span className="text-sm font-bold text-[#111418]">
                                 {formatCurrency(

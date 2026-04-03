@@ -44,6 +44,8 @@ const Finance = () => {
     useState(null);
   const [reconciliationOpenedFromHistory, setReconciliationOpenedFromHistory] =
     useState(false);
+  const [reconciliationFreshStart, setReconciliationFreshStart] =
+    useState(false);
 
   const location = useLocation();
 
@@ -70,8 +72,6 @@ const Finance = () => {
   const displayName =
     user?.firstName || user?.fullName?.split(" ")[0] || "User";
   const currentUserId = user?.id || user?._id || user?.userId || "";
-
-  const getCurrentMonthYear = () => new Date().toISOString().slice(0, 7);
 
   const extractList = (response) => {
     if (Array.isArray(response)) return response;
@@ -199,10 +199,11 @@ const Finance = () => {
 
   const openReconciliationManagement = (
     prefillData,
-    { fromHistory = false } = {},
+    { fromHistory = false, freshStart = false } = {},
   ) => {
-    setReconciliationPrefillData(prefillData);
+    setReconciliationPrefillData(prefillData || null);
     setReconciliationOpenedFromHistory(fromHistory);
+    setReconciliationFreshStart(freshStart);
     setShowReconciliationHistory(false);
     setShowReconciliationManagement(true);
   };
@@ -245,13 +246,16 @@ const Finance = () => {
         onBack={() => {
           setShowReconciliationManagement(false);
           setReconciliationOpenedFromHistory(false);
+          setReconciliationFreshStart(false);
           fetchReconciliationBreakdowns();
         }}
         onBackToHistory={() => {
           setShowReconciliationManagement(false);
+          setReconciliationFreshStart(false);
           setShowReconciliationHistory(true);
         }}
         showHistoryBreadcrumb={reconciliationOpenedFromHistory}
+        forceFreshStart={reconciliationFreshStart}
         initialMonthYear={reconciliationPrefillData?.monthYear || ""}
         initialLineItems={reconciliationPrefillData?.lineItems || []}
         initialEvidenceFiles={reconciliationPrefillData?.evidenceFiles || []}
@@ -327,12 +331,10 @@ const Finance = () => {
               </div>
               <button
                 onClick={() =>
-                  openReconciliationManagement(
-                    {
-                      monthYear: getCurrentMonthYear(),
-                    },
-                    { fromHistory: true },
-                  )
+                  openReconciliationManagement(null, {
+                    fromHistory: true,
+                    freshStart: true,
+                  })
                 }
                 className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-slate-900"
               >
@@ -355,12 +357,10 @@ const Finance = () => {
                   </p>
                   <button
                     onClick={() =>
-                      openReconciliationManagement(
-                        {
-                          monthYear: getCurrentMonthYear(),
-                        },
-                        { fromHistory: true },
-                      )
+                      openReconciliationManagement(null, {
+                        fromHistory: true,
+                        freshStart: true,
+                      })
                     }
                     className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-6 py-3 font-semibold text-white transition-all hover:bg-slate-900"
                   >

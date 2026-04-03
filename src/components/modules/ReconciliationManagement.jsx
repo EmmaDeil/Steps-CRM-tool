@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/useAuth";
 import { useAppContext } from "../../context/useAppContext";
 import { apiService } from "../../services/api";
@@ -10,6 +10,7 @@ const ReconciliationManagement = ({
   onBack,
   onBackToHistory,
   showHistoryBreadcrumb = false,
+  forceFreshStart = false,
   initialMonthYear = "",
   initialLineItems = [],
   initialEvidenceFiles = [],
@@ -29,6 +30,7 @@ const ReconciliationManagement = ({
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionSearch, setMentionSearch] = useState("");
   const commentRef = useRef(null);
+  const autoFillToastMonthRef = useRef("");
   const [newItem, setNewItem] = useState({
     date: "",
     description: "",
@@ -45,6 +47,30 @@ const ReconciliationManagement = ({
     inflowAmount,
     setInflowAmount,
   } = useAppContext();
+
+  const shouldAutoFillPreviousBalance =
+    !(Array.isArray(initialLineItems) && initialLineItems.length > 0) &&
+    initialPreviousClosingBalance === undefined &&
+    initialInflowAmount === undefined;
+
+  useEffect(() => {
+    if (!forceFreshStart) return;
+
+    setLineItems([]);
+    setEvidenceFiles([]);
+    setCommentText("");
+    setNewItem({ date: "", description: "", quantity: "", amount: "" });
+    setIsMonthFinalized(false);
+    setFinalizedOn("");
+    setMonthYear(new Date().toISOString().slice(0, 7));
+    setPreviousClosingBalance("");
+    setInflowAmount("");
+  }, [
+    forceFreshStart,
+    setInflowAmount,
+    setMonthYear,
+    setPreviousClosingBalance,
+  ]);
 
   useEffect(() => {
     if (initialMonthYear && initialMonthYear !== monthYear) {
@@ -79,6 +105,30 @@ const ReconciliationManagement = ({
 
   useEffect(() => {
     const checkMonthStatus = async () => {
+      const addMonthToMonthYear = (baseMonthYear, monthOffset = 1) => {
+        const [year, month] = String(baseMonthYear || "").split("-");
+        const date = new Date(Number(year), Number(month) - 1 + monthOffset, 1);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      };
+
+      const findNextDraftMonthYear = (startMonthYear, breakdowns) => {
+        const submittedMonths = new Set(
+          (breakdowns || [])
+            .filter(
+              (entry) => entry?.status === "submitted" && entry?.monthYear,
+            )
+            .map((entry) => entry.monthYear),
+        );
+
+        let candidate = startMonthYear;
+        for (let i = 0; i < 24; i += 1) {
+          if (!submittedMonths.has(candidate)) return candidate;
+          candidate = addMonthToMonthYear(candidate, 1);
+        }
+
+        return addMonthToMonthYear(startMonthYear, 1);
+      };
+
       if (!monthYear || !resolvedUserId) {
         setIsMonthFinalized(false);
         setFinalizedOn("");
@@ -103,85 +153,72 @@ const ReconciliationManagement = ({
           (breakdown) => breakdown.status === "submitted",
         );
 
+        if (forceFreshStart && hasSubmitted) {
+          const nextDraftMonth = findNextDraftMonthYear(monthYear, breakdowns);
+          if (nextDraftMonth !== monthYear) {
+            setIsMonthFinalized(false);
+            setFinalizedOn("");
+            autoFillToastMonthRef.current = "";
+            setMonthYear(nextDraftMonth);
+            return;
+          }
+        }
+
         setIsMonthFinalized(hasSubmitted);
 
         const submittedRecord = monthBreakdowns.find(
           (breakdown) => breakdown.status === "submitted",
         );
         setFinalizedOn(submittedRecord?.submittedDate || "");
+
+        if (shouldAutoFillPreviousBalance) {
+          const [year, month] = monthYear.split("-");
+          const prevMonth = parseInt(month) - 1;
+          let prevYear = parseInt(year);
+          let prevMonthStr;
+
+          if (prevMonth < 1) {
+            prevYear -= 1;
+            prevMonthStr = `${prevYear}-12`;
+          } else {
+            prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
+          }
+
+          const prevMonthData = breakdowns.find(
+            (breakdown) => breakdown.monthYear === prevMonthStr,
+          );
+
+          if (prevMonthData) {
+            setPreviousClosingBalance(prevMonthData.newOpeningBalance || 0);
+            if (autoFillToastMonthRef.current !== monthYear) {
+              toast.success(
+                `Previous closing balance auto-filled: ${formatCurrency(
+                  prevMonthData.newOpeningBalance || 0,
+                )}`,
+              );
+              autoFillToastMonthRef.current = monthYear;
+            }
+          } else {
+            setPreviousClosingBalance("");
+          }
+        }
       } catch (error) {
-        console.error("Error checking reconciliation status:", error);
+        const errorCode = error?.code;
+        if (errorCode !== "ECONNABORTED" && errorCode !== "ERR_NETWORK") {
+          console.error("Error checking reconciliation status:", error);
+        }
       }
     };
 
     checkMonthStatus();
-  }, [monthYear, resolvedUserId]);
-
-  const fetchPreviousMonthBalance = useCallback(async () => {
-    if (
-      (Array.isArray(initialLineItems) && initialLineItems.length > 0) ||
-      initialPreviousClosingBalance !== undefined ||
-      initialInflowAmount !== undefined
-    ) {
-      return;
-    }
-
-    try {
-      const [year, month] = monthYear.split("-");
-      const prevMonth = parseInt(month) - 1;
-      let prevYear = parseInt(year);
-      let prevMonthStr;
-
-      if (prevMonth < 1) {
-        prevYear -= 1;
-        prevMonthStr = `${prevYear}-12`;
-      } else {
-        prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
-      }
-
-      // Fetch all retirement breakdowns for the user
-      const response = await apiService.get(
-        `/api/retirement-breakdown?userId=${resolvedUserId}`,
-      );
-      const breakdowns = Array.isArray(response)
-        ? response
-        : Array.isArray(response?.data)
-          ? response.data
-          : [];
-
-      // Find the previous month's breakdown
-      const prevMonthData = breakdowns.find(
-        (breakdown) => breakdown.monthYear === prevMonthStr,
-      );
-
-      if (prevMonthData) {
-        // Auto-fill with the previous month's closing balance (newOpeningBalance)
-        setPreviousClosingBalance(prevMonthData.newOpeningBalance || 0);
-        toast.success(
-          `Previous closing balance auto-filled: ${formatCurrency(
-            prevMonthData.newOpeningBalance || 0,
-          )}`,
-        );
-      } else {
-        // If no previous month data, clear the field for manual entry
-        setPreviousClosingBalance("");
-      }
-    } catch (error) {
-      console.error("Error fetching previous month balance:", error);
-      // Don't show error toast here as it might not be critical
-    }
   }, [
-    initialInflowAmount,
-    initialLineItems,
-    initialPreviousClosingBalance,
     monthYear,
     resolvedUserId,
+    forceFreshStart,
+    setMonthYear,
     setPreviousClosingBalance,
+    shouldAutoFillPreviousBalance,
   ]);
-
-  useEffect(() => {
-    fetchPreviousMonthBalance();
-  }, [monthYear, fetchPreviousMonthBalance]);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -295,6 +332,30 @@ const ReconciliationManagement = ({
 
     setLineItems(lineItems.filter((item) => item.id !== id));
     toast.success("Expense item removed");
+  };
+
+  const handleUpdateLineItem = (id, field, value) => {
+    if (isMonthFinalized) return;
+
+    setLineItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+
+        if (field === "description") {
+          return { ...item, [field]: value };
+        }
+
+        if (field === "quantity" || field === "amount") {
+          if (value === "") {
+            return { ...item, [field]: "" };
+          }
+          const parsed = Number(value);
+          return { ...item, [field]: Number.isNaN(parsed) ? "" : parsed };
+        }
+
+        return { ...item, [field]: value };
+      }),
+    );
   };
 
   const calculateTotal = () =>
@@ -469,60 +530,75 @@ const ReconciliationManagement = ({
   breadcrumbItems.push({ label: "Reconciliation", icon: "fa-umbrella" });
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-[#f4f7fb]">
       <Breadcrumb items={breadcrumbItems} />
-      <div className="p-4">
-        {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Reconcile Expenses
-            </h1>
-            <p className="text-gray-600">
-              Record the breakdown of how you spent the inflow payment from
-              finance.
-            </p>
+
+      <main className="min-h-screen w-full p-2">
+        <header className="mb-10">
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
+            {/* Action Required */}
+          </p>
+          <h1 className="mb-2 text-4xl font-extrabold tracking-tight text-slate-900">
+            Reconcile Expenses
+          </h1>
+          <p className="text-slate-600">
+            Record the breakdown of how you spent the inflow payment from
+            finance.
+          </p>
+        </header>
+
+        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 border-l-4 border-l-blue-600 bg-white p-6 shadow-sm">
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
+              Month & Year
+            </label>
+            <input
+              type="month"
+              value={monthYear}
+              onChange={(e) => setMonthYear(e.target.value)}
+              disabled={isMonthFinalized}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-          <div className="flex gap-4 items-end">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Month & Year
-              </label>
-              <input
-                type="month"
-                value={monthYear}
-                onChange={(e) => setMonthYear(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Previous Closing Balance
-              </label>
+
+          <div className="rounded-xl border border-slate-200 border-l-4 border-l-emerald-600 bg-white p-6 shadow-sm">
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
+              Previous Closing Balance
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xl font-bold text-slate-700">
+                N
+              </span>
               <input
                 type="number"
                 value={previousClosingBalance}
                 onChange={(e) => setPreviousClosingBalance(e.target.value)}
                 disabled={isMonthFinalized}
                 placeholder="0.00"
-                step="0.0"
+                step="0"
                 min="0"
-                className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm w-40"
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-8 pr-3 text-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Inflow Received (This Month)
-              </label>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 border-l-4 border-l-orange-500 bg-white p-6 shadow-sm">
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
+              Inflow Received
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xl font-bold text-slate-700">
+                N
+              </span>
               <input
                 type="number"
                 value={inflowAmount}
                 onChange={(e) => setInflowAmount(e.target.value)}
                 disabled={isMonthFinalized}
                 placeholder="0.00"
-                step="0.0"
+                step="0"
                 min="0"
-                className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm w-40"
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-8 pr-3 text-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
           </div>
@@ -533,40 +609,51 @@ const ReconciliationManagement = ({
             <p className="text-sm font-semibold">
               This month is finalized and read-only.
             </p>
-            <p className="text-xs mt-1">
+            <p className="mt-1 text-xs">
               Submitted on {finalizedOn || "a previous date"}. Switch the month
               to create a new draft.
             </p>
           </div>
         )}
 
-        {/* Main Card */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow p-6 mb-6">
+        <div className="mb-8 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+            <h4 className="text-lg font-bold text-slate-900">
+              Expense Breakdown
+            </h4>
+          </div>
+
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full border-collapse text-left">
+              <colgroup>
+                <col className="w-[16%]" />
+                <col className="w-[50%]" />
+                <col className="w-[10%]" />
+                <col className="w-[16%]" />
+                <col className="w-[10%]" />
+              </colgroup>
               <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                <tr className="bg-slate-50">
+                  <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                  <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
                     Description
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                  <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
                     Quantity
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                  <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
                     Amount
                   </th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                  <th className="px-4 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {/* Inline input row */}
-                <tr className="bg-gray-50">
-                  <td className="px-6 py-2">
+                <tr className="border-t border-slate-100 bg-slate-50/50">
+                  <td className="px-4 py-1.5">
                     <input
                       type="date"
                       value={newItem.date}
@@ -577,10 +664,10 @@ const ReconciliationManagement = ({
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                      className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
                     />
                   </td>
-                  <td className="px-6 py-2">
+                  <td className="px-4 py-1.5">
                     <input
                       type="text"
                       value={newItem.description}
@@ -592,10 +679,10 @@ const ReconciliationManagement = ({
                         if (e.key === "Enter") handleAddLineItem();
                       }}
                       placeholder="e.g., Office Supplies"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                      className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
                     />
                   </td>
-                  <td className="px-6 py-2">
+                  <td className="px-4 py-1.5">
                     <input
                       type="number"
                       value={newItem.quantity}
@@ -608,10 +695,10 @@ const ReconciliationManagement = ({
                       }}
                       placeholder="0"
                       min="0"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                      className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
                     />
                   </td>
-                  <td className="px-6 py-2">
+                  <td className="px-4 py-1.5">
                     <input
                       type="number"
                       value={newItem.amount}
@@ -623,59 +710,127 @@ const ReconciliationManagement = ({
                         if (e.key === "Enter") handleAddLineItem();
                       }}
                       placeholder="0.00"
-                      step="0.0"
+                      step="0"
                       min="0"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                      className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
                     />
                   </td>
-                  <td className="px-6 py-2 text-center">
+                  <td className="px-4 py-1.5 text-right">
                     <button
                       onClick={handleAddLineItem}
                       disabled={isMonthFinalized}
-                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-xs inline-flex items-center gap-2"
+                      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                       title="Add expense"
                     >
                       <i className="fa-solid fa-plus"></i>
+                      {/* Add */}
                     </button>
                   </td>
                 </tr>
 
-                {/* Existing items */}
                 {lineItems.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={5}
-                      className="px-6 py-6 text-center text-sm text-gray-500"
-                    >
-                      No expenses added yet.
+                    <td colSpan={5} className="py-16 text-center">
+                      <div className="flex flex-col items-center px-6">
+                        <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-slate-100">
+                          <i className="fa-solid fa-receipt text-4xl text-slate-400"></i>
+                        </div>
+                        <p className="mb-1 text-lg font-bold text-slate-900">
+                          No expenses added yet.
+                        </p>
+                        <p className="mb-5 text-slate-500">
+                          Start by adding your first expense line item above.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toast("Bank feed import will be available soon")
+                          }
+                          className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 hover:underline"
+                        >
+                          Import from bank feed
+                          <i className="fa-solid fa-arrow-right text-xs"></i>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ) : (
                   lineItems.map((item) => (
                     <tr
                       key={item.id}
-                      className="border-t border-gray-200 hover:bg-gray-50 transition-colors"
+                      className="border-t border-slate-100 transition-colors hover:bg-slate-50"
                     >
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        {item.date}
+                      <td className="px-4 py-2">
+                        <input
+                          type="date"
+                          value={String(item.date || "").slice(0, 10)}
+                          onChange={(e) =>
+                            handleUpdateLineItem(
+                              item.id,
+                              "date",
+                              e.target.value,
+                            )
+                          }
+                          disabled={isMonthFinalized}
+                          className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
+                        />
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 font-medium">
-                        {item.description}
+                      <td className="px-4 py-2">
+                        <input
+                          type="text"
+                          value={item.description || ""}
+                          onChange={(e) =>
+                            handleUpdateLineItem(
+                              item.id,
+                              "description",
+                              e.target.value,
+                            )
+                          }
+                          disabled={isMonthFinalized}
+                          className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm font-medium text-slate-900 outline-none focus:border-blue-500 focus:ring-0"
+                        />
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {item.quantity}
+                      <td className="px-4 py-2">
+                        <input
+                          type="number"
+                          value={item.quantity ?? ""}
+                          onChange={(e) =>
+                            handleUpdateLineItem(
+                              item.id,
+                              "quantity",
+                              e.target.value,
+                            )
+                          }
+                          disabled={isMonthFinalized}
+                          min="0"
+                          className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
+                        />
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 font-semibold">
-                        {formatCurrency(item.amount)}
+                      <td className="px-4 py-2">
+                        <input
+                          type="number"
+                          value={item.amount ?? ""}
+                          onChange={(e) =>
+                            handleUpdateLineItem(
+                              item.id,
+                              "amount",
+                              e.target.value,
+                            )
+                          }
+                          disabled={isMonthFinalized}
+                          min="0"
+                          step="0"
+                          className="w-full border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-0"
+                        />
                       </td>
-                      <td className="px-6 py-4 text-center">
+                      <td className="px-4 py-4 text-right">
                         <button
                           onClick={() => handleRemoveLineItem(item.id)}
                           disabled={isMonthFinalized}
-                          className="text-red-500 hover:text-red-700 transition-colors"
+                          className="text-sm text-red-600 transition-colors hover:text-red-700 disabled:cursor-not-allowed disabled:text-slate-400"
                           title="Delete item"
                         >
-                          <i className="fa-solid fa-trash text-sm"></i>
+                          <i className="fa-solid fa-trash"></i>
                         </button>
                       </td>
                     </tr>
@@ -686,234 +841,245 @@ const ReconciliationManagement = ({
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 shadow p-6 mb-6">
-          <div className="mb-4">
-            <h3 className="text-base font-semibold text-gray-900">Comment</h3>
-            <p className="text-sm text-gray-600">
-              Add context for this reconciliation. Use @ to mention a colleague
-              and attach receipts with the paperclip icon.
-            </p>
-          </div>
+        <input
+          id="reconciliation-evidence-input"
+          type="file"
+          multiple
+          accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+          className="hidden"
+          onChange={(e) => {
+            if (isMonthFinalized) return;
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+            setEvidenceFiles((prev) => [
+              ...prev,
+              ...normalizePickedEvidence(files),
+            ]);
+            e.target.value = "";
+          }}
+        />
 
-          <input
-            id="reconciliation-evidence-input"
-            type="file"
-            multiple
-            accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
-            className="hidden"
-            onChange={(e) => {
-              if (isMonthFinalized) return;
-              const files = e.target.files;
-              if (!files || files.length === 0) return;
-              setEvidenceFiles((prev) => [
-                ...prev,
-                ...normalizePickedEvidence(files),
-              ]);
-              e.target.value = "";
-            }}
-          />
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
+          <div className="space-y-6 lg:col-span-3">
+            <div className="h-full rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h4 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-900">
+                <i className="fa-solid fa-comments text-orange-500"></i>
+                Comments
+              </h4>
 
-          <div className="relative">
-            <textarea
-              ref={commentRef}
-              value={commentText}
-              onChange={handleCommentChange}
-              onBlur={() => {
-                setTimeout(() => setShowMentionDropdown(false), 120);
-              }}
-              disabled={isMonthFinalized}
-              rows={4}
-              placeholder="Write a comment... Use @ to mention someone"
-              className="w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-4 py-3 pr-14 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
+              <div className="relative">
+                <textarea
+                  ref={commentRef}
+                  value={commentText}
+                  onChange={handleCommentChange}
+                  onBlur={() => {
+                    setTimeout(() => setShowMentionDropdown(false), 120);
+                  }}
+                  disabled={isMonthFinalized}
+                  rows={6}
+                  placeholder="Add context for this reconciliation. Use @ to mention a colleague..."
+                  className="min-h-[160px] w-full rounded-xl border border-slate-200 bg-slate-50 p-4 pr-24 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500"
+                />
 
-            <button
-              type="button"
-              onClick={() =>
-                document
-                  .getElementById("reconciliation-evidence-input")
-                  ?.click()
-              }
-              disabled={isMonthFinalized}
-              className="absolute right-3 top-3 size-8 rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors inline-flex items-center justify-center"
-              title="Attach file"
-            >
-              <i className="fa-solid fa-paperclip"></i>
-            </button>
+                <div className="absolute bottom-4 right-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      document
+                        .getElementById("reconciliation-evidence-input")
+                        ?.click()
+                    }
+                    disabled={isMonthFinalized}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:text-blue-700 disabled:cursor-not-allowed disabled:text-slate-300"
+                    title="Attach file"
+                  >
+                    <i className="fa-solid fa-paperclip"></i>
+                  </button>
+                </div>
 
-            {showMentionDropdown && (
-              <div className="absolute z-20 mt-1 max-h-44 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-                {(userList || [])
-                  .filter((u) => u.name?.toLowerCase().includes(mentionSearch))
-                  .slice(0, 8)
-                  .map((u) => (
-                    <button
-                      key={u.id || u.email || u.name}
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleMentionSelect(u.name);
-                      }}
-                      className="w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors"
-                    >
-                      <p className="text-sm font-medium text-gray-900">
-                        {u.name}
+                {showMentionDropdown && (
+                  <div className="absolute z-50 bottom-full left-0 right-0 -mt-3 py-2 bg-white rounded-xl shadow-lg max-h-[150px] overflow-y-auto w-[150px]">
+                    {(userList || [])
+                      .filter((u) =>
+                        u.name?.toLowerCase().includes(mentionSearch),
+                      )
+                      .slice(0, 8)
+                      .map((u) => (
+                        <button
+                          key={u.id || u.email || u.name}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleMentionSelect(u.name);
+                          }}
+                          className="w-full px-3 py-2 text-left transition-colors hover:bg-blue-50"
+                        >
+                          <p className="text-sm font-medium text-slate-900">
+                            {u.name}
+                          </p>
+                        </button>
+                      ))}
+
+                    {userList.filter((u) =>
+                      u.name?.toLowerCase().includes(mentionSearch),
+                    ).length === 0 && (
+                      <p className="px-3 py-2 text-sm text-slate-500">
+                        No users found
                       </p>
-                      <p className="text-xs text-gray-500">
-                        {u.email || "No email"}
-                      </p>
-                    </button>
-                  ))}
-
-                {userList.filter((u) =>
-                  u.name?.toLowerCase().includes(mentionSearch),
-                ).length === 0 && (
-                  <p className="px-3 py-2 text-sm text-gray-500">
-                    No users found
-                  </p>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
 
-          <div className="mt-3">
-            {evidenceFiles.length === 0 ? (
-              <p className="text-sm text-gray-500">No attachments yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {evidenceFiles.map((file, idx) => {
-                  const href = getEvidenceHref(file);
-                  return (
-                    <div
-                      key={`${getEvidenceName(file, idx)}-${idx}`}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-200"
-                    >
-                      <div className="min-w-0">
-                        {href ? (
-                          <a
-                            href={href}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-sm font-medium text-blue-700 hover:underline truncate"
+              <div className="mt-3">
+                {evidenceFiles.length === 0 ? (
+                  <p className="text-sm text-slate-500">No attachments yet.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {evidenceFiles.map((file, idx) => {
+                      const href = getEvidenceHref(file);
+                      return (
+                        <div
+                          key={`${getEvidenceName(file, idx)}-${idx}`}
+                          className="inline-flex max-w-xs items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5"
+                        >
+                          <i className="fa-solid fa-paperclip text-xs text-slate-400"></i>
+                          <div className="min-w-0">
+                            {href ? (
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block max-w-[10rem] truncate text-xs font-medium text-blue-700 hover:underline"
+                              >
+                                {getEvidenceName(file, idx)}
+                              </a>
+                            ) : (
+                              <p className="max-w-[10rem] truncate text-xs font-medium text-slate-800">
+                                {getEvidenceName(file, idx)}
+                              </p>
+                            )}
+                            <p className="text-[10px] text-slate-500">
+                              {file?.type || file?.fileType || "Unknown type"}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEvidenceFiles((prev) =>
+                                prev.filter((_, index) => index !== idx),
+                              )
+                            }
+                            disabled={isMonthFinalized}
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-xs text-red-600 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:text-slate-300"
+                            title="Remove file"
                           >
-                            {getEvidenceName(file, idx)}
-                          </a>
-                        ) : (
-                          <p className="text-sm font-medium text-gray-800 truncate">
-                            {getEvidenceName(file, idx)}
-                          </p>
-                        )}
-                        <p className="text-xs text-gray-500">
-                          {file?.type || file?.fileType || "Unknown type"}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setEvidenceFiles((prev) =>
-                            prev.filter((_, index) => index !== idx),
-                          )
-                        }
-                        disabled={isMonthFinalized}
-                        className="text-red-600 hover:text-red-700 text-sm"
-                        title="Remove file"
-                      >
-                        <i className="fa-solid fa-trash"></i>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Summary Section */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                Summary for {formatMonthYear(monthYear) || "(select month)"}
-              </h3>
-              <div className="mt-2 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">
-                    Previous Closing Balance
-                  </span>
-                  <span className="font-semibold text-gray-900">
-                    {formatCurrency(Number(previousClosingBalance) || 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Inflow Received</span>
-                  <span className="font-semibold text-gray-900">
-                    {formatCurrency(Number(inflowAmount) || 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Total Expenses</span>
-                  <span className="font-semibold text-blue-600">
-                    {formatCurrency(calculateTotal())}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center md:justify-end">
-              <div className="text-right">
-                <div className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                  Opening Balance
-                </div>
-                <div className="text-4xl font-bold text-green-600">
-                  {formatCurrency(calculateNewOpeningBalance())}
-                </div>
+                            <i className="fa-solid fa-xmark"></i>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 justify-end">
-            <button
-              onClick={handleReset}
-              disabled={isMonthFinalized}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm"
-            >
-              Clear
-            </button>
-            <button
-              onClick={handleSaveDraft}
-              disabled={!monthYear || isMonthFinalized}
-              className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${
-                !monthYear || isMonthFinalized
-                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                  : "bg-slate-700 text-white hover:bg-slate-800"
-              }`}
-            >
-              <i className="fa-solid fa-floppy-disk"></i>
-              Save
-            </button>
-            <button
-              onClick={handleSubmitBreakdown}
-              disabled={
-                isMonthFinalized ||
-                lineItems.length === 0 ||
-                !monthYear ||
-                previousClosingBalance === ""
-              }
-              className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${
-                isMonthFinalized ||
-                lineItems.length === 0 ||
-                !monthYear ||
-                previousClosingBalance === ""
-                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                  : "bg-blue-600 text-white hover:bg-blue-700"
-              }`}
-            >
-              <i className="fa-solid fa-check"></i>
-              Submit
-            </button>
+          <div className="lg:col-span-2">
+            <div className="relative h-full overflow-hidden rounded-xl bg-slate-900 p-8 text-white shadow-xl">
+              <div className="pointer-events-none absolute inset-0 opacity-20">
+                <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-white/30 blur-3xl"></div>
+                <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-blue-500/40 blur-3xl"></div>
+              </div>
+
+              <div className="relative z-10">
+                <h4 className="mb-6 flex items-center gap-2 text-lg font-bold">
+                  <i className="fa-solid fa-chart-pie text-blue-300"></i>
+                  Summary for {formatMonthYear(monthYear) || "(select month)"}
+                </h4>
+
+                <div className="mb-8 space-y-4">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                    <span className="text-sm text-white/70">
+                      Previous Closing Balance
+                    </span>
+                    <span className="text-lg font-bold">
+                      {formatCurrency(Number(previousClosingBalance) || 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                    <span className="text-sm text-white/70">
+                      Inflow Received
+                    </span>
+                    <span className="text-lg font-bold text-blue-300">
+                      {formatCurrency(Number(inflowAmount) || 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                    <span className="text-sm text-white/70">
+                      Total Expenses
+                    </span>
+                    <span className="text-lg font-bold text-rose-300">
+                      {formatCurrency(calculateTotal())}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-white/10 p-6 backdrop-blur-sm">
+                  <p className="mb-1 text-xs font-bold uppercase tracking-widest text-blue-200">
+                    Projected Opening Balance
+                  </p>
+                  <h2 className="text-3xl font-extrabold tracking-tight">
+                    {formatCurrency(calculateNewOpeningBalance())}
+                  </h2>
+                </div>
+
+                <div className="mt-8 flex flex-wrap justify-end gap-3">
+                  <button
+                    onClick={handleReset}
+                    disabled={isMonthFinalized}
+                    className="rounded-lg border border-white/30 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={handleSaveDraft}
+                    disabled={!monthYear || isMonthFinalized}
+                    className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-all ${
+                      !monthYear || isMonthFinalized
+                        ? "cursor-not-allowed bg-white/20 text-white/60"
+                        : "bg-white text-slate-900 hover:bg-slate-100"
+                    }`}
+                  >
+                    <i className="fa-solid fa-floppy-disk"></i>
+                    Save
+                  </button>
+                  <button
+                    onClick={handleSubmitBreakdown}
+                    disabled={
+                      isMonthFinalized ||
+                      lineItems.length === 0 ||
+                      !monthYear ||
+                      previousClosingBalance === ""
+                    }
+                    className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-all ${
+                      isMonthFinalized ||
+                      lineItems.length === 0 ||
+                      !monthYear ||
+                      previousClosingBalance === ""
+                        ? "cursor-not-allowed bg-white/20 text-white/60"
+                        : "bg-blue-500 text-white hover:bg-blue-600"
+                    }`}
+                  >
+                    <i className="fa-solid fa-check"></i>
+                    Submit
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };
