@@ -10,7 +10,7 @@ const ModuleLoader = ({ moduleName = "Module", subtitle, className = "" }) => {
       <div className="text-center">
         <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600 mb-4"></div>
         <h3 className="text-lg font-semibold mb-1 text-[#111418]">
-          Loading... {safeName || " "} Please wait.
+          Loading... {safeName || " "} 
         </h3>
         <h3>
         <p className="text-sm text-[#617589]">

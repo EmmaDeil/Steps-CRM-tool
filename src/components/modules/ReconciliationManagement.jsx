@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../../context/useAuth";
 import { useAppContext } from "../../context/useAppContext";
 import { apiService } from "../../services/api";
@@ -28,6 +28,9 @@ const ReconciliationManagement = ({
   const [evidenceFiles, setEvidenceFiles] = useState([]);
   const [commentText, setCommentText] = useState("");
   const [userList, setUserList] = useState([]);
+  const [isLoadingMentionUsers, setIsLoadingMentionUsers] = useState(false);
+  const [hasAttemptedMentionUsersLoad, setHasAttemptedMentionUsersLoad] =
+    useState(false);
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionSearch, setMentionSearch] = useState("");
   const [reviewedLineItemIds, setReviewedLineItemIds] = useState([]);
@@ -270,37 +273,44 @@ const ReconciliationManagement = ({
     shouldAutoFillPreviousBalance,
   ]);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await apiService.get("/api/hr/employees", {
-          timeout: 20000,
-        });
-        const employees = Array.isArray(response)
-          ? response
-          : Array.isArray(response?.data)
-            ? response.data
-            : Array.isArray(response?.employees)
-              ? response.employees
-              : [];
+  const fetchMentionUsers = useCallback(async () => {
+    if (isLoadingMentionUsers || hasAttemptedMentionUsersLoad) return;
 
-        setUserList(
-          employees
-            .map((emp) => ({
-              id: emp._id || emp.id || emp.userId,
-              name: emp.fullName || emp.name,
-              email: emp.email || "",
-            }))
-            .filter((emp) => emp.name),
-        );
-      } catch (error) {
+    setIsLoadingMentionUsers(true);
+    setHasAttemptedMentionUsersLoad(true);
+
+    try {
+      const response = await apiService.get("/api/hr/employees", {
+        params: { limit: 120, page: 1 },
+        timeout: 10000,
+      });
+      const employees = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response?.employees)
+            ? response.employees
+            : [];
+
+      setUserList(
+        employees
+          .map((emp) => ({
+            id: emp._id || emp.id || emp.userId,
+            name: emp.fullName || emp.name,
+            email: emp.email || "",
+          }))
+          .filter((emp) => emp.name),
+      );
+    } catch (error) {
+      const errorCode = error?.code;
+      if (errorCode !== "ECONNABORTED" && errorCode !== "ERR_NETWORK") {
         console.error("Error fetching users for mentions:", error);
-        setUserList([]);
       }
-    };
-
-    fetchUsers();
-  }, []);
+      setUserList([]);
+    } finally {
+      setIsLoadingMentionUsers(false);
+    }
+  }, [hasAttemptedMentionUsersLoad, isLoadingMentionUsers]);
 
   const handleCommentChange = (e) => {
     const value = e.target.value;
@@ -313,6 +323,9 @@ const ReconciliationManagement = ({
     if (atMatch) {
       setShowMentionDropdown(true);
       setMentionSearch(atMatch[1].toLowerCase());
+      if (!hasAttemptedMentionUsersLoad) {
+        fetchMentionUsers();
+      }
     } else {
       setShowMentionDropdown(false);
       setMentionSearch("");
@@ -697,7 +710,7 @@ const ReconciliationManagement = ({
         <header className="mb-10 flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
-              {isFinanceReviewMode ? "Finance Review" : "Employee Submission"}
+              {isFinanceReviewMode ? "Review" : "Submission"}
             </p>
             <h1 className="mb-2 text-4xl font-extrabold tracking-tight text-slate-900">
               {isFinanceReviewMode ? "Review" : "Expenses"}
