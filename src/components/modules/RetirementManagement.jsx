@@ -6,7 +6,14 @@ import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 
-const RetirementManagement = ({ onBack }) => {
+const RetirementManagement = ({
+  onBack,
+  initialMonthYear = "",
+  initialLineItems = [],
+  initialEvidenceFiles = [],
+  initialPreviousClosingBalance,
+  initialInflowAmount,
+}) => {
   const { user } = useAuth();
   const resolvedUserId = user?.id || user?._id || user?.userId || "";
   const resolvedEmployeeName =
@@ -21,6 +28,8 @@ const RetirementManagement = ({ onBack }) => {
     quantity: "",
     amount: "",
   });
+  const [isMonthFinalized, setIsMonthFinalized] = useState(false);
+  const [finalizedOn, setFinalizedOn] = useState("");
   const {
     monthYear,
     setMonthYear,
@@ -30,7 +39,86 @@ const RetirementManagement = ({ onBack }) => {
     setInflowAmount,
   } = useAppContext();
 
+  useEffect(() => {
+    if (initialMonthYear && initialMonthYear !== monthYear) {
+      setMonthYear(initialMonthYear);
+    }
+  }, [initialMonthYear, monthYear, setMonthYear]);
+
+  useEffect(() => {
+    if (Array.isArray(initialLineItems) && initialLineItems.length > 0) {
+      setLineItems(initialLineItems);
+    }
+    if (
+      Array.isArray(initialEvidenceFiles) &&
+      initialEvidenceFiles.length > 0
+    ) {
+      setEvidenceFiles(initialEvidenceFiles);
+    }
+    if (initialPreviousClosingBalance !== undefined) {
+      setPreviousClosingBalance(initialPreviousClosingBalance);
+    }
+    if (initialInflowAmount !== undefined) {
+      setInflowAmount(initialInflowAmount);
+    }
+  }, [
+    initialLineItems,
+    initialEvidenceFiles,
+    initialPreviousClosingBalance,
+    initialInflowAmount,
+    setPreviousClosingBalance,
+    setInflowAmount,
+  ]);
+
+  useEffect(() => {
+    const checkMonthStatus = async () => {
+      if (!monthYear || !resolvedUserId) {
+        setIsMonthFinalized(false);
+        setFinalizedOn("");
+        return;
+      }
+
+      try {
+        const response = await apiService.get(
+          `/api/retirement-breakdown?userId=${resolvedUserId}`,
+        );
+        const breakdowns = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.data)
+            ? response.data
+            : [];
+
+        const monthBreakdowns = breakdowns.filter(
+          (breakdown) => breakdown.monthYear === monthYear,
+        );
+
+        const hasSubmitted = monthBreakdowns.some(
+          (breakdown) => breakdown.status === "submitted",
+        );
+
+        setIsMonthFinalized(hasSubmitted);
+
+        const submittedRecord = monthBreakdowns.find(
+          (breakdown) => breakdown.status === "submitted",
+        );
+        setFinalizedOn(submittedRecord?.submittedDate || "");
+      } catch (error) {
+        console.error("Error checking reconciliation status:", error);
+      }
+    };
+
+    checkMonthStatus();
+  }, [monthYear, resolvedUserId]);
+
   const fetchPreviousMonthBalance = useCallback(async () => {
+    if (
+      (Array.isArray(initialLineItems) && initialLineItems.length > 0) ||
+      initialPreviousClosingBalance !== undefined ||
+      initialInflowAmount !== undefined
+    ) {
+      return;
+    }
+
     try {
       const [year, month] = monthYear.split("-");
       const prevMonth = parseInt(month) - 1;
@@ -75,42 +163,69 @@ const RetirementManagement = ({ onBack }) => {
       console.error("Error fetching previous month balance:", error);
       // Don't show error toast here as it might not be critical
     }
-  }, [monthYear, resolvedUserId, setPreviousClosingBalance]);
+  }, [
+    initialInflowAmount,
+    initialLineItems,
+    initialPreviousClosingBalance,
+    monthYear,
+    resolvedUserId,
+    setPreviousClosingBalance,
+  ]);
 
   useEffect(() => {
     fetchPreviousMonthBalance();
   }, [monthYear, fetchPreviousMonthBalance]);
 
   const handleAddLineItem = () => {
+    if (isMonthFinalized) {
+      toast.error("This month has been submitted and is read-only");
+      return;
+    }
+
+    const parsedQuantity = parseFloat(newItem.quantity);
+    const parsedAmount = parseFloat(newItem.amount);
+
     if (
       !newItem.date.trim() ||
       !newItem.description.trim() ||
-      !newItem.quantity ||
-      !newItem.amount ||
-      parseFloat(newItem.amount) <= 0
+      Number.isNaN(parsedQuantity) ||
+      parsedQuantity <= 0 ||
+      Number.isNaN(parsedAmount) ||
+      parsedAmount <= 0
     ) {
       toast.error("Please fill in all fields with valid values");
       return;
     }
+
     const item = {
       id: Date.now(),
       date: newItem.date,
       description: newItem.description.trim(),
-      quantity: parseInt(newItem.quantity),
-      amount: parseFloat(newItem.amount),
+      quantity: parsedQuantity,
+      amount: parsedAmount,
     };
+
     setLineItems([...lineItems, item]);
     setNewItem({ date: "", description: "", quantity: "", amount: "" });
     toast.success("Expense item added");
   };
 
   const handleRemoveLineItem = (id) => {
+    if (isMonthFinalized) {
+      toast.error("This month has been submitted and is read-only");
+      return;
+    }
+
     setLineItems(lineItems.filter((item) => item.id !== id));
     toast.success("Expense item removed");
   };
 
   const calculateTotal = () =>
-    lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    lineItems.reduce((sum, item) => {
+      const qty = Number(item.quantity) || 0;
+      const amt = Number(item.amount) || 0;
+      return sum + qty * amt;
+    }, 0);
 
   const getEvidenceName = (file, fallbackIndex = 0) =>
     file?.fileName || file?.name || `Evidence ${fallbackIndex + 1}`;
@@ -172,6 +287,11 @@ const RetirementManagement = ({ onBack }) => {
   // Use centralized currency formatter
 
   const handleSubmitBreakdown = async () => {
+    if (isMonthFinalized) {
+      toast.error("This month has already been submitted");
+      return;
+    }
+
     if (!resolvedUserId) {
       toast.error("Unable to determine current user. Please re-login.");
       return;
@@ -205,6 +325,11 @@ const RetirementManagement = ({ onBack }) => {
   };
 
   const handleSaveDraft = async () => {
+    if (isMonthFinalized) {
+      toast.error("This month has already been submitted");
+      return;
+    }
+
     if (!resolvedUserId) {
       toast.error("Unable to determine current user. Please re-login.");
       return;
@@ -233,6 +358,11 @@ const RetirementManagement = ({ onBack }) => {
   };
 
   const handleReset = () => {
+    if (isMonthFinalized) {
+      toast.error("This month has been submitted and cannot be cleared");
+      return;
+    }
+
     setLineItems([]);
     setEvidenceFiles([]);
     setNewItem({ date: "", description: "", quantity: "", amount: "" });
@@ -249,7 +379,7 @@ const RetirementManagement = ({ onBack }) => {
             onClick: onBack,
             icon: "fa-calculator",
           },
-          { label: "Reconcile", icon: "fa-umbrella" },
+          { label: "Reconcilation", icon: "fa-umbrella" },
         ]}
       />
       <div className="p-4">
@@ -257,7 +387,7 @@ const RetirementManagement = ({ onBack }) => {
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Reconcile Retirement Expenses
+              Reconcile Expenses
             </h1>
             <p className="text-gray-600">
               Record the breakdown of how you spent the inflow payment from
@@ -284,6 +414,7 @@ const RetirementManagement = ({ onBack }) => {
                 type="number"
                 value={previousClosingBalance}
                 onChange={(e) => setPreviousClosingBalance(e.target.value)}
+                disabled={isMonthFinalized}
                 placeholder="0.00"
                 step="0.0"
                 min="0"
@@ -298,6 +429,7 @@ const RetirementManagement = ({ onBack }) => {
                 type="number"
                 value={inflowAmount}
                 onChange={(e) => setInflowAmount(e.target.value)}
+                disabled={isMonthFinalized}
                 placeholder="0.00"
                 step="0.0"
                 min="0"
@@ -306,6 +438,18 @@ const RetirementManagement = ({ onBack }) => {
             </div>
           </div>
         </div>
+
+        {isMonthFinalized && (
+          <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
+            <p className="text-sm font-semibold">
+              This month is finalized and read-only.
+            </p>
+            <p className="text-xs mt-1">
+              Submitted on {finalizedOn || "a previous date"}. Switch the month
+              to create a new draft.
+            </p>
+          </div>
+        )}
 
         {/* Main Card */}
         <div className="bg-white rounded-lg border border-gray-200 shadow p-6 mb-6">
@@ -340,6 +484,7 @@ const RetirementManagement = ({ onBack }) => {
                       onChange={(e) =>
                         setNewItem({ ...newItem, date: e.target.value })
                       }
+                      disabled={isMonthFinalized}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
@@ -353,6 +498,7 @@ const RetirementManagement = ({ onBack }) => {
                       onChange={(e) =>
                         setNewItem({ ...newItem, description: e.target.value })
                       }
+                      disabled={isMonthFinalized}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
@@ -367,11 +513,12 @@ const RetirementManagement = ({ onBack }) => {
                       onChange={(e) =>
                         setNewItem({ ...newItem, quantity: e.target.value })
                       }
+                      disabled={isMonthFinalized}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
                       placeholder="0"
-                      min="1"
+                      min="0"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                     />
                   </td>
@@ -382,6 +529,7 @@ const RetirementManagement = ({ onBack }) => {
                       onChange={(e) =>
                         setNewItem({ ...newItem, amount: e.target.value })
                       }
+                      disabled={isMonthFinalized}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleAddLineItem();
                       }}
@@ -394,6 +542,7 @@ const RetirementManagement = ({ onBack }) => {
                   <td className="px-6 py-2 text-center">
                     <button
                       onClick={handleAddLineItem}
+                      disabled={isMonthFinalized}
                       className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-xs inline-flex items-center gap-2"
                       title="Add expense"
                     >
@@ -433,6 +582,7 @@ const RetirementManagement = ({ onBack }) => {
                       <td className="px-6 py-4 text-center">
                         <button
                           onClick={() => handleRemoveLineItem(item.id)}
+                          disabled={isMonthFinalized}
                           className="text-red-500 hover:text-red-700 transition-colors"
                           title="Delete item"
                         >
@@ -451,11 +601,10 @@ const RetirementManagement = ({ onBack }) => {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
             <div>
               <h3 className="text-base font-semibold text-gray-900">
-                Evidence Upload
+                Attachment
               </h3>
               <p className="text-sm text-gray-600">
-                Attach receipts or supporting evidence for this reconciliation
-                entry.
+                Attach receipts or supporting evidence for this entry.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -466,6 +615,7 @@ const RetirementManagement = ({ onBack }) => {
                 accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
                 className="hidden"
                 onChange={(e) => {
+                  if (isMonthFinalized) return;
                   const files = e.target.files;
                   if (!files || files.length === 0) return;
                   setEvidenceFiles((prev) => [
@@ -480,6 +630,7 @@ const RetirementManagement = ({ onBack }) => {
                 onClick={() =>
                   document.getElementById("retirement-evidence-input")?.click()
                 }
+                disabled={isMonthFinalized}
                 className="px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium inline-flex items-center gap-2"
               >
                 <i className="fa-solid fa-upload"></i>
@@ -527,6 +678,7 @@ const RetirementManagement = ({ onBack }) => {
                           prev.filter((_, index) => index !== idx),
                         )
                       }
+                      disabled={isMonthFinalized}
                       className="text-red-600 hover:text-red-700 text-sm"
                       title="Remove file"
                     >
@@ -585,15 +737,16 @@ const RetirementManagement = ({ onBack }) => {
           <div className="flex gap-3 justify-end">
             <button
               onClick={handleReset}
+              disabled={isMonthFinalized}
               className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm"
             >
               Clear
             </button>
             <button
               onClick={handleSaveDraft}
-              disabled={!monthYear}
+              disabled={!monthYear || isMonthFinalized}
               className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${
-                !monthYear
+                !monthYear || isMonthFinalized
                   ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                   : "bg-slate-700 text-white hover:bg-slate-800"
               }`}
@@ -604,11 +757,13 @@ const RetirementManagement = ({ onBack }) => {
             <button
               onClick={handleSubmitBreakdown}
               disabled={
+                isMonthFinalized ||
                 lineItems.length === 0 ||
                 !monthYear ||
                 previousClosingBalance === ""
               }
               className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${
+                isMonthFinalized ||
                 lineItems.length === 0 ||
                 !monthYear ||
                 previousClosingBalance === ""

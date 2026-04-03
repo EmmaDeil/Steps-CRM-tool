@@ -15,6 +15,7 @@ import JournalEntry from "./JournalEntry";
 import VendorManagement from "./VendorManagement";
 import Budget from "./Budget";
 import Invoicing from "./Invoicing";
+import RetirementManagement from "./RetirementManagement";
 
 const Finance = () => {
   const { user } = useAuth();
@@ -34,6 +35,11 @@ const Finance = () => {
   const [showBudget, setShowBudget] = useState(false);
   const [showInvoicing, setShowInvoicing] = useState(false);
   const [showQuickAction, setShowQuickAction] = useState(false);
+  const [retirementBreakdowns, setRetirementBreakdowns] = useState([]);
+  const [showRetirementManagement, setShowRetirementManagement] =
+    useState(false);
+  const [showRetirementHistory, setShowRetirementHistory] = useState(false);
+  const [retirementPrefillData, setRetirementPrefillData] = useState(null);
 
   const location = useLocation();
 
@@ -41,6 +47,9 @@ const Finance = () => {
     const shouldOpenFromState = Boolean(location.state?.openInvoicing);
     const shouldOpenFromSession =
       sessionStorage.getItem("financeOpenInvoicing") === "1";
+    const shouldOpenRetirementFromState = Boolean(
+      location.state?.openRetirementReconciliation,
+    );
 
     if (shouldOpenFromState || shouldOpenFromSession) {
       setShowInvoicing(true);
@@ -48,10 +57,26 @@ const Finance = () => {
         sessionStorage.removeItem("financeOpenInvoicing");
       }
     }
+
+    if (shouldOpenRetirementFromState) {
+      setRetirementPrefillData({
+        monthYear: getCurrentMonthYear(),
+      });
+      setShowRetirementManagement(true);
+    }
   }, [location.state]);
 
   const displayName =
     user?.firstName || user?.fullName?.split(" ")[0] || "User";
+  const currentUserId = user?.id || user?._id || user?.userId || "";
+
+  const getCurrentMonthYear = () => new Date().toISOString().slice(0, 7);
+
+  const extractList = (response) => {
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response?.data)) return response.data;
+    return [];
+  };
 
   const fetchFinanceData = async () => {
     try {
@@ -108,6 +133,26 @@ const Finance = () => {
     }
   }, []);
 
+  const fetchRetirementBreakdowns = useCallback(async () => {
+    if (!currentUserId) {
+      setRetirementBreakdowns([]);
+      return;
+    }
+
+    try {
+      const response = await apiService.get(
+        `/api/retirement-breakdown?userId=${currentUserId}`,
+        {
+          timeout: 20000,
+        },
+      );
+      setRetirementBreakdowns(extractList(response));
+    } catch (err) {
+      console.error("Error fetching retirement breakdowns:", err);
+      setRetirementBreakdowns([]);
+    }
+  }, [currentUserId]);
+
   useEffect(() => {
     fetchFinanceData();
   }, []);
@@ -115,6 +160,47 @@ const Finance = () => {
   useEffect(() => {
     fetchRecentPOs();
   }, [fetchRecentPOs]);
+
+  useEffect(() => {
+    fetchRetirementBreakdowns();
+  }, [fetchRetirementBreakdowns]);
+
+  const buildRetirementPrefillData = (monthYear) => {
+    const monthBreakdowns = retirementBreakdowns.filter(
+      (breakdown) => breakdown.monthYear === monthYear,
+    );
+
+    const openingBalance = monthBreakdowns[0]?.previousClosingBalance || 0;
+    const totalInflow = monthBreakdowns.reduce(
+      (sum, breakdown) => sum + (breakdown.inflowAmount || 0),
+      0,
+    );
+    const allLineItems = [];
+    const allEvidenceFiles = [];
+
+    monthBreakdowns.forEach((breakdown) => {
+      if (breakdown.lineItems && breakdown.lineItems.length > 0) {
+        allLineItems.push(...breakdown.lineItems);
+      }
+      if (breakdown.evidenceFiles && breakdown.evidenceFiles.length > 0) {
+        allEvidenceFiles.push(...breakdown.evidenceFiles);
+      }
+    });
+
+    return {
+      monthYear,
+      lineItems: allLineItems,
+      evidenceFiles: allEvidenceFiles,
+      previousClosingBalance: openingBalance,
+      inflowAmount: totalInflow,
+    };
+  };
+
+  const openRetirementManagement = (prefillData) => {
+    setRetirementPrefillData(prefillData);
+    setShowRetirementHistory(false);
+    setShowRetirementManagement(true);
+  };
 
   const getFilteredPOs = () => {
     if (poFilter === "approved") {
@@ -141,6 +227,246 @@ const Finance = () => {
           <div className="flex h-full grow flex-col w-full">
             <div className="p-2">
               <Invoicing onBackToFinance={() => setShowInvoicing(false)} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (showRetirementManagement) {
+    return (
+      <RetirementManagement
+        onBack={() => {
+          setShowRetirementManagement(false);
+          fetchRetirementBreakdowns();
+        }}
+        initialMonthYear={retirementPrefillData?.monthYear || ""}
+        initialLineItems={retirementPrefillData?.lineItems || []}
+        initialEvidenceFiles={retirementPrefillData?.evidenceFiles || []}
+        initialPreviousClosingBalance={
+          retirementPrefillData?.previousClosingBalance
+        }
+        initialInflowAmount={retirementPrefillData?.inflowAmount}
+      />
+    );
+  }
+
+  if (showRetirementHistory) {
+    const monthlyData = {};
+    retirementBreakdowns.forEach((breakdown) => {
+      const monthKey = breakdown.monthYear;
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          monthYear: monthKey,
+          previousClosingBalance: breakdown.previousClosingBalance || 0,
+          totalInflow: 0,
+          totalExpenses: 0,
+          totalItems: 0,
+          totalEvidence: 0,
+          submissions: 0,
+          latestBalance: 0,
+          latestStatus: "draft",
+          latestCreatedAt: "",
+        };
+      }
+
+      monthlyData[monthKey].totalInflow += breakdown.inflowAmount || 0;
+      monthlyData[monthKey].totalExpenses += breakdown.totalExpenses || 0;
+      monthlyData[monthKey].totalItems += breakdown.lineItems?.length || 0;
+      monthlyData[monthKey].totalEvidence +=
+        breakdown.evidenceFiles?.length || 0;
+      monthlyData[monthKey].submissions += 1;
+      monthlyData[monthKey].latestBalance = breakdown.newOpeningBalance || 0;
+
+      const createdAt = String(
+        breakdown.createdAt || breakdown.updatedAt || "",
+      );
+      if (
+        !monthlyData[monthKey].latestCreatedAt ||
+        createdAt > monthlyData[monthKey].latestCreatedAt
+      ) {
+        monthlyData[monthKey].latestCreatedAt = createdAt;
+        monthlyData[monthKey].latestStatus = breakdown.status || "draft";
+      }
+    });
+
+    const monthlyArray = Object.values(monthlyData).sort((a, b) =>
+      b.monthYear.localeCompare(a.monthYear),
+    );
+
+    return (
+      <div className="w-full min-h-screen bg-gray-50 px-1">
+        <Breadcrumb
+          items={[
+            { label: "Home", href: "/home", icon: "fa-house" },
+            {
+              label: "Finance",
+              icon: "fa-coins",
+              onClick: () => setShowRetirementHistory(false),
+            },
+            { label: "Reconcilation", icon: "fa-history" },
+          ]}
+        />
+
+        <div className="space-y-6 p-3">
+          <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg w-full flex flex-col">
+            <div className="bg-slate-800 px-6 py-4 flex items-center justify-between rounded-t-xl">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <i className="fa-solid fa-history"></i>
+                Reconcilation History
+              </h2>
+              <button
+                onClick={() => setShowRetirementHistory(false)}
+                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors"
+              >
+                <i className="fa-solid fa-arrow-left text-lg"></i>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {retirementBreakdowns.length === 0 ? (
+                <div className="text-center py-12">
+                  <i className="fa-solid fa-inbox text-6xl text-gray-300 mb-4"></i>
+                  <p className="text-lg text-[#617589] mb-2">
+                    No reconcilation breakdowns found
+                  </p>
+                  <p className="text-sm text-[#617589] mb-6">
+                    Create a new reconcilation to get started
+                  </p>
+                  <button
+                    onClick={() =>
+                      openRetirementManagement({
+                        monthYear: getCurrentMonthYear(),
+                      })
+                    }
+                    className="px-6 py-3 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-all font-semibold inline-flex items-center gap-2"
+                  >
+                    <i className="fa-solid fa-plus"></i>
+                    Create New
+                  </button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Month
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Previous Balance
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Total Inflow
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Total Expenses
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Closing Balance
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Total Items
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Evidence
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Submissions
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Latest Status
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {monthlyArray.map((monthData, idx) => {
+                        const [year, month] = (monthData.monthYear || "").split(
+                          "-",
+                        );
+                        const monthName = month
+                          ? new Date(
+                              year,
+                              parseInt(month) - 1,
+                              1,
+                            ).toLocaleString("en-US", {
+                              month: "long",
+                              year: "numeric",
+                            })
+                          : monthData.monthYear;
+
+                        return (
+                          <tr
+                            key={idx}
+                            className="hover:bg-gray-50 transition-colors"
+                          >
+                            <td className="px-6 py-4 text-sm font-medium text-blue-600">
+                              {monthName}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-semibold text-gray-600">
+                              {formatCurrency(
+                                monthData.previousClosingBalance || 0,
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-semibold text-green-600">
+                              {formatCurrency(monthData.totalInflow || 0)}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-semibold text-red-600">
+                              {formatCurrency(monthData.totalExpenses || 0)}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-semibold text-blue-600">
+                              {formatCurrency(monthData.latestBalance || 0)}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-[#617589]">
+                              {monthData.totalItems} items
+                            </td>
+                            <td className="px-6 py-4 text-sm text-[#617589]">
+                              {monthData.totalEvidence || 0} file
+                              {(monthData.totalEvidence || 0) === 1 ? "" : "s"}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-[#617589]">
+                              {monthData.submissions} submission
+                              {monthData.submissions > 1 ? "s" : ""}
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <span
+                                className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                  monthData.latestStatus === "submitted"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-700"
+                                }`}
+                              >
+                                {monthData.latestStatus === "submitted"
+                                  ? "Submitted"
+                                  : "Draft"}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openRetirementManagement(
+                                    buildRetirementPrefillData(
+                                      monthData.monthYear,
+                                    ),
+                                  )
+                                }
+                                className="px-3 py-1.5 rounded-lg bg-slate-800 text-white hover:bg-slate-900 transition-colors text-xs font-medium"
+                              >
+                                Continue
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -273,6 +599,19 @@ const Finance = () => {
                           },
                         },
                         {
+                          icon: "fa-history",
+                          color: "text-slate-600",
+                          bg: "bg-slate-100 dark:bg-slate-700/50",
+                          label: "Reconcilation",
+                          action: () => {
+                            setRetirementPrefillData({
+                              monthYear: getCurrentMonthYear(),
+                            });
+                            setShowRetirementManagement(true);
+                            setShowQuickAction(false);
+                          },
+                        },
+                        {
                           icon: "fa-users",
                           color: "text-indigo-600",
                           bg: "bg-indigo-50 dark:bg-indigo-900/30",
@@ -399,6 +738,35 @@ const Finance = () => {
                 </div>
                 <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
                   Invoicing
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setRetirementPrefillData({
+                    monthYear: getCurrentMonthYear(),
+                  });
+                  setShowRetirementManagement(true);
+                }}
+                className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
+              >
+                <div className="flex size-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 group-hover:scale-110 transition-transform">
+                  <i className="fa-solid fa-history text-[28px]"></i>
+                </div>
+                <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
+                  New Retirement
+                </span>
+              </button>
+
+              <button
+                onClick={() => setShowRetirementHistory(true)}
+                className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
+              >
+                <div className="flex size-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 group-hover:scale-110 transition-transform">
+                  <i className="fa-solid fa-clock-rotate-left text-[28px]"></i>
+                </div>
+                <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
+                  Retirement History
                 </span>
               </button>
 

@@ -324,6 +324,7 @@ async function start() {
         { id: 12, name: "Analytics", componentName: "Analytics" },
         { id: 13, name: "Policy", componentName: "Policy" },
         { id: 14, name: "Incident Reporting", componentName: "IncidentReporting" },
+        { id: 15, name: "Contacts", componentName: "Contact" },
       ];
 
       // Seed modules if empty or update with new modules
@@ -1138,6 +1139,10 @@ async function start() {
   // ============ ADMIN ROUTES (logs + backup) ============
   const adminRoutes = require('./routes/admin.routes');
   app.use('/api/admin', adminRoutes);
+
+  // ============ CONTACTS ROUTES ============
+  const contactsRoutes = require('./routes/contacts.routes');
+  app.use('/api/contacts', contactsRoutes);
 
   // ============ APP DATA ROUTES (application API key) ============
   app.use('/api/app', appRoutes);
@@ -2749,10 +2754,15 @@ async function start() {
   });
 
   // Retirement Breakdown endpoints
-  app.get('/api/retirement-breakdown', async (req, res) => {
+  app.get('/api/retirement-breakdown', authMiddleware, async (req, res) => {
     try {
-      const userId = req.query.userId;
-      const query = userId ? { userId } : {};
+      const isPrivileged = hasAdminPrivileges(req.user);
+      const actorId = String(req.user?._id || req.user?.id || '').trim();
+      const requestedUserId = String(req.query?.userId || '').trim();
+      const query = isPrivileged && requestedUserId
+        ? { userId: requestedUserId }
+        : { userId: actorId };
+
       const breakdowns = await RetirementBreakdownModel.find(query).sort({ createdAt: -1 });
       res.json(breakdowns);
     } catch (err) {
@@ -2761,12 +2771,21 @@ async function start() {
     }
   });
 
-  app.post('/api/retirement-breakdown', async (req, res) => {
+  app.post('/api/retirement-breakdown', authMiddleware, async (req, res) => {
     try {
+      const actorId = String(req.user?._id || req.user?.id || '').trim();
+      const actorName = String(
+        req.user?.fullName ||
+          [req.user?.firstName, req.user?.lastName].filter(Boolean).join(' ') ||
+          req.user?.name ||
+          req.user?.email ||
+          '',
+      ).trim();
+
       const payload = {
         ...req.body,
-        userId: String(req.body?.userId || '').trim(),
-        employeeName: String(req.body?.employeeName || '').trim(),
+        userId: actorId,
+        employeeName: actorName || String(req.body?.employeeName || '').trim(),
       };
 
       if (!payload.userId) {
@@ -2780,6 +2799,24 @@ async function start() {
         return res.status(400).json({
           success: false,
           error: 'employeeName is required',
+        });
+      }
+
+      const existingDraft = await RetirementBreakdownModel.findOne({
+        userId: payload.userId,
+        monthYear: payload.monthYear,
+        status: 'draft',
+      }).sort({ updatedAt: -1 });
+
+      if (existingDraft) {
+        const updated = await RetirementBreakdownModel.findByIdAndUpdate(
+          existingDraft._id,
+          payload,
+          { new: true, runValidators: true },
+        );
+        return res.status(200).json({
+          message: 'Breakdown updated successfully',
+          data: updated,
         });
       }
 
@@ -2798,14 +2835,24 @@ async function start() {
     }
   });
 
-  app.put('/api/retirement-breakdown/:id', async (req, res) => {
+  app.put('/api/retirement-breakdown/:id', authMiddleware, async (req, res) => {
     try {
+      const target = await RetirementBreakdownModel.findById(req.params.id);
+      if (!target) return res.status(404).json({ message: 'Breakdown not found' });
+
+      const actorId = String(req.user?._id || req.user?.id || '').trim();
+      const isPrivileged = hasAdminPrivileges(req.user);
+
+      if (!isPrivileged && String(target.userId || '').trim() !== actorId) {
+        return res.status(403).json({ message: 'Not authorized to update this breakdown' });
+      }
+
       const updated = await RetirementBreakdownModel.findByIdAndUpdate(
         req.params.id,
         req.body,
-        { new: true }
+        { new: true, runValidators: true }
       );
-      if (!updated) return res.status(404).json({ message: 'Breakdown not found' });
+
       res.json({ message: 'Breakdown updated', data: updated });
     } catch (err) {
       console.error('Error updating retirement breakdown:', err);
