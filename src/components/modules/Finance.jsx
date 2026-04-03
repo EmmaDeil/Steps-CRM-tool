@@ -15,7 +15,7 @@ import JournalEntry from "./JournalEntry";
 import VendorManagement from "./VendorManagement";
 import Budget from "./Budget";
 import Invoicing from "./Invoicing";
-import RetirementManagement from "./RetirementManagement";
+import ReconciliationManagement from "./ReconciliationManagement";
 
 const Finance = () => {
   const { user } = useAuth();
@@ -35,11 +35,15 @@ const Finance = () => {
   const [showBudget, setShowBudget] = useState(false);
   const [showInvoicing, setShowInvoicing] = useState(false);
   const [showQuickAction, setShowQuickAction] = useState(false);
-  const [retirementBreakdowns, setRetirementBreakdowns] = useState([]);
-  const [showRetirementManagement, setShowRetirementManagement] =
+  const [reconciliationBreakdowns, setReconciliationBreakdowns] = useState([]);
+  const [showReconciliationManagement, setShowReconciliationManagement] =
     useState(false);
-  const [showRetirementHistory, setShowRetirementHistory] = useState(false);
-  const [retirementPrefillData, setRetirementPrefillData] = useState(null);
+  const [showReconciliationHistory, setShowReconciliationHistory] =
+    useState(false);
+  const [reconciliationPrefillData, setReconciliationPrefillData] =
+    useState(null);
+  const [reconciliationOpenedFromHistory, setReconciliationOpenedFromHistory] =
+    useState(false);
 
   const location = useLocation();
 
@@ -47,7 +51,7 @@ const Finance = () => {
     const shouldOpenFromState = Boolean(location.state?.openInvoicing);
     const shouldOpenFromSession =
       sessionStorage.getItem("financeOpenInvoicing") === "1";
-    const shouldOpenRetirementFromState = Boolean(
+    const shouldOpenReconciliationFromState = Boolean(
       location.state?.openRetirementReconciliation,
     );
 
@@ -58,11 +62,8 @@ const Finance = () => {
       }
     }
 
-    if (shouldOpenRetirementFromState) {
-      setRetirementPrefillData({
-        monthYear: getCurrentMonthYear(),
-      });
-      setShowRetirementManagement(true);
+    if (shouldOpenReconciliationFromState) {
+      setShowReconciliationHistory(true);
     }
   }, [location.state]);
 
@@ -133,9 +134,9 @@ const Finance = () => {
     }
   }, []);
 
-  const fetchRetirementBreakdowns = useCallback(async () => {
+  const fetchReconciliationBreakdowns = useCallback(async () => {
     if (!currentUserId) {
-      setRetirementBreakdowns([]);
+      setReconciliationBreakdowns([]);
       return;
     }
 
@@ -146,10 +147,10 @@ const Finance = () => {
           timeout: 20000,
         },
       );
-      setRetirementBreakdowns(extractList(response));
+      setReconciliationBreakdowns(extractList(response));
     } catch (err) {
       console.error("Error fetching retirement breakdowns:", err);
-      setRetirementBreakdowns([]);
+      setReconciliationBreakdowns([]);
     }
   }, [currentUserId]);
 
@@ -162,11 +163,11 @@ const Finance = () => {
   }, [fetchRecentPOs]);
 
   useEffect(() => {
-    fetchRetirementBreakdowns();
-  }, [fetchRetirementBreakdowns]);
+    fetchReconciliationBreakdowns();
+  }, [fetchReconciliationBreakdowns]);
 
-  const buildRetirementPrefillData = (monthYear) => {
-    const monthBreakdowns = retirementBreakdowns.filter(
+  const buildReconciliationPrefillData = (monthYear) => {
+    const monthBreakdowns = reconciliationBreakdowns.filter(
       (breakdown) => breakdown.monthYear === monthYear,
     );
 
@@ -196,10 +197,14 @@ const Finance = () => {
     };
   };
 
-  const openRetirementManagement = (prefillData) => {
-    setRetirementPrefillData(prefillData);
-    setShowRetirementHistory(false);
-    setShowRetirementManagement(true);
+  const openReconciliationManagement = (
+    prefillData,
+    { fromHistory = false } = {},
+  ) => {
+    setReconciliationPrefillData(prefillData);
+    setReconciliationOpenedFromHistory(fromHistory);
+    setShowReconciliationHistory(false);
+    setShowReconciliationManagement(true);
   };
 
   const getFilteredPOs = () => {
@@ -234,27 +239,33 @@ const Finance = () => {
     );
   }
 
-  if (showRetirementManagement) {
+  if (showReconciliationManagement) {
     return (
-      <RetirementManagement
+      <ReconciliationManagement
         onBack={() => {
-          setShowRetirementManagement(false);
-          fetchRetirementBreakdowns();
+          setShowReconciliationManagement(false);
+          setReconciliationOpenedFromHistory(false);
+          fetchReconciliationBreakdowns();
         }}
-        initialMonthYear={retirementPrefillData?.monthYear || ""}
-        initialLineItems={retirementPrefillData?.lineItems || []}
-        initialEvidenceFiles={retirementPrefillData?.evidenceFiles || []}
+        onBackToHistory={() => {
+          setShowReconciliationManagement(false);
+          setShowReconciliationHistory(true);
+        }}
+        showHistoryBreadcrumb={reconciliationOpenedFromHistory}
+        initialMonthYear={reconciliationPrefillData?.monthYear || ""}
+        initialLineItems={reconciliationPrefillData?.lineItems || []}
+        initialEvidenceFiles={reconciliationPrefillData?.evidenceFiles || []}
         initialPreviousClosingBalance={
-          retirementPrefillData?.previousClosingBalance
+          reconciliationPrefillData?.previousClosingBalance
         }
-        initialInflowAmount={retirementPrefillData?.inflowAmount}
+        initialInflowAmount={reconciliationPrefillData?.inflowAmount}
       />
     );
   }
 
-  if (showRetirementHistory) {
+  if (showReconciliationHistory) {
     const monthlyData = {};
-    retirementBreakdowns.forEach((breakdown) => {
+    reconciliationBreakdowns.forEach((breakdown) => {
       const monthKey = breakdown.monthYear;
       if (!monthlyData[monthKey]) {
         monthlyData[monthKey] = {
@@ -262,9 +273,6 @@ const Finance = () => {
           previousClosingBalance: breakdown.previousClosingBalance || 0,
           totalInflow: 0,
           totalExpenses: 0,
-          totalItems: 0,
-          totalEvidence: 0,
-          submissions: 0,
           latestBalance: 0,
           latestStatus: "draft",
           latestCreatedAt: "",
@@ -273,10 +281,6 @@ const Finance = () => {
 
       monthlyData[monthKey].totalInflow += breakdown.inflowAmount || 0;
       monthlyData[monthKey].totalExpenses += breakdown.totalExpenses || 0;
-      monthlyData[monthKey].totalItems += breakdown.lineItems?.length || 0;
-      monthlyData[monthKey].totalEvidence +=
-        breakdown.evidenceFiles?.length || 0;
-      monthlyData[monthKey].submissions += 1;
       monthlyData[monthKey].latestBalance = breakdown.newOpeningBalance || 0;
 
       const createdAt = String(
@@ -303,169 +307,165 @@ const Finance = () => {
             {
               label: "Finance",
               icon: "fa-coins",
-              onClick: () => setShowRetirementHistory(false),
+              onClick: () => setShowReconciliationHistory(false),
             },
-            { label: "Reconcilation", icon: "fa-history" },
+            { label: "Reconciliation", icon: "fa-history" },
           ]}
         />
 
         <div className="space-y-6 p-3">
-          <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg w-full flex flex-col">
-            <div className="bg-slate-800 px-6 py-4 flex items-center justify-between rounded-t-xl">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <i className="fa-solid fa-history"></i>
-                Reconcilation History
-              </h2>
+          <div className="rounded-xl border border-[#dbe0e6] bg-white p-6 shadow-lg">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-[#111418] flex items-center gap-2">
+                  <i className="fa-solid fa-history text-slate-700"></i>
+                  Reconciliation History
+                </h2>
+                <p className="mt-1 text-sm text-[#617589]">
+                  Select a month to continue or start a new reconciliation.
+                </p>
+              </div>
               <button
-                onClick={() => setShowRetirementHistory(false)}
-                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors"
+                onClick={() =>
+                  openReconciliationManagement(
+                    {
+                      monthYear: getCurrentMonthYear(),
+                    },
+                    { fromHistory: true },
+                  )
+                }
+                className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-slate-900"
               >
-                <i className="fa-solid fa-arrow-left text-lg"></i>
+                <i className="fa-solid fa-plus"></i>
+                New Reconciliation
               </button>
             </div>
+          </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
-              {retirementBreakdowns.length === 0 ? (
-                <div className="text-center py-12">
-                  <i className="fa-solid fa-inbox text-6xl text-gray-300 mb-4"></i>
-                  <p className="text-lg text-[#617589] mb-2">
-                    No reconcilation breakdowns found
+          <div className="rounded-xl border border-[#dbe0e6] bg-white shadow-lg">
+            <div className="overflow-x-auto">
+              {reconciliationBreakdowns.length === 0 ? (
+                <div className="px-6 py-12 text-center">
+                  <i className="fa-solid fa-inbox mb-4 text-6xl text-gray-300"></i>
+                  <p className="mb-2 text-lg text-[#617589]">
+                    No reconciliation breakdowns found
                   </p>
-                  <p className="text-sm text-[#617589] mb-6">
-                    Create a new reconcilation to get started
+                  <p className="mb-6 text-sm text-[#617589]">
+                    Create a new reconciliation to get started
                   </p>
                   <button
                     onClick={() =>
-                      openRetirementManagement({
-                        monthYear: getCurrentMonthYear(),
-                      })
+                      openReconciliationManagement(
+                        {
+                          monthYear: getCurrentMonthYear(),
+                        },
+                        { fromHistory: true },
+                      )
                     }
-                    className="px-6 py-3 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-all font-semibold inline-flex items-center gap-2"
+                    className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-6 py-3 font-semibold text-white transition-all hover:bg-slate-900"
                   >
                     <i className="fa-solid fa-plus"></i>
-                    Create New
+                    Create New Reconciliation
                   </button>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Month
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Previous Balance
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Total Inflow
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Total Expenses
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Closing Balance
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Total Items
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Evidence
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Submissions
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Latest Status
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {monthlyArray.map((monthData, idx) => {
-                        const [year, month] = (monthData.monthYear || "").split(
-                          "-",
-                        );
-                        const monthName = month
-                          ? new Date(
-                              year,
-                              parseInt(month) - 1,
-                              1,
-                            ).toLocaleString("en-US", {
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Month
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Previous Balance
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Total Inflow
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Total Expenses
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Closing Balance
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Status
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {monthlyArray.map((monthData, idx) => {
+                      const [year, month] = (monthData.monthYear || "").split(
+                        "-",
+                      );
+                      const monthName = month
+                        ? new Date(year, parseInt(month) - 1, 1).toLocaleString(
+                            "en-US",
+                            {
                               month: "long",
                               year: "numeric",
-                            })
-                          : monthData.monthYear;
+                            },
+                          )
+                        : monthData.monthYear;
 
-                        return (
-                          <tr
-                            key={idx}
-                            className="hover:bg-gray-50 transition-colors"
-                          >
-                            <td className="px-6 py-4 text-sm font-medium text-blue-600">
-                              {monthName}
-                            </td>
-                            <td className="px-6 py-4 text-sm font-semibold text-gray-600">
-                              {formatCurrency(
-                                monthData.previousClosingBalance || 0,
-                              )}
-                            </td>
-                            <td className="px-6 py-4 text-sm font-semibold text-green-600">
-                              {formatCurrency(monthData.totalInflow || 0)}
-                            </td>
-                            <td className="px-6 py-4 text-sm font-semibold text-red-600">
-                              {formatCurrency(monthData.totalExpenses || 0)}
-                            </td>
-                            <td className="px-6 py-4 text-sm font-semibold text-blue-600">
-                              {formatCurrency(monthData.latestBalance || 0)}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-[#617589]">
-                              {monthData.totalItems} items
-                            </td>
-                            <td className="px-6 py-4 text-sm text-[#617589]">
-                              {monthData.totalEvidence || 0} file
-                              {(monthData.totalEvidence || 0) === 1 ? "" : "s"}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-[#617589]">
-                              {monthData.submissions} submission
-                              {monthData.submissions > 1 ? "s" : ""}
-                            </td>
-                            <td className="px-6 py-4 text-sm">
-                              <span
-                                className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
-                                  monthData.latestStatus === "submitted"
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-amber-100 text-amber-700"
-                                }`}
-                              >
-                                {monthData.latestStatus === "submitted"
-                                  ? "Submitted"
-                                  : "Draft"}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-sm">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openRetirementManagement(
-                                    buildRetirementPrefillData(
-                                      monthData.monthYear,
-                                    ),
-                                  )
-                                }
-                                className="px-3 py-1.5 rounded-lg bg-slate-800 text-white hover:bg-slate-900 transition-colors text-xs font-medium"
-                              >
-                                Continue
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                      return (
+                        <tr
+                          key={idx}
+                          className="hover:bg-gray-50 transition-colors"
+                        >
+                          <td className="px-6 py-4 text-sm font-medium text-blue-600">
+                            {monthName}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-semibold text-gray-600">
+                            {formatCurrency(
+                              monthData.previousClosingBalance || 0,
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-semibold text-green-600">
+                            {formatCurrency(monthData.totalInflow || 0)}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-semibold text-red-600">
+                            {formatCurrency(monthData.totalExpenses || 0)}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-semibold text-blue-600">
+                            {formatCurrency(monthData.latestBalance || 0)}
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                monthData.latestStatus === "submitted"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {monthData.latestStatus === "submitted"
+                                ? "Submitted"
+                                : "Draft"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openReconciliationManagement(
+                                  buildReconciliationPrefillData(
+                                    monthData.monthYear,
+                                  ),
+                                  { fromHistory: true },
+                                )
+                              }
+                              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-900"
+                            >
+                              View Details
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>
@@ -602,12 +602,9 @@ const Finance = () => {
                           icon: "fa-history",
                           color: "text-slate-600",
                           bg: "bg-slate-100 dark:bg-slate-700/50",
-                          label: "Reconcilation",
+                          label: "Reconciliation",
                           action: () => {
-                            setRetirementPrefillData({
-                              monthYear: getCurrentMonthYear(),
-                            });
-                            setShowRetirementManagement(true);
+                            setShowReconciliationHistory(true);
                             setShowQuickAction(false);
                           },
                         },
@@ -742,31 +739,14 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => {
-                  setRetirementPrefillData({
-                    monthYear: getCurrentMonthYear(),
-                  });
-                  setShowRetirementManagement(true);
-                }}
-                className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
-              >
-                <div className="flex size-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 group-hover:scale-110 transition-transform">
-                  <i className="fa-solid fa-history text-[28px]"></i>
-                </div>
-                <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
-                  New Retirement
-                </span>
-              </button>
-
-              <button
-                onClick={() => setShowRetirementHistory(true)}
+                onClick={() => setShowReconciliationHistory(true)}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 group-hover:scale-110 transition-transform">
                   <i className="fa-solid fa-clock-rotate-left text-[28px]"></i>
                 </div>
                 <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
-                  Retirement History
+                  Reconciliation
                 </span>
               </button>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../../context/useAuth";
 import { useAppContext } from "../../context/useAppContext";
 import { apiService } from "../../services/api";
@@ -6,8 +6,10 @@ import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 
-const RetirementManagement = ({
+const ReconciliationManagement = ({
   onBack,
+  onBackToHistory,
+  showHistoryBreadcrumb = false,
   initialMonthYear = "",
   initialLineItems = [],
   initialEvidenceFiles = [],
@@ -22,6 +24,11 @@ const RetirementManagement = ({
     "Employee";
   const [lineItems, setLineItems] = useState([]);
   const [evidenceFiles, setEvidenceFiles] = useState([]);
+  const [commentText, setCommentText] = useState("");
+  const [userList, setUserList] = useState([]);
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState("");
+  const commentRef = useRef(null);
   const [newItem, setNewItem] = useState({
     date: "",
     description: "",
@@ -176,6 +183,76 @@ const RetirementManagement = ({
     fetchPreviousMonthBalance();
   }, [monthYear, fetchPreviousMonthBalance]);
 
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await apiService.get("/api/hr/employees", {
+          timeout: 20000,
+        });
+        const employees = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.data)
+            ? response.data
+            : Array.isArray(response?.employees)
+              ? response.employees
+              : [];
+
+        setUserList(
+          employees
+            .map((emp) => ({
+              id: emp._id || emp.id || emp.userId,
+              name: emp.fullName || emp.name,
+              email: emp.email || "",
+            }))
+            .filter((emp) => emp.name),
+        );
+      } catch (error) {
+        console.error("Error fetching users for mentions:", error);
+        setUserList([]);
+      }
+    };
+
+    fetchUsers();
+  }, []);
+
+  const handleCommentChange = (e) => {
+    const value = e.target.value;
+    setCommentText(value);
+
+    const cursorPos = e.target.selectionStart;
+    const textBefore = value.substring(0, cursorPos);
+    const atMatch = textBefore.match(/@(\w*)$/);
+
+    if (atMatch) {
+      setShowMentionDropdown(true);
+      setMentionSearch(atMatch[1].toLowerCase());
+    } else {
+      setShowMentionDropdown(false);
+      setMentionSearch("");
+    }
+  };
+
+  const handleMentionSelect = (userName) => {
+    const textarea = commentRef.current;
+    if (!textarea) return;
+
+    const cursorPos = textarea.selectionStart;
+    const textBefore = commentText.substring(0, cursorPos);
+    const textAfter = commentText.substring(cursorPos);
+    const replacedBefore = textBefore.replace(/@(\w*)$/, `@${userName} `);
+    const nextText = replacedBefore + textAfter;
+
+    setCommentText(nextText);
+    setShowMentionDropdown(false);
+    setMentionSearch("");
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const nextPos = replacedBefore.length;
+      textarea.setSelectionRange(nextPos, nextPos);
+    });
+  };
+
   const handleAddLineItem = () => {
     if (isMonthFinalized) {
       toast.error("This month has been submitted and is read-only");
@@ -310,6 +387,7 @@ const RetirementManagement = ({
         previousClosingBalance: Number(previousClosingBalance) || 0,
         inflowAmount: Number(inflowAmount) || 0,
         lineItems,
+        comment: commentText,
         evidenceFiles: await serializeEvidenceFiles(evidenceFiles),
         totalExpenses: calculateTotal(),
         newOpeningBalance: calculateNewOpeningBalance(),
@@ -343,6 +421,7 @@ const RetirementManagement = ({
         previousClosingBalance: Number(previousClosingBalance) || 0,
         inflowAmount: Number(inflowAmount) || 0,
         lineItems,
+        comment: commentText,
         evidenceFiles: await serializeEvidenceFiles(evidenceFiles),
         totalExpenses: calculateTotal(),
         newOpeningBalance: calculateNewOpeningBalance(),
@@ -365,23 +444,33 @@ const RetirementManagement = ({
 
     setLineItems([]);
     setEvidenceFiles([]);
+    setCommentText("");
     setNewItem({ date: "", description: "", quantity: "", amount: "" });
     toast.success("Expense breakdown cleared");
   };
 
+  const breadcrumbItems = [
+    { label: "Home", href: "/home", icon: "fa-house" },
+    {
+      label: "Finance",
+      onClick: onBack,
+      icon: "fa-calculator",
+    },
+  ];
+
+  if (showHistoryBreadcrumb && typeof onBackToHistory === "function") {
+    breadcrumbItems.push({
+      label: "Reconciliation History",
+      onClick: onBackToHistory,
+      icon: "fa-history",
+    });
+  }
+
+  breadcrumbItems.push({ label: "Reconciliation", icon: "fa-umbrella" });
+
   return (
     <div className="min-h-screen bg-slate-100">
-      <Breadcrumb
-        items={[
-          { label: "Home", href: "/home", icon: "fa-house" },
-          {
-            label: "Approvals",
-            onClick: onBack,
-            icon: "fa-calculator",
-          },
-          { label: "Reconcilation", icon: "fa-umbrella" },
-        ]}
-      />
+      <Breadcrumb items={breadcrumbItems} />
       <div className="p-4">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
@@ -598,97 +687,145 @@ const RetirementManagement = ({
         </div>
 
         <div className="bg-white rounded-lg border border-gray-200 shadow p-6 mb-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900">
-                Attachment
-              </h3>
-              <p className="text-sm text-gray-600">
-                Attach receipts or supporting evidence for this entry.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <input
-                id="retirement-evidence-input"
-                type="file"
-                multiple
-                accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
-                className="hidden"
-                onChange={(e) => {
-                  if (isMonthFinalized) return;
-                  const files = e.target.files;
-                  if (!files || files.length === 0) return;
-                  setEvidenceFiles((prev) => [
-                    ...prev,
-                    ...normalizePickedEvidence(files),
-                  ]);
-                  e.target.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  document.getElementById("retirement-evidence-input")?.click()
-                }
-                disabled={isMonthFinalized}
-                className="px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium inline-flex items-center gap-2"
-              >
-                <i className="fa-solid fa-upload"></i>
-                Upload
-              </button>
-            </div>
+          <div className="mb-4">
+            <h3 className="text-base font-semibold text-gray-900">Comment</h3>
+            <p className="text-sm text-gray-600">
+              Add context for this reconciliation. Use @ to mention a colleague
+              and attach receipts with the paperclip icon.
+            </p>
           </div>
 
-          {evidenceFiles.length === 0 ? (
-            <p className="text-sm text-gray-500">
-              No evidence files uploaded yet.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {evidenceFiles.map((file, idx) => {
-                const href = getEvidenceHref(file);
-                return (
-                  <div
-                    key={`${getEvidenceName(file, idx)}-${idx}`}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-200"
-                  >
-                    <div className="min-w-0">
-                      {href ? (
-                        <a
-                          href={href}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sm font-medium text-blue-700 hover:underline truncate"
-                        >
-                          {getEvidenceName(file, idx)}
-                        </a>
-                      ) : (
-                        <p className="text-sm font-medium text-gray-800 truncate">
-                          {getEvidenceName(file, idx)}
-                        </p>
-                      )}
-                      <p className="text-xs text-gray-500">
-                        {file?.type || file?.fileType || "Unknown type"}
-                      </p>
-                    </div>
+          <input
+            id="reconciliation-evidence-input"
+            type="file"
+            multiple
+            accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+            className="hidden"
+            onChange={(e) => {
+              if (isMonthFinalized) return;
+              const files = e.target.files;
+              if (!files || files.length === 0) return;
+              setEvidenceFiles((prev) => [
+                ...prev,
+                ...normalizePickedEvidence(files),
+              ]);
+              e.target.value = "";
+            }}
+          />
+
+          <div className="relative">
+            <textarea
+              ref={commentRef}
+              value={commentText}
+              onChange={handleCommentChange}
+              onBlur={() => {
+                setTimeout(() => setShowMentionDropdown(false), 120);
+              }}
+              disabled={isMonthFinalized}
+              rows={4}
+              placeholder="Write a comment... Use @ to mention someone"
+              className="w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-4 py-3 pr-14 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+
+            <button
+              type="button"
+              onClick={() =>
+                document
+                  .getElementById("reconciliation-evidence-input")
+                  ?.click()
+              }
+              disabled={isMonthFinalized}
+              className="absolute right-3 top-3 size-8 rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors inline-flex items-center justify-center"
+              title="Attach file"
+            >
+              <i className="fa-solid fa-paperclip"></i>
+            </button>
+
+            {showMentionDropdown && (
+              <div className="absolute z-20 mt-1 max-h-44 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                {(userList || [])
+                  .filter((u) => u.name?.toLowerCase().includes(mentionSearch))
+                  .slice(0, 8)
+                  .map((u) => (
                     <button
+                      key={u.id || u.email || u.name}
                       type="button"
-                      onClick={() =>
-                        setEvidenceFiles((prev) =>
-                          prev.filter((_, index) => index !== idx),
-                        )
-                      }
-                      disabled={isMonthFinalized}
-                      className="text-red-600 hover:text-red-700 text-sm"
-                      title="Remove file"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleMentionSelect(u.name);
+                      }}
+                      className="w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors"
                     >
-                      <i className="fa-solid fa-trash"></i>
+                      <p className="text-sm font-medium text-gray-900">
+                        {u.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {u.email || "No email"}
+                      </p>
                     </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  ))}
+
+                {userList.filter((u) =>
+                  u.name?.toLowerCase().includes(mentionSearch),
+                ).length === 0 && (
+                  <p className="px-3 py-2 text-sm text-gray-500">
+                    No users found
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3">
+            {evidenceFiles.length === 0 ? (
+              <p className="text-sm text-gray-500">No attachments yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {evidenceFiles.map((file, idx) => {
+                  const href = getEvidenceHref(file);
+                  return (
+                    <div
+                      key={`${getEvidenceName(file, idx)}-${idx}`}
+                      className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-200"
+                    >
+                      <div className="min-w-0">
+                        {href ? (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm font-medium text-blue-700 hover:underline truncate"
+                          >
+                            {getEvidenceName(file, idx)}
+                          </a>
+                        ) : (
+                          <p className="text-sm font-medium text-gray-800 truncate">
+                            {getEvidenceName(file, idx)}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-500">
+                          {file?.type || file?.fileType || "Unknown type"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEvidenceFiles((prev) =>
+                            prev.filter((_, index) => index !== idx),
+                          )
+                        }
+                        disabled={isMonthFinalized}
+                        className="text-red-600 hover:text-red-700 text-sm"
+                        title="Remove file"
+                      >
+                        <i className="fa-solid fa-trash"></i>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Summary Section */}
@@ -781,4 +918,4 @@ const RetirementManagement = ({
   );
 };
 
-export default RetirementManagement;
+export default ReconciliationManagement;

@@ -116,17 +116,36 @@ const Approval = () => {
 
     setLoading(true);
     try {
-      const [advanceRes, refundRes, leaveRes, travelRes] = await Promise.allSettled([
-        apiService.get(`/api/advance-requests?userId=${currentUserId}`, { timeout: 20000 }),
-        apiService.get(`/api/refund-requests?userId=${currentUserId}`, { timeout: 20000 }),
-        apiService.get(`/api/approval/leave-requests?employeeId=${currentEmployeeId}`, { timeout: 20000 }),
-        apiService.get(`/api/approval/travel-requests?employeeId=${currentEmployeeId}`, { timeout: 20000 }),
-      ]);
+      const [advanceRes, refundRes, leaveRes, travelRes] =
+        await Promise.allSettled([
+          apiService.get(`/api/advance-requests?userId=${currentUserId}`, {
+            timeout: 20000,
+          }),
+          apiService.get(`/api/refund-requests?userId=${currentUserId}`, {
+            timeout: 20000,
+          }),
+          apiService.get(
+            `/api/approval/leave-requests?employeeId=${currentEmployeeId}`,
+            { timeout: 20000 },
+          ),
+          apiService.get(
+            `/api/approval/travel-requests?employeeId=${currentEmployeeId}`,
+            { timeout: 20000 },
+          ),
+        ]);
 
-      setAdvanceRequests(advanceRes.status === "fulfilled" ? extractList(advanceRes.value) : []);
-      setRefundRequests(refundRes.status === "fulfilled" ? extractList(refundRes.value) : []);
-      setLeaveRequests(leaveRes.status === "fulfilled" ? extractList(leaveRes.value) : []);
-      setTravelRequests(travelRes.status === "fulfilled" ? extractList(travelRes.value) : []);
+      setAdvanceRequests(
+        advanceRes.status === "fulfilled" ? extractList(advanceRes.value) : [],
+      );
+      setRefundRequests(
+        refundRes.status === "fulfilled" ? extractList(refundRes.value) : [],
+      );
+      setLeaveRequests(
+        leaveRes.status === "fulfilled" ? extractList(leaveRes.value) : [],
+      );
+      setTravelRequests(
+        travelRes.status === "fulfilled" ? extractList(travelRes.value) : [],
+      );
 
       if (
         advanceRes.status === "rejected" ||
@@ -192,7 +211,11 @@ const Approval = () => {
 
     const from = new Date(leaveFormData.fromDate);
     const to = new Date(leaveFormData.toDate);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) {
+    if (
+      Number.isNaN(from.getTime()) ||
+      Number.isNaN(to.getTime()) ||
+      to < from
+    ) {
       setCalculatedDays(0);
       setRemainingLeave(null);
       return;
@@ -239,7 +262,12 @@ const Approval = () => {
       requested: days,
       remaining: allocated - used - days,
     });
-  }, [leaveFormData.fromDate, leaveFormData.toDate, leaveFormData.leaveType, leaveAllocation]);
+  }, [
+    leaveFormData.fromDate,
+    leaveFormData.toDate,
+    leaveFormData.leaveType,
+    leaveAllocation,
+  ]);
 
   useEffect(() => {
     if (!travelFormData.fromDate || !travelFormData.toDate) {
@@ -248,8 +276,16 @@ const Approval = () => {
 
     const from = new Date(travelFormData.fromDate);
     const to = new Date(travelFormData.toDate);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) {
-      setTravelFormData((prev) => ({ ...prev, numberOfDays: 0, numberOfNights: 0 }));
+    if (
+      Number.isNaN(from.getTime()) ||
+      Number.isNaN(to.getTime()) ||
+      to < from
+    ) {
+      setTravelFormData((prev) => ({
+        ...prev,
+        numberOfDays: 0,
+        numberOfNights: 0,
+      }));
       return;
     }
 
@@ -348,7 +384,11 @@ const Approval = () => {
   const handleLeaveSubmit = async (e) => {
     e.preventDefault();
 
-    if (!leaveFormData.leaveType || !leaveFormData.fromDate || !leaveFormData.toDate) {
+    if (
+      !leaveFormData.leaveType ||
+      !leaveFormData.fromDate ||
+      !leaveFormData.toDate
+    ) {
       console.warn("Validation failed: leave type and dates are required");
       return;
     }
@@ -573,15 +613,24 @@ const Approval = () => {
           <tbody className="divide-y divide-slate-200">
             {rows.length === 0 ? (
               <tr>
-                <td className="px-6 py-10 text-center text-slate-500" colSpan={columns.length}>
+                <td
+                  className="px-6 py-10 text-center text-slate-500"
+                  colSpan={columns.length}
+                >
                   {emptyText}
                 </td>
               </tr>
             ) : (
               rows.map((row, index) => (
-                <tr key={row.id || `${title}-${index}`} className="hover:bg-slate-50">
+                <tr
+                  key={row.id || `${title}-${index}`}
+                  className="hover:bg-slate-50"
+                >
                   {row.cells.map((cell, cellIndex) => (
-                    <td key={cellIndex} className="px-6 py-4 text-sm text-[#111418]">
+                    <td
+                      key={cellIndex}
+                      className="px-6 py-4 text-sm text-[#111418]"
+                    >
                       {cell}
                     </td>
                   ))}
@@ -611,24 +660,33 @@ const Approval = () => {
             const theme = summaryTheme[item.accent];
 
             return (
-            <div key={item.title} className="rounded-xl border border-[#dbe0e6] bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm text-[#617589]">{item.title}</p>
-                  <p className="mt-1 text-3xl font-bold text-[#111418]">{item.count}</p>
-                </div>
-                <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${theme.iconBg}`}>
-                  <i className={`fa-solid ${item.icon} ${theme.iconText} text-xl`} />
-                </div>
-              </div>
-              <button
-                onClick={item.onNew}
-                className={`mt-4 w-full rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors ${theme.button}`}
+              <div
+                key={item.title}
+                className="rounded-xl border border-[#dbe0e6] bg-white p-5 shadow-sm"
               >
-                New Request
-              </button>
-            </div>
-          );
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-[#617589]">{item.title}</p>
+                    <p className="mt-1 text-3xl font-bold text-[#111418]">
+                      {item.count}
+                    </p>
+                  </div>
+                  <div
+                    className={`flex h-12 w-12 items-center justify-center rounded-xl ${theme.iconBg}`}
+                  >
+                    <i
+                      className={`fa-solid ${item.icon} ${theme.iconText} text-xl`}
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={item.onNew}
+                  className={`mt-4 w-full rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors ${theme.button}`}
+                >
+                  New Request
+                </button>
+              </div>
+            );
           })}
         </div>
 
@@ -636,9 +694,12 @@ const Approval = () => {
           <div className="rounded-2xl border border-[#dbe0e6] bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-bold text-[#111418]">Request Center</h2>
+                <h2 className="text-2xl font-bold text-[#111418]">
+                  Request Center
+                </h2>
                 <p className="mt-1 text-sm text-[#617589]">
-                  Create advance, refund, leave, and travel requests from one place.
+                  Create advance, refund, leave, and travel requests from one
+                  place.
                 </p>
               </div>
             </div>
@@ -653,8 +714,12 @@ const Approval = () => {
                     <i className="fa-solid fa-wallet" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">Advance Expense</p>
-                    <p className="text-sm text-slate-600">Request cash or prepayment</p>
+                    <p className="font-semibold text-slate-900">
+                      Advance Expense
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Request cash or prepayment
+                    </p>
                   </div>
                 </div>
               </button>
@@ -669,7 +734,9 @@ const Approval = () => {
                   </div>
                   <div>
                     <p className="font-semibold text-slate-900">Refund</p>
-                    <p className="text-sm text-slate-600">Submit expense reimbursements</p>
+                    <p className="text-sm text-slate-600">
+                      Submit expense reimbursements
+                    </p>
                   </div>
                 </div>
               </button>
@@ -683,8 +750,12 @@ const Approval = () => {
                     <i className="fa-solid fa-calendar-days" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">Leave Request</p>
-                    <p className="text-sm text-slate-600">Apply for annual or sick leave</p>
+                    <p className="font-semibold text-slate-900">
+                      Leave Request
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Apply for annual or sick leave
+                    </p>
                   </div>
                 </div>
               </button>
@@ -698,8 +769,12 @@ const Approval = () => {
                     <i className="fa-solid fa-plane" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">Travel Request</p>
-                    <p className="text-sm text-slate-600">Plan business travel</p>
+                    <p className="font-semibold text-slate-900">
+                      Travel Request
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Plan business travel
+                    </p>
                   </div>
                 </div>
               </button>
@@ -730,7 +805,9 @@ const Approval = () => {
                 </div>
                 <div className="rounded-xl bg-slate-50 p-4">
                   <p className="text-slate-500">Requested Days</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">{calculatedDays}</p>
+                  <p className="mt-1 text-xl font-bold text-slate-900">
+                    {calculatedDays}
+                  </p>
                 </div>
               </div>
             ) : (
@@ -753,7 +830,9 @@ const Approval = () => {
             advanceRequests.map((request) => ({
               id: request._id || request.id,
               cells: [
-                request.requestDate ? formatDate(request.requestDate) : formatDate(request.createdAt),
+                request.requestDate
+                  ? formatDate(request.requestDate)
+                  : formatDate(request.createdAt),
                 request.purpose || "N/A",
                 formatMoney(request.amount, request.currency),
                 request.approver || "Auto-assigned",
@@ -774,7 +853,9 @@ const Approval = () => {
             refundRequests.map((request) => ({
               id: request._id || request.id,
               cells: [
-                request.requestDate ? formatDate(request.requestDate) : formatDate(request.createdAt),
+                request.requestDate
+                  ? formatDate(request.requestDate)
+                  : formatDate(request.createdAt),
                 request.category || "N/A",
                 formatMoney(request.amount, request.currency),
                 request.approver || "Auto-assigned",
@@ -840,27 +921,49 @@ const Approval = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h3 className="text-xl font-bold text-slate-900">New Advance Request</h3>
-              <button onClick={() => setShowAdvanceForm(false)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100">
+              <h3 className="text-xl font-bold text-slate-900">
+                New Advance Request
+              </h3>
+              <button
+                onClick={() => setShowAdvanceForm(false)}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+              >
                 <i className="fa-solid fa-times" />
               </button>
             </div>
-            <form onSubmit={handleAdvanceSubmit} className="space-y-4 overflow-y-auto p-6">
+            <form
+              onSubmit={handleAdvanceSubmit}
+              className="space-y-4 overflow-y-auto p-6"
+            >
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Amount</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Amount
+                </label>
                 <input
                   type="number"
                   value={advanceFormData.amount}
-                  onChange={(e) => setAdvanceFormData({ ...advanceFormData, amount: e.target.value })}
+                  onChange={(e) =>
+                    setAdvanceFormData({
+                      ...advanceFormData,
+                      amount: e.target.value,
+                    })
+                  }
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                   required
                 />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Purpose</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Purpose
+                </label>
                 <select
                   value={advanceFormData.purpose}
-                  onChange={(e) => setAdvanceFormData({ ...advanceFormData, purpose: e.target.value })}
+                  onChange={(e) =>
+                    setAdvanceFormData({
+                      ...advanceFormData,
+                      purpose: e.target.value,
+                    })
+                  }
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                   required
                 >
@@ -873,20 +976,34 @@ const Approval = () => {
                 </select>
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Reason</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Reason
+                </label>
                 <textarea
                   value={advanceFormData.reason}
-                  onChange={(e) => setAdvanceFormData({ ...advanceFormData, reason: e.target.value })}
+                  onChange={(e) =>
+                    setAdvanceFormData({
+                      ...advanceFormData,
+                      reason: e.target.value,
+                    })
+                  }
                   rows="4"
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Currency</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Currency
+                  </label>
                   <select
                     value={advanceFormData.currency}
-                    onChange={(e) => setAdvanceFormData({ ...advanceFormData, currency: e.target.value })}
+                    onChange={(e) =>
+                      setAdvanceFormData({
+                        ...advanceFormData,
+                        currency: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                   >
                     <option value="USD">USD</option>
@@ -897,10 +1014,17 @@ const Approval = () => {
                 </div>
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowAdvanceForm(false)} className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanceForm(false)}
+                  className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700"
+                >
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white">
+                <button
+                  type="submit"
+                  className="flex-1 rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white"
+                >
                   Submit
                 </button>
               </div>
@@ -913,27 +1037,49 @@ const Approval = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h3 className="text-xl font-bold text-slate-900">New Refund Request</h3>
-              <button onClick={() => setShowRefundForm(false)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100">
+              <h3 className="text-xl font-bold text-slate-900">
+                New Refund Request
+              </h3>
+              <button
+                onClick={() => setShowRefundForm(false)}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+              >
                 <i className="fa-solid fa-times" />
               </button>
             </div>
-            <form onSubmit={handleRefundSubmit} className="space-y-4 overflow-y-auto p-6">
+            <form
+              onSubmit={handleRefundSubmit}
+              className="space-y-4 overflow-y-auto p-6"
+            >
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Amount</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Amount
+                </label>
                 <input
                   type="number"
                   value={refundFormData.amount}
-                  onChange={(e) => setRefundFormData({ ...refundFormData, amount: e.target.value })}
+                  onChange={(e) =>
+                    setRefundFormData({
+                      ...refundFormData,
+                      amount: e.target.value,
+                    })
+                  }
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                   required
                 />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Category</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Category
+                </label>
                 <select
                   value={refundFormData.category}
-                  onChange={(e) => setRefundFormData({ ...refundFormData, category: e.target.value })}
+                  onChange={(e) =>
+                    setRefundFormData({
+                      ...refundFormData,
+                      category: e.target.value,
+                    })
+                  }
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                   required
                 >
@@ -946,20 +1092,34 @@ const Approval = () => {
                 </select>
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Reason</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Reason
+                </label>
                 <textarea
                   value={refundFormData.reason}
-                  onChange={(e) => setRefundFormData({ ...refundFormData, reason: e.target.value })}
+                  onChange={(e) =>
+                    setRefundFormData({
+                      ...refundFormData,
+                      reason: e.target.value,
+                    })
+                  }
                   rows="4"
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Currency</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Currency
+                  </label>
                   <select
                     value={refundFormData.currency}
-                    onChange={(e) => setRefundFormData({ ...refundFormData, currency: e.target.value })}
+                    onChange={(e) =>
+                      setRefundFormData({
+                        ...refundFormData,
+                        currency: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                   >
                     <option value="USD">USD</option>
@@ -969,29 +1129,50 @@ const Approval = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Receipt Number</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Receipt Number
+                  </label>
                   <input
                     type="text"
                     value={refundFormData.receiptNumber}
-                    onChange={(e) => setRefundFormData({ ...refundFormData, receiptNumber: e.target.value })}
+                    onChange={(e) =>
+                      setRefundFormData({
+                        ...refundFormData,
+                        receiptNumber: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                   />
                 </div>
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Transaction Date</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Transaction Date
+                </label>
                 <input
                   type="date"
                   value={refundFormData.transactionDate}
-                  onChange={(e) => setRefundFormData({ ...refundFormData, transactionDate: e.target.value })}
+                  onChange={(e) =>
+                    setRefundFormData({
+                      ...refundFormData,
+                      transactionDate: e.target.value,
+                    })
+                  }
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                 />
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowRefundForm(false)} className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setShowRefundForm(false)}
+                  className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700"
+                >
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white">
+                <button
+                  type="submit"
+                  className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white"
+                >
                   Submit
                 </button>
               </div>
@@ -1004,18 +1185,33 @@ const Approval = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h3 className="text-xl font-bold text-slate-900">New Leave Request</h3>
-              <button onClick={() => setShowLeaveForm(false)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100">
+              <h3 className="text-xl font-bold text-slate-900">
+                New Leave Request
+              </h3>
+              <button
+                onClick={() => setShowLeaveForm(false)}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+              >
                 <i className="fa-solid fa-times" />
               </button>
             </div>
-            <form onSubmit={handleLeaveSubmit} className="space-y-4 overflow-y-auto p-6">
+            <form
+              onSubmit={handleLeaveSubmit}
+              className="space-y-4 overflow-y-auto p-6"
+            >
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Leave Type</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Leave Type
+                  </label>
                   <select
                     value={leaveFormData.leaveType}
-                    onChange={(e) => setLeaveFormData({ ...leaveFormData, leaveType: e.target.value })}
+                    onChange={(e) =>
+                      setLeaveFormData({
+                        ...leaveFormData,
+                        leaveType: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                     required
                   >
@@ -1027,7 +1223,9 @@ const Approval = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Requested Days</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Requested Days
+                  </label>
                   <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
                     {calculatedDays}
                   </div>
@@ -1035,31 +1233,52 @@ const Approval = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">From</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    From
+                  </label>
                   <input
                     type="date"
                     value={leaveFormData.fromDate}
-                    onChange={(e) => setLeaveFormData({ ...leaveFormData, fromDate: e.target.value })}
+                    onChange={(e) =>
+                      setLeaveFormData({
+                        ...leaveFormData,
+                        fromDate: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                     required
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">To</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    To
+                  </label>
                   <input
                     type="date"
                     value={leaveFormData.toDate}
-                    onChange={(e) => setLeaveFormData({ ...leaveFormData, toDate: e.target.value })}
+                    onChange={(e) =>
+                      setLeaveFormData({
+                        ...leaveFormData,
+                        toDate: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                     required
                   />
                 </div>
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Reason</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Reason
+                </label>
                 <textarea
                   value={leaveFormData.reason}
-                  onChange={(e) => setLeaveFormData({ ...leaveFormData, reason: e.target.value })}
+                  onChange={(e) =>
+                    setLeaveFormData({
+                      ...leaveFormData,
+                      reason: e.target.value,
+                    })
+                  }
                   rows="4"
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                 />
@@ -1071,15 +1290,24 @@ const Approval = () => {
                   {leaveFormData.managerName || "Not assigned"}
                 </div>
                 <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700 sm:col-span-2">
-                  <span className="block text-xs text-slate-500">Manager Email</span>
+                  <span className="block text-xs text-slate-500">
+                    Manager Email
+                  </span>
                   {leaveFormData.managerEmail || "Not assigned"}
                 </div>
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowLeaveForm(false)} className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setShowLeaveForm(false)}
+                  className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700"
+                >
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 rounded-lg bg-orange-600 px-4 py-3 font-semibold text-white">
+                <button
+                  type="submit"
+                  className="flex-1 rounded-lg bg-orange-600 px-4 py-3 font-semibold text-white"
+                >
                   Submit
                 </button>
               </div>
@@ -1092,29 +1320,51 @@ const Approval = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h3 className="text-xl font-bold text-slate-900">New Travel Request</h3>
-              <button onClick={() => setShowTravelForm(false)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100">
+              <h3 className="text-xl font-bold text-slate-900">
+                New Travel Request
+              </h3>
+              <button
+                onClick={() => setShowTravelForm(false)}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+              >
                 <i className="fa-solid fa-times" />
               </button>
             </div>
-            <form onSubmit={handleTravelSubmit} className="space-y-4 overflow-y-auto p-6">
+            <form
+              onSubmit={handleTravelSubmit}
+              className="space-y-4 overflow-y-auto p-6"
+            >
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Current Location</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Current Location
+                  </label>
                   <input
                     type="text"
                     value={travelFormData.currentLocation}
-                    onChange={(e) => setTravelFormData({ ...travelFormData, currentLocation: e.target.value })}
+                    onChange={(e) =>
+                      setTravelFormData({
+                        ...travelFormData,
+                        currentLocation: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                     required
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Destination</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Destination
+                  </label>
                   <input
                     type="text"
                     value={travelFormData.destination}
-                    onChange={(e) => setTravelFormData({ ...travelFormData, destination: e.target.value })}
+                    onChange={(e) =>
+                      setTravelFormData({
+                        ...travelFormData,
+                        destination: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                     required
                   />
@@ -1122,21 +1372,35 @@ const Approval = () => {
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Purpose</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Purpose
+                  </label>
                   <input
                     type="text"
                     value={travelFormData.purpose}
-                    onChange={(e) => setTravelFormData({ ...travelFormData, purpose: e.target.value })}
+                    onChange={(e) =>
+                      setTravelFormData({
+                        ...travelFormData,
+                        purpose: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                     required
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Budget</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Budget
+                  </label>
                   <input
                     type="number"
                     value={travelFormData.budget}
-                    onChange={(e) => setTravelFormData({ ...travelFormData, budget: e.target.value })}
+                    onChange={(e) =>
+                      setTravelFormData({
+                        ...travelFormData,
+                        budget: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                     required
                   />
@@ -1144,21 +1408,35 @@ const Approval = () => {
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">From</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    From
+                  </label>
                   <input
                     type="date"
                     value={travelFormData.fromDate}
-                    onChange={(e) => setTravelFormData({ ...travelFormData, fromDate: e.target.value })}
+                    onChange={(e) =>
+                      setTravelFormData({
+                        ...travelFormData,
+                        fromDate: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                     required
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">To</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    To
+                  </label>
                   <input
                     type="date"
                     value={travelFormData.toDate}
-                    onChange={(e) => setTravelFormData({ ...travelFormData, toDate: e.target.value })}
+                    onChange={(e) =>
+                      setTravelFormData({
+                        ...travelFormData,
+                        toDate: e.target.value,
+                      })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-4 py-3"
                     required
                   />
@@ -1175,10 +1453,17 @@ const Approval = () => {
                 </div>
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Description</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Description
+                </label>
                 <textarea
                   value={travelFormData.description}
-                  onChange={(e) => setTravelFormData({ ...travelFormData, description: e.target.value })}
+                  onChange={(e) =>
+                    setTravelFormData({
+                      ...travelFormData,
+                      description: e.target.value,
+                    })
+                  }
                   rows="4"
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                 />
@@ -1187,7 +1472,12 @@ const Approval = () => {
                 <input
                   type="checkbox"
                   checked={travelFormData.accommodationRequired}
-                  onChange={(e) => setTravelFormData({ ...travelFormData, accommodationRequired: e.target.checked })}
+                  onChange={(e) =>
+                    setTravelFormData({
+                      ...travelFormData,
+                      accommodationRequired: e.target.checked,
+                    })
+                  }
                 />
                 <span>Accommodation required</span>
               </div>
@@ -1197,15 +1487,26 @@ const Approval = () => {
                   {travelFormData.managerName || "Not assigned"}
                 </div>
                 <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700 sm:col-span-2">
-                  <span className="block text-xs text-slate-500">Manager Email</span>
+                  <span className="block text-xs text-slate-500">
+                    Manager Email
+                  </span>
                   {travelFormData.managerEmail || "Not assigned"}
                 </div>
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowTravelForm(false)} className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700" disabled={travelFormLoading}>
+                <button
+                  type="button"
+                  onClick={() => setShowTravelForm(false)}
+                  className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700"
+                  disabled={travelFormLoading}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white" disabled={travelFormLoading}>
+                <button
+                  type="submit"
+                  className="flex-1 rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white"
+                  disabled={travelFormLoading}
+                >
                   {travelFormLoading ? "Submitting..." : "Submit"}
                 </button>
               </div>
