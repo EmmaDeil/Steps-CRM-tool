@@ -83,6 +83,23 @@ const materialRequestSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    subtotalAmount: {
+      type: Number,
+      default: 0,
+    },
+    discountType: {
+      type: String,
+      enum: ['', 'percentage', 'amount'],
+      default: '',
+    },
+    discountValue: {
+      type: Number,
+      default: 0,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+    },
     totalAmountNgn: {
       type: Number,
       default: 0,
