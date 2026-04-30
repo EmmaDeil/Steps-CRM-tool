@@ -2468,7 +2468,7 @@ const MaterialRequests = () => {
                             className="grid grid-cols-12 gap-2 items-start rounded-md border border-gray-100 px-2 py-2"
                           >
                             <div className="col-span-1 pt-1">
-                              <span className="inline-flex h-6 min-w-6 items-center justify-center text-xs font-bold text-white bg-[#137fec] px-2 rounded-full">
+                              <span className="inline-flex h-6 min-w-2 items-center justify-center text-xs font-bold text-white bg-[#137fec] px-2 rounded-full">
                                 {index + 1}
                               </span>
                             </div>
