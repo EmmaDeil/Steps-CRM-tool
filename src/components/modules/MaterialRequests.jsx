@@ -1934,30 +1934,17 @@ const MaterialRequests = () => {
   return (
     <>
       <div className="w-full min-h-screen bg-gray-50 px-4 sm:px-6 lg:px-8">
-        <Breadcrumb
-          items={[
-            { label: "Home", href: "/home", icon: "fa-house" },
-            {
-              label: "Material Requests",
-              icon: "fa-box",
-              ...(showForm && {
-                onClick: (e) => {
-                  e.preventDefault();
-                  setShowForm(false);
-                  resetCreateForm();
-                },
-              }),
-            },
-            ...(showForm
-              ? [
-                  {
-                    label: isEditMode ? "Edit Request" : "Create New",
-                    icon: isEditMode ? "fa-pen-to-square" : "fa-plus",
-                  },
-                ]
-              : []),
-          ]}
-        />
+        <div className="-mx-4 sm:-mx-6 lg:-mx-8">
+          <Breadcrumb
+            items={[
+              { label: "Home", href: "/home", icon: "fa-house" },
+              {
+                label: "Material Requests",
+                icon: "fa-box",
+              },
+            ]}
+          />
+        </div>
 
         {!showForm && !showViewModal && (
           <div className="w-full max-w-none py-6">
@@ -3121,7 +3108,7 @@ const MaterialRequests = () => {
             <Navbar user={user} />
 
             {/* Breadcrumb */}
-            <div className="w-full bg-gray-50 px-4 sm:px-6 lg:px-8">
+            <div className="-mx-4 sm:-mx-6 lg:-mx-8">
               <Breadcrumb
                 items={[
                   { label: "Home", href: "/home", icon: "fa-house" },
