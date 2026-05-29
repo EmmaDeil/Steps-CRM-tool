@@ -1933,7 +1933,7 @@ const MaterialRequests = () => {
 
   return (
     <>
-      <div className="w-full min-h-screen bg-gray-50 px-1">
+      <div className="w-full min-h-screen bg-gray-50 px-4 sm:px-6 lg:px-8">
         <Breadcrumb
           items={[
             { label: "Home", href: "/home", icon: "fa-house" },
@@ -1960,10 +1960,10 @@ const MaterialRequests = () => {
         />
 
         {!showForm && !showViewModal && (
-          <div className="max-w-[1490px] mx-auto px-1 py-6">
+          <div className="w-full max-w-none py-6">
             {/* Page Header */}
-            <div className="flex justify-between items-start mb-6">
-              <div>
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
                 <h1 className="text-2xl font-bold text-[#111418] mb-1">
                   Material Requests
                 </h1>
@@ -1976,7 +1976,7 @@ const MaterialRequests = () => {
                   resetCreateForm();
                   setShowForm(true);
                 }}
-                className="px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-[#0d6efd] transition-colors flex items-center gap-2 font-medium"
+                className="w-full sm:w-auto px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-[#0d6efd] transition-colors flex items-center justify-center gap-2 font-medium"
               >
                 <i className="fa-solid fa-plus"></i>
                 Create Request
@@ -1985,9 +1985,9 @@ const MaterialRequests = () => {
 
             {/* Search & Filters Bar */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
                 {/* Search Input */}
-                <div className="flex-1 min-w-[200px]">
+                <div className="lg:col-span-1 min-w-0">
                   <div className="relative">
                     <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#617589]"></i>
                     <input
@@ -2001,11 +2001,11 @@ const MaterialRequests = () => {
                 </div>
 
                 {/* Status Filter */}
-                <div className="relative">
+                <div className="relative min-w-0">
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[140px]"
+                    className="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer"
                   >
                     <option value="all">All Status</option>
                     <option value="pending">Pending</option>
@@ -2018,11 +2018,11 @@ const MaterialRequests = () => {
                 </div>
 
                 {/* Date Filter */}
-                <div className="relative">
+                <div className="relative min-w-0">
                   <select
                     value={dateFilter}
                     onChange={(e) => setDateFilter(e.target.value)}
-                    className="pl-5 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[150px]"
+                    className="w-full pl-5 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer"
                   >
                     <option value="all">All time</option>
                     <option value="last7">Last 7 days</option>
@@ -2033,11 +2033,11 @@ const MaterialRequests = () => {
                 </div>
 
                 {/* Sort By */}
-                <div className="relative">
+                <div className="relative min-w-0">
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[150px]"
+                    className="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer"
                   >
                     <option value="newest">Newest First</option>
                     <option value="oldest">Oldest First</option>
@@ -2059,7 +2059,7 @@ const MaterialRequests = () => {
                       setDateFilter("last30");
                       setSortBy("newest");
                     }}
-                    className="px-3 py-2 text-[#617589] hover:text-[#111418] hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2 text-sm"
+                    className="px-3 py-2 text-[#617589] hover:text-[#111418] hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm lg:justify-start"
                   >
                     <i className="fa-solid fa-filter-circle-xmark"></i>
                     {/* Clear filters */}
@@ -2089,10 +2089,10 @@ const MaterialRequests = () => {
 
         {/* Request Form - New Consolidated Design */}
         {showForm && (
-          <div className="flex-1 w-full max-w-full mx-auto px-2 sm:px-6 py-8">
+          <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
             {/* Page Heading */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-              <div>
+            <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div className="min-w-0">
                 <h1 className="text-3xl font-bold tracking-tight text-[#111418]">
                   {isEditMode
                     ? "Edit Material Request"
@@ -2452,7 +2452,7 @@ const MaterialRequests = () => {
                   <div className="overflow-x-auto">
                     <div className="min-w-[980px]">
                       <div className="grid grid-cols-12 gap-2 px-2 pb-2 border-b border-gray-200 text-[11px] font-semibold uppercase tracking-wider text-[#617589]">
-                        <span className="col-span-1">#</span> 
+                        <span className="col-span-1">#</span>
                         <span className="col-span-3">Item / SKU</span>
                         <span className="col-span-4">Description</span>
                         <span className="col-span-1">Qty</span>
@@ -3121,7 +3121,7 @@ const MaterialRequests = () => {
             <Navbar user={user} />
 
             {/* Breadcrumb */}
-            <div className="w-full bg-gray-50 px-1">
+            <div className="w-full bg-gray-50 px-4 sm:px-6 lg:px-8">
               <Breadcrumb
                 items={[
                   { label: "Home", href: "/home", icon: "fa-house" },
@@ -3143,12 +3143,12 @@ const MaterialRequests = () => {
             </div>
 
             {/* Header Section */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4">
-              <div className="max-w-[1590px] mx-auto">
-                <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4">
+              <div className="w-full max-w-none">
+                <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
-                      <h1 className="text-[#111418] text-3xl font-bold leading-tight tracking-tight">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                      <h1 className="text-[#111418] text-2xl sm:text-3xl font-bold leading-tight tracking-tight break-words">
                         {/* Material Request # */}
                         {selectedRequest.requestId || selectedRequest._id}
                       </h1>
@@ -3367,7 +3367,7 @@ const MaterialRequests = () => {
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 w-full max-w-[1590px] mx-auto p-6">
+            <div className="flex-1 w-full max-w-none px-4 sm:px-6 lg:px-8 py-6">
               <div className="grid grid-cols-1 gap-6">
                 {/* Left Column - Main Details */}
                 <div className="flex flex-col gap-6">
@@ -3508,7 +3508,7 @@ const MaterialRequests = () => {
                             return (
                               <div
                                 key={`${fileName}-${idx}`}
-                                className="flex w-full max-w-[240px] items-center justify-between bg-white px-3 py-2"
+                                className="flex w-full max-w-full sm:max-w-[240px] items-center justify-between bg-white px-3 py-2"
                               >
                                 <div className="min-w-0 flex items-center gap-2">
                                   <i className="fa-solid fa-paperclip text-[#617589] text-sm"></i>

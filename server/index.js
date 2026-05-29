@@ -165,6 +165,31 @@ app.use(cors({
   optionsSuccessStatus: 200,
 }));
 
+const getRateLimitKey = (req) => {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (forwardedFor) {
+    return forwardedFor.split(',')[0].trim();
+  }
+
+  if (req.headers['cf-connecting-ip']) {
+    return req.headers['cf-connecting-ip'];
+  }
+
+  if (req.headers['x-real-ip']) {
+    return req.headers['x-real-ip'];
+  }
+
+  if (req.socket?.remoteAddress) {
+    return req.socket.remoteAddress;
+  }
+
+  if (req.connection?.remoteAddress) {
+    return req.connection.remoteAddress;
+  }
+
+  return req.ip || 'unknown';
+};
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -172,6 +197,7 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
+  keyGenerator: getRateLimitKey,
 });
 
 // Apply rate limiter to all requests
@@ -183,10 +209,14 @@ const authLimiter = rateLimit({
   max: 20, // increased for developement convenience
   skipSuccessfulRequests: true,
   message: 'Too many failed requests, please try again later.',
+  keyGenerator: getRateLimitKey,
 });
 
 // Trust proxy - enables correct client IP extraction when behind reverse proxy
-app.set('trust proxy', true);
+const trustProxySetting = Number.isInteger(Number(process.env.TRUST_PROXY))
+  ? Number(process.env.TRUST_PROXY)
+  : (isServerlessRuntime ? 1 : 0);
+app.set('trust proxy', trustProxySetting);
 
 // Utility function to extract complete client IP address
 const getClientIP = (req) => {
@@ -279,20 +309,29 @@ if (!MONGODB_URI) {
   }
 }
 
+const mongoConnectionOptions = (useTls) => ({
+  serverSelectionTimeoutMS: 30000, // Increased to 30 seconds
+  socketTimeoutMS: 45000,
+  family: 4, // Use IPv4, skip trying IPv6
+  maxPoolSize: 10,
+  minPoolSize: 2,
+  ...(useTls ? {
+    tls: true, // Enable TLS/SSL for Atlas connections
+    tlsAllowInvalidCertificates: false,
+  } : {}),
+  retryWrites: true,
+  w: 'majority',
+});
+
+const connectToMongo = async (uri) => {
+  const useTls = /^mongodb\+srv:\/\//i.test(uri);
+  await mongoose.connect(uri, mongoConnectionOptions(useTls));
+};
+
 async function start() {
   if (mongoose.connection.readyState !== 1) {
     try {
-      await mongoose.connect(MONGODB_URI, {
-        serverSelectionTimeoutMS: 30000, // Increased to 30 seconds
-        socketTimeoutMS: 45000,
-        family: 4, // Use IPv4, skip trying IPv6
-        maxPoolSize: 10,
-        minPoolSize: 2,
-        tls: true, // Enable TLS/SSL
-        tlsAllowInvalidCertificates: false,
-        retryWrites: true,
-        w: 'majority',
-      });
+      await connectToMongo(MONGODB_URI);
       console.log('✓ Connected to MongoDB');
 
       // Handle MongoDB connection events
@@ -2626,9 +2665,44 @@ async function start() {
           </div>
         `,
       };
+          const isDnsLookupFailure = /ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(err.message || '');
+          const shouldTryLocalFallback = !isServerlessRuntime && isDnsLookupFailure && MONGODB_URI !== LOCAL_MONGODB_URI;
+
+          if (shouldTryLocalFallback) {
+            console.warn('Primary MongoDB host could not be resolved. Trying local MongoDB fallback at', LOCAL_MONGODB_URI);
+            try {
+              await mongoose.disconnect().catch(() => {});
+              await connectToMongo(LOCAL_MONGODB_URI);
+              console.log('✓ Connected to local MongoDB fallback');
+
+              mongoose.connection.on('error', (connectionError) => {
+                console.error('MongoDB connection error:', connectionError);
+              });
+
+              mongoose.connection.on('disconnected', () => {
+                console.warn('MongoDB disconnected. Attempting to reconnect...');
+              });
+
+              mongoose.connection.on('reconnected', () => {
+                console.log('✓ MongoDB reconnected');
+              });
+
+              return;
+            } catch (fallbackErr) {
+              console.error('✗ Failed to connect to MongoDB');
+              console.error('  Primary URI error:', err.message);
+              console.error('  Fallback URI error:', fallbackErr.message);
+              console.error('  Ensure MongoDB is running locally or set MONGODB_URI to a reachable Atlas URI in server/.env');
+              if (!isServerlessRuntime) {
+                process.exit(1);
+              }
+              throw fallbackErr;
+            }
+          }
+
 
       if (process.env.NODE_ENV !== 'production') {
-        console.log('📧 Approval email would be sent to:', mailOptions.to);
+          console.error('  Please ensure MongoDB is running and MONGODB_URI points to a reachable database in server/.env');
         return res.json({ success: true, message: 'Email logged (dev mode)' });
       }
 
