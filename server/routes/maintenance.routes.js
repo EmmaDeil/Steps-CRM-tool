@@ -16,6 +16,7 @@ router.get("/", verifyToken, requireModuleAction('facility', 'view'), async (req
       category,
       assignedTo,
       reportedBy,
+      mine,
       search,
       page = 1,
       limit = 20,
@@ -30,6 +31,7 @@ router.get("/", verifyToken, requireModuleAction('facility', 'view'), async (req
     if (category) filter.category = category;
     if (assignedTo) filter.assignedTo = assignedTo;
     if (reportedBy) filter.reportedBy = reportedBy;
+    if (mine === 'true') filter.reportedBy = req.user._id;
 
     // Add search functionality
     if (search) {
@@ -153,6 +155,74 @@ router.get("/stats", verifyToken, requireModuleAction('facility', 'view'), async
   } catch (error) {
     console.error("Error fetching statistics:", error);
     res.status(500).json({ error: "Failed to fetch statistics" });
+  }
+});
+
+// Get per-ticket timeline analytics (time to assign, in-progress, completion)
+router.get("/analytics/times", verifyToken, requireModuleAction('facility', 'view'), async (req, res) => {
+  try {
+    const tickets = await MaintenanceTicket.find()
+      .select('ticketNumber title createdAt completedDate workLog status')
+      .lean();
+
+    const rows = tickets.map((t) => {
+      const createdAt = t.createdAt ? new Date(t.createdAt) : null;
+
+      // Worklog entries may include actions like 'Assigned', 'In Progress', 'Completed'
+      const assignedEntry = (t.workLog || []).find(w => /assign(ed)?/i.test(w.action));
+      const inProgressEntry = (t.workLog || []).find(w => /in progress/i.test(w.action) || /start(ed)?/i.test(w.action));
+      const completedEntry = (t.workLog || []).find(w => /complete(d)?/i.test(w.action));
+
+      const assignedAt = assignedEntry ? new Date(assignedEntry.timestamp) : null;
+      const inProgressAt = inProgressEntry ? new Date(inProgressEntry.timestamp) : null;
+      const completedAt = t.completedDate ? new Date(t.completedDate) : (completedEntry ? new Date(completedEntry.timestamp) : null);
+
+      const durToAssign = assignedAt && createdAt ? (assignedAt - createdAt) : null;
+      const durToInProgress = inProgressAt && (assignedAt || createdAt) ? (inProgressAt - (assignedAt || createdAt)) : null;
+      const durToComplete = completedAt && createdAt ? (completedAt - createdAt) : null;
+      const durInProgressToComplete = completedAt && inProgressAt ? (completedAt - inProgressAt) : null;
+
+      return {
+        _id: t._id,
+        ticketNumber: t.ticketNumber,
+        title: t.title,
+        createdAt,
+        assignedAt,
+        inProgressAt,
+        completedAt,
+        durToAssign,
+        durToInProgress,
+        durToComplete,
+        durInProgressToComplete,
+        status: t.status,
+      };
+    });
+
+    // Summary averages (ms)
+    const nonNull = (arr) => arr.filter(x => x != null);
+    const avg = (arr) => {
+      const a = nonNull(arr);
+      if (a.length === 0) return null;
+      return Math.round(a.reduce((s,v) => s + v, 0) / a.length);
+    };
+
+    const avgToAssign = avg(rows.map(r => r.durToAssign));
+    const avgToComplete = avg(rows.map(r => r.durToComplete));
+    const avgInProgressToComplete = avg(rows.map(r => r.durInProgressToComplete));
+
+    res.json({
+      tickets: rows,
+      summary: {
+        avgToAssign,
+        avgToComplete,
+        avgInProgressToComplete,
+        totalTickets: rows.length,
+        completedCount: rows.filter(r => r.completedAt != null).length,
+      }
+    });
+  } catch (error) {
+    console.error('Error generating ticket timeline analytics:', error);
+    res.status(500).json({ error: 'Failed to generate analytics' });
   }
 });
 
