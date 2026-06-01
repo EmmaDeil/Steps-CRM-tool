@@ -198,12 +198,7 @@ const Approval = () => {
   }, [currentEmployeeId]);
 
   useEffect(() => {
-    if (
-      !leaveFormData.fromDate ||
-      !leaveFormData.toDate ||
-      !leaveFormData.leaveType ||
-      !leaveAllocation
-    ) {
+    if (!leaveFormData.fromDate || !leaveFormData.toDate) {
       setCalculatedDays(0);
       setRemainingLeave(null);
       return;
@@ -231,6 +226,13 @@ const Approval = () => {
       current.setDate(current.getDate() + 1);
     }
 
+    setCalculatedDays(days);
+
+    if (!leaveFormData.leaveType || !leaveAllocation) {
+      setRemainingLeave(null);
+      return;
+    }
+
     let allocated = 0;
     let used = 0;
     switch (leaveFormData.leaveType) {
@@ -255,7 +257,6 @@ const Approval = () => {
         used = 0;
     }
 
-    setCalculatedDays(days);
     setRemainingLeave({
       allocated,
       used,
