@@ -24,6 +24,7 @@ const AdvanceRequestModel = require('./models/AdvanceRequest');
 const RefundRequestModel = require('./models/RefundRequest');
 const RetirementBreakdownModel = require('./models/RetirementBreakdown');
 const DocumentModel = require('./models/Document');
+const TemplateModel = require('./models/Template');
 const UserModel = require('./models/User');
 const SecuritySettingsModel = require('./models/SecuritySettings');
 const AuditLogModel = require('./models/AuditLog');
@@ -3148,13 +3149,31 @@ async function start() {
         return res.status(404).json({ message: 'Document not found' });
       }
 
-      if (!hasAdminPrivileges(req.user) && String(existing.uploadedBy || '') !== String(req.user?._id || '')) {
-        return res.status(403).json({ message: 'Only the document owner can update this document' });
+      const actorId = String(req.user?._id || '');
+      const actorEmail = String(req.user?.email || '').trim().toLowerCase();
+      const uploader = String(existing.uploadedBy || '').trim().toLowerCase();
+      const isOwner = hasAdminPrivileges(req.user) || uploader === actorId.toLowerCase() || uploader === actorEmail;
+
+      const isRecipient = (existing.recipients || []).some(
+        (rec) => String(rec.email || '').trim().toLowerCase() === actorEmail || String(rec.id || '') === actorId
+      );
+
+      if (!isOwner && !isRecipient) {
+        return res.status(403).json({ message: 'Only the document owner or assigned recipients can update this document' });
+      }
+
+      // Restrict payload for non-owners (recipients can only update fields, recipients list, or status)
+      let updatePayload = req.body;
+      if (!isOwner) {
+        updatePayload = {};
+        if (req.body.fields) updatePayload.fields = req.body.fields;
+        if (req.body.recipients) updatePayload.recipients = req.body.recipients;
+        if (req.body.status) updatePayload.status = req.body.status;
       }
 
       const updated = await DocumentModel.findByIdAndUpdate(
         req.params.id,
-        req.body,
+        updatePayload,
         { new: true }
       );
       if (!updated) {
@@ -3246,7 +3265,12 @@ async function start() {
         return res.status(404).json({ message: 'Document not found' });
       }
 
-      if (!hasAdminPrivileges(req.user) && String(existing.uploadedBy || '') !== String(req.user?._id || '')) {
+      const actorId = String(req.user?._id || '');
+      const actorEmail = String(req.user?.email || '').trim().toLowerCase();
+      const uploader = String(existing.uploadedBy || '').trim().toLowerCase();
+      const isOwner = hasAdminPrivileges(req.user) || uploader === actorId.toLowerCase() || uploader === actorEmail;
+
+      if (!isOwner) {
         return res.status(403).json({ message: 'Only the document owner can delete this document' });
       }
 
@@ -3258,6 +3282,79 @@ async function start() {
     } catch (err) {
       console.error('Error deleting document:', err);
       res.status(500).json({ message: 'Failed to delete document' });
+    }
+  });
+
+  // ==================== DOCUMENT TEMPLATES API ====================
+
+  // Get all templates
+  app.get('/api/documents/templates', authMiddleware, async (req, res) => {
+    try {
+      const templates = await TemplateModel.find({}).sort({ createdAt: -1 });
+      res.json(templates);
+    } catch (err) {
+      console.error('Error fetching templates:', err);
+      res.status(500).json({ message: 'Failed to fetch templates' });
+    }
+  });
+
+  // Get template by ID
+  app.get('/api/documents/templates/:id', authMiddleware, async (req, res) => {
+    try {
+      const template = await TemplateModel.findById(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: 'Template not found' });
+      }
+      res.json(template);
+    } catch (err) {
+      console.error('Error fetching template:', err);
+      res.status(500).json({ message: 'Failed to fetch template' });
+    }
+  });
+
+  // Create a new template
+  app.post('/api/documents/templates', authMiddleware, async (req, res) => {
+    try {
+      const payload = {
+        ...req.body,
+        uploadedBy: String(req.user?._id || ''),
+        uploadedByName: req.user?.fullName || req.user?.email || '',
+      };
+
+      const template = new TemplateModel(payload);
+      const saved = await template.save();
+      res.status(201).json(saved);
+    } catch (err) {
+      console.error('Error creating template:', err);
+      res.status(500).json({ message: 'Failed to create template' });
+    }
+  });
+
+  // Delete a template
+  app.delete('/api/documents/templates/:id', authMiddleware, async (req, res) => {
+    try {
+      const existing = await TemplateModel.findById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: 'Template not found' });
+      }
+
+      const actorId = String(req.user?._id || '');
+      const actorEmail = String(req.user?.email || '').trim().toLowerCase();
+      const uploader = String(existing.uploadedBy || '').trim().toLowerCase();
+      const isOwner = hasAdminPrivileges(req.user) || uploader === actorId.toLowerCase() || uploader === actorEmail;
+
+      if (!isOwner) {
+        return res.status(403).json({ message: 'Only the template owner can delete this template' });
+      }
+
+      const deleted = await TemplateModel.findByIdAndDelete(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: 'Template not found' });
+      }
+      res.json({ message: 'Template deleted successfully' });
+    } catch (err) {
+      console.error('Error deleting template:', err);
+      res.status(500).json({ message: 'Failed to delete template' });
     }
   });
 

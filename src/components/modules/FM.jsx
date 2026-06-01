@@ -3,11 +3,9 @@ import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import ModuleLoader from "../common/ModuleLoader";
-import { useAuth } from "../../context/useAuth";
 
 // Facilities Management main component with analytics timeline
 const FM = () => {
-  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [tickets, setTickets] = useState([]);
   const [stats, setStats] = useState(null);
@@ -438,7 +436,7 @@ const FM = () => {
                       onClick={() =>
                         setPagination((p) => ({
                           ...p,
-                          page: Math.min(pages || 1, p.page + 1),
+                          page: Math.min(p.pages || 1, p.page + 1),
                         }))
                       }
                       disabled={pagination.page >= pagination.pages}
@@ -575,7 +573,7 @@ const FM = () => {
   );
 };
 
-// Create Ticket Modal (simplified)
+// Create Ticket Modal
 const CreateTicketModal = ({ onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     title: "",
@@ -584,129 +582,402 @@ const CreateTicketModal = ({ onClose, onSuccess }) => {
     priority: "Medium",
     location: { building: "", floor: "", room: "", specificLocation: "" },
     dueDate: "",
+    scheduledDate: "",
     isEmergency: false,
     assignedTo: "",
+    assignedTeam: "Unassigned",
+    estimatedCost: "",
   });
   const [submitting, setSubmitting] = useState(false);
-  const [users, setUsers] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(true);
 
   useEffect(() => {
-    // fetch assignable users for dropdown
     let mounted = true;
     const load = async () => {
       try {
-        const res = await apiService.get("/api/users?status=Active&limit=200");
+        setLoadingEmployees(true);
+        const res = await apiService.get("/api/hr/employees?limit=500");
         if (!mounted) return;
-        const list = Array.isArray(res) ? res : Array.isArray(res?.users) ? res.users : [];
-        setUsers(list);
+        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        setEmployees(list);
       } catch (err) {
-        console.error("Failed to load users for assign dropdown", err);
+        console.error("Failed to load employees for assign dropdown", err);
+      } finally {
+        if (mounted) setLoadingEmployees(false);
       }
     };
     load();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
+
+  const updateLocation = (key, value) => {
+    setFormData((f) => ({
+      ...f,
+      location: { ...f.location, [key]: value },
+    }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.category) {
+      toast.error("Please select a category");
+      return;
+    }
+    if (!formData.location.building) {
+      toast.error("Please enter the building location");
+      return;
+    }
     setSubmitting(true);
     try {
-      await apiService.post("/api/maintenance", formData);
-      toast.success("Maintenance ticket created");
+      const payload = {
+        ...formData,
+        estimatedCost: formData.estimatedCost ? Number(formData.estimatedCost) : undefined,
+        dueDate: formData.dueDate || undefined,
+        scheduledDate: formData.scheduledDate || undefined,
+      };
+      await apiService.post("/api/maintenance", payload);
+      toast.success("Maintenance ticket created successfully");
       onSuccess();
     } catch (err) {
       console.error(err);
-      toast.error("Failed to create ticket");
+      toast.error(err?.response?.data?.message || "Failed to create ticket");
     } finally {
       setSubmitting(false);
     }
   };
 
+  const categories = [
+    { value: "HVAC", icon: "fa-fan", color: "text-sky-500" },
+    { value: "Plumbing", icon: "fa-faucet-drip", color: "text-blue-500" },
+    { value: "Electrical", icon: "fa-bolt", color: "text-yellow-500" },
+    { value: "Carpentry", icon: "fa-hammer", color: "text-amber-700" },
+    { value: "Painting", icon: "fa-paint-roller", color: "text-purple-500" },
+    { value: "Cleaning", icon: "fa-broom", color: "text-green-500" },
+    { value: "Landscaping", icon: "fa-tree", color: "text-emerald-600" },
+    { value: "IT Equipment", icon: "fa-computer", color: "text-indigo-500" },
+    { value: "Safety & Security", icon: "fa-shield-halved", color: "text-red-500" },
+    { value: "General Maintenance", icon: "fa-screwdriver-wrench", color: "text-gray-600" },
+    { value: "Other", icon: "fa-ellipsis", color: "text-gray-400" },
+  ];
+
+  const teams = [
+    "Unassigned", "HVAC Team", "Plumbing Team", "Electrical Team",
+    "General Maintenance", "IT Support", "Security Team",
+  ];
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-900">
-            Create Maintenance Ticket
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+              <i className="fa-solid fa-wrench text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white">Create Maintenance Ticket</h3>
+              <p className="text-blue-100 text-xs">Fill in the details to submit a new request</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white transition-colors p-1">
             <i className="fa-solid fa-times text-xl" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Title <span className="text-red-500">*</span>
-            </label>
-            <input
-              required
-              type="text"
-              value={formData.title}
-              onChange={(e) =>
-                setFormData((f) => ({ ...f, title: e.target.value }))
-              }
-              className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg"
-            />
+
+        {/* Emergency Toggle Banner */}
+        {formData.isEmergency && (
+          <div className="bg-red-50 border-b border-red-200 px-6 py-2 flex items-center gap-2">
+            <i className="fa-solid fa-triangle-exclamation text-red-500 animate-pulse" />
+            <span className="text-sm font-semibold text-red-700">Emergency ticket — this will be flagged as urgent</span>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Description <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              required
-              rows={4}
-              value={formData.description}
-              onChange={(e) =>
-                setFormData((f) => ({ ...f, description: e.target.value }))
-              }
-              className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Assign To
-              </label>
-              <select
-                value={formData.assignedTo}
-                onChange={(e) =>
-                  setFormData((f) => ({ ...f, assignedTo: e.target.value }))
-                }
-                className="block w-full px-3 py-2 border border-gray-300 rounded-lg"
-              >
-                <option value="">Unassigned</option>
-                {Array.isArray(users) && users.map((u) => (
-                  <option key={u._id} value={u._id}>
-                    {u.firstName} {u.lastName} — {u.email}
-                  </option>
-                ))}
-              </select>
+        )}
+
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+          <div className="p-6 space-y-6">
+
+            {/* Section: Basic Info */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-bold text-gray-800 uppercase tracking-wider">
+                <i className="fa-solid fa-info-circle text-blue-500" />
+                Basic Information
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. Broken AC unit in Conference Room B"
+                  value={formData.title}
+                  onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
+                  className="block w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Description <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Describe the issue in detail — what happened, when it started, and the impact..."
+                  value={formData.description}
+                  onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
+                  className="block w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Category <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.category}
+                    onChange={(e) => setFormData((f) => ({ ...f, category: e.target.value }))}
+                    className="block w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  >
+                    <option value="">Select a category...</option>
+                    {categories.map((cat) => (
+                      <option key={cat.value} value={cat.value}>{cat.value}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Priority
+                  </label>
+                  <div className="flex gap-2">
+                    {["Low", "Medium", "High", "Urgent"].map((p) => {
+                      const priorityColors = {
+                        Low: formData.priority === p ? "bg-green-100 border-green-500 text-green-700" : "border-gray-200 text-gray-500 hover:border-green-300",
+                        Medium: formData.priority === p ? "bg-yellow-100 border-yellow-500 text-yellow-700" : "border-gray-200 text-gray-500 hover:border-yellow-300",
+                        High: formData.priority === p ? "bg-orange-100 border-orange-500 text-orange-700" : "border-gray-200 text-gray-500 hover:border-orange-300",
+                        Urgent: formData.priority === p ? "bg-red-100 border-red-500 text-red-700" : "border-gray-200 text-gray-500 hover:border-red-300",
+                      };
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setFormData((f) => ({ ...f, priority: p }))}
+                          className={`flex-1 py-2 px-1 border-2 rounded-lg text-xs font-semibold transition-all ${priorityColors[p]}`}
+                        >
+                          {p}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                &nbsp;
-              </label>
-              <div className="flex gap-3">
+
+            <div className="h-px bg-gray-100" />
+
+            {/* Section: Location */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-bold text-gray-800 uppercase tracking-wider">
+                <i className="fa-solid fa-location-dot text-red-500" />
+                Location Details
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Building <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    placeholder="e.g. Main Office, Warehouse A"
+                    value={formData.location.building}
+                    onChange={(e) => updateLocation("building", e.target.value)}
+                    className="block w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Floor</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 2nd Floor, Ground"
+                    value={formData.location.floor}
+                    onChange={(e) => updateLocation("floor", e.target.value)}
+                    className="block w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Room / Area</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Room 204, Kitchen"
+                    value={formData.location.room}
+                    onChange={(e) => updateLocation("room", e.target.value)}
+                    className="block w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Specific Location</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Near window, above sink"
+                    value={formData.location.specificLocation}
+                    onChange={(e) => updateLocation("specificLocation", e.target.value)}
+                    className="block w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="h-px bg-gray-100" />
+
+            {/* Section: Assignment */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-bold text-gray-800 uppercase tracking-wider">
+                <i className="fa-solid fa-user-gear text-indigo-500" />
+                Assignment
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Assign to Employee
+                  </label>
+                  <select
+                    value={formData.assignedTo}
+                    onChange={(e) => setFormData((f) => ({ ...f, assignedTo: e.target.value }))}
+                    className="block w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  >
+                    <option value="">— Unassigned —</option>
+                    {loadingEmployees ? (
+                      <option disabled>Loading employees...</option>
+                    ) : (
+                      employees.map((emp) => (
+                        <option key={emp._id || emp.id} value={emp._id || emp.id}>
+                          {emp.name || `${emp.firstName || ""} ${emp.lastName || ""}`.trim()} — {emp.department || "No Dept"} {emp.jobTitle ? `(${emp.jobTitle})` : ""}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Assigned Team
+                  </label>
+                  <select
+                    value={formData.assignedTeam}
+                    onChange={(e) => setFormData((f) => ({ ...f, assignedTeam: e.target.value }))}
+                    className="block w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  >
+                    {teams.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="h-px bg-gray-100" />
+
+            {/* Section: Scheduling & Cost */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-bold text-gray-800 uppercase tracking-wider">
+                <i className="fa-solid fa-calendar-check text-emerald-500" />
+                Scheduling & Cost
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Due Date</label>
+                  <input
+                    type="date"
+                    value={formData.dueDate}
+                    onChange={(e) => setFormData((f) => ({ ...f, dueDate: e.target.value }))}
+                    className="block w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Scheduled Date</label>
+                  <input
+                    type="date"
+                    value={formData.scheduledDate}
+                    onChange={(e) => setFormData((f) => ({ ...f, scheduledDate: e.target.value }))}
+                    className="block w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Estimated Cost</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">₦</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.estimatedCost}
+                      onChange={(e) => setFormData((f) => ({ ...f, estimatedCost: e.target.value }))}
+                      className="block w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Emergency Toggle */}
+              <div className="flex items-center justify-between p-4 rounded-xl border-2 border-dashed border-red-200 bg-red-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+                    <i className="fa-solid fa-triangle-exclamation text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Mark as Emergency</p>
+                    <p className="text-xs text-gray-500">Emergency tickets are escalated immediately</p>
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={onClose}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg"
+                  onClick={() => setFormData((f) => ({ ...f, isEmergency: !f.isEmergency }))}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                    formData.isEmergency ? "bg-red-500" : "bg-gray-200"
+                  }`}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg"
-                >
-                  {submitting ? "Creating..." : "Create Ticket"}
+                  <span className={`${formData.isEmergency ? "translate-x-5" : "translate-x-0"} pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`} />
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between gap-3">
+            <p className="text-xs text-gray-400 hidden sm:block">
+              <i className="fa-solid fa-info-circle mr-1" />
+              Fields marked with <span className="text-red-500">*</span> are required
+            </p>
+            <div className="flex gap-3 ml-auto">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-plus" />
+                    Create Ticket
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </form>

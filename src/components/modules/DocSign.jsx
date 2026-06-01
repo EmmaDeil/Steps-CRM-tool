@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
@@ -8,6 +9,7 @@ import DocSignTemplateCreate from "./DocSignTemplateCreate";
 import ModuleLoader from "../common/ModuleLoader";
 
 const DocSign = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [showCreateTemplate, setShowCreateTemplate] = useState(false);
@@ -22,6 +24,18 @@ const DocSign = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Map category values (like 'hr', 'legal') to readable layout labels
+  const displayCategory = useCallback((cat) => {
+    const mapping = {
+      hr: "HR & People",
+      legal: "Legal & Compliance",
+      sales: "Sales Contracts",
+      finance: "Finance",
+      realestate: "Real Estate"
+    };
+    return mapping[String(cat).toLowerCase()] || cat || "General";
+  }, []);
+
   const fetchDocuments = useCallback(async () => {
     try {
       setLoading(true);
@@ -33,14 +47,15 @@ const DocSign = () => {
         return;
       }
 
-      // Fetch documents assigned to the user
-      const response = await apiService.get("/api/documents", {
-        params: { userId },
-      });
+      // Fetch documents and templates in parallel
+      const [docsResponse, templatesResponse] = await Promise.all([
+        apiService.get("/api/documents", { params: { userId } }),
+        apiService.get("/api/documents/templates")
+      ]);
 
-      if (Array.isArray(response)) {
+      if (Array.isArray(docsResponse)) {
         // Filter pending documents (documents needing user action)
-        const pending = response.filter(
+        const pending = docsResponse.filter(
           (doc) => doc.status === "Action Required" || doc.status === "Pending",
         );
 
@@ -57,31 +72,28 @@ const DocSign = () => {
         }));
 
         setPendingRequests(transformedPending);
+      }
 
-        // Templates are completed documents
-        const completedDocs = response.filter(
-          (doc) => doc.status === "Completed",
-        );
-        const transformedTemplates = completedDocs.slice(0, 10).map((doc) => ({
-          id: doc._id,
-          title: doc.name,
-          category: doc.metadata?.category || "General",
-          categoryColor: getCategoryColor(doc.metadata?.category || "General"),
-          description: doc.metadata?.description || "Document template",
-          lastModified: formatDate(doc.updatedAt),
-          document: doc,
+      if (Array.isArray(templatesResponse)) {
+        const transformedTemplates = templatesResponse.map((tmpl) => ({
+          id: tmpl._id,
+          title: tmpl.name,
+          category: displayCategory(tmpl.category || "General"),
+          categoryColor: getCategoryColor(tmpl.category || "General"),
+          description: tmpl.description || "Document template",
+          lastModified: formatDate(tmpl.updatedAt),
+          document: tmpl,
         }));
-
         setTemplates(transformedTemplates);
       }
     } catch (err) {
-      console.error("Error fetching documents:", err);
+      console.error("Error fetching documents and templates:", err);
       setError("Failed to load documents");
       toast.error("Failed to load documents");
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, displayCategory]);
 
   // Fetch documents and templates on mount
   useEffect(() => {
@@ -89,6 +101,66 @@ const DocSign = () => {
       fetchDocuments();
     }
   }, [user, fetchDocuments]);
+
+  const filteredTemplates = useMemo(() => {
+    let result = [...templates];
+
+    // Search Query Filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (tmpl) =>
+          tmpl.title.toLowerCase().includes(q) ||
+          tmpl.description.toLowerCase().includes(q)
+      );
+    }
+
+    // Category Filter
+    if (selectedCategory !== "All Categories") {
+      result = result.filter((tmpl) => {
+        const cat = String(tmpl.category).toLowerCase();
+        if (selectedCategory === "HR & People") return cat === "hr" || cat.includes("hr") || cat.includes("people");
+        if (selectedCategory === "Sales & Legal") return cat === "sales" || cat === "legal" || cat.includes("sales") || cat.includes("legal") || cat.includes("compliance") || cat.includes("contract");
+        if (selectedCategory === "Finance") return cat === "finance" || cat.includes("finance");
+        if (selectedCategory === "Real Estate") return cat === "realestate" || cat.includes("real");
+        return false;
+      });
+    }
+
+    // Time Range Filter
+    if (selectedTimeRange !== "Any Time") {
+      const now = new Date();
+      result = result.filter((tmpl) => {
+        const date = new Date(tmpl.document?.updatedAt || tmpl.document?.createdAt || now);
+        const diffTime = now - date;
+        const diffDays = diffTime / (1000 * 60 * 60 * 24);
+        if (selectedTimeRange === "Last 7 Days") return diffDays <= 7;
+        if (selectedTimeRange === "Last 30 Days") return diffDays <= 30;
+        if (selectedTimeRange === "Last Year") return diffDays <= 365;
+        return true;
+      });
+    }
+
+    // Sorting
+    result.sort((a, b) => {
+      if (sortBy === "Sort: Name (A-Z)") {
+        return a.title.localeCompare(b.title);
+      }
+      
+      const dateA = new Date(a.document?.updatedAt || a.document?.createdAt || 0);
+      const dateB = new Date(b.document?.updatedAt || b.document?.createdAt || 0);
+      
+      if (sortBy === "Sort: Date Created") {
+        const createA = new Date(a.document?.createdAt || 0);
+        const createB = new Date(b.document?.createdAt || 0);
+        return createB - createA;
+      }
+      
+      return dateB - dateA;
+    });
+
+    return result;
+  }, [templates, searchQuery, selectedCategory, selectedTimeRange, sortBy]);
 
   // Helper functions
   const getInitials = (name) => {
@@ -176,9 +248,8 @@ const DocSign = () => {
     });
   };
 
-  const handleReviewAndSign = (_requestId) => {
-    // TODO: Implement signing view
-    toast("Signing interface coming soon");
+  const handleReviewAndSign = (requestId) => {
+    navigate(`/docsign/sign/${requestId}`);
   };
 
   const handleDeleteTemplate = async (templateId) => {
@@ -467,14 +538,14 @@ const DocSign = () => {
                 </div>
 
                 {/* Templates Grid */}
-                {templates.length === 0 ? (
+                {filteredTemplates.length === 0 ? (
                   <div className="w-full bg-white p-8 rounded-xl border border-[#e5e7eb] text-center">
                     <i className="fa-solid fa-folder text-4xl text-[#617589] mb-3"></i>
                     <p className="text-sm text-[#617589]">No templates found</p>
                   </div>
                 ) : (
                   <div className="w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {templates.map((template) => (
+                    {filteredTemplates.map((template) => (
                       <div
                         key={template.id}
                         className="group bg-white rounded-xl border border-[#e5e7eb] hover:border-[#137fec] hover:shadow-[0_4px_20px_rgba(0,0,0,0.05)] transition-all flex flex-col overflow-hidden relative"

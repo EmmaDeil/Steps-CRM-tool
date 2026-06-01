@@ -12,6 +12,7 @@ import NotFound from "./components/NotFound";
 import VisitorSignIn from "./components/VisitorSignIn";
 import { Toaster } from "react-hot-toast";
 import Navbar from "./components/Navbar";
+import DocSignView from "./components/modules/DocSignView";
 
 // Defined outside App so React never sees a new component type on re-renders,
 // preventing unmount/remount of child routes when App re-renders.
@@ -35,6 +36,15 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/visitor/:token" element={<VisitorSignIn />} />
+        
+        <Route
+          path="/docsign/sign/:id"
+          element={
+            <PrivateRoute>
+              <DocSignView />
+            </PrivateRoute>
+          }
+        />
 
         <Route
           path="/home"

@@ -122,29 +122,40 @@ const DocSignTemplateCreate = ({ onBack }) => {
     try {
       setLoading(true);
 
-      const formData = new FormData();
-      formData.append("name", templateName);
-      formData.append("category", category);
-      formData.append("description", description);
-      formData.append("document", uploadedFile);
-      formData.append("roles", JSON.stringify(roles));
-      formData.append("fields", JSON.stringify(fields));
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const fileDataURL = reader.result;
 
-      await apiService.post("/api/documents/templates", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+        const templateData = {
+          name: templateName,
+          category: category,
+          description: description,
+          fileURL: fileDataURL,
+          fileSize: `${(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB`,
+          roles: roles,
+          fields: fields,
+        };
 
-      toast.success("Template saved successfully!");
-      setShowSaveModal(false);
+        try {
+          await apiService.post("/api/documents/templates", templateData);
+          toast.success("Template saved successfully!");
+          setShowSaveModal(false);
 
-      // Return to DocSign view after short delay
-      setTimeout(() => {
-        if (onBack) onBack();
-      }, 1500);
+          // Return to DocSign view after short delay
+          setTimeout(() => {
+            if (onBack) onBack();
+          }, 1500);
+        } catch (error) {
+          console.error("Error saving template:", error);
+          toast.error(error.response?.data?.message || "Failed to save template");
+        } finally {
+          setLoading(false);
+        }
+      };
+      reader.readAsDataURL(uploadedFile);
     } catch (error) {
       console.error("Error saving template:", error);
-      toast.error(error.response?.data?.message || "Failed to save template");
-    } finally {
+      toast.error("Failed to process document file");
       setLoading(false);
     }
   };

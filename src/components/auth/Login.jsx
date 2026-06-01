@@ -76,7 +76,9 @@ const Login = () => {
           return;
         }
         toast.success("Welcome back!");
-        navigate("/home");
+        const queryParams = new URLSearchParams(window.location.search);
+        const redirectUrl = queryParams.get("redirect") || "/home";
+        navigate(redirectUrl);
       } else {
         toast.error(result.error || "Invalid email or password");
       }
@@ -145,7 +147,9 @@ const Login = () => {
         } else {
           toast.success("Welcome back!");
         }
-        navigate("/home");
+        const queryParams = new URLSearchParams(window.location.search);
+        const redirectUrl = queryParams.get("redirect") || "/home";
+        navigate(redirectUrl);
       } else {
         toast.error(result.error || "Invalid verification code");
         setMfaCode(["", "", "", "", "", ""]);
