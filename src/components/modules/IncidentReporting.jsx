@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
-import { apiService } from "../../services/api";
+import { apiService, getBackendConnectionMessage } from "../../services/api";
 
 const DEFAULT_FORM = {
   title: "",
@@ -92,7 +92,11 @@ const IncidentReporting = () => {
       }
     } catch (error) {
       console.error("Failed to fetch incident reports:", error);
-      toast.error("Failed to load incident reports");
+      const connectionMessage = await getBackendConnectionMessage(
+        error,
+        "Incident reports",
+      );
+      toast.error(connectionMessage || "Failed to load incident reports");
       setIncidents([]);
       setTotalPages(1);
     } finally {
@@ -338,8 +342,8 @@ const IncidentReporting = () => {
         ]}
       />
 
-      <section className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-[1800px] mx-auto w-full flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <section className="w-full bg-white border-b border-slate-200 px-4 py-4 sm:px-6 lg:px-8">
+        <div className="w-full flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-xl font-bold text-slate-900">
               Incident Reporting
@@ -348,24 +352,24 @@ const IncidentReporting = () => {
               Create, track, and print incident reports.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 w-full lg:w-auto">
             <button
               onClick={handleExportCsv}
-              className="px-3 py-2 rounded-md border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-100"
+              className="w-full sm:w-auto px-3 py-2 rounded-md border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-100"
             >
               <i className="fa-solid fa-file-csv mr-2"></i>
               Export CSV
             </button>
             <button
               onClick={() => window.print()}
-              className="px-3 py-2 rounded-md border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-100"
+              className="w-full sm:w-auto px-3 py-2 rounded-md border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-100"
             >
               <i className="fa-solid fa-print mr-2"></i>
               Print List
             </button>
             <button
               onClick={openCreateModal}
-              className="px-4 py-2 rounded-md bg-primary text-white text-sm font-semibold hover:bg-blue-700"
+              className="w-full sm:w-auto px-4 py-2 rounded-md bg-primary text-white text-sm font-semibold hover:bg-blue-700"
             >
               <i className="fa-solid fa-plus mr-2"></i>
               New Incident
@@ -374,8 +378,8 @@ const IncidentReporting = () => {
         </div>
       </section>
 
-      <main className="flex-1 p-6">
-        <div className="max-w-[1800px] mx-auto space-y-5">
+      <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="w-full max-w-none space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white border border-slate-200 rounded-lg p-4">
               <p className="text-xs text-slate-500 uppercase font-semibold">
@@ -411,7 +415,7 @@ const IncidentReporting = () => {
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row gap-3">
+          <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col gap-3 md:flex-row">
             <div className="relative flex-1">
               <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
               <input
@@ -431,7 +435,7 @@ const IncidentReporting = () => {
                 setCurrentPage(1);
                 setStatusFilter(e.target.value);
               }}
-              className="px-3 py-2 rounded-md border border-slate-300 bg-white"
+              className="w-full md:w-auto px-3 py-2 rounded-md border border-slate-300 bg-white"
             >
               <option value="">All Statuses</option>
               {statusOptions.map((status) => (
@@ -446,7 +450,7 @@ const IncidentReporting = () => {
                 setCurrentPage(1);
                 setSeverityFilter(e.target.value);
               }}
-              className="px-3 py-2 rounded-md border border-slate-300 bg-white"
+              className="w-full md:w-auto px-3 py-2 rounded-md border border-slate-300 bg-white"
             >
               <option value="">All Severities</option>
               {severityOptions.map((severity) => (

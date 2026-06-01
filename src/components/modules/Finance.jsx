@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 import { useAuth } from "../../context/useAuth";
-import { apiService } from "../../services/api";
+import { apiService, getBackendConnectionMessage } from "../../services/api";
 import Reconcile from "./Reconcile";
 import AccountsPayable from "./AccountsPayable";
 import JournalHistory from "./JournalHistory";
@@ -138,11 +138,14 @@ const Finance = () => {
     } catch (err) {
       console.error("Error fetching recent POs:", err);
       setRecentPOs([]);
-      if (!err?.response) {
-        toast.error(
-          "Finance data source is taking too long. Showing empty recent purchase orders.",
-        );
-      }
+      const connectionMessage = await getBackendConnectionMessage(
+        err,
+        "Recent purchase orders",
+      );
+      toast.error(
+        connectionMessage ||
+          "Failed to load recent purchase orders. Showing an empty list.",
+      );
     } finally {
       setPoLoading(false);
     }

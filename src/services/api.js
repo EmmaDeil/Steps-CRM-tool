@@ -14,6 +14,62 @@ const api = axios.create({
   },
 });
 
+const healthApi = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 3000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+const isTimeoutError = (error) =>
+  error?.code === 'ECONNABORTED' || /timeout/i.test(error?.message || '');
+
+const isNetworkReachabilityError = (error) => {
+  const text = `${error?.code || ''} ${error?.message || ''}`;
+  return /ERR_NETWORK|NETWORK ERROR|ECONNREFUSED|EHOSTUNREACH|ENOTFOUND|ECONNRESET/i.test(
+    text,
+  );
+};
+
+const probeBackendHealth = async () => {
+  try {
+    const response = await healthApi.get('/api/health');
+    return {
+      reachable: true,
+      healthy: response?.data?.success === true,
+      status: response?.data?.data?.status || 'unknown',
+    };
+  } catch (error) {
+    return {
+      reachable: false,
+      healthy: false,
+      error,
+    };
+  }
+};
+
+export const getBackendConnectionMessage = async (
+  error,
+  featureName = 'The server',
+) => {
+  if (isTimeoutError(error)) {
+    const health = await probeBackendHealth();
+    return health.reachable
+      ? `${featureName} is responding slowly. The backend is up, but this request timed out.`
+      : `${featureName} could not be reached. Please make sure the backend is running.`;
+  }
+
+  if (isNetworkReachabilityError(error)) {
+    const health = await probeBackendHealth();
+    return health.reachable
+      ? `${featureName} is reachable, but the browser could not complete the request.`
+      : `${featureName} is not reachable from this browser. Check that the backend is running and accessible.`;
+  }
+
+  return null;
+};
+
 // Request interceptor - Add auth token
 api.interceptors.request.use(
   async (config) => {
@@ -60,7 +116,7 @@ api.interceptors.response.use(
     } else if (error.response?.status >= 500) {
       toast.error('Server error. Please try again later.');
     } else if (error.code === 'ECONNABORTED') {
-      toast.error('Request timeout. Please check your connection.');
+      console.warn('Request timed out while waiting for the backend response.');
     } else if (!error.response) {
       // Network error
       console.error('Network error:', error.message);

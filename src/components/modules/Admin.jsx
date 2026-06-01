@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { apiService } from "../../services/api";
+import { apiService, getBackendConnectionMessage } from "../../services/api";
 import toast from "react-hot-toast";
 import Footer from "../Footer";
 import Breadcrumb from "../Breadcrumb";
@@ -431,6 +431,13 @@ const Admin = () => {
       }
     } catch (error) {
       console.error("Error fetching system stats:", error);
+      const connectionMessage = await getBackendConnectionMessage(
+        error,
+        "System stats",
+      );
+      if (connectionMessage) {
+        toast.error(connectionMessage);
+      }
     }
   };
 

@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { useAuth } from "../../context/useAuth";
 import { useLocation, useNavigate } from "react-router-dom";
-import { apiService } from "../../services/api";
+import { apiService, getBackendConnectionMessage } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import Navbar from "../Navbar";
@@ -451,10 +451,14 @@ const MaterialRequests = () => {
       usersFetchErrorLoggedRef.current = false;
     } catch (error) {
       if (!usersFetchErrorLoggedRef.current) {
-        if (!error?.response) {
-          console.warn(
-            "MaterialRequests: could not fetch users while backend is unavailable.",
-          );
+        const connectionMessage = await getBackendConnectionMessage(
+          error,
+          "Material Requests users",
+        );
+
+        if (connectionMessage) {
+          console.warn(connectionMessage);
+          toast.error(connectionMessage);
         } else {
           console.error(
             "MaterialRequests: failed to fetch users.",
