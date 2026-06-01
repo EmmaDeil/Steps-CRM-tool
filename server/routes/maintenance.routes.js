@@ -265,6 +265,23 @@ router.post("/", verifyToken, requireModuleAction('facility', 'create'), async (
       ticket,
     });
 
+    // Add initial work log entry and save asynchronously (don't block response)
+    (async () => {
+      try {
+        ticket.workLog = ticket.workLog || [];
+        ticket.workLog.push({
+          user: req.user._id,
+          action: 'Created',
+          description: `Ticket created by ${req.user.firstName || ''} ${req.user.lastName || ''}`,
+          timestamp: new Date(),
+        });
+        // Save the workLog change, ignore errors
+        await ticket.save();
+      } catch (e) {
+        console.error('Error adding initial workLog entry:', e);
+      }
+    })();
+
     // Send notification emails asynchronously (don't block response)
     (async () => {
       try {
@@ -346,19 +363,47 @@ router.put("/:id", verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'Insufficient permissions to update ticket' });
     }
 
-    // If status is being updated to "Completed", set completedDate
-    if (updateData.status === "Completed" && !updateData.completedDate) {
-      updateData.completedDate = new Date();
+    // Detect and record meaningful changes into workLog (assignedTo, status changes, updates)
+    ticket.workLog = ticket.workLog || [];
+
+    // If assignedTo changed
+    if (updateData.assignedTo && (!ticket.assignedTo || ticket.assignedTo.toString() !== updateData.assignedTo.toString())) {
+      ticket.workLog.push({
+        user: req.user._id,
+        action: 'Assigned',
+        description: `Assigned to ${updateData.assignedTo}`,
+        timestamp: new Date(),
+      });
     }
 
-    // Apply updates
+    // If status is being updated to Completed, set completedDate and log
+    if (updateData.status && updateData.status === 'Completed' && !ticket.completedDate) {
+      updateData.completedDate = new Date();
+      ticket.workLog.push({
+        user: req.user._id,
+        action: 'Completed',
+        description: `Marked completed by ${req.user.firstName} ${req.user.lastName}`,
+        timestamp: new Date(),
+      });
+    }
+
+    // If status is being updated to In Progress
+    if (updateData.status && /in progress/i.test(updateData.status) && !/in progress/i.test(ticket.status || '')) {
+      ticket.workLog.push({
+        user: req.user._id,
+        action: 'In Progress',
+        description: `Marked In Progress by ${req.user.firstName} ${req.user.lastName}`,
+        timestamp: new Date(),
+      });
+    }
+
+    // Apply remaining updates
     Object.assign(ticket, updateData);
 
-    // Add to work log
-    ticket.workLog = ticket.workLog || [];
+    // Generic update entry
     ticket.workLog.push({
       user: req.user._id,
-      action: "Updated",
+      action: 'Updated',
       description: `Ticket updated by ${req.user.firstName} ${req.user.lastName}`,
       timestamp: new Date(),
     });

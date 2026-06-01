@@ -547,8 +547,28 @@ const CreateTicketModal = ({ onClose, onSuccess }) => {
     location: { building: "", floor: "", room: "", specificLocation: "" },
     dueDate: "",
     isEmergency: false,
+    assignedTo: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [users, setUsers] = useState([]);
+
+  useEffect(() => {
+    // fetch assignable users for dropdown
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await apiService.get("/api/users?status=Active&limit=200");
+        if (!mounted) return;
+        setUsers(res.users || res);
+      } catch (err) {
+        console.error("Failed to load users for assign dropdown", err);
+      }
+    };
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -608,21 +628,47 @@ const CreateTicketModal = ({ onClose, onSuccess }) => {
               className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg"
             />
           </div>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg"
-            >
-              {submitting ? "Creating..." : "Create Ticket"}
-            </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Assign To
+              </label>
+              <select
+                value={formData.assignedTo}
+                onChange={(e) =>
+                  setFormData((f) => ({ ...f, assignedTo: e.target.value }))
+                }
+                className="block w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="">Unassigned</option>
+                {users.map((u) => (
+                  <option key={u._id} value={u._id}>
+                    {u.firstName} {u.lastName} — {u.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                &nbsp;
+              </label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg"
+                >
+                  {submitting ? "Creating..." : "Create Ticket"}
+                </button>
+              </div>
+            </div>
           </div>
         </form>
       </div>
@@ -634,6 +680,63 @@ const CreateTicketModal = ({ onClose, onSuccess }) => {
 const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [assignedTo, setAssignedTo] = useState(ticket.assignedTo?._id || "");
+  const [status, setStatus] = useState(ticket.status || "Open");
+  const [updating, setUpdating] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await apiService.get("/api/users?status=Active&limit=200");
+        if (!mounted) return;
+        setUsers(res.users || res);
+      } catch (err) {
+        console.error("Failed to load users", err);
+      }
+    };
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setAssignedTo(ticket.assignedTo?._id || "");
+    setStatus(ticket.status || "Open");
+  }, [ticket]);
+
+  const handleAssign = async () => {
+    if (!assignedTo) return toast.error("Select a user to assign");
+    setUpdating(true);
+    try {
+      await apiService.post(`/api/maintenance/${ticket._id}/assign`, {
+        assignedTo,
+      });
+      toast.success("Ticket assigned");
+      onUpdate();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to assign ticket");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleStatusUpdate = async () => {
+    setUpdating(true);
+    try {
+      await apiService.put(`/api/maintenance/${ticket._id}`, { status });
+      toast.success("Status updated");
+      onUpdate();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update status");
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   const addComment = async () => {
     if (!comment.trim()) return toast.error("Please enter a comment");
@@ -681,6 +784,77 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
               </div>
             </div>
           ))}
+        </div>
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Assign To
+            </label>
+            <select
+              value={assignedTo}
+              onChange={(e) => setAssignedTo(e.target.value)}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-lg"
+            >
+              <option value="">Unassigned</option>
+              {users.map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.firstName} {u.lastName} — {u.email}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleAssign}
+              disabled={updating}
+              className="mt-2 px-3 py-2 bg-yellow-500 text-white rounded"
+            >
+              {updating ? "Assigning..." : "Assign"}
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Status
+            </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-lg"
+            >
+              <option>Open</option>
+              <option>Assigned</option>
+              <option>In Progress</option>
+              <option>On Hold</option>
+              <option>Completed</option>
+              <option>Cancelled</option>
+            </select>
+            <button
+              onClick={handleStatusUpdate}
+              disabled={updating}
+              className="mt-2 px-3 py-2 bg-blue-600 text-white rounded"
+            >
+              {updating ? "Updating..." : "Update Status"}
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Work Log
+            </label>
+            <div className="max-h-40 overflow-y-auto border rounded p-2 bg-gray-50">
+              {(ticket.workLog || [])
+                .slice()
+                .reverse()
+                .map((w, idx) => (
+                  <div key={`${w.timestamp}-${idx}`} className="mb-2 text-sm">
+                    <div className="font-medium">{w.action}</div>
+                    <div className="text-xs text-gray-500">{w.description}</div>
+                    <div className="text-xs text-gray-400">
+                      {new Date(w.timestamp).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
         </div>
 
         <div className="flex gap-2">
