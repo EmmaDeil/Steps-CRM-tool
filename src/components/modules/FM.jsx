@@ -297,79 +297,117 @@ const FM = () => {
               {loading ? (
                 <ModuleLoader moduleName="Facilities Management" />
               ) : tickets.length === 0 ? (
-                <div className="text-center py-12">
-                  <i className="fa-solid fa-inbox text-6xl text-gray-300 mb-4" />
-                  <p className="text-gray-600 text-lg">
+                <div className="text-center py-16">
+                  <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gray-100 mb-5">
+                    <i className="fa-solid fa-inbox text-4xl text-gray-400" />
+                  </div>
+                  <p className="text-gray-600 text-lg font-medium">
                     {activeTab === "my-tickets"
                       ? "You have not submitted any tickets yet"
                       : "No maintenance tickets found"}
                   </p>
+                  <p className="text-gray-400 text-sm mt-1 mb-5">Get started by creating your first maintenance request</p>
                   <button
                     onClick={() => setShowCreateModal(true)}
-                    className="mt-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="inline-flex items-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm hover:shadow font-medium"
                   >
                     <i className="fa-solid fa-plus mr-2" /> Create First Ticket
                   </button>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {tickets.map((ticket) => (
-                    <div
-                      key={ticket._id}
-                      onClick={() => handleViewTicket(ticket._id)}
-                      className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-md transition-all cursor-pointer bg-white"
-                    >
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-start gap-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                                  {ticket.ticketNumber}
-                                </span>
-                                <h3 className="text-base font-semibold text-gray-900">
-                                  {ticket.title}
-                                </h3>
-                              </div>
-                              <p className="text-sm text-gray-600 line-clamp-1 mb-2">
-                                {ticket.description}
-                              </p>
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                                <span className="flex items-center">
-                                  <i className="fa-solid fa-tag mr-1" />
-                                  {ticket.category}
-                                </span>
-                                <span className="flex items-center">
-                                  <i className="fa-solid fa-location-dot mr-1" />
-                                  {ticket.location?.building}
-                                  {ticket.location?.floor
-                                    ? `, Floor ${ticket.location.floor}`
-                                    : ""}
-                                </span>
-                                <span className="flex items-center">
-                                  <i className="fa-solid fa-user mr-1" />
-                                  {ticket.reportedBy?.firstName}{" "}
-                                  {ticket.reportedBy?.lastName}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800`}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Ticket</th>
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Category</th>
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Location</th>
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Reported By</th>
+                        <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Priority</th>
+                        <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {tickets.map((ticket) => {
+                        const priorityStyles = {
+                          Urgent: "bg-red-50 text-red-700 ring-1 ring-red-200",
+                          High: "bg-orange-50 text-orange-700 ring-1 ring-orange-200",
+                          Medium: "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200",
+                          Low: "bg-green-50 text-green-700 ring-1 ring-green-200",
+                        };
+                        const statusStyles = {
+                          Open: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+                          Assigned: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200",
+                          "In Progress": "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+                          "On Hold": "bg-gray-100 text-gray-600 ring-1 ring-gray-300",
+                          Completed: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+                          Cancelled: "bg-red-50 text-red-600 ring-1 ring-red-200",
+                        };
+                        return (
+                          <tr
+                            key={ticket._id}
+                            onClick={() => handleViewTicket(ticket._id)}
+                            className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
                           >
-                            {ticket.priority}
-                          </span>
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800`}
-                          >
-                            {ticket.status}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
+                                  <i className="fa-solid fa-wrench text-white text-xs" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] font-bold text-gray-400 font-mono">{ticket.ticketNumber}</span>
+                                  </div>
+                                  <p className="text-sm font-semibold text-gray-900 truncate max-w-[260px] group-hover:text-blue-700 transition-colors">{ticket.title}</p>
+                                  <p className="text-xs text-gray-400 truncate max-w-[260px] mt-0.5 hidden sm:block">{ticket.description}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 hidden md:table-cell">
+                              <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
+                                <i className="fa-solid fa-tag text-gray-400 text-xs" />
+                                {ticket.category || "—"}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 hidden lg:table-cell">
+                              <span className="text-sm text-gray-600">
+                                {ticket.location?.building || "—"}
+                                {ticket.location?.floor ? `, Fl ${ticket.location.floor}` : ""}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 hidden lg:table-cell">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-[10px] font-bold text-gray-500">
+                                    {(ticket.reportedBy?.firstName?.[0] || "")}{(ticket.reportedBy?.lastName?.[0] || "")}
+                                  </span>
+                                </div>
+                                <span className="text-sm text-gray-600 truncate">
+                                  {ticket.reportedBy?.firstName} {ticket.reportedBy?.lastName}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${priorityStyles[ticket.priority] || "bg-gray-100 text-gray-700 ring-1 ring-gray-200"}`}>
+                                {ticket.priority}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${statusStyles[ticket.status] || "bg-gray-100 text-gray-700 ring-1 ring-gray-200"}`}>
+                                {ticket.status}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-right hidden md:table-cell">
+                              <span className="text-xs text-gray-400">
+                                {ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : "—"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
@@ -559,7 +597,8 @@ const CreateTicketModal = ({ onClose, onSuccess }) => {
       try {
         const res = await apiService.get("/api/users?status=Active&limit=200");
         if (!mounted) return;
-        setUsers(res.users || res);
+        const list = Array.isArray(res) ? res : Array.isArray(res?.users) ? res.users : [];
+        setUsers(list);
       } catch (err) {
         console.error("Failed to load users for assign dropdown", err);
       }
@@ -641,7 +680,7 @@ const CreateTicketModal = ({ onClose, onSuccess }) => {
                 className="block w-full px-3 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="">Unassigned</option>
-                {users.map((u) => (
+                {Array.isArray(users) && users.map((u) => (
                   <option key={u._id} value={u._id}>
                     {u.firstName} {u.lastName} — {u.email}
                   </option>
@@ -691,7 +730,8 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
       try {
         const res = await apiService.get("/api/users?status=Active&limit=200");
         if (!mounted) return;
-        setUsers(res.users || res);
+        const list = Array.isArray(res) ? res : Array.isArray(res?.users) ? res.users : [];
+        setUsers(list);
       } catch (err) {
         console.error("Failed to load users", err);
       }
@@ -796,7 +836,7 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
               className="block w-full px-3 py-2 border border-gray-300 rounded-lg"
             >
               <option value="">Unassigned</option>
-              {users.map((u) => (
+              {Array.isArray(users) && users.map((u) => (
                 <option key={u._id} value={u._id}>
                   {u.firstName} {u.lastName} — {u.email}
                 </option>

@@ -214,10 +214,10 @@ const DocSignTemplateCreate = ({ onBack }) => {
       </div>
 
       {/* Split View */}
-      <div className="flex-1 px-6 pb-6 pt-6">
-        <div className="max-w-[1600px] mx-auto flex gap-6 h-full">
+      <div className="flex-1 px-3 sm:px-6 pb-6 pt-6">
+        <div className="max-w-[1600px] mx-auto flex flex-col lg:flex-row gap-6 h-full">
           {/* LEFT PANEL: Configuration */}
-          <aside className="w-[380px] shrink-0 flex flex-col gap-4 overflow-y-auto pr-1">
+          <aside className="w-full lg:w-[380px] shrink-0 flex flex-col gap-4 overflow-y-auto pr-0 lg:pr-1">
             {/* 1. Metadata Card */}
             <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
               <h3 className="text-sm font-bold uppercase tracking-wider text-gray-600 mb-4">
@@ -384,8 +384,8 @@ const DocSignTemplateCreate = ({ onBack }) => {
           {/* RIGHT PANEL: Editor Canvas */}
           <section className="flex-1 flex flex-col bg-slate-100 rounded-xl border border-gray-200 overflow-hidden shadow-inner">
             {/* Toolbar */}
-            <div className="bg-white px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-4 shadow-sm">
-              <div className="flex items-center gap-2 overflow-x-auto">
+            <div className="bg-white px-3 sm:px-4 py-3 border-b border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 shadow-sm">
+              <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
                 <span className="text-xs font-bold uppercase text-gray-600 mr-2 whitespace-nowrap">
                   Fields for{" "}
                   <span className="text-blue-600">
@@ -454,12 +454,12 @@ const DocSignTemplateCreate = ({ onBack }) => {
             </div>
 
             {/* Document Surface */}
-            <div className="flex-1 overflow-auto p-12 bg-slate-100 flex justify-center items-start relative">
+            <div className="flex-1 overflow-auto p-4 md:p-8 lg:p-12 bg-slate-100 flex justify-center items-start relative">
               {pdfUrl ? (
                 <div className="relative">
                   <iframe
                     src={pdfUrl}
-                    className="w-[800px] min-h-[1100px] bg-white shadow-lg"
+                    className="w-full max-w-[800px] min-h-[600px] lg:min-h-[1100px] bg-white shadow-lg"
                     title="PDF Preview"
                   />
                   {/* Overlay for fields */}

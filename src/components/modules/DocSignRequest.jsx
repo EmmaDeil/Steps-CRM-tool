@@ -37,6 +37,10 @@ const DocSignRequest = ({ onBack }) => {
   const [selectedFieldId, setSelectedFieldId] = useState(null);
   const [draggedPlacedFieldId, setDraggedPlacedFieldId] = useState(null);
 
+  // Mobile sidebar toggle state
+  const [showLeftSidebar, setShowLeftSidebar] = useState(false);
+  const [showRightSidebar, setShowRightSidebar] = useState(false);
+
   // Employee search autocomplete state
   const [employeeSearchResults, setEmployeeSearchResults] = useState({});
   const [activeDropdown, setActiveDropdown] = useState(null);
@@ -430,7 +434,7 @@ const DocSignRequest = ({ onBack }) => {
       />
 
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-[#e5e7eb] bg-white px-6 py-3 shadow-sm mb-4">
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-[#e5e7eb] bg-white px-4 sm:px-6 py-3 shadow-sm mb-4 gap-3">
         <div className="flex items-center gap-4">
           <div className="flex flex-col">
             <h2 className="text-[#111418] text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
@@ -444,6 +448,20 @@ const DocSignRequest = ({ onBack }) => {
           </div>
         </div>
         <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowLeftSidebar(!showLeftSidebar)}
+              className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+              title="Recipients & Settings"
+            >
+              <i className="fa-solid fa-users text-sm" />
+            </button>
+            <button
+              onClick={() => setShowRightSidebar(!showRightSidebar)}
+              className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+              title="Form Fields"
+            >
+              <i className="fa-solid fa-puzzle-piece text-sm" />
+            </button>
           <div className="hidden md:flex items-center mr-4 gap-2 text-sm text-[#617589]">
             <div className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
               Draft
@@ -467,9 +485,23 @@ const DocSignRequest = ({ onBack }) => {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Left Sidebar - Recipients & Settings */}
-        <aside className="w-80 lg:w-96 flex flex-col border-r border-[#e5e7eb] bg-white overflow-y-auto shrink-0 shadow-sm">
+        {/* Mobile backdrop */}
+        {showLeftSidebar && (
+          <div
+            className="fixed inset-0 bg-black/40 z-30 lg:hidden"
+            onClick={() => setShowLeftSidebar(false)}
+          />
+        )}
+        <aside className={`${showLeftSidebar ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:relative z-40 lg:z-auto top-0 left-0 h-full w-80 lg:w-96 flex flex-col border-r border-[#e5e7eb] bg-white overflow-y-auto shrink-0 shadow-sm lg:shadow-sm transition-transform duration-300 ease-in-out`}>
+          {/* Mobile close button */}
+          <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
+            <span className="font-bold text-gray-900">Recipients & Settings</span>
+            <button onClick={() => setShowLeftSidebar(false)} className="text-gray-500 hover:text-gray-700">
+              <i className="fa-solid fa-times text-lg" />
+            </button>
+          </div>
           {/* Recipients Section */}
           <div className="p-6 border-b border-[#f0f2f4]">
             <div className="flex items-center justify-between mb-4">
@@ -732,7 +764,7 @@ const DocSignRequest = ({ onBack }) => {
         <main className="flex-1 bg-[#f6f7f8] relative flex flex-col">
           {/* Upload Section - Show when no file */}
           {!uploadedFile ? (
-            <div className="flex-1 flex items-center justify-center p-12">
+            <div className="flex-1 flex items-center justify-center p-4 md:p-8 lg:p-12">
               <div className="max-w-md w-full">
                 <div className="bg-white rounded-2xl shadow-lg border-2 border-dashed border-gray-300 p-12 text-center hover:border-[#137fec] hover:bg-blue-50/30 transition-all">
                   <div className="mb-6">
@@ -766,7 +798,7 @@ const DocSignRequest = ({ onBack }) => {
           ) : (
             <>
               {/* PDF Viewer */}
-              <div className="flex-1 overflow-auto p-12 flex justify-center items-start">
+              <div className="flex-1 overflow-auto p-4 md:p-8 lg:p-12 flex justify-center items-start">
                 <div
                   className="relative"
                   style={{
@@ -786,9 +818,10 @@ const DocSignRequest = ({ onBack }) => {
                     <div className="relative">
                       <iframe
                         src={fileURL}
-                        className="bg-white shadow-2xl rounded-sm border border-gray-200"
+                        className="bg-white shadow-2xl rounded-sm border border-gray-200 w-full max-w-[620px]"
                         style={{
-                          width: "620px",
+                          width: "100%",
+                          maxWidth: "620px",
                           height: "877px",
                         }}
                         title="PDF Preview"
@@ -930,7 +963,7 @@ const DocSignRequest = ({ onBack }) => {
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-white relative w-[620px] h-[877px] shadow-2xl rounded-sm border border-gray-200 flex items-center justify-center">
+                    <div className="bg-white relative w-full max-w-[620px] h-[877px] shadow-2xl rounded-sm border border-gray-200 flex items-center justify-center">
                       <div className="text-center">
                         <i className="fa-solid fa-file-pdf text-6xl text-gray-300 mb-4"></i>
                         <p className="text-gray-500">Loading PDF...</p>
@@ -944,7 +977,21 @@ const DocSignRequest = ({ onBack }) => {
         </main>
 
         {/* Right Sidebar - Form Fields */}
-        <aside className="w-64 border-l border-[#e5e7eb] bg-white shrink-0 flex flex-col shadow-sm">
+        {/* Mobile backdrop */}
+        {showRightSidebar && (
+          <div
+            className="fixed inset-0 bg-black/40 z-30 lg:hidden"
+            onClick={() => setShowRightSidebar(false)}
+          />
+        )}
+        <aside className={`${showRightSidebar ? 'translate-x-0' : 'translate-x-full'} lg:translate-x-0 fixed lg:relative z-40 lg:z-auto top-0 right-0 h-full w-72 lg:w-64 border-l border-[#e5e7eb] bg-white shrink-0 flex flex-col shadow-sm transition-transform duration-300 ease-in-out`}>
+          {/* Mobile close button */}
+          <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
+            <span className="font-bold text-gray-900">Form Fields</span>
+            <button onClick={() => setShowRightSidebar(false)} className="text-gray-500 hover:text-gray-700">
+              <i className="fa-solid fa-times text-lg" />
+            </button>
+          </div>
           <div className="p-5 border-b border-[#f0f2f4]">
             <h3 className="text-base font-bold text-[#111418]">Form Fields</h3>
             <p className="text-xs text-[#617589] mt-1">
