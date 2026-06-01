@@ -152,23 +152,29 @@ const maintenanceTicketSchema = new mongoose.Schema(
   }
 );
 
-// Generate unique ticket number before saving
-maintenanceTicketSchema.pre("save", async function (next) {
-  if (this.isNew && !this.ticketNumber) {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    
+// Generate unique ticket number before validation so required validation passes
+maintenanceTicketSchema.pre("validate", async function (next) {
+  if (!this.isNew || this.ticketNumber) return next();
+
+  try {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+
     // Count today's tickets to generate sequential number
     const count = await mongoose.model("MaintenanceTicket").countDocuments({
       createdAt: {
-        $gte: new Date(date.setHours(0, 0, 0, 0)),
+        $gte: startOfDay,
       },
     });
-    
+
     this.ticketNumber = `MT-${year}${month}-${String(count + 1).padStart(4, "0")}`;
+    next();
+  } catch (error) {
+    next(error);
   }
-  next();
 });
 
 // Add indexes for better query performance

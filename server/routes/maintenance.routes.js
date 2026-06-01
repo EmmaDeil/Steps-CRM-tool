@@ -1,8 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const MaintenanceTicket = require("../models/MaintenanceTicket");
+const User = require('../models/User');
 const { verifyToken } = require("../middleware/auth");
 const { requireModuleAction } = require('../middleware/moduleAccess');
+const { transporter } = require('../utils/emailService');
+const { hasModuleAction } = require('../utils/moduleAccess');
 
 // Get all maintenance tickets with filtering and pagination
 router.get("/", verifyToken, requireModuleAction('facility', 'view'), async (req, res) => {
@@ -191,43 +194,108 @@ router.post("/", verifyToken, requireModuleAction('facility', 'create'), async (
       message: "Maintenance ticket created successfully",
       ticket,
     });
+
+    // Send notification emails asynchronously (don't block response)
+    (async () => {
+      try {
+        const requesterEmail = ticket.reportedBy?.email || req.user.email;
+
+        // Find facility staff by role or department (case-insensitive match)
+        const facilityStaff = await User.find({
+          status: 'Active',
+          $or: [
+            { role: { $regex: /facility/i } },
+            { department: { $regex: /facility/i } },
+          ],
+        }).select('email firstName lastName');
+
+        const facilityEmails = facilityStaff.map((u) => u.email).filter(Boolean);
+
+        const recipients = Array.from(new Set([requesterEmail, ...facilityEmails]));
+
+        if (recipients.length > 0 && transporter) {
+          const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: recipients.join(', '),
+            subject: `New Maintenance Ticket: ${ticket.ticketNumber || ''} - ${ticket.title}`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 680px; margin: 0 auto;">
+                <h2 style="color: #0d6efd;">New Maintenance Ticket Created</h2>
+                <p>A new maintenance ticket has been submitted.</p>
+                <p><strong>Ticket:</strong> ${ticket.ticketNumber || 'N/A'}</p>
+                <p><strong>Title:</strong> ${ticket.title}</p>
+                <p><strong>Priority:</strong> ${ticket.priority}</p>
+                <p><strong>Category:</strong> ${ticket.category}</p>
+                <p><strong>Location:</strong> ${ticket.location?.building || ''} ${ticket.location?.floor ? '- ' + ticket.location.floor : ''} ${ticket.location?.room ? '- ' + ticket.location.room : ''}</p>
+                <p><strong>Reported By:</strong> ${ticket.reportedBy?.firstName || req.user.firstName} ${ticket.reportedBy?.lastName || req.user.lastName} (${requesterEmail})</p>
+                <p style="margin-top: 12px;">${ticket.description || ''}</p>
+                <p style="margin-top:20px; font-size:12px; color:#666;">This is an automated notification from the StepsProject system.</p>
+              </div>
+            `,
+          };
+
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('📧 Maintenance notification (dev mode) would be sent to:', recipients);
+            console.log('Mail subject:', mailOptions.subject);
+          } else {
+            await transporter.sendMail(mailOptions);
+          }
+        }
+      } catch (err) {
+        console.error('Error sending maintenance notification emails:', err);
+      }
+    })();
   } catch (error) {
     console.error("Error creating ticket:", error);
+    // Surface validation and duplicate-key errors to the client for debugging
+    if (error && error.name === 'ValidationError') {
+      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+    }
+    if (error && (error.code === 11000 || error.code === '11000')) {
+      return res.status(409).json({ error: 'Duplicate key error', details: error.keyValue || error.keyValues || {} });
+    }
+
     res.status(500).json({ error: "Failed to create ticket" });
   }
 });
 
 // Update maintenance ticket
-router.put("/:id", verifyToken, requireModuleAction('facility', 'edit'), async (req, res) => {
+router.put("/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
+
+    // Fetch ticket to check ownership and current state
+    const ticket = await MaintenanceTicket.findById(id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+    const isOwner = ticket.reportedBy && ticket.reportedBy.toString() === req.user._id.toString();
+    const hasEditPerm = hasModuleAction(req.user, 'facility', 'edit');
+
+    if (!isOwner && !hasEditPerm) {
+      return res.status(403).json({ error: 'Insufficient permissions to update ticket' });
+    }
 
     // If status is being updated to "Completed", set completedDate
     if (updateData.status === "Completed" && !updateData.completedDate) {
       updateData.completedDate = new Date();
     }
 
-    const ticket = await MaintenanceTicket.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    )
-      .populate("reportedBy", "firstName lastName email")
-      .populate("assignedTo", "firstName lastName email");
-
-    if (!ticket) {
-      return res.status(404).json({ error: "Ticket not found" });
-    }
+    // Apply updates
+    Object.assign(ticket, updateData);
 
     // Add to work log
+    ticket.workLog = ticket.workLog || [];
     ticket.workLog.push({
       user: req.user._id,
       action: "Updated",
       description: `Ticket updated by ${req.user.firstName} ${req.user.lastName}`,
       timestamp: new Date(),
     });
+
     await ticket.save();
+    await ticket.populate("reportedBy", "firstName lastName email");
+    await ticket.populate("assignedTo", "firstName lastName email");
 
     res.json({
       message: "Ticket updated successfully",
