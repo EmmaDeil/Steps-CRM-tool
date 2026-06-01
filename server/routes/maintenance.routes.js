@@ -475,6 +475,7 @@ router.post("/:id/assign", verifyToken, requireModuleAction('facility', 'approve
     }
 
     // Add to work log
+    ticket.workLog = ticket.workLog || [];
     ticket.workLog.push({
       user: req.user._id,
       action: "Assigned",
