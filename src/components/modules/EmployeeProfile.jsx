@@ -207,10 +207,11 @@ const EmployeeProfile = ({
     (location) => location.name || location.code,
   );
   const currentEmployeeId = String(employee?._id || employee?.id || "");
-  const pageSectionClass = fullWidth
+  const useFullWidth = fullWidth || fromProfile;
+  const pageSectionClass = useFullWidth
     ? "w-full px-0 sm:px-2"
     : "mx-auto max-w-7xl px-4";
-  const pageRootClass = fullWidth
+  const pageRootClass = useFullWidth
     ? "w-full min-h-screen bg-gray-50 px-0"
     : "w-full min-h-screen bg-gray-50 px-1";
   const currentManager = orgEmployees.find(
