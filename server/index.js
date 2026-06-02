@@ -9012,9 +9012,52 @@ async function start() {
     console.log(`📅 Inventory expiry alerts scheduled daily at 8:00 AM (next run: ${nextRun.toLocaleString()})`);
   };
 
+  const runItemReturnReminderJob = async () => {
+    try {
+      const MaintenanceTicketModel = require('./models/MaintenanceTicket');
+      const { sendItemReturnReminderEmail } = require('./utils/emailService');
+
+      const now = new Date();
+      const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+
+      const tickets = await MaintenanceTicketModel.find({
+        category: 'Item Movement',
+        movementType: 'Temporary',
+        reminderSent: { $ne: true },
+        status: { $nin: ['Completed', 'Cancelled'] },
+        returnDate: { $lte: oneHourFromNow }
+      }).populate('reportedBy');
+
+      for (const ticket of tickets) {
+        if (!ticket.reportedBy || !ticket.reportedBy.email) {
+          console.log(`⚠️ Skip reminder for ticket ${ticket.ticketNumber || ticket._id}: No requester email found.`);
+          continue;
+        }
+
+        const recipientEmail = ticket.reportedBy.email;
+        const recipientName = `${ticket.reportedBy.firstName || ''} ${ticket.reportedBy.lastName || ''}`.trim() || 'Employee';
+
+        console.log(`📧 Sending return reminder email for ticket ${ticket.ticketNumber} to ${recipientEmail}`);
+        const result = await sendItemReturnReminderEmail(ticket, recipientEmail, recipientName);
+
+        if (result && result.success) {
+          ticket.reminderSent = true;
+          await ticket.save();
+        }
+      }
+    } catch (err) {
+      console.error('❌ Error running item return reminder job:', err);
+    }
+  };
+
   if (!isServerlessRuntime) {
     scheduleInventoryExpiryAlertJob();
     runInventoryExpiryAlertJob().catch((err) => console.error('Error running initial inventory expiry alert job:', err));
+    
+    // Start the item return reminder job every 5 minutes
+    setInterval(runItemReturnReminderJob, 5 * 60 * 1000);
+    // Also run it once immediately on startup
+    runItemReturnReminderJob().catch((err) => console.error('Error running initial item return reminder job:', err));
   }
 
   // Graceful shutdown

@@ -351,7 +351,17 @@ const FM = () => {
                             <td className="py-3.5 px-4">
                               <div className="flex items-center gap-3">
                                 <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
-                                  <i className="fa-solid fa-wrench text-white text-xs" />
+                                  <i className={`fa-solid ${
+                                    ticket.category === "Item Movement" ? "fa-truck-ramp-box" :
+                                    ticket.category === "Plumbing" ? "fa-droplet" :
+                                    ticket.category === "Electrical" ? "fa-bolt" :
+                                    ticket.category === "HVAC" ? "fa-temperature-arrow-up" :
+                                    ticket.category === "Safety & Security" ? "fa-shield-halved" :
+                                    ticket.category === "Cleaning" ? "fa-broom" :
+                                    ticket.category === "Carpentry" ? "fa-hammer" :
+                                    ticket.category === "IT Equipment" ? "fa-laptop" :
+                                    "fa-wrench"
+                                  } text-white text-xs`} />
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2">
@@ -1082,8 +1092,54 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
           </button>
         </div>
         <div className="mb-4">
-          <p className="text-sm text-gray-600">{ticket.description}</p>
+          <p className="text-sm text-gray-600 font-medium">{ticket.description}</p>
         </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg border border-slate-100">
+          <div>
+            <span className="text-gray-500 block">Category</span>
+            <span className="font-semibold text-gray-800">{ticket.category}</span>
+          </div>
+          <div>
+            <span className="text-gray-500 block">Building Location</span>
+            <span className="font-semibold text-gray-800">
+              {ticket.location?.building || "—"}
+              {ticket.location?.floor ? `, Fl ${ticket.location.floor}` : ""}
+              {ticket.location?.room ? `, Rm ${ticket.location.room}` : ""}
+            </span>
+          </div>
+        </div>
+
+        {ticket.category === "Item Movement" && (
+          <div className="mb-4 p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl">
+            <h4 className="text-sm font-bold text-indigo-900 mb-2 flex items-center gap-1.5">
+              <i className="fa-solid fa-truck-ramp-box text-indigo-600" />
+              Item Transfer Details
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-gray-500 block">Movement Type</span>
+                <span className="font-semibold text-gray-800">{ticket.movementType || "N/A"}</span>
+              </div>
+              {ticket.movementType === "Temporary" && (
+                <div>
+                  <span className="text-gray-500 block">Scheduled Return Time</span>
+                  <span className="font-semibold text-amber-700">
+                    {ticket.returnDate ? new Date(ticket.returnDate).toLocaleString() : "N/A"}
+                  </span>
+                </div>
+              )}
+              <div>
+                <span className="text-gray-500 block">From (Source Location)</span>
+                <span className="font-semibold text-gray-800">{ticket.fromLocation || "N/A"}</span>
+              </div>
+              <div>
+                <span className="text-gray-500 block">To (Destination Location)</span>
+                <span className="font-semibold text-gray-800">{ticket.toLocation || "N/A"}</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mb-4">
           <h4 className="font-medium mb-2">Comments</h4>

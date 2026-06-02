@@ -8,7 +8,12 @@ const { transporter } = require('../utils/emailService');
 const { hasModuleAction } = require('../utils/moduleAccess');
 
 // Get all maintenance tickets with filtering and pagination
-router.get("/", verifyToken, requireModuleAction('facility', 'view'), async (req, res) => {
+router.get("/", verifyToken, (req, res, next) => {
+  if (req.query.mine === 'true') {
+    return next();
+  }
+  return requireModuleAction('facility', 'view')(req, res, next);
+}, async (req, res) => {
   try {
     const {
       status,
@@ -227,7 +232,7 @@ router.get("/analytics/times", verifyToken, requireModuleAction('facility', 'vie
 });
 
 // Get single ticket by ID
-router.get("/:id", verifyToken, requireModuleAction('facility', 'view'), async (req, res) => {
+router.get("/:id", verifyToken, async (req, res) => {
   try {
     const ticket = await MaintenanceTicket.findById(req.params.id)
       .populate("reportedBy", "firstName lastName email department")
@@ -239,6 +244,13 @@ router.get("/:id", verifyToken, requireModuleAction('facility', 'view'), async (
       return res.status(404).json({ error: "Ticket not found" });
     }
 
+    const isOwner = ticket.reportedBy && ticket.reportedBy._id.toString() === req.user._id.toString();
+    const hasViewPerm = hasModuleAction(req.user, 'facility', 'view');
+
+    if (!isOwner && !hasViewPerm) {
+      return res.status(403).json({ error: "Insufficient permissions to view ticket" });
+    }
+
     res.json(ticket);
   } catch (error) {
     console.error("Error fetching ticket:", error);
@@ -247,7 +259,7 @@ router.get("/:id", verifyToken, requireModuleAction('facility', 'view'), async (
 });
 
 // Create new maintenance ticket
-router.post("/", verifyToken, requireModuleAction('facility', 'create'), async (req, res) => {
+router.post("/", verifyToken, async (req, res) => {
   try {
     const ticketData = {
       ...req.body,
@@ -423,7 +435,7 @@ router.put("/:id", verifyToken, async (req, res) => {
 });
 
 // Add comment to ticket
-router.post("/:id/comments", verifyToken, requireModuleAction('facility', 'edit'), async (req, res) => {
+router.post("/:id/comments", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { comment } = req.body;
@@ -435,6 +447,13 @@ router.post("/:id/comments", verifyToken, requireModuleAction('facility', 'edit'
     const ticket = await MaintenanceTicket.findById(id);
     if (!ticket) {
       return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    const isOwner = ticket.reportedBy && ticket.reportedBy.toString() === req.user._id.toString();
+    const hasEditPerm = hasModuleAction(req.user, 'facility', 'edit');
+
+    if (!isOwner && !hasEditPerm) {
+      return res.status(403).json({ error: 'Insufficient permissions to comment on this ticket' });
     }
 
     ticket.comments.push({

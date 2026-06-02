@@ -70,9 +70,9 @@ const formatMoney = (value, currency = "USD") => {
 
 const getStatusClass = (status = "") => {
   const normalized = String(status).toLowerCase();
-  if (normalized.includes("approved")) return "bg-green-100 text-green-800";
-  if (normalized.includes("rejected")) return "bg-red-100 text-red-800";
-  if (normalized.includes("pending")) return "bg-amber-100 text-amber-800";
+  if (normalized.includes("approved") || normalized.includes("completed")) return "bg-green-100 text-green-800";
+  if (normalized.includes("rejected") || normalized.includes("cancelled")) return "bg-red-100 text-red-800";
+  if (normalized.includes("pending") || normalized.includes("open") || normalized.includes("assigned") || normalized.includes("in progress") || normalized.includes("on hold")) return "bg-amber-100 text-amber-800";
   return "bg-slate-100 text-slate-700";
 };
 
@@ -103,6 +103,23 @@ const Approval = () => {
   const [travelFormData, setTravelFormData] = useState(initialTravelForm);
   const [travelFormLoading, setTravelFormLoading] = useState(false);
 
+  const [facilityRequests, setFacilityRequests] = useState([]);
+  const [showFacilityForm, setShowFacilityForm] = useState(false);
+  const [facilityFormData, setFacilityFormData] = useState({
+    title: "",
+    description: "",
+    requestType: "General Query / Concern",
+    movementType: "Permanent",
+    returnDate: "",
+    fromLocation: "",
+    toLocation: "",
+    building: "",
+    floor: "",
+    room: "",
+    priority: "Medium",
+    issueCategory: "General Maintenance"
+  });
+
   const [leaveAllocation, setLeaveAllocation] = useState(null);
   const [calculatedDays, setCalculatedDays] = useState(0);
   const [remainingLeave, setRemainingLeave] = useState(null);
@@ -127,7 +144,7 @@ const Approval = () => {
 
     setLoading(true);
     try {
-      const [advanceRes, refundRes, leaveRes, travelRes, pendingRes] =
+      const [advanceRes, refundRes, leaveRes, travelRes, pendingRes, facilityRes] =
         await Promise.allSettled([
           apiService.get(`/api/advance-requests?userId=${currentUserId}`, {
             timeout: 20000,
@@ -147,6 +164,10 @@ const Approval = () => {
             `/api/approval/pending`,
             { timeout: 20000 },
           ),
+          apiService.get(
+            `/api/maintenance?mine=true`,
+            { timeout: 20000 },
+          ),
         ]);
 
       setAdvanceRequests(
@@ -164,13 +185,19 @@ const Approval = () => {
       setPendingApprovals(
         pendingRes.status === "fulfilled" ? extractList(pendingRes.value) : [],
       );
+      setFacilityRequests(
+        facilityRes.status === "fulfilled" && facilityRes.value && Array.isArray(facilityRes.value.tickets)
+          ? facilityRes.value.tickets
+          : []
+      );
 
       if (
         advanceRes.status === "rejected" ||
         refundRes.status === "rejected" ||
         leaveRes.status === "rejected" ||
         travelRes.status === "rejected" ||
-        pendingRes.status === "rejected"
+        pendingRes.status === "rejected" ||
+        facilityRes.status === "rejected"
       ) {
         console.error("One or more approval lists failed to load.", {
           advanceRes,
@@ -178,6 +205,7 @@ const Approval = () => {
           leaveRes,
           travelRes,
           pendingRes,
+          facilityRes,
         });
       }
     } catch (error) {
@@ -600,6 +628,80 @@ const Approval = () => {
     }
   };
 
+  const handleFacilitySubmit = async (e) => {
+    e.preventDefault();
+
+    if (!facilityFormData.title || !facilityFormData.description || !facilityFormData.building) {
+      toast.error("Please fill in all required fields.");
+      return;
+    }
+
+    if (facilityFormData.requestType === "Item Movement") {
+      if (!facilityFormData.fromLocation || !facilityFormData.toLocation) {
+        toast.error("Please specify both source and destination locations for item movement.");
+        return;
+      }
+      if (facilityFormData.movementType === "Temporary" && !facilityFormData.returnDate) {
+        toast.error("Please specify a return date and time for temporary movement.");
+        return;
+      }
+    }
+
+    let category = "General Maintenance";
+    if (facilityFormData.requestType === "Item Movement") {
+      category = "Item Movement";
+    } else if (facilityFormData.requestType === "Report a Maintenance Issue") {
+      category = facilityFormData.issueCategory || "General Maintenance";
+    } else if (facilityFormData.requestType === "General Query / Concern") {
+      category = "Other";
+    } else if (facilityFormData.requestType === "Other") {
+      category = "Other";
+    }
+
+    try {
+      const response = await apiService.post("/api/maintenance", {
+        title: facilityFormData.title,
+        description: facilityFormData.description,
+        category,
+        priority: facilityFormData.priority,
+        location: {
+          building: facilityFormData.building,
+          floor: facilityFormData.floor || "",
+          room: facilityFormData.room || ""
+        },
+        movementType: facilityFormData.requestType === "Item Movement" ? facilityFormData.movementType : undefined,
+        fromLocation: facilityFormData.requestType === "Item Movement" ? facilityFormData.fromLocation : undefined,
+        toLocation: facilityFormData.requestType === "Item Movement" ? facilityFormData.toLocation : undefined,
+        returnDate: (facilityFormData.requestType === "Item Movement" && facilityFormData.movementType === "Temporary") ? facilityFormData.returnDate : undefined
+      });
+
+      if (!response) {
+        throw new Error("Failed to submit facility request");
+      }
+
+      setFacilityFormData({
+        title: "",
+        description: "",
+        requestType: "General Query / Concern",
+        movementType: "Permanent",
+        returnDate: "",
+        fromLocation: "",
+        toLocation: "",
+        building: "",
+        floor: "",
+        room: "",
+        priority: "Medium",
+        issueCategory: "General Maintenance"
+      });
+      setShowFacilityForm(false);
+      toast.success("Facility request submitted successfully!");
+      await fetchData();
+    } catch (error) {
+      console.error("Error submitting facility request:", error);
+      toast.error(error.response?.data?.error || "Failed to submit facility request");
+    }
+  };
+
   const requestSummary = [
     {
       title: "Advance Requests",
@@ -742,11 +844,12 @@ const Approval = () => {
   const allocationInfo = getLeaveTypeAllocationInfo();
 
   const historyPills = [
-    { id: "all", label: "All History", icon: "fa-list-ul", count: advanceRequests.length + refundRequests.length + leaveRequests.length + travelRequests.length },
+    { id: "all", label: "All History", icon: "fa-list-ul", count: advanceRequests.length + refundRequests.length + leaveRequests.length + travelRequests.length + facilityRequests.length },
     { id: "leave", label: "Leaves", icon: "fa-calendar-days", count: leaveRequests.length },
     { id: "travel", label: "Travels", icon: "fa-plane", count: travelRequests.length },
     { id: "advance", label: "Advances", icon: "fa-wallet", count: advanceRequests.length },
     { id: "refund", label: "Refunds", icon: "fa-money-bill-transfer", count: refundRequests.length },
+    { id: "facility", label: "Facility Requests", icon: "fa-building-circle-exclamation", count: facilityRequests.length },
   ];
 
   return (
@@ -838,6 +941,21 @@ const Approval = () => {
                   <div>
                     <p className="font-semibold text-slate-900">Travel Request</p>
                     <p className="text-xs text-slate-500">Plan business travel</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowFacilityForm(true);
+                    setDropdownOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-purple-100 text-purple-600">
+                    <i className="fa-solid fa-building-circle-exclamation text-xs" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900">Facility Request</p>
+                    <p className="text-xs text-slate-500">Report issue, transfer items, query</p>
                   </div>
                 </button>
               </div>
@@ -1057,6 +1175,29 @@ const Approval = () => {
                       "No travel requests found.",
                     )}
                   </div>
+                  <div className="grid grid-cols-1 gap-6 mt-6">
+                    {renderTable(
+                      "Facility Requests",
+                      facilityRequests.map((request) => ({
+                        id: request._id || request.id,
+                        cells: [
+                          request.createdAt ? formatDate(request.createdAt) : "N/A",
+                          request.ticketNumber || "N/A",
+                          request.title || "N/A",
+                          request.category || "N/A",
+                          request.location?.building || "N/A",
+                          <span
+                            key={`${request._id || request.id}-status`}
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                          >
+                            {request.status || "Open"}
+                          </span>,
+                        ],
+                      })),
+                      ["Date Requested", "Ticket No.", "Request Summary", "Category / Type", "Location (Building)", "Status"],
+                      "No facility requests found.",
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1179,6 +1320,36 @@ const Approval = () => {
                   })),
                   ["Dates", "Destination", "Budget", "Approver", "Status"],
                   "No travel requests found.",
+                )
+              )}
+
+              {activeHistoryPill === "facility" && (
+                renderTable(
+                  "Facility Requests",
+                  facilityRequests.map((request) => ({
+                    id: request._id || request.id,
+                    cells: [
+                      request.createdAt ? formatDate(request.createdAt) : "N/A",
+                      request.ticketNumber || "N/A",
+                      request.title || "N/A",
+                      request.category || "N/A",
+                      `${request.location?.building || "N/A"}${request.location?.floor ? `, Fl ${request.location.floor}` : ""}${request.location?.room ? `, Rm ${request.location.room}` : ""}`,
+                      request.category === "Item Movement" 
+                        ? `${request.movementType || "N/A"}${request.movementType === "Temporary" && request.returnDate ? ` (Return: ${new Date(request.returnDate).toLocaleString()})` : ""}`
+                        : "N/A",
+                      request.category === "Item Movement"
+                        ? `${request.fromLocation || "N/A"} ➔ ${request.toLocation || "N/A"}`
+                        : "N/A",
+                      <span
+                        key={`${request._id || request.id}-status`}
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                      >
+                        {request.status || "Open"}
+                      </span>,
+                    ],
+                  })),
+                  ["Date Requested", "Ticket No.", "Request Summary", "Category / Type", "Location Details", "Movement Info", "Transfer Route", "Status"],
+                  "No facility requests found.",
                 )
               )}
             </div>
@@ -2196,6 +2367,323 @@ const Approval = () => {
         </div>
       ) : null}
 
+      {showFacilityForm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
+              <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <i className="fa-solid fa-building-circle-exclamation text-blue-600" />
+                New Facility Request
+              </h3>
+              <button
+                onClick={() => setShowFacilityForm(false)}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+              >
+                <i className="fa-solid fa-times" />
+              </button>
+            </div>
+            <form
+              onSubmit={handleFacilitySubmit}
+              className="space-y-4 overflow-y-auto p-6 flex-grow"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                    Request Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={facilityFormData.requestType}
+                    onChange={(e) =>
+                      setFacilityFormData({
+                        ...facilityFormData,
+                        requestType: e.target.value,
+                        movementType: "Permanent",
+                        returnDate: "",
+                        fromLocation: "",
+                        toLocation: "",
+                        issueCategory: "General Maintenance"
+                      })
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
+                    required
+                  >
+                    <option value="General Query / Concern">General Query / Concern</option>
+                    <option value="Report a Maintenance Issue">Report a Maintenance Issue (Leakage, etc.)</option>
+                    <option value="Item Movement">Item Movement / Transfer</option>
+                    <option value="Other">Other Request</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                    Priority <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={facilityFormData.priority}
+                    onChange={(e) =>
+                      setFacilityFormData({
+                        ...facilityFormData,
+                        priority: e.target.value,
+                      })
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
+                    required
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              {facilityFormData.requestType === "Report a Maintenance Issue" && (
+                <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 transition-all">
+                  <label className="mb-1.5 block text-sm font-semibold text-blue-900">
+                    Issue Category <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={facilityFormData.issueCategory}
+                    onChange={(e) =>
+                      setFacilityFormData({
+                        ...facilityFormData,
+                        issueCategory: e.target.value,
+                      })
+                    }
+                    className="w-full rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
+                    required
+                  >
+                    <option value="General Maintenance">General Maintenance</option>
+                    <option value="Plumbing">Plumbing (e.g. water leakage, pipes)</option>
+                    <option value="Electrical">Electrical (e.g. lighting, outlets)</option>
+                    <option value="HVAC">HVAC (e.g. heating, AC, ventilation)</option>
+                    <option value="Carpentry">Carpentry (e.g. doors, furniture repair)</option>
+                    <option value="Painting">Painting</option>
+                    <option value="Cleaning">Cleaning / Janitorial</option>
+                    <option value="Safety & Security">Safety & Security</option>
+                    <option value="IT Equipment">IT Equipment (Power/Cabling)</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              )}
+
+              {facilityFormData.requestType === "Item Movement" && (
+                <div className="p-4 bg-indigo-50/40 rounded-xl border border-indigo-100 transition-all space-y-4">
+                  <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-1.5">
+                    <i className="fa-solid fa-truck-ramp-box" />
+                    Item Movement Specifications
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                        Movement Type <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={facilityFormData.movementType}
+                        onChange={(e) =>
+                          setFacilityFormData({
+                            ...facilityFormData,
+                            movementType: e.target.value,
+                            returnDate: ""
+                          })
+                        }
+                        className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        required
+                      >
+                        <option value="Permanent">Permanent</option>
+                        <option value="Temporary">Temporary</option>
+                      </select>
+                    </div>
+
+                    {facilityFormData.movementType === "Temporary" && (
+                      <div>
+                        <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                          Return Date & Time <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          required={facilityFormData.movementType === "Temporary"}
+                          type="datetime-local"
+                          value={facilityFormData.returnDate}
+                          onChange={(e) =>
+                            setFacilityFormData({
+                              ...facilityFormData,
+                              returnDate: e.target.value,
+                            })
+                          }
+                          className="w-full rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                        />
+                        <p className="mt-1 text-[11px] text-amber-700">
+                          <i className="fa-solid fa-bell mr-1" />
+                          You'll receive an email reminder 1 hour before this scheduled return.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                        From (Source Location) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        required={facilityFormData.requestType === "Item Movement"}
+                        type="text"
+                        placeholder="e.g. Floor 2, Desk 204"
+                        value={facilityFormData.fromLocation}
+                        onChange={(e) =>
+                          setFacilityFormData({
+                            ...facilityFormData,
+                            fromLocation: e.target.value,
+                          })
+                        }
+                        className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                        To (Destination Location) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        required={facilityFormData.requestType === "Item Movement"}
+                        type="text"
+                        placeholder="e.g. Floor 3, Room 311"
+                        value={facilityFormData.toLocation}
+                        onChange={(e) =>
+                          setFacilityFormData({
+                            ...facilityFormData,
+                            toLocation: e.target.value,
+                          })
+                        }
+                        className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                  Request Summary / Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. Broken water pipe / Move executive desk"
+                  value={facilityFormData.title}
+                  onChange={(e) =>
+                    setFacilityFormData({
+                      ...facilityFormData,
+                      title: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                  Request Details / Description <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows="3"
+                  placeholder="Provide any additional details or background information..."
+                  value={facilityFormData.description}
+                  onChange={(e) =>
+                    setFacilityFormData({
+                      ...facilityFormData,
+                      description: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div className="border-t border-slate-100 pt-4 space-y-3">
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                  <i className="fa-solid fa-location-dot text-red-500" />
+                  Building Location Details
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                      Building <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="e.g. Main Office"
+                      value={facilityFormData.building}
+                      onChange={(e) =>
+                        setFacilityFormData({
+                          ...facilityFormData,
+                          building: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                      Floor
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 2nd Floor"
+                      value={facilityFormData.floor}
+                      onChange={(e) =>
+                        setFacilityFormData({
+                          ...facilityFormData,
+                          floor: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                      Room / Area
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Room 205"
+                      value={facilityFormData.room}
+                      onChange={(e) =>
+                        setFacilityFormData({
+                          ...facilityFormData,
+                          room: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowFacilityForm(false)}
+                  className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-sm"
+                >
+                  Submit Request
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
     </div>
   );
