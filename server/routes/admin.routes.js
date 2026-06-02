@@ -368,4 +368,57 @@ router.post('/system-settings/app-api-key/generate', async (req, res) => {
     }
 });
 
+// ============================================================
+// DELETE /api/admin/system-settings/database
+// Reset database: clears all collections except system settings, roles, and the current Admin user
+// ============================================================
+router.delete('/system-settings/database', async (req, res) => {
+    try {
+        const mongoose = require('mongoose');
+        const db = mongoose.connection.db;
+
+        // Fetch all collections in the current database
+        const collections = await db.listCollections().toArray();
+
+        const preservedCollections = ['roles', 'systemsettings'];
+
+        for (const col of collections) {
+            const colName = col.name;
+            if (preservedCollections.includes(colName.toLowerCase())) {
+                continue;
+            }
+
+            const dbCollection = db.collection(colName);
+            if (colName.toLowerCase() === 'users') {
+                // Delete all users except the current admin
+                await dbCollection.deleteMany({ _id: { $ne: req.user._id } });
+            } else {
+                // Clear the collection entirely
+                await dbCollection.deleteMany({});
+            }
+        }
+
+        // Write a reset audit log entry
+        await AuditLog.create({
+            actor: {
+                userId: req.user._id.toString(),
+                userName: req.user.fullName || req.user.email,
+                userEmail: req.user.email,
+                initials: (req.user.fullName || req.user.email).substring(0, 2).toUpperCase(),
+            },
+            action: 'Database Reset',
+            actionColor: 'red',
+            ipAddress: req.ip || req.connection?.remoteAddress || '127.0.0.1',
+            userAgent: req.headers['user-agent'],
+            description: `Database reset initiated by Admin: ${req.user.email}. All non-admin accounts and transaction histories cleared.`,
+            status: 'Success',
+        });
+
+        res.json({ message: 'Database reset successfully. Only configuration settings and current Admin user were preserved.' });
+    } catch (error) {
+        console.error('Database reset error:', error);
+        res.status(500).json({ message: 'Failed to reset database: ' + error.message });
+    }
+});
+
 module.exports = router;

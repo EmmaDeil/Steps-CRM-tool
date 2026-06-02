@@ -486,8 +486,12 @@ router.post("/:id/assign", verifyToken, requireModuleAction('facility', 'approve
       return res.status(404).json({ error: "Ticket not found" });
     }
 
-    if (assignedTo) ticket.assignedTo = assignedTo;
-    if (assignedTeam) ticket.assignedTeam = assignedTeam;
+    if (assignedTo !== undefined) {
+      ticket.assignedTo = assignedTo || null;
+    }
+    if (assignedTeam !== undefined) {
+      ticket.assignedTeam = assignedTeam || "Unassigned";
+    }
     
     if (ticket.status === "Open") {
       ticket.status = "Assigned";

@@ -3360,6 +3360,19 @@ async function start() {
 
   // ==================== USER MANAGEMENT ROUTES ====================
 
+  // Get active users for dropdown assignment (accessible by any authenticated user)
+  app.get('/api/users/dropdown', authMiddleware, async (req, res) => {
+    try {
+      const users = await UserModel.find({ status: 'Active' })
+        .select('firstName lastName fullName email _id')
+        .sort({ firstName: 1, lastName: 1 });
+      res.json(users);
+    } catch (error) {
+      console.error('Error fetching dropdown users:', error);
+      res.status(500).json({ error: 'Failed to fetch users list' });
+    }
+  });
+
   // Get all users with optional filtering
   app.get('/api/users', authMiddleware, requireUserManagementPermission('viewUsers'), async (req, res) => {
     try {

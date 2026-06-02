@@ -1009,9 +1009,9 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
     let mounted = true;
     const load = async () => {
       try {
-        const res = await apiService.get("/api/users?status=Active&limit=200");
+        const res = await apiService.get("/api/users/dropdown");
         if (!mounted) return;
-        const list = Array.isArray(res) ? res : Array.isArray(res?.users) ? res.users : [];
+        const list = Array.isArray(res) ? res : [];
         setUsers(list);
       } catch (err) {
         console.error("Failed to load users", err);
@@ -1028,14 +1028,14 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
     setStatus(ticket.status || "Open");
   }, [ticket]);
 
-  const handleAssign = async () => {
-    if (!assignedTo) return toast.error("Select a user to assign");
+  const handleAssign = async (val) => {
     setUpdating(true);
     try {
       await apiService.post(`/api/maintenance/${ticket._id}/assign`, {
-        assignedTo,
+        assignedTo: val || null,
       });
-      toast.success("Ticket assigned");
+      setAssignedTo(val);
+      toast.success(val ? "Ticket assigned successfully" : "Ticket unassigned");
       onUpdate();
     } catch (err) {
       console.error(err);
@@ -1045,11 +1045,12 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
     }
   };
 
-  const handleStatusUpdate = async () => {
+  const handleStatusUpdate = async (val) => {
     setUpdating(true);
     try {
-      await apiService.put(`/api/maintenance/${ticket._id}`, { status });
-      toast.success("Status updated");
+      await apiService.put(`/api/maintenance/${ticket._id}`, { status: val });
+      setStatus(val);
+      toast.success("Status updated successfully");
       onUpdate();
     } catch (err) {
       console.error(err);
@@ -1159,8 +1160,9 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
             </label>
             <select
               value={assignedTo}
-              onChange={(e) => setAssignedTo(e.target.value)}
-              className="block w-full px-3 py-2 border border-gray-300 rounded-lg"
+              disabled={updating}
+              onChange={(e) => handleAssign(e.target.value)}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
             >
               <option value="">Unassigned</option>
               {Array.isArray(users) && users.map((u) => (
@@ -1169,13 +1171,6 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
                 </option>
               ))}
             </select>
-            <button
-              onClick={handleAssign}
-              disabled={updating}
-              className="mt-2 px-3 py-2 bg-yellow-500 text-white rounded"
-            >
-              {updating ? "Assigning..." : "Assign"}
-            </button>
           </div>
 
           <div>
@@ -1184,8 +1179,9 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
             </label>
             <select
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="block w-full px-3 py-2 border border-gray-300 rounded-lg"
+              disabled={updating}
+              onChange={(e) => handleStatusUpdate(e.target.value)}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
             >
               <option>Open</option>
               <option>Assigned</option>
@@ -1194,13 +1190,6 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
               <option>Completed</option>
               <option>Cancelled</option>
             </select>
-            <button
-              onClick={handleStatusUpdate}
-              disabled={updating}
-              className="mt-2 px-3 py-2 bg-blue-600 text-white rounded"
-            >
-              {updating ? "Updating..." : "Update Status"}
-            </button>
           </div>
 
           <div>

@@ -120,7 +120,8 @@ const AccountsPayable = ({ onBack }) => {
       }
     } catch (error) {
       console.error("Error paying invoices:", error);
-      toast.error("Failed to process payment");
+      const errMsg = error.serverData?.error || error.response?.data?.error || "Failed to process payment";
+      toast.error(errMsg);
     }
   };
 

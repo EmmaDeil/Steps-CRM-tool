@@ -86,6 +86,8 @@ const Approval = () => {
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [activeTab, setActiveTab] = useState("my-requests");
   const [selectedPendingRequest, setSelectedPendingRequest] = useState(null);
+  const [selectedMyRequest, setSelectedMyRequest] = useState(null);
+  const [showLeaveBalanceModal, setShowLeaveBalanceModal] = useState(false);
   const [approvalActionType, setApprovalActionType] = useState("");
   const [actionComments, setActionComments] = useState("");
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
@@ -702,6 +704,10 @@ const Approval = () => {
     }
   };
 
+  const handleMyRequestClick = (request) => {
+    setSelectedMyRequest(request);
+  };
+
   const requestSummary = [
     {
       title: "Advance Requests",
@@ -756,13 +762,14 @@ const Approval = () => {
     },
   };
 
-  const renderTable = (title, rows, columns, emptyText) => (
+  const renderTable = (title, rows, columns, emptyText, onRowClick, headerAction) => (
     <div className="rounded-xl border border-[#dbe0e6] bg-white shadow-sm">
-      <div className="border-b border-[#dbe0e6] px-6 py-4">
+      <div className="border-b border-[#dbe0e6] px-6 py-4 flex justify-between items-center">
         <h3 className="text-lg font-bold text-[#111418]">{title}</h3>
+        {headerAction}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-[800px]">
           <thead className="bg-slate-50">
             <tr>
               {columns.map((column) => (
@@ -789,7 +796,8 @@ const Approval = () => {
               rows.map((row, index) => (
                 <tr
                   key={row.id || `${title}-${index}`}
-                  className="hover:bg-slate-50"
+                  className={`hover:bg-slate-50 ${onRowClick ? "cursor-pointer" : ""}`}
+                  onClick={() => onRowClick && onRowClick(row.originalData)}
                 >
                   {row.cells.map((cell, cellIndex) => (
                     <td
@@ -1027,9 +1035,8 @@ const Approval = () => {
         </div>
 
         {activeTab === "my-requests" ? (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-            {/* Left Column: History filter and tables */}
-            <div className="lg:col-span-3 space-y-6">
+          <>
+            <div className="space-y-6">
               {/* Pills Filter */}
               <div className="flex flex-wrap gap-2 pb-2">
                 {historyPills.map((pill) => (
@@ -1063,26 +1070,13 @@ const Approval = () => {
                       "Advance History",
                       advanceRequests.map((request) => ({
                         id: request._id || request.id,
+                        originalData: { ...request, type: "advance" },
                         cells: [
                           request.requestDate
                             ? formatDate(request.requestDate)
                             : formatDate(request.createdAt),
                           request.purpose || "N/A",
                           formatMoney(request.amount, request.currency),
-                          request.approver || "Auto-assigned",
-                          request.attachment ? (
-                            <a
-                              href={request.attachment}
-                              download={request.attachmentName || "attachment"}
-                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold"
-                              title={request.attachmentName}
-                            >
-                              <i className="fa-solid fa-paperclip text-xs" />
-                              <span className="max-w-[80px] truncate text-xs">{request.attachmentName || "View"}</span>
-                            </a>
-                          ) : (
-                            <span className="text-slate-400 text-xs">None</span>
-                          ),
                           <span
                             key={`${request._id || request.id}-status`}
                             className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
@@ -1091,21 +1085,22 @@ const Approval = () => {
                           </span>,
                         ],
                       })),
-                      ["Date", "Purpose", "Amount", "Approver", "Attachment", "Status"],
+                      ["Date", "Purpose", "Amount", "Status"],
                       "No advance requests found.",
+                      handleMyRequestClick
                     )}
 
                     {renderTable(
                       "Refund History",
                       refundRequests.map((request) => ({
                         id: request._id || request.id,
+                        originalData: { ...request, type: "refund" },
                         cells: [
                           request.requestDate
                             ? formatDate(request.requestDate)
                             : formatDate(request.createdAt),
                           request.category || "N/A",
                           formatMoney(request.amount, request.currency),
-                          request.approver || "Auto-assigned",
                           <span
                             key={`${request._id || request.id}-status`}
                             className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
@@ -1114,8 +1109,9 @@ const Approval = () => {
                           </span>,
                         ],
                       })),
-                      ["Date", "Category", "Amount", "Approver", "Status"],
+                      ["Date", "Category", "Amount", "Status"],
                       "No refund requests found.",
+                      handleMyRequestClick
                     )}
                   </div>
 
@@ -1124,24 +1120,11 @@ const Approval = () => {
                       "Leave History",
                       leaveRequests.map((request) => ({
                         id: request._id || request.id,
+                        originalData: { ...request, type: "leave" },
                         cells: [
                           `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
                           request.leaveType || "Leave",
                           `${request.days || 0} day(s)`,
-                          request.managerName || "Manager",
-                          request.attachment ? (
-                            <a
-                              href={request.attachment}
-                              download={request.attachmentName || "attachment"}
-                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold"
-                              title={request.attachmentName}
-                            >
-                              <i className="fa-solid fa-paperclip text-xs" />
-                              <span className="max-w-[80px] truncate text-xs">{request.attachmentName || "View"}</span>
-                            </a>
-                          ) : (
-                            <span className="text-slate-400 text-xs">None</span>
-                          ),
                           <span
                             key={`${request._id || request.id}-status`}
                             className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
@@ -1150,19 +1133,27 @@ const Approval = () => {
                           </span>,
                         ],
                       })),
-                      ["Dates", "Type", "Days", "Approver", "Attachment", "Status"],
+                      ["Dates", "Type", "Days", "Status"],
                       "No leave requests found.",
+                      handleMyRequestClick,
+                      <button
+                        onClick={() => setShowLeaveBalanceModal(true)}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 bg-blue-50/70 border border-blue-100 rounded-lg px-2.5 py-1.5 transition-colors"
+                      >
+                        <i className="fa-solid fa-chart-simple" />
+                        <span>Leave Balance</span>
+                      </button>
                     )}
 
                     {renderTable(
                       "Travel History",
                       travelRequests.map((request) => ({
                         id: request._id || request.id,
+                        originalData: { ...request, type: "travel" },
                         cells: [
                           `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
                           request.destination || "N/A",
                           request.budget ? formatMoney(request.budget) : "N/A",
-                          request.managerName || "Manager",
                           <span
                             key={`${request._id || request.id}-status`}
                             className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
@@ -1171,8 +1162,9 @@ const Approval = () => {
                           </span>,
                         ],
                       })),
-                      ["Dates", "Destination", "Budget", "Approver", "Status"],
+                      ["Dates", "Destination", "Budget", "Status"],
                       "No travel requests found.",
+                      handleMyRequestClick
                     )}
                   </div>
                   <div className="grid grid-cols-1 gap-6 mt-6">
@@ -1180,12 +1172,12 @@ const Approval = () => {
                       "Facility Requests",
                       facilityRequests.map((request) => ({
                         id: request._id || request.id,
+                        originalData: { ...request, type: "facility" },
                         cells: [
                           request.createdAt ? formatDate(request.createdAt) : "N/A",
                           request.ticketNumber || "N/A",
                           request.title || "N/A",
                           request.category || "N/A",
-                          request.location?.building || "N/A",
                           <span
                             key={`${request._id || request.id}-status`}
                             className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
@@ -1194,8 +1186,9 @@ const Approval = () => {
                           </span>,
                         ],
                       })),
-                      ["Date Requested", "Ticket No.", "Request Summary", "Category / Type", "Location (Building)", "Status"],
+                      ["Date Requested", "Ticket No.", "Request Summary", "Category / Type", "Status"],
                       "No facility requests found.",
+                      handleMyRequestClick
                     )}
                   </div>
                 </div>
@@ -1206,26 +1199,13 @@ const Approval = () => {
                   "Advance History",
                   advanceRequests.map((request) => ({
                     id: request._id || request.id,
+                    originalData: { ...request, type: "advance" },
                     cells: [
                       request.requestDate
                         ? formatDate(request.requestDate)
                         : formatDate(request.createdAt),
                       request.purpose || "N/A",
                       formatMoney(request.amount, request.currency),
-                      request.approver || "Auto-assigned",
-                      request.attachment ? (
-                        <a
-                          href={request.attachment}
-                          download={request.attachmentName || "attachment"}
-                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold"
-                          title={request.attachmentName}
-                        >
-                          <i className="fa-solid fa-paperclip text-xs" />
-                          <span className="max-w-[80px] truncate text-xs">{request.attachmentName || "View"}</span>
-                        </a>
-                      ) : (
-                        <span className="text-slate-400 text-xs">None</span>
-                      ),
                       <span
                         key={`${request._id || request.id}-status`}
                         className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
@@ -1234,8 +1214,9 @@ const Approval = () => {
                       </span>,
                     ],
                   })),
-                  ["Date", "Purpose", "Amount", "Approver", "Attachment", "Status"],
+                  ["Date", "Purpose", "Amount", "Status"],
                   "No advance requests found.",
+                  handleMyRequestClick
                 )
               )}
 
@@ -1244,13 +1225,13 @@ const Approval = () => {
                   "Refund History",
                   refundRequests.map((request) => ({
                     id: request._id || request.id,
+                    originalData: { ...request, type: "refund" },
                     cells: [
                       request.requestDate
                         ? formatDate(request.requestDate)
                         : formatDate(request.createdAt),
                       request.category || "N/A",
                       formatMoney(request.amount, request.currency),
-                      request.approver || "Auto-assigned",
                       <span
                         key={`${request._id || request.id}-status`}
                         className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
@@ -1259,8 +1240,9 @@ const Approval = () => {
                       </span>,
                     ],
                   })),
-                  ["Date", "Category", "Amount", "Approver", "Status"],
+                  ["Date", "Category", "Amount", "Status"],
                   "No refund requests found.",
+                  handleMyRequestClick
                 )
               )}
 
@@ -1269,24 +1251,11 @@ const Approval = () => {
                   "Leave History",
                   leaveRequests.map((request) => ({
                     id: request._id || request.id,
+                    originalData: { ...request, type: "leave" },
                     cells: [
                       `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
                       request.leaveType || "Leave",
                       `${request.days || 0} day(s)`,
-                      request.managerName || "Manager",
-                      request.attachment ? (
-                        <a
-                          href={request.attachment}
-                          download={request.attachmentName || "attachment"}
-                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold"
-                          title={request.attachmentName}
-                        >
-                          <i className="fa-solid fa-paperclip text-xs" />
-                          <span className="max-w-[80px] truncate text-xs">{request.attachmentName || "View"}</span>
-                        </a>
-                      ) : (
-                        <span className="text-slate-400 text-xs">None</span>
-                      ),
                       <span
                         key={`${request._id || request.id}-status`}
                         className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
@@ -1295,8 +1264,16 @@ const Approval = () => {
                       </span>,
                     ],
                   })),
-                  ["Dates", "Type", "Days", "Approver", "Attachment", "Status"],
+                  ["Dates", "Type", "Days", "Status"],
                   "No leave requests found.",
+                  handleMyRequestClick,
+                  <button
+                    onClick={() => setShowLeaveBalanceModal(true)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 bg-blue-50/70 border border-blue-100 rounded-lg px-2.5 py-1.5 transition-colors"
+                  >
+                    <i className="fa-solid fa-chart-simple" />
+                    <span>Leave Balance</span>
+                  </button>
                 )
               )}
 
@@ -1305,11 +1282,11 @@ const Approval = () => {
                   "Travel History",
                   travelRequests.map((request) => ({
                     id: request._id || request.id,
+                    originalData: { ...request, type: "travel" },
                     cells: [
                       `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
                       request.destination || "N/A",
                       request.budget ? formatMoney(request.budget) : "N/A",
-                      request.managerName || "Manager",
                       <span
                         key={`${request._id || request.id}-status`}
                         className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
@@ -1318,8 +1295,9 @@ const Approval = () => {
                       </span>,
                     ],
                   })),
-                  ["Dates", "Destination", "Budget", "Approver", "Status"],
+                  ["Dates", "Destination", "Budget", "Status"],
                   "No travel requests found.",
+                  handleMyRequestClick
                 )
               )}
 
@@ -1328,18 +1306,12 @@ const Approval = () => {
                   "Facility Requests",
                   facilityRequests.map((request) => ({
                     id: request._id || request.id,
+                    originalData: { ...request, type: "facility" },
                     cells: [
                       request.createdAt ? formatDate(request.createdAt) : "N/A",
                       request.ticketNumber || "N/A",
                       request.title || "N/A",
                       request.category || "N/A",
-                      `${request.location?.building || "N/A"}${request.location?.floor ? `, Fl ${request.location.floor}` : ""}${request.location?.room ? `, Rm ${request.location.room}` : ""}`,
-                      request.category === "Item Movement" 
-                        ? `${request.movementType || "N/A"}${request.movementType === "Temporary" && request.returnDate ? ` (Return: ${new Date(request.returnDate).toLocaleString()})` : ""}`
-                        : "N/A",
-                      request.category === "Item Movement"
-                        ? `${request.fromLocation || "N/A"} ➔ ${request.toLocation || "N/A"}`
-                        : "N/A",
                       <span
                         key={`${request._id || request.id}-status`}
                         className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
@@ -1348,87 +1320,55 @@ const Approval = () => {
                       </span>,
                     ],
                   })),
-                  ["Date Requested", "Ticket No.", "Request Summary", "Category / Type", "Location Details", "Movement Info", "Transfer Route", "Status"],
+                  ["Date Requested", "Ticket No.", "Request Summary", "Category / Type", "Status"],
                   "No facility requests found.",
+                  handleMyRequestClick
                 )
               )}
             </div>
 
-            {/* Right Column: Leave Balance Widget */}
-            <div className="lg:col-span-1">
-              <div className="rounded-2xl border border-[#dbe0e6] bg-white p-6 shadow-sm sticky top-6">
-                <h3 className="text-lg font-bold text-[#111418] border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
-                  <i className="fa-solid fa-chart-simple text-blue-600 text-sm" />
-                  Leave Balance
-                </h3>
-                {leaveAllocation ? (
-                  <div className="space-y-3.5 text-sm">
-                    <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between transition-all hover:bg-slate-100/70">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Annual Leave</p>
-                        <p className="mt-1 text-2xl font-bold text-slate-900">
-                          {leaveAllocation.annualLeave || 0}
-                        </p>
-                      </div>
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
-                        <i className="fa-solid fa-calendar-days text-lg" />
-                      </div>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between transition-all hover:bg-slate-100/70">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sick Leave</p>
-                        <p className="mt-1 text-2xl font-bold text-slate-900">
-                          {leaveAllocation.sickLeave || 0}
-                        </p>
-                      </div>
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                        <i className="fa-solid fa-notes-medical text-lg" />
-                      </div>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between transition-all hover:bg-slate-100/70">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Personal Leave</p>
-                        <p className="mt-1 text-2xl font-bold text-slate-900">
-                          {leaveAllocation.personalLeave || 0}
-                        </p>
-                      </div>
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                        <i className="fa-solid fa-user-clock text-lg" />
-                      </div>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between transition-all hover:bg-slate-100/70">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Requested Days</p>
-                        <p className="mt-1 text-2xl font-bold text-slate-900 text-slate-600">
-                          {calculatedDays}
-                        </p>
-                      </div>
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-                        <i className="fa-solid fa-clock text-lg" />
-                      </div>
-                    </div>
+            {showLeaveBalanceModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
+                  <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
+                    <h3 className="text-lg font-bold text-slate-900">Leave Balance</h3>
+                    <button
+                      onClick={() => setShowLeaveBalanceModal(false)}
+                      className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+                    >
+                      <i className="fa-solid fa-times" />
+                    </button>
                   </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500 text-center">
-                    Leave allocation is not available yet.
-                  </div>
-                )}
-
-                {remainingLeave ? (
-                  <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-900 border border-blue-100">
-                    <div className="flex gap-2">
-                      <i className="fa-solid fa-circle-info mt-0.5 text-blue-600" />
-                      <div>
-                        <span className="font-semibold">Remaining Balance:</span>
-                        <span className="ml-1 font-bold">{remainingLeave.remaining} days</span>
-                        <p className="text-xs text-blue-700 mt-1">Estimated remaining balance after current request approval.</p>
+                  <div className="p-6">
+                    {leaveAllocation ? (
+                      <div className="space-y-3.5 text-sm">
+                        <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Annual Leave</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-900">{leaveAllocation.annualLeave || 0}</p>
+                          </div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sick Leave</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-900">{leaveAllocation.sickLeave || 0}</p>
+                          </div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Personal Leave</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-900">{leaveAllocation.personalLeave || 0}</p>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <p className="text-sm text-slate-500 text-center">Leave allocation data unavailable.</p>
+                    )}
                   </div>
-                ) : null}
+                </div>
               </div>
-            </div>
-          </div>
+            )}
+          </>
         ) : (
           <div className="rounded-2xl border border-[#dbe0e6] bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
@@ -1445,7 +1385,7 @@ const Approval = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
+                <table className="w-full min-w-[800px] text-left text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <th className="px-6 py-3 font-semibold text-slate-600">Requester</th>
@@ -1522,8 +1462,8 @@ const Approval = () => {
       {/* Action Dialog Modal */}
       {selectedPendingRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
               <h3 className="text-lg font-bold text-slate-900">
                 Confirm {approvalActionType === "approve" ? "Approval" : "Rejection"}
               </h3>
@@ -1537,7 +1477,7 @@ const Approval = () => {
                 <i className="fa-solid fa-times" />
               </button>
             </div>
-            <form onSubmit={handleApprovalAction} className="p-6 space-y-4">
+            <form onSubmit={handleApprovalAction} className="p-6 space-y-4 overflow-y-auto flex-grow">
               <div>
                 <p className="text-sm text-slate-600">
                   Are you sure you want to <strong>{approvalActionType}</strong> this {selectedPendingRequest.type} request from <strong>{selectedPendingRequest.employeeName}</strong>?
@@ -1610,8 +1550,8 @@ const Approval = () => {
 
       {showAdvanceForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
               <h3 className="text-xl font-bold text-slate-900">
                 New Advance Request
               </h3>
@@ -1624,7 +1564,7 @@ const Approval = () => {
             </div>
             <form
               onSubmit={handleAdvanceSubmit}
-              className="space-y-4 overflow-y-auto p-6"
+              className="space-y-4 overflow-y-auto p-6 flex-grow"
             >
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -1682,7 +1622,7 @@ const Approval = () => {
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     Currency
@@ -1790,8 +1730,8 @@ const Approval = () => {
 
       {showRefundForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
               <h3 className="text-xl font-bold text-slate-900">
                 New Refund Request
               </h3>
@@ -1804,7 +1744,7 @@ const Approval = () => {
             </div>
             <form
               onSubmit={handleRefundSubmit}
-              className="space-y-4 overflow-y-auto p-6"
+              className="space-y-4 overflow-y-auto p-6 flex-grow"
             >
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -1862,7 +1802,7 @@ const Approval = () => {
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     Currency
@@ -1938,8 +1878,8 @@ const Approval = () => {
 
       {showLeaveForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
               <h3 className="text-xl font-bold text-slate-900">
                 New Leave Request
               </h3>
@@ -1952,9 +1892,9 @@ const Approval = () => {
             </div>
             <form
               onSubmit={handleLeaveSubmit}
-              className="space-y-4 overflow-y-auto p-6"
+              className="space-y-4 overflow-y-auto p-6 flex-grow"
             >
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     Leave Type
@@ -1988,7 +1928,7 @@ const Approval = () => {
               </div>
 
               {leaveFormData.leaveType && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-700">
                       Total Allocation
@@ -2019,7 +1959,7 @@ const Approval = () => {
                   </div>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
                     From
@@ -2170,8 +2110,8 @@ const Approval = () => {
 
       {showTravelForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
               <h3 className="text-xl font-bold text-slate-900">
                 New Travel Request
               </h3>
@@ -2184,7 +2124,7 @@ const Approval = () => {
             </div>
             <form
               onSubmit={handleTravelSubmit}
-              className="space-y-4 overflow-y-auto p-6"
+              className="space-y-4 overflow-y-auto p-6 flex-grow"
             >
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
@@ -2294,7 +2234,7 @@ const Approval = () => {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700">
                   <span className="block text-xs text-slate-500">Days</span>
                   {travelFormData.numberOfDays}
@@ -2684,6 +2624,316 @@ const Approval = () => {
           </div>
         </div>
       ) : null}
+
+      {/* Request Details Modal (Read-only) */}
+      {selectedMyRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <i className="fa-solid fa-circle-info text-blue-600" />
+                Request Details
+              </h3>
+              <button
+                onClick={() => setSelectedMyRequest(null)}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+              >
+                <i className="fa-solid fa-times" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto flex-grow text-sm text-[#111418]">
+              {/* Type and Status Badge */}
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div>
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Request Type</span>
+                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold mt-1 ${
+                    selectedMyRequest.type === 'leave' ? 'bg-orange-100 text-orange-800' :
+                    selectedMyRequest.type === 'travel' ? 'bg-indigo-100 text-indigo-800' :
+                    selectedMyRequest.type === 'advance' ? 'bg-blue-100 text-blue-800' :
+                    selectedMyRequest.type === 'refund' ? 'bg-emerald-100 text-emerald-800' :
+                    'bg-purple-100 text-purple-800'
+                  }`}>
+                    {selectedMyRequest.type.toUpperCase()} REQUEST
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Status</span>
+                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold mt-1 ${getStatusClass(selectedMyRequest.status || 'pending')}`}>
+                    {selectedMyRequest.status || 'pending'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Date */}
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Date Requested</span>
+                <span className="font-medium">
+                  {selectedMyRequest.requestDate 
+                    ? formatDate(selectedMyRequest.requestDate) 
+                    : selectedMyRequest.createdAt 
+                    ? formatDate(selectedMyRequest.createdAt) 
+                    : "N/A"}
+                </span>
+              </div>
+
+              {/* Dynamic details per type */}
+              {selectedMyRequest.type === "advance" && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Amount</span>
+                      <span className="font-bold text-lg text-slate-900">
+                        {formatMoney(selectedMyRequest.amount, selectedMyRequest.currency)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Purpose</span>
+                      <span className="font-medium">{selectedMyRequest.purpose || "N/A"}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Reason / Details</span>
+                    <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1 whitespace-pre-wrap">
+                      {selectedMyRequest.reason || "No reason specified."}
+                    </p>
+                  </div>
+                  {selectedMyRequest.approver && (
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Approver / Handler</span>
+                      <span className="font-medium text-slate-700">{selectedMyRequest.approver}</span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {selectedMyRequest.type === "refund" && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Amount</span>
+                      <span className="font-bold text-lg text-slate-900">
+                        {formatMoney(selectedMyRequest.amount, selectedMyRequest.currency)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Category</span>
+                      <span className="font-medium">{selectedMyRequest.category || "N/A"}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Receipt Number</span>
+                      <span className="font-medium text-slate-700">{selectedMyRequest.receiptNumber || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Transaction Date</span>
+                      <span className="font-medium text-slate-700">{formatDate(selectedMyRequest.transactionDate)}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Reason / Details</span>
+                    <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1 whitespace-pre-wrap">
+                      {selectedMyRequest.reason || "No reason specified."}
+                    </p>
+                  </div>
+                  {selectedMyRequest.approver && (
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Approver / Handler</span>
+                      <span className="font-medium text-slate-700">{selectedMyRequest.approver}</span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {selectedMyRequest.type === "leave" && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Leave Type</span>
+                      <span className="font-semibold text-slate-900 capitalize">{selectedMyRequest.leaveType || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Duration</span>
+                      <span className="font-semibold text-slate-900">{selectedMyRequest.days || 0} Day(s)</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Dates</span>
+                    <span className="font-medium text-slate-700">
+                      {formatDate(selectedMyRequest.fromDate)} to {formatDate(selectedMyRequest.toDate)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Reason / Description</span>
+                    <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1 whitespace-pre-wrap">
+                      {selectedMyRequest.reason || "No reason specified."}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Assigned Manager</span>
+                      <span className="font-medium text-slate-700">{selectedMyRequest.managerName || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Manager Email</span>
+                      <span className="font-medium text-slate-600 truncate block" title={selectedMyRequest.managerEmail}>
+                        {selectedMyRequest.managerEmail || "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {selectedMyRequest.type === "travel" && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Current Location</span>
+                      <span className="font-semibold text-slate-900">{selectedMyRequest.currentLocation || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Destination</span>
+                      <span className="font-semibold text-slate-900">{selectedMyRequest.destination || "N/A"}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Budget</span>
+                      <span className="font-bold text-slate-900">{selectedMyRequest.budget ? formatMoney(selectedMyRequest.budget) : "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Days</span>
+                      <span className="font-semibold text-slate-700">{selectedMyRequest.numberOfDays || 0}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Nights</span>
+                      <span className="font-semibold text-slate-700">{selectedMyRequest.numberOfNights || 0}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Dates</span>
+                    <span className="font-medium text-slate-700">
+                      {formatDate(selectedMyRequest.fromDate)} to {formatDate(selectedMyRequest.toDate)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Accommodation Required</span>
+                    <span className="font-semibold text-slate-800">
+                      {selectedMyRequest.accommodationRequired ? "Yes" : "No"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Description / Details</span>
+                    <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1 whitespace-pre-wrap">
+                      {selectedMyRequest.description || "No description provided."}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Assigned Manager</span>
+                      <span className="font-medium text-slate-700">{selectedMyRequest.managerName || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Manager Email</span>
+                      <span className="font-medium text-slate-600 truncate block" title={selectedMyRequest.managerEmail}>
+                        {selectedMyRequest.managerEmail || "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {selectedMyRequest.type === "facility" && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Ticket Number</span>
+                      <span className="font-bold text-slate-900">{selectedMyRequest.ticketNumber || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Category / Type</span>
+                      <span className="font-semibold text-slate-700">{selectedMyRequest.category || "N/A"}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Request Summary</span>
+                    <span className="font-semibold text-slate-900 block mt-0.5">{selectedMyRequest.title || "N/A"}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Description</span>
+                    <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1 whitespace-pre-wrap">
+                      {selectedMyRequest.description || "No details provided."}
+                    </p>
+                  </div>
+                  
+                  {/* Location Info */}
+                  <div>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Location Details</span>
+                    <span className="font-medium text-slate-800">
+                      Building: {selectedMyRequest.location?.building || "N/A"}
+                      {selectedMyRequest.location?.floor ? `, Floor: ${selectedMyRequest.location.floor}` : ""}
+                      {selectedMyRequest.location?.room ? `, Room/Area: ${selectedMyRequest.location.room}` : ""}
+                    </span>
+                  </div>
+
+                  {/* Item Movement Specific Info */}
+                  {selectedMyRequest.category === "Item Movement" && (
+                    <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 space-y-2 mt-2">
+                      <span className="text-xs font-bold text-indigo-900 block uppercase tracking-wider">Item Movement Info</span>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-slate-500 block">Movement Type:</span>
+                          <span className="font-semibold text-slate-900">{selectedMyRequest.movementType || "N/A"}</span>
+                        </div>
+                        {selectedMyRequest.movementType === "Temporary" && (
+                          <div>
+                            <span className="text-slate-500 block">Return Time:</span>
+                            <span className="font-semibold text-slate-900">{selectedMyRequest.returnDate ? new Date(selectedMyRequest.returnDate).toLocaleString() : "N/A"}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs">
+                        <span className="text-slate-500 block">Route:</span>
+                        <span className="font-semibold text-slate-900">{selectedMyRequest.fromLocation || "N/A"} ➔ {selectedMyRequest.toLocation || "N/A"}</span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Attachment link */}
+              {selectedMyRequest.attachment && (
+                <div className="border-t border-slate-100 pt-4">
+                  <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                    Supporting Attachment
+                  </span>
+                  <a
+                    href={selectedMyRequest.attachment}
+                    download={selectedMyRequest.attachmentName || "attachment"}
+                    className="inline-flex w-full items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <i className="fa-solid fa-paperclip text-xs" />
+                      <span className="truncate">{selectedMyRequest.attachmentName || "Download Attachment"}</span>
+                    </span>
+                    <i className="fa-solid fa-download text-xs" />
+                  </a>
+                </div>
+              )}
+            </div>
+            
+            <div className="border-t border-slate-100 px-6 py-4 flex justify-end bg-slate-50 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedMyRequest(null)}
+                className="rounded-xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
