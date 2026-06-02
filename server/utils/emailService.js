@@ -36,72 +36,93 @@ const transporter = nodemailer.createTransport({
 
 // Send material request approval email
 async function sendApprovalEmail(requestData) {
-  if (!requestData.approverEmail) {
-    throw new Error('approverEmail is required to send approval email');
+  const recipientEmail = requestData.approverEmail || requestData.to;
+  if (!recipientEmail) {
+    throw new Error('Recipient email (approverEmail or to) is required to send approval email');
   }
 
-  const approvalLink = `${frontendUrl}/material-requests?action=approve&id=${requestData._id}`;
-  
-  const lineItemsHTML = requestData.lineItems.map(item => `
-    <tr>
-      <td style="padding: 8px; border: 1px solid #ddd;">${item.itemName}</td>
-      <td style="padding: 8px; border: 1px solid #ddd;">${item.quantity} ${item.quantityType}</td>
-      <td style="padding: 8px; border: 1px solid #ddd;">$${item.amount || 0}</td>
-    </tr>
-  `).join('');
+  // Material requests have a custom page. Other requests go to approvals tab.
+  const isMaterialRequest = Array.isArray(requestData.lineItems) && requestData.lineItems.length > 0;
+  const approvalLink = isMaterialRequest
+    ? `${frontendUrl}/material-requests?action=approve&id=${requestData._id}`
+    : `${frontendUrl}/home/9`; // Approvals module tab index is usually 9 in sidebar
+
+  let detailsHTML = '';
+  if (isMaterialRequest) {
+    const lineItemsHTML = requestData.lineItems.map(item => `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #ddd;">${item.itemName}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${item.quantity} ${item.quantityType}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">$${item.amount || 0}</td>
+      </tr>
+    `).join('');
+
+    detailsHTML = `
+      <h3>Line Items</h3>
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <thead>
+          <tr style="background-color: #0d6efd; color: white;">
+            <th style="padding: 10px; text-align: left;">Item</th>
+            <th style="padding: 10px; text-align: left;">Quantity</th>
+            <th style="padding: 10px; text-align: left;">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lineItemsHTML}
+        </tbody>
+      </table>
+    `;
+  } else if (requestData.additionalInfo) {
+    detailsHTML = `
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; white-space: pre-line;">
+        <strong>Additional Info:</strong><br/>
+        ${requestData.additionalInfo}
+      </div>
+    `;
+  }
+
+  const approverName = requestData.approver || requestData.managerName || 'Approver';
+  const requestId = requestData.requestId || requestData._id || 'N/A';
+  const requester = requestData.requestedBy || requestData.employeeName || 'An employee';
+  const requestType = requestData.requestType || 'Approval request';
 
   const mailOptions = {
     from: emailUser,
-    to: requestData.approverEmail,
-    subject: `Material Request Approval Required - ${requestData.requestId}`,
+    to: recipientEmail,
+    subject: `Approval Required: ${requestType} - ${requestId}`,
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #0d6efd;">Material Request Approval Required</h2>
-        <p>Dear ${requestData.approver},</p>
-        <p>A new material request has been submitted and requires your approval.</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+        <h2 style="color: #0d6efd;">Approval Required</h2>
+        <p>Dear ${approverName},</p>
+        <p>A new ${requestType.toLowerCase()} has been submitted by ${requester} and requires your approval.</p>
         
         <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-          <h3 style="margin-top: 0;">Request Details</h3>
-          <p><strong>Request ID:</strong> ${requestData.requestId}</p>
-          <p><strong>Requested By:</strong> ${requestData.requestedBy}</p>
-          <p><strong>Department:</strong> ${requestData.department}</p>
-          <p><strong>Date:</strong> ${requestData.date}</p>
-          <p><strong>Type:</strong> ${requestData.requestType}</p>
+          <h3 style="margin-top: 0; color: #0d6efd;">Request Details</h3>
+          <p><strong>Requester:</strong> ${requester}</p>
+          <p><strong>Department:</strong> ${requestData.department || 'N/A'}</p>
+          <p><strong>Reason/Purpose:</strong> ${requestData.reason || requestData.purpose || 'N/A'}</p>
+          ${requestData.amount ? `<p><strong>Amount/Duration:</strong> ${requestData.amount}</p>` : ''}
         </div>
 
-        <h3>Line Items</h3>
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-          <thead>
-            <tr style="background-color: #0d6efd; color: white;">
-              <th style="padding: 10px; text-align: left;">Item</th>
-              <th style="padding: 10px; text-align: left;">Quantity</th>
-              <th style="padding: 10px; text-align: left;">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${lineItemsHTML}
-          </tbody>
-        </table>
-
-        ${requestData.message ? `<p><strong>Message:</strong> ${requestData.message}</p>` : ''}
+        ${detailsHTML}
 
         <div style="margin: 30px 0;">
-          <a href="${approvalLink}" style="background-color: #198754; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
-            Review & Approve Request
+          <a href="${approvalLink}" style="background-color: #198754; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+            Review & Action Request
           </a>
         </div>
 
         <p style="color: #666; font-size: 12px;">
-          This is an automated email. Please do not reply to this message.
+          This is an automated email notification from Steps CRM. Please do not reply directly.
         </p>
       </div>
     `,
   };
 
   try {
-    // In development, just log the email
     if (process.env.NODE_ENV !== 'production') {
       console.log('📧 Email would be sent to:', mailOptions.to);
+      console.log('Subject:', mailOptions.subject);
       console.log('Approval Link:', approvalLink);
       return { success: true, message: 'Email logged (dev mode)' };
     }

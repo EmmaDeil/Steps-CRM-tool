@@ -2720,7 +2720,7 @@ async function start() {
   });
 
   // Advance Request endpoints
-  app.get('/api/advance-requests', async (req, res) => {
+  app.get('/api/advance-requests', authMiddleware, async (req, res) => {
     try {
       const userId = req.query.userId;
       const query = userId ? { userId } : {};
@@ -2732,7 +2732,7 @@ async function start() {
     }
   });
 
-  app.post('/api/advance-requests', async (req, res) => {
+  app.post('/api/advance-requests', authMiddleware, async (req, res) => {
     try {
       const requestData = { ...req.body };
       
@@ -2761,7 +2761,7 @@ async function start() {
     }
   });
 
-  app.put('/api/advance-requests/:id', async (req, res) => {
+  app.put('/api/advance-requests/:id', authMiddleware, async (req, res) => {
     try {
       const updated = await AdvanceRequestModel.findByIdAndUpdate(
         req.params.id,
@@ -2777,7 +2777,7 @@ async function start() {
   });
 
   // Refund Request endpoints
-  app.get('/api/refund-requests', async (req, res) => {
+  app.get('/api/refund-requests', authMiddleware, async (req, res) => {
     try {
       const userId = req.query.userId;
       const query = userId ? { userId } : {};
@@ -2789,7 +2789,7 @@ async function start() {
     }
   });
 
-  app.post('/api/refund-requests', async (req, res) => {
+  app.post('/api/refund-requests', authMiddleware, async (req, res) => {
     try {
       const requestData = { ...req.body };
       
@@ -2818,7 +2818,7 @@ async function start() {
     }
   });
 
-  app.put('/api/refund-requests/:id', async (req, res) => {
+  app.put('/api/refund-requests/:id', authMiddleware, async (req, res) => {
     try {
       const updated = await RefundRequestModel.findByIdAndUpdate(
         req.params.id,
@@ -6907,7 +6907,8 @@ async function start() {
   // ===========================
   
   // Get leave requests (with optional filters)
-  app.get('/api/approval/leave-requests', async (req, res) => {
+  // Get leave requests (with optional filters)
+  app.get('/api/approval/leave-requests', authMiddleware, async (req, res) => {
     try {
       const query = {};
       if (req.query.employeeId) query.employeeId = req.query.employeeId;
@@ -6923,7 +6924,7 @@ async function start() {
   });
 
   // Create leave request
-  app.post('/api/approval/leave-requests', async (req, res) => {
+  app.post('/api/approval/leave-requests', authMiddleware, async (req, res) => {
     try {
       const request = await api.createLeaveRequest(req.body);
       res.status(201).json({ success: true, data: request });
@@ -6933,98 +6934,455 @@ async function start() {
     }
   });
 
-  // Manager approves leave request
-  app.post('/api/approval/leave-requests/:id/manager-approve', async (req, res) => {
+  // ===========================
+  // Travel Request Routes
+  // ===========================
+  
+  // Get travel requests (with optional filters)
+  app.get('/api/approval/travel-requests', authMiddleware, async (req, res) => {
     try {
-      const { comments } = req.body;
-      const request = await api.updateLeaveRequestStatus(
-        req.params.id,
-        'approved_manager',
-        comments,
-        'manager'
-      );
+      const query = {};
+      if (req.query.employeeId) query.employeeId = req.query.employeeId;
+      if (req.query.managerId) query.managerId = req.query.managerId;
+      if (req.query.status) query.status = req.query.status;
       
-      // Send email to HR for final approval
-      // You can add email logic here
-      
-      res.json({ success: true, data: request });
+      const requests = await api.getTravelRequests(query);
+      res.json({ success: true, data: requests });
     } catch (error) {
-      console.error('Error approving leave request:', error);
+      console.error('Error fetching travel requests:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
 
-  // Manager rejects leave request
-  app.post('/api/approval/leave-requests/:id/manager-reject', async (req, res) => {
+  // Create travel request
+  app.post('/api/approval/travel-requests', authMiddleware, async (req, res) => {
     try {
-      const { comments } = req.body;
-      const request = await api.updateLeaveRequestStatus(
-        req.params.id,
-        'rejected_manager',
-        comments,
-        'manager'
-      );
-      
-      res.json({ success: true, data: request });
+      const request = await api.createTravelRequest(req.body);
+      res.status(201).json({ success: true, data: request });
     } catch (error) {
-      console.error('Error rejecting leave request:', error);
+      console.error('Error creating travel request:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
 
-  // HR approves leave request (final approval)
-  app.post('/api/approval/leave-requests/:id/hr-approve', async (req, res) => {
+  // Update travel booking details (after manager approval)
+  app.post('/api/approval/travel-requests/:id/book', authMiddleware, async (req, res) => {
     try {
+      const bookingData = {
+        ticketBooked: req.body.ticketBooked || false,
+        bookedBy: req.body.bookedBy,
+        bookingReference: req.body.bookingReference,
+        hotelBooked: req.body.hotelBooked || false,
+        hotelDetails: req.body.hotelDetails,
+      };
+      
+      const request = await api.updateTravelBooking(req.params.id, bookingData);
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error booking travel:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // =====================================================
+  // Unified Approval Workflow Action Routes
+  // =====================================================
+
+  // GET pending approvals for the current user
+  app.get('/api/approval/pending', authMiddleware, async (req, res) => {
+    try {
+      const currentUserId = String(req.user?._id || '');
+      const currentUserEmail = String(req.user?.email || '').toLowerCase().trim();
+
+      const LeaveRequestModel = require('./models/LeaveRequest');
+      const TravelRequestModel = require('./models/TravelRequest');
+
+      // Leave Requests pending
+      const leaveQuery = {
+        $or: [
+          {
+            usesRuleBasedApproval: true,
+            status: 'pending_manager',
+            approvalChain: {
+              $elemMatch: {
+                status: 'pending',
+                $or: [
+                  { approverId: currentUserId },
+                  { approverEmail: currentUserEmail }
+                ]
+              }
+            }
+          },
+          {
+            usesRuleBasedApproval: { $ne: true },
+            status: 'pending_manager',
+            $or: [
+              { managerId: currentUserId },
+              { managerEmail: currentUserEmail }
+            ]
+          }
+        ]
+      };
+
+      // Travel Requests pending
+      const travelQuery = {
+        $or: [
+          {
+            usesRuleBasedApproval: true,
+            status: 'pending_manager',
+            approvalChain: {
+              $elemMatch: {
+                status: 'pending',
+                $or: [
+                  { approverId: currentUserId },
+                  { approverEmail: currentUserEmail }
+                ]
+              }
+            }
+          },
+          {
+            usesRuleBasedApproval: { $ne: true },
+            status: 'pending_manager',
+            $or: [
+              { managerId: currentUserId },
+              { managerEmail: currentUserEmail }
+            ]
+          }
+        ]
+      };
+
+      // Advance Requests pending
+      const advanceQuery = {
+        $or: [
+          {
+            usesRuleBasedApproval: true,
+            status: 'pending',
+            approvalChain: {
+              $elemMatch: {
+                status: 'pending',
+                $or: [
+                  { approverId: currentUserId },
+                  { approverEmail: currentUserEmail }
+                ]
+              }
+            }
+          },
+          {
+            usesRuleBasedApproval: { $ne: true },
+            status: 'pending',
+            $or: [
+              { approverEmail: currentUserEmail }
+            ]
+          }
+        ]
+      };
+
+      // Refund Requests pending
+      const refundQuery = {
+        $or: [
+          {
+            usesRuleBasedApproval: true,
+            status: 'pending',
+            approvalChain: {
+              $elemMatch: {
+                status: 'pending',
+                $or: [
+                  { approverId: currentUserId },
+                  { approverEmail: currentUserEmail }
+                ]
+              }
+            }
+          },
+          {
+            usesRuleBasedApproval: { $ne: true },
+            status: 'pending',
+            $or: [
+              { approverEmail: currentUserEmail }
+            ]
+          }
+        ]
+      };
+
+      const [leaveReqs, travelReqs, advanceReqs, refundReqs] = await Promise.all([
+        LeaveRequestModel.find(leaveQuery).sort({ createdAt: -1 }),
+        TravelRequestModel.find(travelQuery).sort({ createdAt: -1 }),
+        AdvanceRequestModel.find(advanceQuery).sort({ createdAt: -1 }),
+        RefundRequestModel.find(refundQuery).sort({ createdAt: -1 })
+      ]);
+
+      const formatRequest = (type, req) => {
+        let details = '';
+        if (type === 'leave') {
+          details = `${req.leaveType ? String(req.leaveType).toUpperCase() : 'LEAVE'} leave for ${req.days} days (${req.fromDate ? new Date(req.fromDate).toLocaleDateString() : 'N/A'} to ${req.toDate ? new Date(req.toDate).toLocaleDateString() : 'N/A'})`;
+        } else if (type === 'travel') {
+          details = `Travel to ${req.destination || 'N/A'} for ${req.numberOfDays || 0} days`;
+        } else if (type === 'advance') {
+          details = `Advance of ${req.amount || 0} ${req.currency || 'NGN'} for ${req.purpose || 'N/A'}`;
+        } else if (type === 'refund') {
+          details = `Refund of ${req.amount || 0} ${req.currency || 'NGN'} for ${req.category || 'N/A'}`;
+        }
+
+        return {
+          id: req._id,
+          type,
+          employeeName: req.employeeName,
+          employeeId: req.employeeId,
+          department: req.department,
+          details,
+          amount: req.amount || req.budget || null,
+          currency: req.currency || 'USD',
+          date: req.requestDate || req.createdAt,
+          status: req.status,
+          currentApprovalLevel: req.currentApprovalLevel || 1,
+          usesRuleBasedApproval: req.usesRuleBasedApproval || false
+        };
+      };
+
+      const formatted = [
+        ...leaveReqs.map(r => formatRequest('leave', r)),
+        ...travelReqs.map(r => formatRequest('travel', r)),
+        ...advanceReqs.map(r => formatRequest('advance', r)),
+        ...refundReqs.map(r => formatRequest('refund', r))
+      ];
+
+      res.json({ success: true, data: formatted });
+    } catch (error) {
+      console.error('Error fetching pending approvals:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch pending approvals', error: error.message });
+    }
+  });
+
+  // Approve a request
+  app.post('/api/approval/:moduleType/:id/approve', authMiddleware, async (req, res) => {
+    try {
+      const { moduleType, id } = req.params;
       const { comments } = req.body;
-      const request = await api.updateLeaveRequestStatus(
-        req.params.id,
-        'approved',
-        comments,
-        'hr'
-      );
       
-      // Update leave allocation usage
-      const allocation = await api.getLeaveAllocations({
-        employeeId: request.employeeId,
-        year: new Date(request.fromDate).getFullYear()
-      });
-      
-      if (allocation && allocation.length > 0 && request.leaveType !== 'unpaid') {
-        await api.updateLeaveUsage(
-          request.employeeId,
-          new Date(request.fromDate).getFullYear(),
-          request.leaveType,
-          request.days
-        );
+      const currentUserId = String(req.user?._id || '');
+      const currentUserEmail = String(req.user?.email || '').toLowerCase().trim();
+
+      let model;
+      let requestTypeLabel = '';
+      if (moduleType === 'leave') {
+        model = require('./models/LeaveRequest');
+        requestTypeLabel = 'Leave Request';
+      } else if (moduleType === 'travel') {
+        model = require('./models/TravelRequest');
+        requestTypeLabel = 'Travel Request';
+      } else if (moduleType === 'advance') {
+        model = require('./models/AdvanceRequest');
+        requestTypeLabel = 'Advance Request';
+      } else if (moduleType === 'refund') {
+        model = require('./models/RefundRequest');
+        requestTypeLabel = 'Refund Request';
+      } else {
+        return res.status(400).json({ success: false, message: 'Invalid module type' });
       }
-      
-      res.json({ success: true, data: request });
+
+      const request = await model.findById(id);
+      if (!request) {
+        return res.status(404).json({ success: false, message: 'Request not found' });
+      }
+
+      const normalizedStatus = String(request.status || '').toLowerCase();
+      if (['approved', 'rejected', 'completed', 'cancelled'].includes(normalizedStatus)) {
+        return res.status(400).json({ success: false, message: `Request is already ${request.status}` });
+      }
+
+      // 1. Process rule-based chain if enabled
+      if (request.usesRuleBasedApproval && Array.isArray(request.approvalChain) && request.approvalChain.length > 0) {
+        const pendingStep = request.approvalChain.find(step => step.status === 'pending');
+        if (!pendingStep) {
+          return res.status(400).json({ success: false, message: 'No active pending approval level found' });
+        }
+
+        const isApprover = (
+          (pendingStep.approverId && String(pendingStep.approverId).trim() === currentUserId) ||
+          (pendingStep.approverEmail && String(pendingStep.approverEmail).toLowerCase().trim() === currentUserEmail)
+        );
+
+        if (!isApprover && String(req.user?.role || '').toLowerCase() !== 'admin') {
+          return res.status(403).json({ success: false, message: 'Only the assigned approver can approve this level' });
+        }
+
+        pendingStep.status = 'approved';
+        pendingStep.approvedAt = new Date();
+        pendingStep.comments = comments || 'Approved';
+
+        // Check if there is a next level to await approval
+        const nextStep = request.approvalChain.find(step => step.status === 'awaiting');
+        if (nextStep) {
+          nextStep.status = 'pending';
+          request.currentApprovalLevel = nextStep.level;
+
+          if (moduleType === 'leave' || moduleType === 'travel') {
+            request.managerId = nextStep.approverId;
+            request.managerName = nextStep.approverName;
+            request.managerEmail = nextStep.approverEmail;
+            request.status = 'pending_manager';
+          } else {
+            request.approver = nextStep.approverName;
+            request.approverEmail = nextStep.approverEmail;
+            request.status = 'pending';
+          }
+
+          await request.save();
+
+          // Send approval notification email
+          try {
+            await sendApprovalEmail({
+              ...request.toObject(),
+              approver: nextStep.approverName,
+              approverEmail: nextStep.approverEmail,
+              to: nextStep.approverEmail,
+              requestType: requestTypeLabel,
+              additionalInfo: `Awaiting your review at Level ${nextStep.level}.`
+            });
+          } catch (err) {
+            console.error('Email send failed:', err);
+          }
+
+          return res.json({ success: true, message: `Approved level ${pendingStep.level} and forwarded to ${nextStep.approverName}`, data: request });
+        }
+      } else {
+        // Fallback checks (legacy flow)
+        const isApprover = (
+          (request.managerId && String(request.managerId).trim() === currentUserId) ||
+          (request.managerEmail && String(request.managerEmail).toLowerCase().trim() === currentUserEmail) ||
+          (request.approverEmail && String(request.approverEmail).toLowerCase().trim() === currentUserEmail)
+        );
+
+        if (!isApprover && String(req.user?.role || '').toLowerCase() !== 'admin') {
+          return res.status(403).json({ success: false, message: 'Only the assigned manager/approver can approve this request' });
+        }
+      }
+
+      // 2. Final Approval step (either dynamic chain completed or fallback approved)
+      request.status = 'approved';
+      if (moduleType === 'leave') {
+        request.hrApprovedAt = new Date();
+        request.hrComments = comments || 'Approved';
+        
+        // Update leave balance
+        try {
+          const LeaveAllocation = require('./models/LeaveAllocation');
+          const allocation = await LeaveAllocation.findOne({
+            employeeId: request.employeeId,
+            year: new Date(request.fromDate).getFullYear()
+          });
+          if (allocation && request.leaveType !== 'unpaid') {
+            await api.updateLeaveUsage(
+              request.employeeId,
+              new Date(request.fromDate).getFullYear(),
+              request.leaveType,
+              request.days
+            );
+          }
+        } catch (err) {
+          console.error('Leave allocation update failed:', err);
+        }
+      } else if (moduleType === 'travel') {
+        request.managerApprovedAt = new Date();
+        request.managerComments = comments || 'Approved';
+        request.status = 'pending_booking';
+      } else {
+        // Advance/refund approvals
+        request.rejectionReason = undefined;
+      }
+
+      await request.save();
+      res.json({ success: true, message: 'Request fully approved', data: request });
     } catch (error) {
-      console.error('Error approving leave request:', error);
-      res.status(500).json({ success: false, error: error.message });
+      console.error('Error approving request:', error);
+      res.status(500).json({ success: false, message: 'Failed to approve request', error: error.message });
     }
   });
 
-  // HR rejects leave request
-  app.post('/api/approval/leave-requests/:id/hr-reject', async (req, res) => {
+  // Reject a request
+  app.post('/api/approval/:moduleType/:id/reject', authMiddleware, async (req, res) => {
     try {
+      const { moduleType, id } = req.params;
       const { comments } = req.body;
-      const request = await api.updateLeaveRequestStatus(
-        req.params.id,
-        'rejected',
-        comments,
-        'hr'
-      );
       
-      res.json({ success: true, data: request });
+      const currentUserId = String(req.user?._id || '');
+      const currentUserEmail = String(req.user?.email || '').toLowerCase().trim();
+
+      let model;
+      if (moduleType === 'leave') {
+        model = require('./models/LeaveRequest');
+      } else if (moduleType === 'travel') {
+        model = require('./models/TravelRequest');
+      } else if (moduleType === 'advance') {
+        model = require('./models/AdvanceRequest');
+      } else if (moduleType === 'refund') {
+        model = require('./models/RefundRequest');
+      } else {
+        return res.status(400).json({ success: false, message: 'Invalid module type' });
+      }
+
+      const request = await model.findById(id);
+      if (!request) {
+        return res.status(404).json({ success: false, message: 'Request not found' });
+      }
+
+      const normalizedStatus = String(request.status || '').toLowerCase();
+      if (['approved', 'rejected', 'completed', 'cancelled'].includes(normalizedStatus)) {
+        return res.status(400).json({ success: false, message: `Request is already ${request.status}` });
+      }
+
+      // Check if user is active approver
+      if (request.usesRuleBasedApproval && Array.isArray(request.approvalChain) && request.approvalChain.length > 0) {
+        const pendingStep = request.approvalChain.find(step => step.status === 'pending');
+        if (!pendingStep) {
+          return res.status(400).json({ success: false, message: 'No active pending approval level found' });
+        }
+
+        const isApprover = (
+          (pendingStep.approverId && String(pendingStep.approverId).trim() === currentUserId) ||
+          (pendingStep.approverEmail && String(pendingStep.approverEmail).toLowerCase().trim() === currentUserEmail)
+        );
+
+        if (!isApprover && String(req.user?.role || '').toLowerCase() !== 'admin') {
+          return res.status(403).json({ success: false, message: 'Only the assigned approver can reject this request' });
+        }
+
+        pendingStep.status = 'rejected';
+        pendingStep.approvedAt = new Date();
+        pendingStep.comments = comments || 'Rejected';
+      } else {
+        const isApprover = (
+          (request.managerId && String(request.managerId).trim() === currentUserId) ||
+          (request.managerEmail && String(request.managerEmail).toLowerCase().trim() === currentUserEmail) ||
+          (request.approverEmail && String(request.approverEmail).toLowerCase().trim() === currentUserEmail)
+        );
+
+        if (!isApprover && String(req.user?.role || '').toLowerCase() !== 'admin') {
+          return res.status(403).json({ success: false, message: 'Only the assigned manager/approver can reject this request' });
+        }
+      }
+
+      request.status = 'rejected';
+      if (moduleType === 'leave') {
+        request.hrRejectedAt = new Date();
+        request.hrComments = comments || 'Rejected';
+      } else if (moduleType === 'travel') {
+        request.managerRejectedAt = new Date();
+        request.managerComments = comments || 'Rejected';
+        request.status = 'cancelled';
+      } else {
+        request.rejectionReason = comments || 'Rejected';
+      }
+
+      await request.save();
+      res.json({ success: true, message: 'Request rejected successfully', data: request });
     } catch (error) {
-      console.error('Error rejecting leave request:', error);
-      res.status(500).json({ success: false, error: error.message });
+      console.error('Error rejecting request:', error);
+      res.status(500).json({ success: false, message: 'Failed to reject request', error: error.message });
     }
   });
 
-  // Send leave approval email (to manager or HR)
-  app.post('/api/send-leave-approval-email', async (req, res) => {
+  // Legacy manual Email sending routes (secured)
+  app.post('/api/send-leave-approval-email', authMiddleware, async (req, res) => {
     try {
       const {
         to,
@@ -7057,94 +7415,7 @@ async function start() {
     }
   });
 
-  // ===========================
-  // Travel Request Routes
-  // ===========================
-  
-  // Get travel requests (with optional filters)
-  app.get('/api/approval/travel-requests', async (req, res) => {
-    try {
-      const query = {};
-      if (req.query.employeeId) query.employeeId = req.query.employeeId;
-      if (req.query.managerId) query.managerId = req.query.managerId;
-      if (req.query.status) query.status = req.query.status;
-      
-      const requests = await api.getTravelRequests(query);
-      res.json({ success: true, data: requests });
-    } catch (error) {
-      console.error('Error fetching travel requests:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // Create travel request
-  app.post('/api/approval/travel-requests', async (req, res) => {
-    try {
-      const request = await api.createTravelRequest(req.body);
-      res.status(201).json({ success: true, data: request });
-    } catch (error) {
-      console.error('Error creating travel request:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // Manager approves travel request
-  app.post('/api/approval/travel-requests/:id/manager-approve', async (req, res) => {
-    try {
-      const { comments } = req.body;
-      const request = await api.updateTravelRequestStatus(
-        req.params.id,
-        'approved_manager',
-        comments,
-        'manager'
-      );
-      
-      res.json({ success: true, data: request });
-    } catch (error) {
-      console.error('Error approving travel request:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // Manager rejects travel request
-  app.post('/api/approval/travel-requests/:id/manager-reject', async (req, res) => {
-    try {
-      const { comments } = req.body;
-      const request = await api.updateTravelRequestStatus(
-        req.params.id,
-        'rejected_manager',
-        comments,
-        'manager'
-      );
-      
-      res.json({ success: true, data: request });
-    } catch (error) {
-      console.error('Error rejecting travel request:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // Update travel booking details (after manager approval)
-  app.post('/api/approval/travel-requests/:id/book', async (req, res) => {
-    try {
-      const bookingData = {
-        ticketBooked: req.body.ticketBooked || false,
-        bookedBy: req.body.bookedBy,
-        bookingReference: req.body.bookingReference,
-        hotelBooked: req.body.hotelBooked || false,
-        hotelDetails: req.body.hotelDetails,
-      };
-      
-      const request = await api.updateTravelBooking(req.params.id, bookingData);
-      res.json({ success: true, data: request });
-    } catch (error) {
-      console.error('Error booking travel:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // Send travel approval email (to manager)
-  app.post('/api/send-travel-approval-email', async (req, res) => {
+  app.post('/api/send-travel-approval-email', authMiddleware, async (req, res) => {
     try {
       const {
         to,

@@ -3,6 +3,7 @@ import { useAuth } from "../../context/useAuth";
 import { apiService } from "../../services/api";
 import Breadcrumb from "../Breadcrumb";
 import ModuleLoader from "../common/ModuleLoader";
+import { toast } from "react-hot-toast";
 
 const initialAdvanceForm = {
   amount: "",
@@ -78,13 +79,17 @@ const Approval = () => {
   const [refundRequests, setRefundRequests] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [travelRequests, setTravelRequests] = useState([]);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [activeTab, setActiveTab] = useState("my-requests");
+  const [selectedPendingRequest, setSelectedPendingRequest] = useState(null);
+  const [approvalActionType, setApprovalActionType] = useState("");
+  const [actionComments, setActionComments] = useState("");
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
   const [showAdvanceForm, setShowAdvanceForm] = useState(false);
   const [showRefundForm, setShowRefundForm] = useState(false);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [showTravelForm, setShowTravelForm] = useState(false);
-  const [showLeaveHistory, setShowLeaveHistory] = useState(false);
-  const [showTravelHistory, setShowTravelHistory] = useState(false);
 
   const [advanceFormData, setAdvanceFormData] = useState(initialAdvanceForm);
   const [refundFormData, setRefundFormData] = useState(initialRefundForm);
@@ -116,7 +121,7 @@ const Approval = () => {
 
     setLoading(true);
     try {
-      const [advanceRes, refundRes, leaveRes, travelRes] =
+      const [advanceRes, refundRes, leaveRes, travelRes, pendingRes] =
         await Promise.allSettled([
           apiService.get(`/api/advance-requests?userId=${currentUserId}`, {
             timeout: 20000,
@@ -130,6 +135,10 @@ const Approval = () => {
           ),
           apiService.get(
             `/api/approval/travel-requests?employeeId=${currentEmployeeId}`,
+            { timeout: 20000 },
+          ),
+          apiService.get(
+            `/api/approval/pending`,
             { timeout: 20000 },
           ),
         ]);
@@ -146,24 +155,58 @@ const Approval = () => {
       setTravelRequests(
         travelRes.status === "fulfilled" ? extractList(travelRes.value) : [],
       );
+      setPendingApprovals(
+        pendingRes.status === "fulfilled" ? extractList(pendingRes.value) : [],
+      );
 
       if (
         advanceRes.status === "rejected" ||
         refundRes.status === "rejected" ||
         leaveRes.status === "rejected" ||
-        travelRes.status === "rejected"
+        travelRes.status === "rejected" ||
+        pendingRes.status === "rejected"
       ) {
         console.error("One or more approval lists failed to load.", {
           advanceRes,
           refundRes,
           leaveRes,
           travelRes,
+          pendingRes,
         });
       }
     } catch (error) {
       console.error("Error loading approval data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApprovalAction = async (e) => {
+    e.preventDefault();
+    if (!selectedPendingRequest || !approvalActionType) return;
+
+    setIsSubmittingAction(true);
+    try {
+      const response = await apiService.post(
+        `/api/approval/${selectedPendingRequest.type}/${selectedPendingRequest.id}/${approvalActionType}`,
+        { comments: actionComments }
+      );
+
+      if (response?.success) {
+        toast.success(`Request ${approvalActionType === "approve" ? "approved" : "rejected"} successfully!`);
+      } else {
+        toast.success("Action submitted successfully");
+      }
+
+      setSelectedPendingRequest(null);
+      setActionComments("");
+      await fetchData();
+    } catch (error) {
+      console.error(`Error processing approval action:`, error);
+      const errMsg = error?.response?.data?.message || error?.message || "Failed to submit action";
+      toast.error(errMsg);
+    } finally {
+      setIsSubmittingAction(false);
     }
   };
 
@@ -825,98 +868,272 @@ const Approval = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {renderTable(
-            "Advance History",
-            advanceRequests.map((request) => ({
-              id: request._id || request.id,
-              cells: [
-                request.requestDate
-                  ? formatDate(request.requestDate)
-                  : formatDate(request.createdAt),
-                request.purpose || "N/A",
-                formatMoney(request.amount, request.currency),
-                request.approver || "Auto-assigned",
-                <span
-                  key={`${request._id || request.id}-status`}
-                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                >
-                  {request.status || "pending"}
-                </span>,
-              ],
-            })),
-            ["Date", "Purpose", "Amount", "Approver", "Status"],
-            "No advance requests found.",
-          )}
-
-          {renderTable(
-            "Refund History",
-            refundRequests.map((request) => ({
-              id: request._id || request.id,
-              cells: [
-                request.requestDate
-                  ? formatDate(request.requestDate)
-                  : formatDate(request.createdAt),
-                request.category || "N/A",
-                formatMoney(request.amount, request.currency),
-                request.approver || "Auto-assigned",
-                <span
-                  key={`${request._id || request.id}-status`}
-                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                >
-                  {request.status || "pending"}
-                </span>,
-              ],
-            })),
-            ["Date", "Category", "Amount", "Approver", "Status"],
-            "No refund requests found.",
-          )}
+        {/* Tab Navigation */}
+        <div className="flex border-b border-slate-200 mb-6">
+          <button
+            onClick={() => setActiveTab("my-requests")}
+            className={`px-6 py-3 font-semibold text-sm transition-colors border-b-2 -mb-px ${
+              activeTab === "my-requests"
+                ? "border-blue-600 text-blue-600 font-bold"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            My Requests
+          </button>
+          <button
+            onClick={() => setActiveTab("pending-approvals")}
+            className={`px-6 py-3 font-semibold text-sm transition-colors border-b-2 -mb-px flex items-center gap-2 ${
+              activeTab === "pending-approvals"
+                ? "border-blue-600 text-blue-600 font-bold"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Pending Approvals
+            {pendingApprovals.length > 0 && (
+              <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                {pendingApprovals.length}
+              </span>
+            )}
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {renderTable(
-            "Leave History",
-            leaveRequests.map((request) => ({
-              id: request._id || request.id,
-              cells: [
-                `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
-                request.leaveType || "Leave",
-                `${request.days || 0} day(s)`,
-                request.managerName || "Manager",
-                <span
-                  key={`${request._id || request.id}-status`}
-                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                >
-                  {request.status || "pending"}
-                </span>,
-              ],
-            })),
-            ["Dates", "Type", "Days", "Approver", "Status"],
-            "No leave requests found.",
-          )}
+        {activeTab === "my-requests" ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              {renderTable(
+                "Advance History",
+                advanceRequests.map((request) => ({
+                  id: request._id || request.id,
+                  cells: [
+                    request.requestDate
+                      ? formatDate(request.requestDate)
+                      : formatDate(request.createdAt),
+                    request.purpose || "N/A",
+                    formatMoney(request.amount, request.currency),
+                    request.approver || "Auto-assigned",
+                    <span
+                      key={`${request._id || request.id}-status`}
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                    >
+                      {request.status || "pending"}
+                    </span>,
+                  ],
+                })),
+                ["Date", "Purpose", "Amount", "Approver", "Status"],
+                "No advance requests found.",
+              )}
 
-          {renderTable(
-            "Travel History",
-            travelRequests.map((request) => ({
-              id: request._id || request.id,
-              cells: [
-                `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
-                request.destination || "N/A",
-                request.budget ? formatMoney(request.budget) : "N/A",
-                request.managerName || "Manager",
-                <span
-                  key={`${request._id || request.id}-status`}
-                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                >
-                  {request.status || "pending"}
-                </span>,
-              ],
-            })),
-            ["Dates", "Destination", "Budget", "Approver", "Status"],
-            "No travel requests found.",
-          )}
-        </div>
+              {renderTable(
+                "Refund History",
+                refundRequests.map((request) => ({
+                  id: request._id || request.id,
+                  cells: [
+                    request.requestDate
+                      ? formatDate(request.requestDate)
+                      : formatDate(request.createdAt),
+                    request.category || "N/A",
+                    formatMoney(request.amount, request.currency),
+                    request.approver || "Auto-assigned",
+                    <span
+                      key={`${request._id || request.id}-status`}
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                    >
+                      {request.status || "pending"}
+                    </span>,
+                  ],
+                })),
+                ["Date", "Category", "Amount", "Approver", "Status"],
+                "No refund requests found.",
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              {renderTable(
+                "Leave History",
+                leaveRequests.map((request) => ({
+                  id: request._id || request.id,
+                  cells: [
+                    `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
+                    request.leaveType || "Leave",
+                    `${request.days || 0} day(s)`,
+                    request.managerName || "Manager",
+                    <span
+                      key={`${request._id || request.id}-status`}
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                    >
+                      {request.status || "pending"}
+                    </span>,
+                  ],
+                })),
+                ["Dates", "Type", "Days", "Approver", "Status"],
+                "No leave requests found.",
+              )}
+
+              {renderTable(
+                "Travel History",
+                travelRequests.map((request) => ({
+                  id: request._id || request.id,
+                  cells: [
+                    `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
+                    request.destination || "N/A",
+                    request.budget ? formatMoney(request.budget) : "N/A",
+                    request.managerName || "Manager",
+                    <span
+                      key={`${request._id || request.id}-status`}
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                    >
+                      {request.status || "pending"}
+                    </span>,
+                  ],
+                })),
+                ["Dates", "Destination", "Budget", "Approver", "Status"],
+                "No travel requests found.",
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-[#dbe0e6] bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Approvals Inbox</h3>
+                <p className="text-sm text-slate-500">Action request submissions routed to you.</p>
+              </div>
+            </div>
+            {pendingApprovals.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                <i className="fa-solid fa-clipboard-check text-4xl mb-3 text-slate-300"></i>
+                <p className="font-medium text-slate-500">All caught up!</p>
+                <p className="text-xs text-slate-400 mt-1">No requests currently pending your decision.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-6 py-3 font-semibold text-slate-600">Requester</th>
+                      <th className="px-6 py-3 font-semibold text-slate-600">Type</th>
+                      <th className="px-6 py-3 font-semibold text-slate-600">Details</th>
+                      <th className="px-6 py-3 font-semibold text-slate-600">Date</th>
+                      <th className="px-6 py-3 font-semibold text-slate-600 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {pendingApprovals.map((req) => (
+                      <tr key={req.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 font-semibold text-slate-900">{req.employeeName}</td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            req.type === 'leave' ? 'bg-orange-100 text-orange-800' :
+                            req.type === 'travel' ? 'bg-indigo-100 text-indigo-800' :
+                            req.type === 'advance' ? 'bg-blue-100 text-blue-800' :
+                            'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {req.type.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-slate-600 max-w-xs truncate" title={req.details}>
+                          {req.details}
+                        </td>
+                        <td className="px-6 py-4 text-slate-500">{formatDate(req.date)}</td>
+                        <td className="px-6 py-4 text-right flex justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedPendingRequest(req);
+                              setApprovalActionType("approve");
+                            }}
+                            className="inline-flex items-center justify-center rounded-lg bg-green-600 text-white font-semibold text-xs px-3 py-1.5 hover:bg-green-700 transition-colors"
+                          >
+                            <i className="fa-solid fa-check mr-1.5"></i> Approve
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedPendingRequest(req);
+                              setApprovalActionType("reject");
+                            }}
+                            className="inline-flex items-center justify-center rounded-lg bg-red-600 text-white font-semibold text-xs px-3 py-1.5 hover:bg-red-700 transition-colors"
+                          >
+                            <i className="fa-solid fa-xmark mr-1.5"></i> Reject
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Action Dialog Modal */}
+      {selectedPendingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <h3 className="text-lg font-bold text-slate-900">
+                Confirm {approvalActionType === "approve" ? "Approval" : "Rejection"}
+              </h3>
+              <button
+                onClick={() => {
+                  setSelectedPendingRequest(null);
+                  setActionComments("");
+                }}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+              >
+                <i className="fa-solid fa-times" />
+              </button>
+            </div>
+            <form onSubmit={handleApprovalAction} className="p-6 space-y-4">
+              <div>
+                <p className="text-sm text-slate-600">
+                  Are you sure you want to <strong>{approvalActionType}</strong> this {selectedPendingRequest.type} request from <strong>{selectedPendingRequest.employeeName}</strong>?
+                </p>
+                <p className="text-xs text-slate-500 mt-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                  {selectedPendingRequest.details}
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Comments / Remarks (Optional)
+                </label>
+                <textarea
+                  value={actionComments}
+                  onChange={(e) => setActionComments(e.target.value)}
+                  rows="3"
+                  className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Provide details or instructions here..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPendingRequest(null);
+                    setActionComments("");
+                  }}
+                  className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  disabled={isSubmittingAction}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={`flex-1 rounded-lg text-white font-semibold text-sm px-4 py-2 transition-colors ${
+                    approvalActionType === "approve"
+                      ? "bg-green-600 hover:bg-green-700"
+                      : "bg-red-600 hover:bg-red-700"
+                  }`}
+                  disabled={isSubmittingAction}
+                >
+                  {isSubmittingAction ? "Submitting..." : `Yes, ${approvalActionType}`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showAdvanceForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1516,8 +1733,7 @@ const Approval = () => {
         </div>
       ) : null}
 
-      {showLeaveHistory ? null : null}
-      {showTravelHistory ? null : null}
+
     </div>
   );
 };
