@@ -37,9 +37,25 @@ const DocSignRequest = ({ onBack }) => {
   const [selectedFieldId, setSelectedFieldId] = useState(null);
   const [draggedPlacedFieldId, setDraggedPlacedFieldId] = useState(null);
 
-  // Mobile sidebar toggle state
-  const [showLeftSidebar, setShowLeftSidebar] = useState(false);
-  const [showRightSidebar, setShowRightSidebar] = useState(false);
+  // Sidebar toggle state (for both mobile drawer and desktop collapsible views)
+  const [showLeftSidebar, setShowLeftSidebar] = useState(true);
+  const [showRightSidebar, setShowRightSidebar] = useState(true);
+
+  // Initialize sidebar states based on screen width and handle window resizing
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024) {
+        setShowLeftSidebar(false);
+        setShowRightSidebar(false);
+      } else {
+        setShowLeftSidebar(true);
+        setShowRightSidebar(true);
+      }
+    };
+    handleResize(); // Run on mount
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Employee search autocomplete state
   const [employeeSearchResults, setEmployeeSearchResults] = useState({});
@@ -450,17 +466,25 @@ const DocSignRequest = ({ onBack }) => {
         <div className="flex items-center gap-3">
             <button
               onClick={() => setShowLeftSidebar(!showLeftSidebar)}
-              className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+              className={`flex items-center justify-center w-9 h-9 rounded-lg border text-sm transition-colors ${
+                showLeftSidebar
+                  ? "border-[#137fec] bg-blue-50 text-[#137fec]"
+                  : "border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
               title="Recipients & Settings"
             >
-              <i className="fa-solid fa-users text-sm" />
+              <i className="fa-solid fa-users" />
             </button>
             <button
               onClick={() => setShowRightSidebar(!showRightSidebar)}
-              className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+              className={`flex items-center justify-center w-9 h-9 rounded-lg border text-sm transition-colors ${
+                showRightSidebar
+                  ? "border-[#137fec] bg-blue-50 text-[#137fec]"
+                  : "border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
               title="Form Fields"
             >
-              <i className="fa-solid fa-puzzle-piece text-sm" />
+              <i className="fa-solid fa-puzzle-piece" />
             </button>
           <div className="hidden md:flex items-center mr-4 gap-2 text-sm text-[#617589]">
             <div className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
@@ -494,12 +518,19 @@ const DocSignRequest = ({ onBack }) => {
             onClick={() => setShowLeftSidebar(false)}
           />
         )}
-        <aside className={`${showLeftSidebar ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:relative z-40 lg:z-auto top-0 left-0 h-full w-80 lg:w-96 flex flex-col border-r border-[#e5e7eb] bg-white overflow-y-auto shrink-0 shadow-sm lg:shadow-sm transition-transform duration-300 ease-in-out`}>
-          {/* Mobile close button */}
-          <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
+        <aside
+          className={`fixed lg:relative z-40 lg:z-auto top-0 left-0 h-full flex flex-col bg-white overflow-y-auto shrink-0 shadow-sm transition-all duration-300 ease-in-out ${
+            showLeftSidebar
+              ? "w-80 lg:w-96 translate-x-0 border-r border-[#e5e7eb] opacity-100"
+              : "w-80 lg:w-0 -translate-x-full lg:translate-x-0 lg:overflow-hidden lg:border-r-0 lg:opacity-0"
+          }`}
+        >
+          {/* Close button (shows on mobile, or when open on desktop as a quick collapse) */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <span className="font-bold text-gray-900">Recipients & Settings</span>
-            <button onClick={() => setShowLeftSidebar(false)} className="text-gray-500 hover:text-gray-700">
-              <i className="fa-solid fa-times text-lg" />
+            <button onClick={() => setShowLeftSidebar(false)} className="text-gray-500 hover:text-gray-700" title="Collapse Sidebar">
+              <i className="fa-solid fa-angles-left text-lg hidden lg:inline" />
+              <i className="fa-solid fa-times text-lg lg:hidden" />
             </button>
           </div>
           {/* Recipients Section */}
@@ -800,7 +831,7 @@ const DocSignRequest = ({ onBack }) => {
               {/* PDF Viewer */}
               <div className="flex-1 overflow-auto p-4 md:p-8 lg:p-12 flex justify-center items-start">
                 <div
-                  className="relative"
+                  className="relative w-full max-w-[1000px]"
                   style={{
                     transform: `scale(${zoom / 100})`,
                     transformOrigin: "top center",
@@ -815,20 +846,34 @@ const DocSignRequest = ({ onBack }) => {
                   }}
                 >
                   {fileURL ? (
-                    <div className="relative">
+                    <div className="relative w-full">
                       <iframe
                         src={fileURL}
-                        className="bg-white shadow-2xl rounded-sm border border-gray-200 w-full max-w-[620px]"
+                        className="bg-white shadow-2xl rounded-sm border border-gray-200 w-full"
                         style={{
                           width: "100%",
-                          maxWidth: "620px",
-                          height: "877px",
+                          height: "1200px",
                         }}
                         title="PDF Preview"
                       />
 
+                      {/* Drag overlay to capture drop events on top of iframe */}
+                      {(draggedField || draggedPlacedFieldId) && (
+                        <div
+                          className="absolute inset-0 z-30 bg-transparent"
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => {
+                            if (draggedPlacedFieldId) {
+                              handleRepositionDrop(e);
+                            } else {
+                              handleDrop(e);
+                            }
+                          }}
+                        />
+                      )}
+
                       {/* Overlay for dropped fields on current page */}
-                      <div className="absolute inset-0 pointer-events-none">
+                      <div className="absolute inset-0 pointer-events-none z-20">
                         {placedFields
                           .filter((field) => field.page === currentPage)
                           .map((field) => {
@@ -929,7 +974,6 @@ const DocSignRequest = ({ onBack }) => {
                                   height: `${field.size.height}px`,
                                   backgroundColor: bgColor,
                                   border: `3px ${borderStyle} ${borderColor}`,
-                                  borderStyle: borderStyle ? "solid" : "dashed",
                                 }}
                               >
                                 <div
@@ -963,7 +1007,7 @@ const DocSignRequest = ({ onBack }) => {
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-white relative w-full max-w-[620px] h-[877px] shadow-2xl rounded-sm border border-gray-200 flex items-center justify-center">
+                    <div className="bg-white relative w-full h-[1200px] shadow-2xl rounded-sm border border-gray-200 flex items-center justify-center">
                       <div className="text-center">
                         <i className="fa-solid fa-file-pdf text-6xl text-gray-300 mb-4"></i>
                         <p className="text-gray-500">Loading PDF...</p>
@@ -984,12 +1028,19 @@ const DocSignRequest = ({ onBack }) => {
             onClick={() => setShowRightSidebar(false)}
           />
         )}
-        <aside className={`${showRightSidebar ? 'translate-x-0' : 'translate-x-full'} lg:translate-x-0 fixed lg:relative z-40 lg:z-auto top-0 right-0 h-full w-72 lg:w-64 border-l border-[#e5e7eb] bg-white shrink-0 flex flex-col shadow-sm transition-transform duration-300 ease-in-out`}>
-          {/* Mobile close button */}
-          <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
+        <aside
+          className={`fixed lg:relative z-40 lg:z-auto top-0 right-0 h-full flex flex-col bg-white shrink-0 shadow-sm transition-all duration-300 ease-in-out ${
+            showRightSidebar
+              ? "w-72 lg:w-64 translate-x-0 border-l border-[#e5e7eb] opacity-100"
+              : "w-72 lg:w-0 translate-x-full lg:translate-x-0 lg:overflow-hidden lg:border-l-0 lg:opacity-0"
+          }`}
+        >
+          {/* Close button (shows on mobile, or when open on desktop as a quick collapse) */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <span className="font-bold text-gray-900">Form Fields</span>
-            <button onClick={() => setShowRightSidebar(false)} className="text-gray-500 hover:text-gray-700">
-              <i className="fa-solid fa-times text-lg" />
+            <button onClick={() => setShowRightSidebar(false)} className="text-gray-500 hover:text-gray-700" title="Collapse Sidebar">
+              <i className="fa-solid fa-angles-right text-lg hidden lg:inline" />
+              <i className="fa-solid fa-times text-lg lg:hidden" />
             </button>
           </div>
           <div className="p-5 border-b border-[#f0f2f4]">
@@ -1015,6 +1066,7 @@ const DocSignRequest = ({ onBack }) => {
                   defaultSize: { width: 220, height: 50 },
                 })
               }
+              onDragEnd={() => setDraggedField(null)}
               className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e7eb] bg-white hover:border-[#137fec] hover:shadow-md cursor-grab active:cursor-grabbing transition-all group select-none"
             >
               <div className="size-8 rounded bg-blue-50 flex items-center justify-center text-[#137fec]">
@@ -1035,6 +1087,7 @@ const DocSignRequest = ({ onBack }) => {
                   defaultSize: { width: 100, height: 50 },
                 })
               }
+              onDragEnd={() => setDraggedField(null)}
               className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e7eb] bg-white hover:border-[#137fec] hover:shadow-md cursor-grab active:cursor-grabbing transition-all group select-none"
             >
               <div className="size-8 rounded bg-indigo-50 flex items-center justify-center text-indigo-500">
@@ -1055,6 +1108,7 @@ const DocSignRequest = ({ onBack }) => {
                   defaultSize: { width: 180, height: 50 },
                 })
               }
+              onDragEnd={() => setDraggedField(null)}
               className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e7eb] bg-white hover:border-[#137fec] hover:shadow-md cursor-grab active:cursor-grabbing transition-all group select-none"
             >
               <div className="size-8 rounded bg-cyan-50 flex items-center justify-center text-cyan-500">
@@ -1081,6 +1135,7 @@ const DocSignRequest = ({ onBack }) => {
                   defaultSize: { width: 200, height: 40 },
                 })
               }
+              onDragEnd={() => setDraggedField(null)}
               className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e7eb] bg-white hover:border-[#137fec] hover:shadow-md cursor-grab active:cursor-grabbing transition-all group select-none"
             >
               <div className="size-8 rounded bg-emerald-50 flex items-center justify-center text-emerald-500">
@@ -1101,6 +1156,7 @@ const DocSignRequest = ({ onBack }) => {
                   defaultSize: { width: 30, height: 30 },
                 })
               }
+              onDragEnd={() => setDraggedField(null)}
               className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e7eb] bg-white hover:border-[#137fec] hover:shadow-md cursor-grab active:cursor-grabbing transition-all group select-none"
             >
               <div className="size-8 rounded bg-purple-50 flex items-center justify-center text-purple-500">
@@ -1121,6 +1177,7 @@ const DocSignRequest = ({ onBack }) => {
                   defaultSize: { width: 200, height: 40 },
                 })
               }
+              onDragEnd={() => setDraggedField(null)}
               className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e7eb] bg-white hover:border-[#137fec] hover:shadow-md cursor-grab active:cursor-grabbing transition-all group select-none"
             >
               <div className="size-8 rounded bg-orange-50 flex items-center justify-center text-orange-500">

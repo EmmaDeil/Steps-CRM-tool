@@ -3074,6 +3074,79 @@ async function start() {
     }
   });
 
+  // ==================== DOCUMENT TEMPLATES API ====================
+
+  // Get all templates
+  app.get('/api/documents/templates', authMiddleware, async (req, res) => {
+    try {
+      const templates = await TemplateModel.find({}).sort({ createdAt: -1 });
+      res.json(templates);
+    } catch (err) {
+      console.error('Error fetching templates:', err);
+      res.status(500).json({ message: 'Failed to fetch templates' });
+    }
+  });
+
+  // Get template by ID
+  app.get('/api/documents/templates/:id', authMiddleware, async (req, res) => {
+    try {
+      const template = await TemplateModel.findById(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: 'Template not found' });
+      }
+      res.json(template);
+    } catch (err) {
+      console.error('Error fetching template:', err);
+      res.status(500).json({ message: 'Failed to fetch template' });
+    }
+  });
+
+  // Create a new template
+  app.post('/api/documents/templates', authMiddleware, async (req, res) => {
+    try {
+      const payload = {
+        ...req.body,
+        uploadedBy: String(req.user?._id || ''),
+        uploadedByName: req.user?.fullName || req.user?.email || '',
+      };
+
+      const template = new TemplateModel(payload);
+      const saved = await template.save();
+      res.status(201).json(saved);
+    } catch (err) {
+      console.error('Error creating template:', err);
+      res.status(500).json({ message: 'Failed to create template' });
+    }
+  });
+
+  // Delete a template
+  app.delete('/api/documents/templates/:id', authMiddleware, async (req, res) => {
+    try {
+      const existing = await TemplateModel.findById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: 'Template not found' });
+      }
+
+      const actorId = String(req.user?._id || '');
+      const actorEmail = String(req.user?.email || '').trim().toLowerCase();
+      const uploader = String(existing.uploadedBy || '').trim().toLowerCase();
+      const isOwner = hasAdminPrivileges(req.user) || uploader === actorId.toLowerCase() || uploader === actorEmail;
+
+      if (!isOwner) {
+        return res.status(403).json({ message: 'Only the template owner can delete this template' });
+      }
+
+      const deleted = await TemplateModel.findByIdAndDelete(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: 'Template not found' });
+      }
+      res.json({ message: 'Template deleted successfully' });
+    } catch (err) {
+      console.error('Error deleting template:', err);
+      res.status(500).json({ message: 'Failed to delete template' });
+    }
+  });
+
   // Get a single document by ID
   app.get('/api/documents/:id', authMiddleware, async (req, res) => {
     try {
@@ -3105,31 +3178,31 @@ async function start() {
       const document = new DocumentModel(payload);
       const saved = await document.save();
       
-      // Send email to all recipients
+      // Send email to all recipients in the background so we don't block document creation response
       if (saved.recipients && saved.recipients.length > 0) {
         const { sendSignatureRequestEmail } = require('./utils/emailService');
         
         for (const recipient of saved.recipients) {
           if (recipient.email) {
-            try {
-              await sendSignatureRequestEmail(
-                {
-                  _id: saved._id,
-                  name: saved.name,
-                  uploadedBy: saved.uploadedBy,
-                  subject: saved.metadata?.subject,
-                  message: saved.metadata?.message,
-                  dueDate: saved.dueDate,
-                  customBranding: saved.metadata?.customBranding || false,
-                },
-                recipient.email,
-                recipient.name
-              );
+            sendSignatureRequestEmail(
+              {
+                _id: saved._id,
+                name: saved.name,
+                uploadedBy: saved.uploadedBy,
+                subject: saved.metadata?.subject,
+                message: saved.metadata?.message,
+                dueDate: saved.dueDate,
+                customBranding: saved.metadata?.customBranding || false,
+              },
+              recipient.email,
+              recipient.name
+            )
+            .then(() => {
               console.log(`✅ Signature request email sent to ${recipient.email}`);
-            } catch (emailError) {
+            })
+            .catch((emailError) => {
               console.error(`❌ Failed to send email to ${recipient.email}:`, emailError);
-              // Continue even if email fails - don't block document creation
-            }
+            });
           }
         }
       }
@@ -3282,79 +3355,6 @@ async function start() {
     } catch (err) {
       console.error('Error deleting document:', err);
       res.status(500).json({ message: 'Failed to delete document' });
-    }
-  });
-
-  // ==================== DOCUMENT TEMPLATES API ====================
-
-  // Get all templates
-  app.get('/api/documents/templates', authMiddleware, async (req, res) => {
-    try {
-      const templates = await TemplateModel.find({}).sort({ createdAt: -1 });
-      res.json(templates);
-    } catch (err) {
-      console.error('Error fetching templates:', err);
-      res.status(500).json({ message: 'Failed to fetch templates' });
-    }
-  });
-
-  // Get template by ID
-  app.get('/api/documents/templates/:id', authMiddleware, async (req, res) => {
-    try {
-      const template = await TemplateModel.findById(req.params.id);
-      if (!template) {
-        return res.status(404).json({ message: 'Template not found' });
-      }
-      res.json(template);
-    } catch (err) {
-      console.error('Error fetching template:', err);
-      res.status(500).json({ message: 'Failed to fetch template' });
-    }
-  });
-
-  // Create a new template
-  app.post('/api/documents/templates', authMiddleware, async (req, res) => {
-    try {
-      const payload = {
-        ...req.body,
-        uploadedBy: String(req.user?._id || ''),
-        uploadedByName: req.user?.fullName || req.user?.email || '',
-      };
-
-      const template = new TemplateModel(payload);
-      const saved = await template.save();
-      res.status(201).json(saved);
-    } catch (err) {
-      console.error('Error creating template:', err);
-      res.status(500).json({ message: 'Failed to create template' });
-    }
-  });
-
-  // Delete a template
-  app.delete('/api/documents/templates/:id', authMiddleware, async (req, res) => {
-    try {
-      const existing = await TemplateModel.findById(req.params.id);
-      if (!existing) {
-        return res.status(404).json({ message: 'Template not found' });
-      }
-
-      const actorId = String(req.user?._id || '');
-      const actorEmail = String(req.user?.email || '').trim().toLowerCase();
-      const uploader = String(existing.uploadedBy || '').trim().toLowerCase();
-      const isOwner = hasAdminPrivileges(req.user) || uploader === actorId.toLowerCase() || uploader === actorEmail;
-
-      if (!isOwner) {
-        return res.status(403).json({ message: 'Only the template owner can delete this template' });
-      }
-
-      const deleted = await TemplateModel.findByIdAndDelete(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ message: 'Template not found' });
-      }
-      res.json({ message: 'Template deleted successfully' });
-    } catch (err) {
-      console.error('Error deleting template:', err);
-      res.status(500).json({ message: 'Failed to delete template' });
     }
   });
 

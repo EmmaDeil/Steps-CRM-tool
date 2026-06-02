@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Breadcrumb from "../Breadcrumb";
 import { toast } from "react-hot-toast";
 import { apiService } from "../../services/api";
@@ -17,6 +17,21 @@ const DocSignTemplateCreate = ({ onBack }) => {
   ]);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef(null);
+  const [showLeftSidebar, setShowLeftSidebar] = useState(true);
+
+  // Initialize sidebar states based on screen width and handle window resizing
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024) {
+        setShowLeftSidebar(false);
+      } else {
+        setShowLeftSidebar(true);
+      }
+    };
+    handleResize(); // Run on mount
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const roleColors = {
     blue: {
@@ -207,6 +222,17 @@ const DocSignTemplateCreate = ({ onBack }) => {
           </div>
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setShowLeftSidebar(!showLeftSidebar)}
+              className={`flex items-center justify-center w-10 h-10 rounded-lg border text-sm transition-colors ${
+                showLeftSidebar
+                  ? "border-blue-600 bg-blue-50 text-blue-600"
+                  : "border-gray-300 text-gray-700 hover:bg-gray-50 bg-white"
+              }`}
+              title="Template Configuration"
+            >
+              <i className="fa-solid fa-sliders" />
+            </button>
+            <button
               onClick={onBack}
               className="px-5 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-900 font-medium hover:bg-gray-50 transition-colors"
             >
@@ -228,7 +254,13 @@ const DocSignTemplateCreate = ({ onBack }) => {
       <div className="flex-1 px-3 sm:px-6 pb-6 pt-6">
         <div className="max-w-[1600px] mx-auto flex flex-col lg:flex-row gap-6 h-full">
           {/* LEFT PANEL: Configuration */}
-          <aside className="w-full lg:w-[380px] shrink-0 flex flex-col gap-4 overflow-y-auto pr-0 lg:pr-1">
+          <aside
+            className={`w-full shrink-0 flex flex-col gap-4 overflow-y-auto pr-0 lg:pr-1 transition-all duration-300 ease-in-out ${
+              showLeftSidebar
+                ? "lg:w-[380px] opacity-100"
+                : "w-0 lg:w-0 opacity-0 lg:overflow-hidden h-0 lg:h-auto"
+            }`}
+          >
             {/* 1. Metadata Card */}
             <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
               <h3 className="text-sm font-bold uppercase tracking-wider text-gray-600 mb-4">
@@ -467,10 +499,10 @@ const DocSignTemplateCreate = ({ onBack }) => {
             {/* Document Surface */}
             <div className="flex-1 overflow-auto p-4 md:p-8 lg:p-12 bg-slate-100 flex justify-center items-start relative">
               {pdfUrl ? (
-                <div className="relative">
+                <div className="relative w-full max-w-[1000px]">
                   <iframe
                     src={pdfUrl}
-                    className="w-full max-w-[800px] min-h-[600px] lg:min-h-[1100px] bg-white shadow-lg"
+                    className="w-full min-h-[600px] lg:min-h-[1100px] bg-white shadow-lg"
                     title="PDF Preview"
                   />
                   {/* Overlay for fields */}

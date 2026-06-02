@@ -32,6 +32,22 @@ const DocSignView = () => {
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);
 
+  const [showLeftSidebar, setShowLeftSidebar] = useState(true);
+
+  // Initialize sidebar states based on screen width and handle window resizing
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024) {
+        setShowLeftSidebar(false);
+      } else {
+        setShowLeftSidebar(true);
+      }
+    };
+    handleResize(); // Run on mount
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Authentication check
   useEffect(() => {
     if (!authLoading && !user) {
@@ -307,31 +323,51 @@ const DocSignView = () => {
           </p>
         </div>
 
-        {document.status !== "Completed" && myRecipient && (
+        <div className="flex items-center gap-3 w-full md:w-auto">
           <button
-            onClick={handleSubmitSignature}
-            disabled={submitting || !isFinished}
-            className="w-full md:w-auto px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all shadow-md shadow-blue-500/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            onClick={() => setShowLeftSidebar(!showLeftSidebar)}
+            className={`flex items-center justify-center w-10 h-10 rounded-lg border text-sm transition-colors ${
+              showLeftSidebar
+                ? "border-blue-600 bg-blue-50 text-blue-600"
+                : "border-gray-300 text-gray-700 hover:bg-gray-50 bg-white"
+            }`}
+            title="Toggle Progress Sidebar"
           >
-            {submitting ? (
-              <>
-                <i className="fa-solid fa-spinner fa-spin" />
-                Submitting...
-              </>
-            ) : (
-              <>
-                <i className="fa-solid fa-check-circle" />
-                Finish Signing ({signedCount}/{assignedFields.length} Filled)
-              </>
-            )}
+            <i className="fa-solid fa-chart-line" />
           </button>
-        )}
+
+          {document.status !== "Completed" && myRecipient && (
+            <button
+              onClick={handleSubmitSignature}
+              disabled={submitting || !isFinished}
+              className="flex-1 md:flex-none px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all shadow-md shadow-blue-500/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {submitting ? (
+                <>
+                  <i className="fa-solid fa-spinner fa-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <i className="fa-solid fa-check-circle" />
+                  Finish Signing ({signedCount}/{assignedFields.length} Filled)
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Body Viewport */}
       <div className="flex-1 max-w-[1600px] mx-auto w-full flex flex-col lg:flex-row gap-6 p-4 md:p-6 overflow-hidden">
         {/* Left Side: Summary & Actions */}
-        <aside className="w-full lg:w-80 shrink-0 bg-white rounded-xl border border-gray-200 p-5 shadow-sm h-fit flex flex-col gap-5">
+        <aside
+          className={`w-full shrink-0 bg-white rounded-xl border border-gray-200 p-5 shadow-sm h-fit flex flex-col gap-5 transition-all duration-300 ease-in-out ${
+            showLeftSidebar
+              ? "lg:w-80 opacity-100"
+              : "w-0 lg:w-0 opacity-0 lg:overflow-hidden h-0 lg:h-auto lg:p-0 lg:border-0"
+          }`}
+        >
           <div>
             <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-2 border-b border-gray-100 pb-2">
               Signing Progress
@@ -393,16 +429,16 @@ const DocSignView = () => {
 
         {/* Right Side: Document rendering with fields overlay */}
         <section className="flex-1 bg-gray-800 rounded-xl border border-gray-700 shadow-inner flex flex-col justify-start items-center p-4 md:p-8 overflow-y-auto max-h-[calc(100vh-180px)] min-h-[500px]">
-          <div className="relative bg-white shadow-2xl rounded overflow-hidden">
+          <div className="relative w-full max-w-[1000px] bg-white shadow-2xl rounded overflow-hidden">
             {/* The PDF Preview */}
             {document.fileURL ? (
               <iframe
                 src={document.fileURL}
-                className="w-[800px] h-[1100px] bg-white border-0 z-0 pointer-events-auto"
+                className="w-full h-[1100px] bg-white border-0 z-0 pointer-events-auto"
                 title="Document View"
               />
             ) : (
-              <div className="w-[800px] h-[1100px] bg-white flex items-center justify-center">
+              <div className="w-full h-[1100px] bg-white flex items-center justify-center">
                 <i className="fa-solid fa-spinner fa-spin text-3xl text-gray-400" />
               </div>
             )}
