@@ -1411,35 +1411,56 @@ async function start() {
 
   app.get('/api/analytics/reports', async (req, res) => {
     try {
-      // 1. Attendance Data Aggregation
-      let attendanceRecords = [];
-      try {
-        attendanceRecords = await AttendanceModel.find().lean();
-      } catch(e) {}
-
-      // Group attendance by week
-      const attendanceData = [];
-      if (attendanceRecords.length > 0) {
-        // Sort by date and group into weeks
-        const sorted = attendanceRecords.sort((a, b) => new Date(a.date || a.createdAt) - new Date(b.date || b.createdAt));
-        const weekSize = Math.ceil(sorted.length / 4) || 1;
-        for (let i = 0; i < 4; i++) {
-          const chunk = sorted.slice(i * weekSize, (i + 1) * weekSize);
-          if (chunk.length === 0) break;
-          const present = chunk.filter(a => (a.status || '').toLowerCase() === 'present').length;
-          const absent = chunk.filter(a => (a.status || '').toLowerCase() === 'absent').length;
-          const late = chunk.filter(a => (a.status || '').toLowerCase() === 'late').length;
-          attendanceData.push({ name: `Week ${i + 1}`, present, absent, late });
-        }
+      if (mongoose.connection.readyState !== 1) {
+        console.warn('Analytics API: Database not connected, returning 503');
+        return res.status(503).json({ success: false, error: 'Database connection unavailable' });
       }
 
-      // 2. Approvals Aggregation (Leave, Travel, Purchase Orders)
-      let leaves = [], travels = [], purchases = [];
-      try {
-        leaves = await LeaveRequestModel.find().lean();
-        travels = await TravelRequestModel.find().lean();
-        purchases = await PurchaseOrderModel.find().lean();
-      } catch(e) {}
+      const withTimeout = (promise, ms = 5000) => 
+        Promise.race([
+          promise,
+          new Promise((resolve) => setTimeout(() => resolve(null), ms))
+        ]);
+
+      const EmployeeModel = require('./models/Employee');
+      const ReportModel = require('./models/Report');
+      const MaintenanceTicketModel = require('./models/MaintenanceTicket');
+      const MaterialRequestModel = require('./models/MaterialRequest');
+
+      const [
+        attendanceRecordsResult,
+        leavesResult,
+        travelsResult,
+        purchasesResult,
+        ticketsResult,
+        materialReqsResult,
+        totalEmployeesResult,
+        reportCountResult
+      ] = await Promise.all([
+        withTimeout(AttendanceModel.find().lean().catch(() => [])),
+        withTimeout(LeaveRequestModel.find().lean().catch(() => [])),
+        withTimeout(TravelRequestModel.find().lean().catch(() => [])),
+        withTimeout(PurchaseOrderModel.find().lean().catch(() => [])),
+        withTimeout(MaintenanceTicketModel.find().lean().catch(() => [])),
+        withTimeout(MaterialRequestModel.find().lean().catch(() => [])),
+        withTimeout(EmployeeModel.countDocuments({ status: 'Active' }).catch(() => 0)),
+        withTimeout(ReportModel.countDocuments().catch(() => 0))
+      ]);
+
+      if (!attendanceRecordsResult) {
+        // If timeout reached, return 503 immediately
+        return res.status(503).json({ success: false, error: 'Analytics queries timed out' });
+      }
+
+      const attendanceRecords = attendanceRecordsResult || [];
+      const leaves = leavesResult || [];
+      const travels = travelsResult || [];
+      const purchases = purchasesResult || [];
+      const tickets = ticketsResult || [];
+      const materialReqs = materialReqsResult || [];
+      const totalEmployees = totalEmployeesResult || 0;
+      const reportCount = reportCountResult || 0;
+      const materialRequests = materialReqs;
 
       const getUsdAmountFromPurchase = (po) => {
         const currency = String(po?.currency || '').trim().toUpperCase();
@@ -1500,28 +1521,40 @@ async function start() {
         });
       }
 
+      // Group attendance by week
+      const attendanceData = [];
+      if (attendanceRecords.length > 0) {
+        // Sort by date and group into weeks
+        const sorted = attendanceRecords.sort((a, b) => new Date(a.date || a.createdAt) - new Date(b.date || b.createdAt));
+        const weekSize = Math.ceil(sorted.length / 4) || 1;
+        for (let i = 0; i < 4; i++) {
+          const chunk = sorted.slice(i * weekSize, (i + 1) * weekSize);
+          if (chunk.length === 0) break;
+          const present = chunk.filter(a => (a.status || '').toLowerCase() === 'present').length;
+          const absent = chunk.filter(a => (a.status || '').toLowerCase() === 'absent').length;
+          const late = chunk.filter(a => (a.status || '').toLowerCase() === 'late').length;
+          attendanceData.push({ name: `Week ${i + 1}`, present, absent, late });
+        }
+      }
+
       // 4. Facility Usage (from maintenance tickets)
       const facilityData = [];
-      try {
-        const MaintenanceTicketModel = require('./models/MaintenanceTicket');
-        const tickets = await MaintenanceTicketModel.find().lean();
-        if (tickets.length > 0) {
-          const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-          const byDay = {};
-          dayNames.forEach(d => { byDay[d] = { usage: 0, maintenance: 0 }; });
-          tickets.forEach(t => {
-            const date = new Date(t.createdAt || t.date || Date.now());
-            const day = dayNames[date.getDay()];
-            byDay[day].maintenance++;
-            byDay[day].usage++;
-          });
-          ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(d => {
-            if (byDay[d].usage > 0 || byDay[d].maintenance > 0) {
-              facilityData.push({ name: d, ...byDay[d] });
-            }
-          });
-        }
-      } catch(e) {}
+      if (tickets.length > 0) {
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const byDay = {};
+        dayNames.forEach(d => { byDay[d] = { usage: 0, maintenance: 0 }; });
+        tickets.forEach(t => {
+          const date = new Date(t.createdAt || t.date || Date.now());
+          const day = dayNames[date.getDay()];
+          byDay[day].maintenance++;
+          byDay[day].usage++;
+        });
+        ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(d => {
+          if (byDay[d].usage > 0 || byDay[d].maintenance > 0) {
+            facilityData.push({ name: d, ...byDay[d] });
+          }
+        });
+      }
 
       // 5. Custom Report - Combined overview from all modules
       // Calculate attendance counts (needed by customData and stats)
@@ -1644,41 +1677,30 @@ async function start() {
         };
       }
       // Material requests
-      try {
-        const MaterialRequestModelCustom = require('./models/MaterialRequest');
-        const materialReqs = await MaterialRequestModelCustom.find().lean();
-        if (materialReqs.length > 0) {
-          const matApproved = materialReqs.filter(m => (m.status || '').toLowerCase() === 'approved').length;
-          const matRejected = materialReqs.filter(m => (m.status || '').toLowerCase() === 'rejected').length;
-          const matPending = materialReqs.length - matApproved - matRejected;
-          customData.push({
-            name: 'Materials',
-            total: materialReqs.length,
-            active: matApproved,
-            issues: matRejected
-          });
-          moduleDetails.Materials = {
-            stats: [
-              { label: 'Total Requests', value: materialReqs.length, icon: 'fa-boxes-stacked', color: 'blue' },
-              { label: 'Approved', value: matApproved, icon: 'fa-circle-check', color: 'green' },
-              { label: 'Pending', value: matPending, icon: 'fa-hourglass-half', color: 'orange' },
-              { label: 'Rejected', value: matRejected, icon: 'fa-circle-xmark', color: 'red' },
-            ],
-            rate: materialReqs.length > 0 ? ((matApproved / materialReqs.length) * 100).toFixed(1) + '%' : '0%',
-            rateLabel: 'Fulfillment Rate'
-          };
-        }
-      } catch(e) {}
+      if (materialReqs.length > 0) {
+        const matApproved = materialReqs.filter(m => (m.status || '').toLowerCase() === 'approved').length;
+        const matRejected = materialReqs.filter(m => (m.status || '').toLowerCase() === 'rejected').length;
+        const matPending = materialReqs.length - matApproved - matRejected;
+        customData.push({
+          name: 'Materials',
+          total: materialReqs.length,
+          active: matApproved,
+          issues: matRejected
+        });
+        moduleDetails.Materials = {
+          stats: [
+            { label: 'Total Requests', value: materialReqs.length, icon: 'fa-boxes-stacked', color: 'blue' },
+            { label: 'Approved', value: matApproved, icon: 'fa-circle-check', color: 'green' },
+            { label: 'Pending', value: matPending, icon: 'fa-hourglass-half', color: 'orange' },
+            { label: 'Rejected', value: matRejected, icon: 'fa-circle-xmark', color: 'red' },
+          ],
+          rate: materialReqs.length > 0 ? ((matApproved / materialReqs.length) * 100).toFixed(1) + '%' : '0%',
+          rateLabel: 'Fulfillment Rate'
+        };
+      }
 
       // Calculate Stats from real data
       const avgAttendance = totalAttendanceRecords > 0 ? ((presentCount / totalAttendanceRecords) * 100).toFixed(1) + '%' : '0%';
-
-      // Get total employees count
-      let totalEmployees = 0;
-      try {
-        const EmployeeModel = require('./models/Employee');
-        totalEmployees = await EmployeeModel.countDocuments({ status: 'Active' });
-      } catch(e) {}
 
       // Calculate financial metrics from real data
       let totalExpenses = 0;
@@ -1689,25 +1711,14 @@ async function start() {
       const netProfit = totalRevenue - totalExpenses;
       const avgTransaction = allRequests.length > 0 ? Math.floor(totalExpenses / allRequests.length) : 0;
 
-      // Get total reports count
-      let reportCount = 0;
-      try {
-        const ReportModel = require('./models/Report');
-        reportCount = await ReportModel.countDocuments();
-      } catch(e) {}
-
       // Calculate facility usage from material requests
       let facilityUsagePercent = "0%";
       let facilityChange = "No data";
-      try {
-        const MaterialRequestModel = require('./models/MaterialRequest');
-        const materialRequests = await MaterialRequestModel.find().lean();
-        if (materialRequests.length > 0) {
-          const approvedRequests = materialRequests.filter(mr => (mr.status || '').toLowerCase() === 'approved').length;
-          facilityUsagePercent = ((approvedRequests / materialRequests.length) * 100).toFixed(0) + '%';
-          facilityChange = `${materialRequests.length} total requests`;
-        }
-      } catch(e) {}
+      if (materialRequests.length > 0) {
+        const approvedRequests = materialRequests.filter(mr => (mr.status || '').toLowerCase() === 'approved').length;
+        facilityUsagePercent = ((approvedRequests / materialRequests.length) * 100).toFixed(0) + '%';
+        facilityChange = `${materialRequests.length} total requests`;
+      }
 
       const totalApprovals = allRequests.length;
       const rejectionRate = totalApprovals > 0 ? ((rejectedCount / totalApprovals) * 100).toFixed(1) + '%' : '0%';
@@ -2173,81 +2184,132 @@ async function start() {
   const SystemSettingsModel = require('./models/SystemSettings');
   const axios = require('axios');
   
-  let localAttendanceRecords = [];
-
-  app.post('/api/attendance', async (req, res) => {
+  // POST /api/attendance - Manual override by HR/Admin
+  app.post('/api/attendance', authMiddleware, async (req, res) => {
     try {
-      const { name, employeeId, status } = req.body;
-      const newRecord = {
-        name: name || 'Demo User',
-        employeeId: employeeId || 'EMP-1337',
-        status: status || 'present',
-        checkInTime: new Date()
-      };
-      // Keep only most recent 50 records to prevent memory leak
-      localAttendanceRecords.unshift(newRecord);
-      if (localAttendanceRecords.length > 50) localAttendanceRecords.pop();
+      const { name, employeeId, status, date } = req.body;
+      const targetDate = date || new Date().toISOString().split('T')[0];
+      
+      let employee = await EmployeeModel.findOne({ employeeId });
+      
+      const record = await AttendanceModel.findOneAndUpdate(
+        { employeeId, date: targetDate },
+        { 
+          name: name || employee?.name || 'Demo User',
+          employeeRef: employee?._id,
+          status: status || 'present',
+          checkInTime: new Date()
+        },
+        { upsert: true, new: true }
+      );
 
-      res.status(201).json({ message: 'Attendance marked', record: newRecord });
+      res.status(201).json({ message: 'Attendance marked', record });
     } catch (e) {
-      console.error(e);
+      console.error('Error marking attendance:', e);
       res.status(500).json({ error: 'Failed to mark attendance' });
     }
   });
 
-  app.get('/api/attendance', async (req, res) => {
+  // POST /api/attendance/clock-in - Self-serve
+  app.post('/api/attendance/clock-in', authMiddleware, async (req, res) => {
     try {
-      const settings = await SystemSettingsModel.findOne();
-      const apiKey = settings?.attendanceApiKey;
-
-      if (apiKey) {
-        await SystemSettingsModel.updateOne(
-          { _id: settings._id },
-          { $set: { attendanceApiKeyLastUsedAt: new Date() } },
-        );
-
-        const endpoints = [
-          'https://attendance-app-swart-iota.vercel.app/api/attendance',
-          'https://attendance-app-swart-iota.vercel.app/api/hr/employees',
-          'https://attendance-app-swart-iota.vercel.app/attendance',
-          'https://attendance-app-swart-iota.vercel.app/'
-        ];
-
-        for (const url of endpoints) {
-          try {
-            const response = await axios.get(url, {
-              headers: { 'x-api-key': apiKey },
-              timeout: 5000 // 5 seconds timeout
-            });
-            if (response.data) {
-              return res.json(response.data);
-            }
-          } catch (err) {
-            // Ignore errors for individual endpoints, move to next
-            console.log(`Endpoint ${url} failed: ${err.message}`);
-          }
+      const user = req.user;
+      let employeeId = 'N/A';
+      let name = user.fullName || `${user.firstName} ${user.lastName}`;
+      let employeeRef = user.employeeRef || null;
+      
+      if (employeeRef) {
+        const emp = await EmployeeModel.findById(employeeRef);
+        if (emp) employeeId = emp.employeeId || 'N/A';
+      } else {
+        const emp = await EmployeeModel.findOne({ email: user.email });
+        if (emp) {
+          employeeId = emp.employeeId || 'N/A';
+          employeeRef = emp._id;
         }
-        
-        console.error('All external attendance endpoints failed.');
       }
-    } catch (error) {
-      console.error('Error in external attendance proxy:', error.message);
+      
+      const today = new Date().toISOString().split('T')[0];
+      
+      const record = await AttendanceModel.findOneAndUpdate(
+        { employeeId, date: today },
+        { 
+          name,
+          employeeRef,
+          status: 'present',
+          checkInTime: new Date(),
+          $setOnInsert: { checkOutTime: null }
+        },
+        { upsert: true, new: true }
+      );
+      
+      res.status(200).json({ message: 'Clocked in successfully', record });
+    } catch (e) {
+      console.error('Clock-in error:', e);
+      res.status(500).json({ error: 'Failed to clock in' });
     }
-    
-    // Remote fetch failed or no API key. Fall back to local volatile session records.
-    const presentCount = localAttendanceRecords.filter(r => r.status === 'present' || r.status === 'on-time').length;
-    const leaveCount = localAttendanceRecords.filter(r => r.status === 'leave' || r.status === 'on-leave').length;
-    const absentCount = localAttendanceRecords.filter(r => r.status === 'absent').length;
-    const lateCount = localAttendanceRecords.filter(r => r.status === 'late').length;
+  });
 
-    res.json({ 
-      records: localAttendanceRecords, 
-      totalEmployees: localAttendanceRecords.length,
-      presentCount,
-      leaveCount,
-      absentCount,
-      lateCount
-    });
+  // POST /api/attendance/clock-out - Self-serve
+  app.post('/api/attendance/clock-out', authMiddleware, async (req, res) => {
+    try {
+      const user = req.user;
+      let employeeId = 'N/A';
+      if (user.employeeRef) {
+        const emp = await EmployeeModel.findById(user.employeeRef);
+        if (emp) employeeId = emp.employeeId || 'N/A';
+      } else {
+        const emp = await EmployeeModel.findOne({ email: user.email });
+        if (emp) employeeId = emp.employeeId || 'N/A';
+      }
+      
+      const today = new Date().toISOString().split('T')[0];
+      
+      const record = await AttendanceModel.findOneAndUpdate(
+        { employeeId, date: today },
+        { checkOutTime: new Date() },
+        { new: true }
+      );
+      
+      if (!record) {
+        return res.status(404).json({ error: 'No clock-in record found for today' });
+      }
+      
+      res.status(200).json({ message: 'Clocked out successfully', record });
+    } catch (e) {
+      console.error('Clock-out error:', e);
+      res.status(500).json({ error: 'Failed to clock out' });
+    }
+  });
+
+  // GET /api/attendance
+  app.get('/api/attendance', authMiddleware, async (req, res) => {
+    try {
+      const targetDate = req.query.date || new Date().toISOString().split('T')[0];
+      
+      const records = await AttendanceModel.find({ date: targetDate }).sort({ checkInTime: -1 }).lean();
+      const totalEmployees = await EmployeeModel.countDocuments({ status: 'Active' });
+      
+      const presentCount = records.filter(r => r.status === 'present' || r.status === 'on-time').length;
+      const leaveCount = records.filter(r => r.status === 'leave' || r.status === 'on-leave').length;
+      const lateCount = records.filter(r => r.status === 'late').length;
+      
+      // Calculate absent as active employees - (present + leave + late)
+      const accountedFor = presentCount + leaveCount + lateCount;
+      const absentCount = Math.max(0, totalEmployees - accountedFor);
+
+      res.json({ 
+        records, 
+        totalEmployees,
+        presentCount,
+        leaveCount,
+        absentCount,
+        lateCount
+      });
+    } catch (error) {
+      console.error('Error fetching attendance:', error);
+      res.status(500).json({ error: 'Failed to fetch attendance data' });
+    }
   });
 
   // Material Requests endpoints

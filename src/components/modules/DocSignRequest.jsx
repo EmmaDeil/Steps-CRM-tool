@@ -5,7 +5,7 @@ import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../../context/useAuth";
 
-const DocSignRequest = ({ onBack }) => {
+const DocSignRequest = ({ onBack, onSuccess }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -291,7 +291,9 @@ const DocSignRequest = ({ onBack }) => {
           await apiService.documents.create(documentData);
 
           toast.success("Signature request sent successfully!");
-          if (onBack) {
+          if (onSuccess) {
+            onSuccess();
+          } else if (onBack) {
             onBack();
           } else {
             navigate("/home/9");

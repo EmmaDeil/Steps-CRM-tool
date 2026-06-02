@@ -19,10 +19,82 @@ const DocSign = () => {
   const [sortBy, setSortBy] = useState("Sort: Last Modified");
 
   // API Data States
-  const [pendingRequests, setPendingRequests] = useState([]);
+  const [activeTab, setActiveTab] = useState("inbox"); // 'inbox', 'sent', 'completed'
+  const [documentsList, setDocumentsList] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const actorEmail = useMemo(() => String(user?.email || "").trim().toLowerCase(), [user]);
+  const actorId = useMemo(() => String(user?.userId || user?._id || "").trim(), [user]);
+
+  const inboxRequests = useMemo(() => {
+    return documentsList.filter((doc) => {
+      if (doc.status === "Completed") return false;
+      const isRecipientPending = (doc.recipients || []).some(
+        (rec) =>
+          (String(rec.email || "").trim().toLowerCase() === actorEmail ||
+            String(rec.id || "").trim() === actorId) &&
+          rec.status !== "signed"
+      );
+      return isRecipientPending;
+    }).map((doc, index) => ({
+      id: doc._id,
+      title: doc.name,
+      sender: doc.uploadedByName || "Unknown",
+      initials: getInitials(doc.uploadedByName || "Unknown"),
+      color: getColorByIndex(index),
+      dueDate: formatDueDate(doc.dueDate),
+      urgent: isUrgent(doc.dueDate),
+      document: doc,
+    }));
+  }, [documentsList, actorEmail, actorId]);
+
+  const sentRequests = useMemo(() => {
+    return documentsList.filter((doc) => {
+      const uploader = String(doc.uploadedBy || "").trim().toLowerCase();
+      return uploader === actorEmail || uploader === actorId.toLowerCase();
+    }).map((doc, index) => {
+      const recipients = doc.recipients || [];
+      const signedCount = recipients.filter(r => r.status === "signed").length;
+      return {
+        id: doc._id,
+        title: doc.name,
+        sender: doc.uploadedByName || "Unknown",
+        initials: getInitials(doc.uploadedByName || "Unknown"),
+        color: getColorByIndex(index),
+        dueDate: formatDueDate(doc.dueDate),
+        urgent: isUrgent(doc.dueDate),
+        signedProgress: `${signedCount}/${recipients.length}`,
+        isCompleted: doc.status === "Completed",
+        recipientsList: recipients,
+        document: doc,
+      };
+    });
+  }, [documentsList, actorEmail, actorId]);
+
+  const completedRequests = useMemo(() => {
+    return documentsList.filter((doc) => {
+      if (doc.status !== "Completed") return false;
+      const uploader = String(doc.uploadedBy || "").trim().toLowerCase();
+      const isSender = uploader === actorEmail || uploader === actorId.toLowerCase();
+      const isRecipient = (doc.recipients || []).some(
+        (rec) =>
+          String(rec.email || "").trim().toLowerCase() === actorEmail ||
+          String(rec.id || "").trim() === actorId
+      );
+      return isSender || isRecipient;
+    }).map((doc, index) => ({
+      id: doc._id,
+      title: doc.name,
+      sender: doc.uploadedByName || "Unknown",
+      initials: getInitials(doc.uploadedByName || "Unknown"),
+      color: getColorByIndex(index),
+      dueDate: formatDueDate(doc.dueDate),
+      urgent: isUrgent(doc.dueDate),
+      document: doc,
+    }));
+  }, [documentsList, actorEmail, actorId]);
 
   // Map category values (like 'hr', 'legal') to readable layout labels
   const displayCategory = useCallback((cat) => {
@@ -54,24 +126,7 @@ const DocSign = () => {
       ]);
 
       if (Array.isArray(docsResponse)) {
-        // Filter pending documents (documents needing user action)
-        const pending = docsResponse.filter(
-          (doc) => doc.status === "Action Required" || doc.status === "Pending",
-        );
-
-        // Transform to match UI expectations
-        const transformedPending = pending.map((doc, index) => ({
-          id: doc._id,
-          title: doc.name,
-          sender: doc.uploadedByName || "Unknown",
-          initials: getInitials(doc.uploadedByName || "Unknown"),
-          color: getColorByIndex(index),
-          dueDate: formatDueDate(doc.dueDate),
-          urgent: isUrgent(doc.dueDate),
-          document: doc,
-        }));
-
-        setPendingRequests(transformedPending);
+        setDocumentsList(docsResponse);
       }
 
       if (Array.isArray(templatesResponse)) {
@@ -299,13 +354,30 @@ const DocSign = () => {
 
   // Show request form if user clicks "Send Signature"
   if (showRequestForm) {
-    return <DocSignRequest onBack={() => setShowRequestForm(false)} />;
+    return (
+      <DocSignRequest
+        onBack={() => {
+          setShowRequestForm(false);
+          fetchDocuments();
+        }}
+        onSuccess={() => {
+          setShowRequestForm(false);
+          setActiveTab("sent");
+          fetchDocuments();
+        }}
+      />
+    );
   }
 
   // Show create template form if user clicks "New Template"
   if (showCreateTemplate) {
     return (
-      <DocSignTemplateCreate onBack={() => setShowCreateTemplate(false)} />
+      <DocSignTemplateCreate
+        onBack={() => {
+          setShowCreateTemplate(false);
+          fetchDocuments();
+        }}
+      />
     );
   }
 
@@ -364,85 +436,284 @@ const DocSign = () => {
             </div>
           ) : (
             <>
-              {/* Pending Requests Section */}
+              {/* Document Tabs Section */}
               <section className="w-full space-y-4">
-                <div className="flex items-center gap-2 mb-2 mt-2">
-                  <i className="fa-solid fa-clock text-orange-500 text-[20px]"></i>
-                  <h3 className="text-lg font-bold text-[#111418]">
-                    Pending Requests
-                  </h3>
-                  <span className="bg-orange-100 text-orange-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                    {pendingRequests.length} Waiting
-                  </span>
+                {/* Tabs Selector */}
+                <div className="border-b border-gray-200">
+                  <nav className="flex space-x-8" aria-label="Tabs">
+                    <button
+                      onClick={() => setActiveTab("inbox")}
+                      className={`py-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition-all ${
+                        activeTab === "inbox"
+                          ? "border-[#137fec] text-[#137fec]"
+                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                      }`}
+                    >
+                      <i className="fa-solid fa-inbox text-[16px]"></i>
+                      Action Required
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        activeTab === "inbox" ? "bg-blue-100 text-[#137fec]" : "bg-gray-100 text-gray-600"
+                      }`}>
+                        {inboxRequests.length}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab("sent")}
+                      className={`py-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition-all ${
+                        activeTab === "sent"
+                          ? "border-[#137fec] text-[#137fec]"
+                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                      }`}
+                    >
+                      <i className="fa-solid fa-paper-plane text-[16px]"></i>
+                      Sent Requests
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        activeTab === "sent" ? "bg-blue-100 text-[#137fec]" : "bg-gray-100 text-gray-600"
+                      }`}>
+                        {sentRequests.length}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab("completed")}
+                      className={`py-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition-all ${
+                        activeTab === "completed"
+                          ? "border-[#137fec] text-[#137fec]"
+                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                      }`}
+                    >
+                      <i className="fa-solid fa-check-double text-[16px]"></i>
+                      Completed
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        activeTab === "completed" ? "bg-blue-100 text-[#137fec]" : "bg-gray-100 text-gray-600"
+                      }`}>
+                        {completedRequests.length}
+                      </span>
+                    </button>
+                  </nav>
                 </div>
 
-                {pendingRequests.length === 0 ? (
-                  <div className="w-full bg-white p-8 rounded-xl border border-[#e5e7eb] text-center">
-                    <i className="fa-solid fa-inbox text-4xl text-[#617589] mb-3"></i>
-                    <p className="text-sm text-[#617589]">
-                      No pending signature requests
-                    </p>
-                  </div>
-                ) : (
-                  <div className="w-full grid grid-cols-1 gap-4">
-                    {pendingRequests.map((request) => (
-                      <div
-                        key={request.id}
-                        className={`bg-white p-4 rounded-xl ${
-                          request.urgent
-                            ? "border-l-4 border-l-orange-500"
-                            : "border border-[#e5e7eb]"
-                        } border-y border-r border-r-[#e5e7eb] border-y-[#e5e7eb] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:shadow-md transition-all`}
-                      >
-                        <div className="flex items-start md:items-center gap-4">
+                {activeTab === "inbox" && (
+                  <>
+                    {inboxRequests.length === 0 ? (
+                      <div className="w-full bg-white p-8 rounded-xl border border-[#e5e7eb] text-center">
+                        <i className="fa-solid fa-inbox text-4xl text-[#617589] mb-3"></i>
+                        <p className="text-sm text-[#617589]">
+                          No pending actions required from you
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="w-full grid grid-cols-1 gap-4">
+                        {inboxRequests.map((request) => (
                           <div
-                            className={`size-10 rounded-full ${
-                              getColorClasses(request.color).bg
-                            } ${
-                              getColorClasses(request.color).text
-                            } flex items-center justify-center shrink-0`}
+                            key={request.id}
+                            className={`bg-white p-4 rounded-xl ${
+                              request.urgent
+                                ? "border-l-4 border-l-orange-500"
+                                : "border border-[#e5e7eb]"
+                            } border-y border-r border-r-[#e5e7eb] border-y-[#e5e7eb] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:shadow-md transition-all`}
                           >
-                            <span className="font-bold text-sm">
-                              {request.initials}
-                            </span>
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-[#111418] group-hover:text-[#137fec] transition-colors">
-                              {request.title}
-                            </h4>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-[#617589]">
-                              <span className="flex items-center gap-1">
-                                <i className="fa-solid fa-user text-[14px]"></i>{" "}
-                                Sent by {request.sender}
-                              </span>
-                              <span className="hidden md:inline text-gray-300">
-                                •
-                              </span>
-                              <span
-                                className={`flex items-center gap-1 ${
-                                  request.urgent
-                                    ? "text-orange-600 font-medium"
-                                    : ""
-                                }`}
+                            <div className="flex items-start md:items-center gap-4">
+                              <div
+                                className={`size-10 rounded-full ${
+                                  getColorClasses(request.color).bg
+                                } ${
+                                  getColorClasses(request.color).text
+                                } flex items-center justify-center shrink-0`}
                               >
-                                <i className="fa-solid fa-calendar text-[14px]"></i>{" "}
-                                Due: {request.dueDate}
-                              </span>
+                                <span className="font-bold text-sm">
+                                  {request.initials}
+                                </span>
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-[#111418] group-hover:text-[#137fec] transition-colors">
+                                  {request.title}
+                                </h4>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-[#617589]">
+                                  <span className="flex items-center gap-1">
+                                    <i className="fa-solid fa-user text-[14px]"></i>{" "}
+                                    Sent by {request.sender}
+                                  </span>
+                                  <span className="hidden md:inline text-gray-300">
+                                    •
+                                  </span>
+                                  <span
+                                    className={`flex items-center gap-1 ${
+                                      request.urgent
+                                        ? "text-orange-600 font-medium"
+                                        : ""
+                                    }`}
+                                  >
+                                    <i className="fa-solid fa-calendar text-[14px]"></i>{" "}
+                                    Due: {request.dueDate}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-end w-full md:w-auto pl-14 md:pl-0">
+                              <button
+                                onClick={() => handleReviewAndSign(request.id)}
+                                className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#111418] text-white hover:bg-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+                              >
+                                <i className="fa-solid fa-pen-nib text-[16px]"></i>
+                                Review & Sign
+                              </button>
                             </div>
                           </div>
-                        </div>
-                        <div className="flex items-center justify-end w-full md:w-auto pl-14 md:pl-0">
-                          <button
-                            onClick={() => handleReviewAndSign(request.id)}
-                            className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#111418] text-white hover:bg-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
-                          >
-                            <i className="fa-solid fa-pen-nib text-[16px]"></i>
-                            Review & Sign
-                          </button>
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    )}
+                  </>
+                )}
+
+                {activeTab === "sent" && (
+                  <>
+                    {sentRequests.length === 0 ? (
+                      <div className="w-full bg-white p-8 rounded-xl border border-[#e5e7eb] text-center">
+                        <i className="fa-solid fa-paper-plane text-4xl text-[#617589] mb-3"></i>
+                        <p className="text-sm text-[#617589]">
+                          No signature requests sent by you
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="w-full grid grid-cols-1 gap-4">
+                        {sentRequests.map((request) => (
+                          <div
+                            key={request.id}
+                            className="bg-white p-4 rounded-xl border border-[#e5e7eb] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:shadow-md transition-all"
+                          >
+                            <div className="flex items-start md:items-center gap-4">
+                              <div
+                                className={`size-10 rounded-full ${
+                                  getColorClasses(request.color).bg
+                                } ${
+                                  getColorClasses(request.color).text
+                                } flex items-center justify-center shrink-0`}
+                              >
+                                <span className="font-bold text-sm">
+                                  {request.initials}
+                                </span>
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-[#111418] group-hover:text-[#137fec] transition-colors">
+                                  {request.title}
+                                </h4>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-[#617589]">
+                                  <span className="flex items-center gap-1">
+                                    <i className="fa-solid fa-circle-info text-[14px]"></i>{" "}
+                                    Status: {request.isCompleted ? "Completed" : "Pending"}
+                                  </span>
+                                  <span className="hidden md:inline text-gray-300">
+                                    •
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <i className="fa-solid fa-users text-[14px]"></i>{" "}
+                                    Signed: {request.signedProgress}
+                                  </span>
+                                  <span className="hidden md:inline text-gray-300">
+                                    •
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <i className="fa-solid fa-calendar text-[14px]"></i>{" "}
+                                    Due: {request.dueDate}
+                                  </span>
+                                </div>
+                                {/* Recipients status list chips */}
+                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                  {request.recipientsList.map((rec) => (
+                                    <span
+                                      key={rec.id || rec.email}
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
+                                        rec.status === "signed"
+                                          ? "bg-green-50 text-green-700 border-green-200"
+                                          : "bg-gray-50 text-gray-600 border-gray-200"
+                                      }`}
+                                    >
+                                      <i className={`fa-solid ${rec.status === "signed" ? "fa-circle-check text-green-500" : "fa-circle-notch fa-spin text-gray-400"}`}></i>
+                                      {rec.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-end w-full md:w-auto pl-14 md:pl-0">
+                              <button
+                                onClick={() => handleReviewAndSign(request.id)}
+                                className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#111418] text-white hover:bg-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+                              >
+                                <i className="fa-solid fa-eye text-[16px]"></i>
+                                View Status
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {activeTab === "completed" && (
+                  <>
+                    {completedRequests.length === 0 ? (
+                      <div className="w-full bg-white p-8 rounded-xl border border-[#e5e7eb] text-center">
+                        <i className="fa-solid fa-circle-check text-4xl text-[#617589] mb-3"></i>
+                        <p className="text-sm text-[#617589]">
+                          No completed signature requests
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="w-full grid grid-cols-1 gap-4">
+                        {completedRequests.map((request) => (
+                          <div
+                            key={request.id}
+                            className="bg-white p-4 rounded-xl border border-[#e5e7eb] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:shadow-md transition-all"
+                          >
+                            <div className="flex items-start md:items-center gap-4">
+                              <div
+                                className={`size-10 rounded-full ${
+                                  getColorClasses(request.color).bg
+                                } ${
+                                  getColorClasses(request.color).text
+                                } flex items-center justify-center shrink-0`}
+                              >
+                                <span className="font-bold text-sm">
+                                  {request.initials}
+                                </span>
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-[#111418] group-hover:text-[#137fec] transition-colors">
+                                  {request.title}
+                                </h4>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-[#617589]">
+                                  <span className="flex items-center gap-1">
+                                    <i className="fa-solid fa-user text-[14px]"></i>{" "}
+                                    Sent by {request.sender}
+                                  </span>
+                                  <span className="hidden md:inline text-gray-300">
+                                    •
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <i className="fa-solid fa-circle-check text-green-600"></i>{" "}
+                                    Completed
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-end w-full md:w-auto pl-14 md:pl-0">
+                              <button
+                                onClick={() => handleReviewAndSign(request.id)}
+                                className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#111418] text-white hover:bg-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+                              >
+                                <i className="fa-solid fa-file-contract text-[16px]"></i>
+                                View Document
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </section>
 

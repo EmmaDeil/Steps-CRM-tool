@@ -1281,7 +1281,7 @@ const EmployeeProfile = ({
                       <span className="text-xs text-gray-500 dark:text-gray-400">
                         Latest uploaded documents
                       </span>
-                      {(isHR || isOwnProfile) && (
+                      {isOwnProfile && (
                         <>
                           <input
                             ref={documentInputRef}
@@ -1364,7 +1364,7 @@ const EmployeeProfile = ({
                                   Download
                                 </button>
                               )}
-                              {(isHR || isOwnProfile) && (
+                              {isOwnProfile && (
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteDocument(idx)}
