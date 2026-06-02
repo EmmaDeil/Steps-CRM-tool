@@ -996,14 +996,23 @@ const CreateTicketModal = ({ onClose, onSuccess }) => {
   );
 };
 
-// Ticket detail modal (simplified)
 const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
+  const [currentTicket, setCurrentTicket] = useState(ticket);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [users, setUsers] = useState([]);
   const [assignedTo, setAssignedTo] = useState(ticket.assignedTo?._id || "");
   const [status, setStatus] = useState(ticket.status || "Open");
   const [updating, setUpdating] = useState(false);
+
+  const fetchCurrentTicket = async () => {
+    try {
+      const res = await apiService.get(`/api/maintenance/${ticket._id}`);
+      setCurrentTicket(res);
+    } catch (err) {
+      console.error("Failed to refetch ticket details", err);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -1024,6 +1033,7 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
   }, []);
 
   useEffect(() => {
+    setCurrentTicket(ticket);
     setAssignedTo(ticket.assignedTo?._id || "");
     setStatus(ticket.status || "Open");
   }, [ticket]);
@@ -1037,6 +1047,7 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
       setAssignedTo(val);
       toast.success(val ? "Ticket assigned successfully" : "Ticket unassigned");
       onUpdate();
+      await fetchCurrentTicket();
     } catch (err) {
       console.error(err);
       toast.error("Failed to assign ticket");
@@ -1052,6 +1063,7 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
       setStatus(val);
       toast.success("Status updated successfully");
       onUpdate();
+      await fetchCurrentTicket();
     } catch (err) {
       console.error(err);
       toast.error("Failed to update status");
@@ -1070,6 +1082,7 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
       toast.success("Comment added");
       setComment("");
       onUpdate();
+      await fetchCurrentTicket();
     } catch (err) {
       console.error(err);
       toast.error("Failed to add comment");
@@ -1083,7 +1096,7 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
       <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">
-            {ticket.ticketNumber} — {ticket.title}
+            {currentTicket.ticketNumber} — {currentTicket.title}
           </h3>
           <button
             onClick={onClose}
@@ -1093,25 +1106,25 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
           </button>
         </div>
         <div className="mb-4">
-          <p className="text-sm text-gray-600 font-medium">{ticket.description}</p>
+          <p className="text-sm text-gray-600 font-medium">{currentTicket.description}</p>
         </div>
 
         <div className="mb-4 grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg border border-slate-100">
           <div>
             <span className="text-gray-500 block">Category</span>
-            <span className="font-semibold text-gray-800">{ticket.category}</span>
+            <span className="font-semibold text-gray-800">{currentTicket.category}</span>
           </div>
           <div>
             <span className="text-gray-500 block">Building Location</span>
             <span className="font-semibold text-gray-800">
-              {ticket.location?.building || "—"}
-              {ticket.location?.floor ? `, Fl ${ticket.location.floor}` : ""}
-              {ticket.location?.room ? `, Rm ${ticket.location.room}` : ""}
+              {currentTicket.location?.building || "—"}
+              {currentTicket.location?.floor ? `, Fl ${currentTicket.location.floor}` : ""}
+              {currentTicket.location?.room ? `, Rm ${currentTicket.location.room}` : ""}
             </span>
           </div>
         </div>
 
-        {ticket.category === "Item Movement" && (
+        {currentTicket.category === "Item Movement" && (
           <div className="mb-4 p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl">
             <h4 className="text-sm font-bold text-indigo-900 mb-2 flex items-center gap-1.5">
               <i className="fa-solid fa-truck-ramp-box text-indigo-600" />
@@ -1120,39 +1133,77 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <div>
                 <span className="text-gray-500 block">Movement Type</span>
-                <span className="font-semibold text-gray-800">{ticket.movementType || "N/A"}</span>
+                <span className="font-semibold text-gray-800">{currentTicket.movementType || "N/A"}</span>
               </div>
-              {ticket.movementType === "Temporary" && (
+              {currentTicket.movementType === "Temporary" && (
                 <div>
                   <span className="text-gray-500 block">Scheduled Return Time</span>
                   <span className="font-semibold text-amber-700">
-                    {ticket.returnDate ? new Date(ticket.returnDate).toLocaleString() : "N/A"}
+                    {currentTicket.returnDate ? new Date(currentTicket.returnDate).toLocaleString() : "N/A"}
                   </span>
                 </div>
               )}
               <div>
                 <span className="text-gray-500 block">From (Source Location)</span>
-                <span className="font-semibold text-gray-800">{ticket.fromLocation || "N/A"}</span>
+                <span className="font-semibold text-gray-800">{currentTicket.fromLocation || "N/A"}</span>
               </div>
               <div>
                 <span className="text-gray-500 block">To (Destination Location)</span>
-                <span className="font-semibold text-gray-800">{ticket.toLocation || "N/A"}</span>
+                <span className="font-semibold text-gray-800">{currentTicket.toLocation || "N/A"}</span>
               </div>
             </div>
           </div>
         )}
 
-        <div className="mb-4">
-          <h4 className="font-medium mb-2">Comments</h4>
-          {(ticket.comments || []).map((c) => (
-            <div key={c.timestamp} className="border-b py-2">
-              <div className="text-sm text-gray-700">{c.comment}</div>
-              <div className="text-xs text-gray-400">
-                {new Date(c.timestamp).toLocaleString()}
-              </div>
+        {currentTicket.attachments && currentTicket.attachments.length > 0 && (
+          <div className="mb-4 bg-slate-50 border border-slate-100 p-4 rounded-xl">
+            <h4 className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-1.5">
+              <i className="fa-solid fa-paperclip text-blue-600" />
+              Supporting Documents
+            </h4>
+            <div className="space-y-2">
+              {currentTicket.attachments.map((att, idx) => (
+                <div key={idx} className="flex items-center justify-between border rounded-lg bg-white p-2 text-sm">
+                  <span className="truncate text-gray-700 font-medium max-w-md" title={att.filename}>
+                    {att.filename}
+                  </span>
+                  <a
+                    href={att.url}
+                    download={att.filename || `document_${idx}`}
+                    className="ml-4 text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1.5"
+                  >
+                    <i className="fa-solid fa-download text-xs" />
+                    Download
+                  </a>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+        )}
+
+        <div className="mb-4">
+          <h4 className="font-semibold text-sm text-gray-700 mb-2">Comments</h4>
+          {(currentTicket.comments && currentTicket.comments.length > 0) ? (
+            <div className="space-y-3 max-h-60 overflow-y-auto mb-3 pr-1">
+              {currentTicket.comments.map((c, idx) => (
+                <div key={idx} className="border-b border-slate-100 pb-2.5 last:border-0 last:pb-0 text-sm">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-semibold text-gray-800">
+                      {c.user ? `${c.user.firstName || ""} ${c.user.lastName || ""}` : "System / Unknown"}
+                    </span>
+                    <span className="text-[11px] text-gray-400">
+                      {new Date(c.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="text-gray-600 bg-slate-50/50 p-2 rounded-lg border border-slate-100">{c.comment}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm italic mb-3">No comments yet.</p>
+          )}
         </div>
+
         <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -1197,7 +1248,7 @@ const TicketDetailModal = ({ ticket, onClose, onUpdate }) => {
               Work Log
             </label>
             <div className="max-h-40 overflow-y-auto border rounded p-2 bg-gray-50">
-              {(ticket.workLog || [])
+              {(currentTicket.workLog || [])
                 .slice()
                 .reverse()
                 .map((w, idx) => (

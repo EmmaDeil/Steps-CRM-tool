@@ -107,6 +107,7 @@ const Approval = () => {
 
   const [facilityRequests, setFacilityRequests] = useState([]);
   const [showFacilityForm, setShowFacilityForm] = useState(false);
+  const [facilityFormLoading, setFacilityFormLoading] = useState(false);
   const [facilityFormData, setFacilityFormData] = useState({
     title: "",
     description: "",
@@ -119,7 +120,9 @@ const Approval = () => {
     floor: "",
     room: "",
     priority: "Medium",
-    issueCategory: "General Maintenance"
+    issueCategory: "General Maintenance",
+    attachment: "",
+    attachmentName: ""
   });
 
   const [leaveAllocation, setLeaveAllocation] = useState(null);
@@ -660,6 +663,7 @@ const Approval = () => {
       category = "Other";
     }
 
+    setFacilityFormLoading(true);
     try {
       const response = await apiService.post("/api/maintenance", {
         title: facilityFormData.title,
@@ -674,7 +678,13 @@ const Approval = () => {
         movementType: facilityFormData.requestType === "Item Movement" ? facilityFormData.movementType : undefined,
         fromLocation: facilityFormData.requestType === "Item Movement" ? facilityFormData.fromLocation : undefined,
         toLocation: facilityFormData.requestType === "Item Movement" ? facilityFormData.toLocation : undefined,
-        returnDate: (facilityFormData.requestType === "Item Movement" && facilityFormData.movementType === "Temporary") ? facilityFormData.returnDate : undefined
+        returnDate: (facilityFormData.requestType === "Item Movement" && facilityFormData.movementType === "Temporary") ? facilityFormData.returnDate : undefined,
+        attachments: facilityFormData.attachment ? [
+          {
+            filename: facilityFormData.attachmentName,
+            url: facilityFormData.attachment
+          }
+        ] : []
       });
 
       if (!response) {
@@ -693,7 +703,9 @@ const Approval = () => {
         floor: "",
         room: "",
         priority: "Medium",
-        issueCategory: "General Maintenance"
+        issueCategory: "General Maintenance",
+        attachment: "",
+        attachmentName: ""
       });
       setShowFacilityForm(false);
       toast.success("Facility request submitted successfully!");
@@ -701,6 +713,8 @@ const Approval = () => {
     } catch (error) {
       console.error("Error submitting facility request:", error);
       toast.error(error.response?.data?.error || "Failed to submit facility request");
+    } finally {
+      setFacilityFormLoading(false);
     }
   };
 
@@ -2605,19 +2619,93 @@ const Approval = () => {
                 </div>
               </div>
 
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Supporting Documents (Optional)
+                </label>
+                {!facilityFormData.attachment ? (
+                  <div className="flex justify-center rounded-lg border-2 border-dashed border-slate-300 px-6 py-6 transition-colors hover:border-slate-400">
+                    <div className="text-center">
+                      <i className="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2" />
+                      <div className="mt-1 flex text-sm text-slate-600 justify-center">
+                        <label className="relative cursor-pointer rounded-md bg-white font-semibold text-blue-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 hover:text-blue-500">
+                          <span>Upload a file</span>
+                          <input
+                            type="file"
+                            className="sr-only"
+                            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  setFacilityFormData((prev) => ({
+                                    ...prev,
+                                    attachment: reader.result,
+                                    attachmentName: file.name,
+                                  }));
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">PDF, PNG, JPG, or DOC up to 5MB</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                        <i className="fa-solid fa-file-lines" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 truncate max-w-xs" title={facilityFormData.attachmentName}>
+                          {facilityFormData.attachmentName}
+                        </p>
+                        <p className="text-xs text-slate-500">Ready to upload</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFacilityFormData((prev) => ({
+                          ...prev,
+                          attachment: "",
+                          attachmentName: "",
+                        }));
+                      }}
+                      className="rounded-full p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                    >
+                      <i className="fa-solid fa-trash-can" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 flex-shrink-0">
                 <button
                   type="button"
+                  disabled={facilityFormLoading}
                   onClick={() => setShowFacilityForm(false)}
-                  className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                  className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-sm"
+                  disabled={facilityFormLoading}
+                  className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2 min-w-[120px]"
                 >
-                  Submit Request
+                  {facilityFormLoading ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin text-sm" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit Request"
+                  )}
                 </button>
               </div>
             </form>
@@ -2918,6 +3006,31 @@ const Approval = () => {
                     </span>
                     <i className="fa-solid fa-download text-xs" />
                   </a>
+                </div>
+              )}
+
+              {/* Attachments array for facility request */}
+              {selectedMyRequest.attachments && selectedMyRequest.attachments.length > 0 && (
+                <div className="border-t border-slate-100 pt-4">
+                  <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                    Supporting Documents
+                  </span>
+                  <div className="space-y-2">
+                    {selectedMyRequest.attachments.map((att, idx) => (
+                      <a
+                        key={idx}
+                        href={att.url}
+                        download={att.filename || `document_${idx}`}
+                        className="inline-flex w-full items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                      >
+                        <span className="flex items-center gap-2 truncate">
+                          <i className="fa-solid fa-paperclip text-xs" />
+                          <span className="truncate">{att.filename || `document_${idx}`}</span>
+                        </span>
+                        <i className="fa-solid fa-download text-xs" />
+                      </a>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

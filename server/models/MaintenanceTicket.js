@@ -178,17 +178,24 @@ maintenanceTicketSchema.pre("validate", async function (next) {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
+    const prefix = `MT-${year}${month}-`;
 
-    // Count today's tickets to generate sequential number
-    const count = await mongoose.model("MaintenanceTicket").countDocuments({
-      createdAt: {
-        $gte: startOfDay,
-      },
-    });
+    // Find the latest ticket with this prefix (highest sequence number)
+    const latestTicket = await mongoose.model("MaintenanceTicket")
+      .findOne({ ticketNumber: new RegExp(`^${prefix}`) })
+      .sort({ ticketNumber: -1 })
+      .exec();
 
-    this.ticketNumber = `MT-${year}${month}-${String(count + 1).padStart(4, "0")}`;
+    let sequence = 1;
+    if (latestTicket && latestTicket.ticketNumber) {
+      const parts = latestTicket.ticketNumber.split("-");
+      const lastSeq = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(lastSeq)) {
+        sequence = lastSeq + 1;
+      }
+    }
+
+    this.ticketNumber = `${prefix}${String(sequence).padStart(4, "0")}`;
     next();
   } catch (error) {
     next(error);
