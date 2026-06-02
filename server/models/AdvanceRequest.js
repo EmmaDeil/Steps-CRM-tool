@@ -12,6 +12,8 @@ const advanceRequestSchema = new mongoose.Schema({
   approver: { type: String, required: false }, // Made optional for rule-based approval
   approverEmail: { type: String, required: false },
   repaymentPeriod: { type: String },
+  attachment: { type: String },
+  attachmentName: { type: String },
   // Multi-level approval fields
   usesRuleBasedApproval: { type: Boolean, default: false },
   approvalRuleId: { type: mongoose.Schema.Types.ObjectId, ref: 'ApprovalRule' },

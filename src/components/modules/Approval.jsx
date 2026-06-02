@@ -10,6 +10,8 @@ const initialAdvanceForm = {
   reason: "",
   currency: "USD",
   purpose: "",
+  attachment: "",
+  attachmentName: "",
 };
 
 const initialRefundForm = {
@@ -29,6 +31,8 @@ const initialLeaveForm = {
   managerId: "",
   managerName: "",
   managerEmail: "",
+  attachment: "",
+  attachmentName: "",
 };
 
 const initialTravelForm = {
@@ -90,6 +94,8 @@ const Approval = () => {
   const [showRefundForm, setShowRefundForm] = useState(false);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [showTravelForm, setShowTravelForm] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [activeHistoryPill, setActiveHistoryPill] = useState("all");
 
   const [advanceFormData, setAdvanceFormData] = useState(initialAdvanceForm);
   const [refundFormData, setRefundFormData] = useState(initialRefundForm);
@@ -353,7 +359,7 @@ const Approval = () => {
     e.preventDefault();
 
     if (!advanceFormData.amount || Number(advanceFormData.amount) <= 0) {
-      console.warn("Validation failed: invalid advance amount");
+      toast.error("Invalid advance amount");
       return;
     }
 
@@ -367,6 +373,8 @@ const Approval = () => {
         reason: advanceFormData.reason,
         currency: advanceFormData.currency,
         purpose: advanceFormData.purpose,
+        attachment: advanceFormData.attachment || null,
+        attachmentName: advanceFormData.attachmentName || null,
         status: "pending",
         requestDate: new Date().toISOString().split("T")[0],
         hasRetirement: false,
@@ -378,9 +386,11 @@ const Approval = () => {
 
       setAdvanceFormData(initialAdvanceForm);
       setShowAdvanceForm(false);
+      toast.success("Advance request submitted successfully!");
       await fetchData();
     } catch (error) {
       console.error("Error submitting advance request:", error);
+      toast.error("Failed to submit advance request");
     }
   };
 
@@ -433,7 +443,12 @@ const Approval = () => {
       !leaveFormData.fromDate ||
       !leaveFormData.toDate
     ) {
-      console.warn("Validation failed: leave type and dates are required");
+      toast.error("Leave type and dates are required");
+      return;
+    }
+
+    if (!leaveFormData.attachment) {
+      toast.error("An attachment is required to submit a leave request");
       return;
     }
 
@@ -442,7 +457,7 @@ const Approval = () => {
       remainingLeave.remaining < 0 &&
       leaveFormData.leaveType !== "unpaid"
     ) {
-      console.warn("Validation failed: insufficient leave balance");
+      toast.error("Insufficient leave balance");
       return;
     }
 
@@ -457,6 +472,8 @@ const Approval = () => {
         toDate: leaveFormData.toDate,
         days: calculatedDays,
         reason: leaveFormData.reason,
+        attachment: leaveFormData.attachment,
+        attachmentName: leaveFormData.attachmentName,
         managerId: leaveFormData.managerId,
         managerName: leaveFormData.managerName,
         managerEmail: leaveFormData.managerEmail,
@@ -492,9 +509,11 @@ const Approval = () => {
         managerEmail: prev.managerEmail,
       }));
       setShowLeaveForm(false);
+      toast.success("Leave request submitted successfully!");
       await fetchData();
     } catch (error) {
       console.error("Error submitting leave request:", error);
+      toast.error("Failed to submit leave request");
     }
   };
 
@@ -687,6 +706,49 @@ const Approval = () => {
     </div>
   );
 
+  const getLeaveTypeAllocationInfo = () => {
+    if (!leaveFormData.leaveType || !leaveAllocation) return { allocated: 0, used: 0, available: 0 };
+    
+    let allocated = 0;
+    let used = 0;
+    switch (leaveFormData.leaveType) {
+      case "annual":
+        allocated = leaveAllocation.annualLeave || 0;
+        used = leaveAllocation.annualLeaveUsed || 0;
+        break;
+      case "sick":
+        allocated = leaveAllocation.sickLeave || 0;
+        used = leaveAllocation.sickLeaveUsed || 0;
+        break;
+      case "personal":
+        allocated = leaveAllocation.personalLeave || 0;
+        used = leaveAllocation.personalLeaveUsed || 0;
+        break;
+      case "unpaid":
+        allocated = 999;
+        used = 0;
+        break;
+      default:
+        allocated = 0;
+        used = 0;
+    }
+    return {
+      allocated,
+      used,
+      available: allocated === 999 ? "Unlimited" : allocated - used
+    };
+  };
+
+  const allocationInfo = getLeaveTypeAllocationInfo();
+
+  const historyPills = [
+    { id: "all", label: "All History", icon: "fa-list-ul", count: advanceRequests.length + refundRequests.length + leaveRequests.length + travelRequests.length },
+    { id: "leave", label: "Leaves", icon: "fa-calendar-days", count: leaveRequests.length },
+    { id: "travel", label: "Travels", icon: "fa-plane", count: travelRequests.length },
+    { id: "advance", label: "Advances", icon: "fa-wallet", count: advanceRequests.length },
+    { id: "refund", label: "Refunds", icon: "fa-money-bill-transfer", count: refundRequests.length },
+  ];
+
   return (
     <div className="min-h-screen w-full bg-slate-50 px-1">
       <Breadcrumb
@@ -696,9 +758,98 @@ const Approval = () => {
         ]}
       />
 
+      {/* Dynamic Action Page Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between px-6 pt-6 pb-2 gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold text-[#111418] tracking-tight">Approvals & Requests</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Submit advance, refund, leave, and travel requests, and approve team submissions.
+          </p>
+        </div>
+        <div className="relative">
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <i className="fa-solid fa-plus text-xs" />
+            <span>New Request</span>
+            <i className="fa-solid fa-chevron-down text-xs ml-1" />
+          </button>
+          
+          {dropdownOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setDropdownOpen(false)} />
+              <div className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-lg z-20">
+                <button
+                  onClick={() => {
+                    setShowAdvanceForm(true);
+                    setDropdownOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-100 text-blue-600">
+                    <i className="fa-solid fa-wallet text-xs" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900">Advance Expense</p>
+                    <p className="text-xs text-slate-500">Request cash or prepayment</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRefundForm(true);
+                    setDropdownOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-100 text-emerald-600">
+                    <i className="fa-solid fa-money-bill-transfer text-xs" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900">Refund</p>
+                    <p className="text-xs text-slate-500">Expense reimbursements</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLeaveForm(true);
+                    setDropdownOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-orange-100 text-orange-600">
+                    <i className="fa-solid fa-calendar-days text-xs" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900">Leave Request</p>
+                    <p className="text-xs text-slate-500">Annual or sick leave</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowTravelForm(true);
+                    setDropdownOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-100 text-indigo-600">
+                    <i className="fa-solid fa-plane text-xs" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900">Travel Request</p>
+                    <p className="text-xs text-slate-500">Plan business travel</p>
+                  </div>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
       <div className="space-y-6 p-4 md:p-6">
         {loading ? <ModuleLoader moduleName="Approvals" /> : null}
 
+        {/* Metrics Grid */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {requestSummary.map((item) => {
             const theme = summaryTheme[item.accent];
@@ -706,11 +857,11 @@ const Approval = () => {
             return (
               <div
                 key={item.title}
-                className="rounded-xl border border-[#dbe0e6] bg-white p-5 shadow-sm"
+                className="rounded-xl border border-[#dbe0e6] bg-white p-5 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm text-[#617589]">{item.title}</p>
+                    <p className="text-sm text-[#617589] font-medium">{item.title}</p>
                     <p className="mt-1 text-3xl font-bold text-[#111418]">
                       {item.count}
                     </p>
@@ -723,149 +874,9 @@ const Approval = () => {
                     />
                   </div>
                 </div>
-                <button
-                  onClick={item.onNew}
-                  className={`mt-4 w-full rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors ${theme.button}`}
-                >
-                  New Request
-                </button>
               </div>
             );
           })}
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <div className="rounded-2xl border border-[#dbe0e6] bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold text-[#111418]">
-                  Request Center
-                </h2>
-                <p className="mt-1 text-sm text-[#617589]">
-                  Create advance, refund, leave, and travel requests from one
-                  place.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <button
-                onClick={() => setShowAdvanceForm(true)}
-                className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 text-left transition-colors hover:bg-blue-100"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white">
-                    <i className="fa-solid fa-wallet" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      Advance Expense
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Request cash or prepayment
-                    </p>
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setShowRefundForm(true)}
-                className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-left transition-colors hover:bg-emerald-100"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600 text-white">
-                    <i className="fa-solid fa-money-bill-transfer" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">Refund</p>
-                    <p className="text-sm text-slate-600">
-                      Submit expense reimbursements
-                    </p>
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setShowLeaveForm(true)}
-                className="rounded-xl border border-orange-200 bg-orange-50 px-5 py-4 text-left transition-colors hover:bg-orange-100"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-600 text-white">
-                    <i className="fa-solid fa-calendar-days" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      Leave Request
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Apply for annual or sick leave
-                    </p>
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setShowTravelForm(true)}
-                className="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4 text-left transition-colors hover:bg-indigo-100"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-600 text-white">
-                    <i className="fa-solid fa-plane" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      Travel Request
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Plan business travel
-                    </p>
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-[#dbe0e6] bg-white p-6 shadow-sm">
-            <h2 className="text-2xl font-bold text-[#111418]">Leave Balance</h2>
-            {leaveAllocation ? (
-              <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-slate-500">Annual Leave</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">
-                    {leaveAllocation.annualLeave || 0}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-slate-500">Sick Leave</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">
-                    {leaveAllocation.sickLeave || 0}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-slate-500">Personal Leave</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">
-                    {leaveAllocation.personalLeave || 0}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-slate-500">Requested Days</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">
-                    {calculatedDays}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-5 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-                Leave allocation is not available yet.
-              </div>
-            )}
-
-            {remainingLeave ? (
-              <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-900">
-                Remaining balance after request: {remainingLeave.remaining}
-              </div>
-            ) : null}
-          </div>
         </div>
 
         {/* Tab Navigation */}
@@ -898,97 +909,353 @@ const Approval = () => {
         </div>
 
         {activeTab === "my-requests" ? (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {renderTable(
-                "Advance History",
-                advanceRequests.map((request) => ({
-                  id: request._id || request.id,
-                  cells: [
-                    request.requestDate
-                      ? formatDate(request.requestDate)
-                      : formatDate(request.createdAt),
-                    request.purpose || "N/A",
-                    formatMoney(request.amount, request.currency),
-                    request.approver || "Auto-assigned",
-                    <span
-                      key={`${request._id || request.id}-status`}
-                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                    >
-                      {request.status || "pending"}
-                    </span>,
-                  ],
-                })),
-                ["Date", "Purpose", "Amount", "Approver", "Status"],
-                "No advance requests found.",
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+            {/* Left Column: History filter and tables */}
+            <div className="lg:col-span-3 space-y-6">
+              {/* Pills Filter */}
+              <div className="flex flex-wrap gap-2 pb-2">
+                {historyPills.map((pill) => (
+                  <button
+                    key={pill.id}
+                    onClick={() => setActiveHistoryPill(pill.id)}
+                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all ${
+                      activeHistoryPill === pill.id
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    <i className={`fa-solid ${pill.icon} text-xs`} />
+                    <span>{pill.label}</span>
+                    <span className={`ml-1 rounded-full px-2 py-0.5 text-xs font-bold ${
+                      activeHistoryPill === pill.id
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-500"
+                    }`}>
+                      {pill.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Dynamic Tables rendering based on pill selection */}
+              {activeHistoryPill === "all" && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    {renderTable(
+                      "Advance History",
+                      advanceRequests.map((request) => ({
+                        id: request._id || request.id,
+                        cells: [
+                          request.requestDate
+                            ? formatDate(request.requestDate)
+                            : formatDate(request.createdAt),
+                          request.purpose || "N/A",
+                          formatMoney(request.amount, request.currency),
+                          request.approver || "Auto-assigned",
+                          request.attachment ? (
+                            <a
+                              href={request.attachment}
+                              download={request.attachmentName || "attachment"}
+                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold"
+                              title={request.attachmentName}
+                            >
+                              <i className="fa-solid fa-paperclip text-xs" />
+                              <span className="max-w-[80px] truncate text-xs">{request.attachmentName || "View"}</span>
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 text-xs">None</span>
+                          ),
+                          <span
+                            key={`${request._id || request.id}-status`}
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                          >
+                            {request.status || "pending"}
+                          </span>,
+                        ],
+                      })),
+                      ["Date", "Purpose", "Amount", "Approver", "Attachment", "Status"],
+                      "No advance requests found.",
+                    )}
+
+                    {renderTable(
+                      "Refund History",
+                      refundRequests.map((request) => ({
+                        id: request._id || request.id,
+                        cells: [
+                          request.requestDate
+                            ? formatDate(request.requestDate)
+                            : formatDate(request.createdAt),
+                          request.category || "N/A",
+                          formatMoney(request.amount, request.currency),
+                          request.approver || "Auto-assigned",
+                          <span
+                            key={`${request._id || request.id}-status`}
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                          >
+                            {request.status || "pending"}
+                          </span>,
+                        ],
+                      })),
+                      ["Date", "Category", "Amount", "Approver", "Status"],
+                      "No refund requests found.",
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    {renderTable(
+                      "Leave History",
+                      leaveRequests.map((request) => ({
+                        id: request._id || request.id,
+                        cells: [
+                          `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
+                          request.leaveType || "Leave",
+                          `${request.days || 0} day(s)`,
+                          request.managerName || "Manager",
+                          request.attachment ? (
+                            <a
+                              href={request.attachment}
+                              download={request.attachmentName || "attachment"}
+                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold"
+                              title={request.attachmentName}
+                            >
+                              <i className="fa-solid fa-paperclip text-xs" />
+                              <span className="max-w-[80px] truncate text-xs">{request.attachmentName || "View"}</span>
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 text-xs">None</span>
+                          ),
+                          <span
+                            key={`${request._id || request.id}-status`}
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                          >
+                            {request.status || "pending"}
+                          </span>,
+                        ],
+                      })),
+                      ["Dates", "Type", "Days", "Approver", "Attachment", "Status"],
+                      "No leave requests found.",
+                    )}
+
+                    {renderTable(
+                      "Travel History",
+                      travelRequests.map((request) => ({
+                        id: request._id || request.id,
+                        cells: [
+                          `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
+                          request.destination || "N/A",
+                          request.budget ? formatMoney(request.budget) : "N/A",
+                          request.managerName || "Manager",
+                          <span
+                            key={`${request._id || request.id}-status`}
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                          >
+                            {request.status || "pending"}
+                          </span>,
+                        ],
+                      })),
+                      ["Dates", "Destination", "Budget", "Approver", "Status"],
+                      "No travel requests found.",
+                    )}
+                  </div>
+                </div>
               )}
 
-              {renderTable(
-                "Refund History",
-                refundRequests.map((request) => ({
-                  id: request._id || request.id,
-                  cells: [
-                    request.requestDate
-                      ? formatDate(request.requestDate)
-                      : formatDate(request.createdAt),
-                    request.category || "N/A",
-                    formatMoney(request.amount, request.currency),
-                    request.approver || "Auto-assigned",
-                    <span
-                      key={`${request._id || request.id}-status`}
-                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                    >
-                      {request.status || "pending"}
-                    </span>,
-                  ],
-                })),
-                ["Date", "Category", "Amount", "Approver", "Status"],
-                "No refund requests found.",
+              {activeHistoryPill === "advance" && (
+                renderTable(
+                  "Advance History",
+                  advanceRequests.map((request) => ({
+                    id: request._id || request.id,
+                    cells: [
+                      request.requestDate
+                        ? formatDate(request.requestDate)
+                        : formatDate(request.createdAt),
+                      request.purpose || "N/A",
+                      formatMoney(request.amount, request.currency),
+                      request.approver || "Auto-assigned",
+                      request.attachment ? (
+                        <a
+                          href={request.attachment}
+                          download={request.attachmentName || "attachment"}
+                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold"
+                          title={request.attachmentName}
+                        >
+                          <i className="fa-solid fa-paperclip text-xs" />
+                          <span className="max-w-[80px] truncate text-xs">{request.attachmentName || "View"}</span>
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 text-xs">None</span>
+                      ),
+                      <span
+                        key={`${request._id || request.id}-status`}
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                      >
+                        {request.status || "pending"}
+                      </span>,
+                    ],
+                  })),
+                  ["Date", "Purpose", "Amount", "Approver", "Attachment", "Status"],
+                  "No advance requests found.",
+                )
+              )}
+
+              {activeHistoryPill === "refund" && (
+                renderTable(
+                  "Refund History",
+                  refundRequests.map((request) => ({
+                    id: request._id || request.id,
+                    cells: [
+                      request.requestDate
+                        ? formatDate(request.requestDate)
+                        : formatDate(request.createdAt),
+                      request.category || "N/A",
+                      formatMoney(request.amount, request.currency),
+                      request.approver || "Auto-assigned",
+                      <span
+                        key={`${request._id || request.id}-status`}
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                      >
+                        {request.status || "pending"}
+                      </span>,
+                    ],
+                  })),
+                  ["Date", "Category", "Amount", "Approver", "Status"],
+                  "No refund requests found.",
+                )
+              )}
+
+              {activeHistoryPill === "leave" && (
+                renderTable(
+                  "Leave History",
+                  leaveRequests.map((request) => ({
+                    id: request._id || request.id,
+                    cells: [
+                      `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
+                      request.leaveType || "Leave",
+                      `${request.days || 0} day(s)`,
+                      request.managerName || "Manager",
+                      request.attachment ? (
+                        <a
+                          href={request.attachment}
+                          download={request.attachmentName || "attachment"}
+                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold"
+                          title={request.attachmentName}
+                        >
+                          <i className="fa-solid fa-paperclip text-xs" />
+                          <span className="max-w-[80px] truncate text-xs">{request.attachmentName || "View"}</span>
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 text-xs">None</span>
+                      ),
+                      <span
+                        key={`${request._id || request.id}-status`}
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                      >
+                        {request.status || "pending"}
+                      </span>,
+                    ],
+                  })),
+                  ["Dates", "Type", "Days", "Approver", "Attachment", "Status"],
+                  "No leave requests found.",
+                )
+              )}
+
+              {activeHistoryPill === "travel" && (
+                renderTable(
+                  "Travel History",
+                  travelRequests.map((request) => ({
+                    id: request._id || request.id,
+                    cells: [
+                      `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
+                      request.destination || "N/A",
+                      request.budget ? formatMoney(request.budget) : "N/A",
+                      request.managerName || "Manager",
+                      <span
+                        key={`${request._id || request.id}-status`}
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
+                      >
+                        {request.status || "pending"}
+                      </span>,
+                    ],
+                  })),
+                  ["Dates", "Destination", "Budget", "Approver", "Status"],
+                  "No travel requests found.",
+                )
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {renderTable(
-                "Leave History",
-                leaveRequests.map((request) => ({
-                  id: request._id || request.id,
-                  cells: [
-                    `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
-                    request.leaveType || "Leave",
-                    `${request.days || 0} day(s)`,
-                    request.managerName || "Manager",
-                    <span
-                      key={`${request._id || request.id}-status`}
-                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                    >
-                      {request.status || "pending"}
-                    </span>,
-                  ],
-                })),
-                ["Dates", "Type", "Days", "Approver", "Status"],
-                "No leave requests found.",
-              )}
+            {/* Right Column: Leave Balance Widget */}
+            <div className="lg:col-span-1">
+              <div className="rounded-2xl border border-[#dbe0e6] bg-white p-6 shadow-sm sticky top-6">
+                <h3 className="text-lg font-bold text-[#111418] border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+                  <i className="fa-solid fa-chart-simple text-blue-600 text-sm" />
+                  Leave Balance
+                </h3>
+                {leaveAllocation ? (
+                  <div className="space-y-3.5 text-sm">
+                    <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between transition-all hover:bg-slate-100/70">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Annual Leave</p>
+                        <p className="mt-1 text-2xl font-bold text-slate-900">
+                          {leaveAllocation.annualLeave || 0}
+                        </p>
+                      </div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+                        <i className="fa-solid fa-calendar-days text-lg" />
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between transition-all hover:bg-slate-100/70">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sick Leave</p>
+                        <p className="mt-1 text-2xl font-bold text-slate-900">
+                          {leaveAllocation.sickLeave || 0}
+                        </p>
+                      </div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                        <i className="fa-solid fa-notes-medical text-lg" />
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between transition-all hover:bg-slate-100/70">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Personal Leave</p>
+                        <p className="mt-1 text-2xl font-bold text-slate-900">
+                          {leaveAllocation.personalLeave || 0}
+                        </p>
+                      </div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                        <i className="fa-solid fa-user-clock text-lg" />
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between transition-all hover:bg-slate-100/70">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Requested Days</p>
+                        <p className="mt-1 text-2xl font-bold text-slate-900 text-slate-600">
+                          {calculatedDays}
+                        </p>
+                      </div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                        <i className="fa-solid fa-clock text-lg" />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500 text-center">
+                    Leave allocation is not available yet.
+                  </div>
+                )}
 
-              {renderTable(
-                "Travel History",
-                travelRequests.map((request) => ({
-                  id: request._id || request.id,
-                  cells: [
-                    `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
-                    request.destination || "N/A",
-                    request.budget ? formatMoney(request.budget) : "N/A",
-                    request.managerName || "Manager",
-                    <span
-                      key={`${request._id || request.id}-status`}
-                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                    >
-                      {request.status || "pending"}
-                    </span>,
-                  ],
-                })),
-                ["Dates", "Destination", "Budget", "Approver", "Status"],
-                "No travel requests found.",
-              )}
+                {remainingLeave ? (
+                  <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-900 border border-blue-100">
+                    <div className="flex gap-2">
+                      <i className="fa-solid fa-circle-info mt-0.5 text-blue-600" />
+                      <div>
+                        <span className="font-semibold">Remaining Balance:</span>
+                        <span className="ml-1 font-bold">{remainingLeave.remaining} days</span>
+                        <p className="text-xs text-blue-700 mt-1">Estimated remaining balance after current request approval.</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         ) : (
@@ -1013,6 +1280,7 @@ const Approval = () => {
                       <th className="px-6 py-3 font-semibold text-slate-600">Requester</th>
                       <th className="px-6 py-3 font-semibold text-slate-600">Type</th>
                       <th className="px-6 py-3 font-semibold text-slate-600">Details</th>
+                      <th className="px-6 py-3 font-semibold text-slate-600 font-medium">Attachment</th>
                       <th className="px-6 py-3 font-semibold text-slate-600">Date</th>
                       <th className="px-6 py-3 font-semibold text-slate-600 text-right">Actions</th>
                     </tr>
@@ -1033,6 +1301,21 @@ const Approval = () => {
                         </td>
                         <td className="px-6 py-4 text-slate-600 max-w-xs truncate" title={req.details}>
                           {req.details}
+                        </td>
+                        <td className="px-6 py-4">
+                          {req.attachment ? (
+                            <a
+                              href={req.attachment}
+                              download={req.attachmentName || "attachment"}
+                              className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-semibold"
+                              title={req.attachmentName}
+                            >
+                              <i className="fa-solid fa-paperclip text-xs" />
+                              <span className="max-w-[100px] truncate text-xs">{req.attachmentName || "View"}</span>
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 text-xs">None</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-slate-500">{formatDate(req.date)}</td>
                         <td className="px-6 py-4 text-right flex justify-end gap-2">
@@ -1092,6 +1375,25 @@ const Approval = () => {
                   {selectedPendingRequest.details}
                 </p>
               </div>
+
+              {selectedPendingRequest.attachment && (
+                <div>
+                  <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                    Supporting Attachment
+                  </span>
+                  <a
+                    href={selectedPendingRequest.attachment}
+                    download={selectedPendingRequest.attachmentName || "attachment"}
+                    className="inline-flex w-full items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <i className="fa-solid fa-paperclip text-xs" />
+                      <span className="truncate">{selectedPendingRequest.attachmentName || "Download Attachment"}</span>
+                    </span>
+                    <i className="fa-solid fa-download text-xs" />
+                  </a>
+                </div>
+              )}
 
               <div>
                 <label className="mb-2 block text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -1230,6 +1532,70 @@ const Approval = () => {
                     <option value="NGN">NGN</option>
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Supporting Document
+                </label>
+                {!advanceFormData.attachment ? (
+                  <div className="flex justify-center rounded-lg border-2 border-dashed border-slate-300 px-6 py-6 transition-colors hover:border-slate-400">
+                    <div className="text-center">
+                      <i className="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2" />
+                      <div className="mt-1 flex text-sm text-slate-600 justify-center">
+                        <label className="relative cursor-pointer rounded-md bg-white font-semibold text-blue-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 hover:text-blue-500">
+                          <span>Upload a file</span>
+                          <input
+                            type="file"
+                            className="sr-only"
+                            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  setAdvanceFormData((prev) => ({
+                                    ...prev,
+                                    attachment: reader.result,
+                                    attachmentName: file.name,
+                                  }));
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">PDF, PNG, JPG, or DOC up to 5MB</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                        <i className="fa-solid fa-file-lines" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 truncate max-w-xs" title={advanceFormData.attachmentName}>
+                          {advanceFormData.attachmentName}
+                        </p>
+                        <p className="text-xs text-slate-500">Ready to upload</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdvanceFormData((prev) => ({
+                          ...prev,
+                          attachment: "",
+                          attachmentName: "",
+                        }));
+                      }}
+                      className="rounded-full p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                    >
+                      <i className="fa-solid fa-trash-can" />
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex gap-3 pt-2">
                 <button
@@ -1449,6 +1815,39 @@ const Approval = () => {
                   </div>
                 </div>
               </div>
+
+              {leaveFormData.leaveType && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Total Allocation
+                    </label>
+                    <input
+                      type="text"
+                      value={allocationInfo.allocated === 999 ? "Unlimited" : `${allocationInfo.allocated} days`}
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600 cursor-not-allowed"
+                      readOnly
+                      disabled
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Available Balance
+                    </label>
+                    <input
+                      type="text"
+                      value={typeof allocationInfo.available === "number" ? `${allocationInfo.available} days` : allocationInfo.available}
+                      className={`w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 cursor-not-allowed font-semibold ${
+                        typeof allocationInfo.available === "number" && allocationInfo.available <= 0
+                          ? "text-red-600"
+                          : "text-emerald-600"
+                      }`}
+                      readOnly
+                      disabled
+                    />
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -1500,6 +1899,70 @@ const Approval = () => {
                   rows="4"
                   className="w-full rounded-lg border border-slate-200 px-4 py-3"
                 />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Supporting Attachment <span className="text-red-500">*</span>
+                </label>
+                {!leaveFormData.attachment ? (
+                  <div className="flex justify-center rounded-lg border-2 border-dashed border-slate-300 px-6 py-6 transition-colors hover:border-slate-400">
+                    <div className="text-center">
+                      <i className="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2" />
+                      <div className="mt-1 flex text-sm text-slate-600 justify-center">
+                        <label className="relative cursor-pointer rounded-md bg-white font-semibold text-blue-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 hover:text-blue-500">
+                          <span>Upload a file</span>
+                          <input
+                            type="file"
+                            className="sr-only"
+                            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  setLeaveFormData((prev) => ({
+                                    ...prev,
+                                    attachment: reader.result,
+                                    attachmentName: file.name,
+                                  }));
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">PDF, PNG, JPG, or DOC up to 5MB</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                        <i className="fa-solid fa-file-lines" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 truncate max-w-xs" title={leaveFormData.attachmentName}>
+                          {leaveFormData.attachmentName}
+                        </p>
+                        <p className="text-xs text-slate-500">Ready to upload</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLeaveFormData((prev) => ({
+                          ...prev,
+                          attachment: "",
+                          attachmentName: "",
+                        }));
+                      }}
+                      className="rounded-full p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                    >
+                      <i className="fa-solid fa-trash-can" />
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <input type="hidden" value={leaveFormData.managerId} readOnly />

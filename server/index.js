@@ -7133,6 +7133,8 @@ async function start() {
           currency: req.currency || 'USD',
           date: req.requestDate || req.createdAt,
           status: req.status,
+          attachment: req.attachment || null,
+          attachmentName: req.attachmentName || null,
           currentApprovalLevel: req.currentApprovalLevel || 1,
           usesRuleBasedApproval: req.usesRuleBasedApproval || false
         };

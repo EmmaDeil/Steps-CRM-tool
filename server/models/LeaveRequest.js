@@ -14,6 +14,8 @@ const leaveRequestSchema = new mongoose.Schema({
   toDate: { type: Date, required: true },
   days: { type: Number, required: true },
   reason: { type: String },
+  attachment: { type: String },
+  attachmentName: { type: String },
   managerId: { type: String, required: false }, // Made optional for rule-based approval
   managerName: { type: String, required: false },
   managerEmail: { type: String },

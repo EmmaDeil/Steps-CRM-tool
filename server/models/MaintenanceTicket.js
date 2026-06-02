@@ -30,6 +30,7 @@ const maintenanceTicketSchema = new mongoose.Schema(
         "IT Equipment",
         "Safety & Security",
         "General Maintenance",
+        "Item Movement",
         "Other",
       ],
     },
@@ -145,6 +146,23 @@ const maintenanceTicketSchema = new mongoose.Schema(
     },
     resolutionNotes: {
       type: String,
+    },
+    movementType: {
+      type: String,
+      enum: ["Temporary", "Permanent"],
+    },
+    returnDate: {
+      type: Date,
+    },
+    fromLocation: {
+      type: String,
+    },
+    toLocation: {
+      type: String,
+    },
+    reminderSent: {
+      type: Boolean,
+      default: false,
     },
   },
   {

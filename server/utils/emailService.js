@@ -678,6 +678,58 @@ async function sendWelcomeVerificationEmail(email, name, verificationToken) {
     return { success: false, error: error.message };
   }
 }
+// Send temporary item return reminder email
+async function sendItemReturnReminderEmail(ticketData, recipientEmail, recipientName) {
+  if (!recipientEmail) {
+    throw new Error('recipientEmail is required to send return reminder email');
+  }
+
+  const mailOptions = {
+    from: emailUser,
+    to: recipientEmail,
+    subject: `REMINDER: Return of ${ticketData.title} is Due`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #d97706; padding: 24px; text-align: center; color: white;">
+          <h2 style="margin: 0; font-size: 20px;">⏰ Temporary Item Return Reminder</h2>
+        </div>
+        <div style="padding: 24px;">
+          <p>Dear ${recipientName},</p>
+          <p>This is a reminder that the item(s) you transferred temporarily under ticket <strong>${ticketData.ticketNumber}</strong> are scheduled to be returned in 1 hour.</p>
+          
+          <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #d97706;">Details</h3>
+            <p><strong>Item Name/Title:</strong> ${ticketData.title}</p>
+            <p><strong>Transfer Type:</strong> Temporary</p>
+            <p><strong>Source Location:</strong> ${ticketData.fromLocation || 'N/A'}</p>
+            <p><strong>Destination Location:</strong> ${ticketData.toLocation || 'N/A'}</p>
+            <p><strong>Scheduled Return Time:</strong> ${new Date(ticketData.returnDate).toLocaleString()}</p>
+          </div>
+          
+          <p>Please ensure the items are returned to their designated location and update the Facilities department or update the ticket status if complete.</p>
+          
+          <p style="color: #666; font-size: 12px; margin-top: 30px;">
+            This is an automated reminder from Steps CRM. Please do not reply to this message.
+          </p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📧 Item return reminder email would be sent to:', recipientEmail);
+      console.log('   Ticket:', ticketData.ticketNumber);
+      return { success: true, message: 'Reminder email logged (dev mode)' };
+    }
+
+    await transporter.sendMail(mailOptions);
+    return { success: true, message: 'Reminder email sent successfully' };
+  } catch (error) {
+    console.error('Error sending return reminder email:', error);
+    return { success: false, error: error.message };
+  }
+}
 
 module.exports = {
   sendApprovalEmail,
@@ -689,5 +741,6 @@ module.exports = {
   sendNotificationRuleEmail,
   sendSignatureRequestEmail,
   sendInventoryExpiryAlertEmail,
+  sendItemReturnReminderEmail,
   transporter,
 };
