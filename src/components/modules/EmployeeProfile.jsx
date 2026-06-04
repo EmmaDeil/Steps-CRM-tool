@@ -1229,7 +1229,9 @@ const EmployeeProfile = ({
                       const personal =
                         (leaveAllocation.personalLeave ?? 0) -
                         (leaveAllocation.personalLeaveUsed ?? 0);
-                      const unpaid = leaveAllocation.unpaidLeave ?? 0;
+                      const unpaid =
+                        (leaveAllocation.unpaidLeave ?? 0) -
+                        (leaveAllocation.unpaidLeaveUsed ?? 0);
                       return (
                         <>
                           <div className="flex items-center justify-between">
@@ -1262,7 +1264,7 @@ const EmployeeProfile = ({
                               Unpaid Leave
                             </span>
                             <span className="text-gray-900 dark:text-gray-200 font-semibold">
-                              {unpaid} days
+                              {unpaid} / {leaveAllocation.unpaidLeave ?? 0} days
                             </span>
                           </div>
                         </>

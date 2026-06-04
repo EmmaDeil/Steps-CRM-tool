@@ -29,6 +29,8 @@ const InvoiceSchema = new mongoose.Schema({
 
   // Source / traceability
   linkedIssueId:   { type: mongoose.Schema.Types.ObjectId, ref: 'InventoryIssue', default: null },
+  linkedDealId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', default: null },
+  source:          { type: String, enum: ['manual', 'sales'], default: 'manual' },
   generatedBy:     { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   generatedByName: { type: String, default: '' },
 }, { timestamps: true });

@@ -1531,17 +1531,29 @@ const HRM = () => {
                               {allocation.year}
                             </span>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                             <div className="flex justify-between">
                               <span className="text-slate-500">Annual:</span>
                               <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                {allocation.annualLeave} days
+                                {allocation.annualLeave || 0} days
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500">Sick:</span>
                               <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                {allocation.sickLeave} days
+                                {allocation.sickLeave || 0} days
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Personal:</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                {allocation.personalLeave || 0} days
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Unpaid:</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                {allocation.unpaidLeave || 0} days
                               </span>
                             </div>
                           </div>
@@ -2590,6 +2602,24 @@ const HRM = () => {
                               setLeaveAllocationForm({
                                 ...leaveAllocationForm,
                                 personalLeave: parseInt(e.target.value) || 0,
+                              })
+                            }
+                            className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                          />
+                        </label>
+
+                        <label className="flex flex-col w-full">
+                          <p className="text-slate-700 text-sm font-medium pb-2">
+                            Unpaid Leave (days)
+                          </p>
+                          <input
+                            type="number"
+                            min="0"
+                            value={leaveAllocationForm.unpaidLeave}
+                            onChange={(e) =>
+                              setLeaveAllocationForm({
+                                ...leaveAllocationForm,
+                                unpaidLeave: parseInt(e.target.value) || 0,
                               })
                             }
                             className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"

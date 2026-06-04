@@ -11,6 +11,7 @@ const leaveAllocationSchema = new mongoose.Schema({
   personalLeave: { type: Number, default: 5 },
   personalLeaveUsed: { type: Number, default: 0 },
   unpaidLeave: { type: Number, default: 0 },
+  unpaidLeaveUsed: { type: Number, default: 0 },
   managerId: { type: String, required: true },
   managerName: { type: String, required: true },
   managerEmail: { type: String },

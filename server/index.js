@@ -365,6 +365,7 @@ async function start() {
         { id: 13, name: "Policy", componentName: "Policy" },
         { id: 14, name: "Incident Reporting", componentName: "IncidentReporting" },
         { id: 15, name: "Contacts", componentName: "Contact" },
+        { id: 16, name: "Sales", componentName: "Sales" },
       ];
 
       // Seed modules if empty or update with new modules
@@ -1233,6 +1234,10 @@ async function start() {
   // ============ MAINTENANCE ROUTES ============
   const maintenanceRoutes = require('./routes/maintenance.routes');
   app.use('/api/maintenance', maintenanceRoutes);
+
+  // ============ SALES ROUTES ============
+  const salesRoutes = require('./routes/sales.routes');
+  app.use('/api/sales', salesRoutes);
 
   // ============ INCIDENT REPORT ROUTES ============
   const incidentReportRoutes = require('./routes/incidentReport.routes');
@@ -6814,6 +6819,26 @@ async function start() {
       leaveRequest.status = 'approved';
       leaveRequest.hrApprovedAt = new Date();
       leaveRequest.hrComments = 'Approved from HR dashboard';
+
+      // Update leave balance
+      try {
+        const LeaveAllocation = require('./models/LeaveAllocation');
+        const allocation = await LeaveAllocation.findOne({
+          employeeId: leaveRequest.employeeId,
+          year: new Date(leaveRequest.fromDate).getFullYear()
+        });
+        if (allocation) {
+          await api.updateLeaveUsage(
+            leaveRequest.employeeId,
+            new Date(leaveRequest.fromDate).getFullYear(),
+            leaveRequest.leaveType,
+            leaveRequest.days
+          );
+        }
+      } catch (err) {
+        console.error('Leave allocation update failed:', err);
+      }
+
       await leaveRequest.save();
 
       res.json({ message: 'Approved', success: true, data: leaveRequest });
@@ -7347,7 +7372,7 @@ async function start() {
             employeeId: request.employeeId,
             year: new Date(request.fromDate).getFullYear()
           });
-          if (allocation && request.leaveType !== 'unpaid') {
+          if (allocation) {
             await api.updateLeaveUsage(
               request.employeeId,
               new Date(request.fromDate).getFullYear(),

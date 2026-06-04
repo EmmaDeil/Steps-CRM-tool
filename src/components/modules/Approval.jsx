@@ -331,8 +331,8 @@ const Approval = () => {
         used = leaveAllocation.personalLeaveUsed || 0;
         break;
       case "unpaid":
-        allocated = 999;
-        used = 0;
+        allocated = leaveAllocation.unpaidLeave || 0;
+        used = leaveAllocation.unpaidLeaveUsed || 0;
         break;
       default:
         allocated = 0;
@@ -849,8 +849,8 @@ const Approval = () => {
         used = leaveAllocation.personalLeaveUsed || 0;
         break;
       case "unpaid":
-        allocated = 999;
-        used = 0;
+        allocated = leaveAllocation.unpaidLeave || 0;
+        used = leaveAllocation.unpaidLeaveUsed || 0;
         break;
       default:
         allocated = 0;
