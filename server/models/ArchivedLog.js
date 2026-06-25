@@ -13,7 +13,7 @@ const archivedLogSchema = new mongoose.Schema({
   ipAddress: { type: String, required: true },
   userAgent: String,
   description: { type: String, required: true },
-  status: { type: String, enum: ['Success', 'Failed'], required: true },
+  status: { type: String, enum: ['Success', 'Failed', 'Warning'], required: true },
   metadata: { type: mongoose.Schema.Types.Mixed },
   timestamp: { type: Date, required: true },
   

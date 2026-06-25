@@ -6467,13 +6467,25 @@ async function start() {
 
       // Create audit log
       await AuditLogModel.create({
-        userId: req.body.deletedBy || 'system',
-        action: 'DELETE_EMPLOYEE',
-        resource: 'Employee',
-        resourceId: id,
-        details: { employeeName: deleted.name, email: deleted.email },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
+        actor: {
+          userId: String(req.body.deletedBy || req.user?._id || 'system'),
+          userName: req.user?.fullName || req.user?.email || 'System',
+          userEmail: req.user?.email || '',
+          initials: String(req.user?.fullName || req.user?.email || 'SY')
+            .substring(0, 2)
+            .toUpperCase(),
+        },
+        action: 'User Deleted',
+        actionColor: 'red',
+        ipAddress: req.ip || '127.0.0.1',
+        userAgent: req.get('user-agent') || 'system',
+        description: `Employee ${deleted.name || deleted.email} deleted`,
+        status: 'Success',
+        metadata: {
+          employeeId: id,
+          employeeName: deleted.name,
+          email: deleted.email,
+        },
       });
 
       res.json({ success: true, message: 'Employee deleted successfully' });
