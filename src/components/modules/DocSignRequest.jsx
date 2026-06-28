@@ -4,6 +4,7 @@ import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../../context/useAuth";
+import { PDFDocument } from 'pdf-lib';
 
 const DocSignRequest = ({ onBack, onSuccess }) => {
   const navigate = useNavigate();
@@ -15,8 +16,9 @@ const DocSignRequest = ({ onBack, onSuccess }) => {
   const [fileName, setFileName] = useState("No document selected");
   const [uploading, setUploading] = useState(false);
 
-  // Constants for PDF viewing (no navigation controls)
-  const currentPage = 1;
+  // State for PDF viewing
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const zoom = 100;
 
   // Form state
@@ -40,6 +42,7 @@ const DocSignRequest = ({ onBack, onSuccess }) => {
   // Sidebar toggle state (for both mobile drawer and desktop collapsible views)
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [showRightSidebar, setShowRightSidebar] = useState(true);
+  const [activeSidebarTab, setActiveSidebarTab] = useState("recipients"); // "recipients" or "fields"
 
   // Initialize sidebar states based on screen width and handle window resizing
   useEffect(() => {
@@ -209,6 +212,12 @@ const DocSignRequest = ({ onBack, onSuccess }) => {
     try {
       const formData = new FormData();
       formData.append("file", file);
+
+      // Extract total pages
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      setTotalPages(pdfDoc.getPageCount());
+      setCurrentPage(1);
 
       // Create a temporary URL for preview
       const tempURL = URL.createObjectURL(file);
@@ -512,29 +521,307 @@ const DocSignRequest = ({ onBack, onSuccess }) => {
       </header>
 
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Left Sidebar - Recipients & Settings */}
+                {/* Main Document Preview Area */}
+        <main className="flex-1 bg-[#f6f7f8] relative flex flex-col">
+          {/* Upload Section - Show when no file */}
+          {!uploadedFile ? (
+            <div className="flex-1 flex items-center justify-center p-4 md:p-8 lg:p-12">
+              <div className="max-w-md w-full">
+                <div className="bg-white rounded-2xl shadow-lg border-2 border-dashed border-gray-300 p-12 text-center hover:border-[#137fec] hover:bg-blue-50/30 transition-all">
+                  <div className="mb-6">
+                    <i className="fa-solid fa-cloud-arrow-up text-6xl text-[#137fec]"></i>
+                  </div>
+                  <h3 className="text-xl font-bold text-[#111418] mb-2">
+                    Upload Document
+                  </h3>
+                  <p className="text-sm text-[#617589] mb-6">
+                    Drag and drop your PDF file here, or click to browse
+                  </p>
+                  <label className="inline-flex items-center gap-2 px-6 py-3 bg-[#137fec] hover:bg-blue-600 text-white rounded-lg font-semibold cursor-pointer transition-colors shadow-md hover:shadow-lg">
+                    <i className="fa-solid fa-file-pdf text-lg"></i>
+                    <span>
+                      {uploading ? "Uploading..." : "Choose PDF File"}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                  </label>
+                  <p className="text-xs text-[#617589] mt-4">
+                    Maximum file size: 10MB
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* PDF Viewer */}
+              <div className="flex-1 overflow-auto p-4 md:p-8 lg:p-12 flex justify-center items-start">
+                <div
+                  className="relative w-full max-w-[1000px]"
+                  style={{
+                    transform: `scale(${zoom / 100})`,
+                    transformOrigin: "top center",
+                  }}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => {
+                    if (draggedPlacedFieldId) {
+                      handleRepositionDrop(e);
+                    } else {
+                      handleDrop(e);
+                    }
+                  }}
+                >
+                  {fileURL ? (
+                    <div className="relative w-full flex flex-col items-center">
+                      <div className="relative w-full">
+                        <iframe
+                          key={`pdf-page-${currentPage}`}
+                          src={`${fileURL}#page=${currentPage}&toolbar=0&navpanes=0&scrollbar=0`}
+                          className="bg-white shadow-2xl rounded-sm border border-gray-200 w-full pointer-events-none"
+                          style={{
+                            width: "100%",
+                            height: "1200px",
+                          }}
+                          title="PDF Preview"
+                        />
+
+                      {/* Drag overlay to capture drop events on top of iframe */}
+                      {(draggedField || draggedPlacedFieldId) && (
+                        <div
+                          className="absolute inset-0 z-30 bg-transparent"
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => {
+                            if (draggedPlacedFieldId) {
+                              handleRepositionDrop(e);
+                            } else {
+                              handleDrop(e);
+                            }
+                          }}
+                        />
+                      )}
+
+                      {/* Overlay for dropped fields on current page */}
+                      <div className="absolute inset-0 pointer-events-none z-20">
+                        {placedFields
+                          .filter((field) => field.page === currentPage)
+                          .map((field) => {
+                            const isSelected = selectedFieldId === field.id;
+
+                            // Define colors based on field type
+                            let bgColor,
+                              borderColor,
+                              borderStyle,
+                              iconColor,
+                              labelBgColor,
+                              labelTextColor;
+
+                            if (isSelected) {
+                              // Selected state - yellow for all types
+                              bgColor = "rgba(254, 243, 199, 0.95)";
+                              borderColor = "#fbbf24";
+                              borderStyle = "solid";
+                              iconColor = "#b45309";
+                              labelBgColor = "bg-yellow-200";
+                              labelTextColor = "text-yellow-800";
+                            } else if (field.type === "signature") {
+                              // Signature - blue
+                              bgColor = "rgba(219, 234, 254, 0.95)";
+                              borderColor = "#3b82f6";
+                              borderStyle = "solid";
+                              iconColor = "#3b82f6";
+                              labelBgColor = "bg-blue-100";
+                              labelTextColor = "text-blue-700";
+                            } else if (field.type === "initials") {
+                              // Initials - indigo
+                              bgColor = "rgba(224, 231, 255, 0.95)";
+                              borderColor = "#6366f1";
+                              borderStyle = "solid";
+                              iconColor = "#6366f1";
+                              labelBgColor = "bg-indigo-100";
+                              labelTextColor = "text-indigo-700";
+                            } else if (field.type === "dateSigned") {
+                              // Date Signed - cyan
+                              bgColor = "rgba(207, 250, 254, 0.95)";
+                              borderColor = "#06b6d4";
+                              borderStyle = "solid";
+                              iconColor = "#06b6d4";
+                              labelBgColor = "bg-cyan-100";
+                              labelTextColor = "text-cyan-700";
+                            } else if (field.type === "textbox") {
+                              // Textbox - emerald
+                              bgColor = "rgba(209, 250, 229, 0.95)";
+                              borderColor = "#10b981";
+                              borderStyle = "solid";
+                              iconColor = "#10b981";
+                              labelBgColor = "bg-emerald-100";
+                              labelTextColor = "text-emerald-700";
+                            } else if (field.type === "checkbox") {
+                              // Checkbox - purple
+                              bgColor = "rgba(243, 232, 255, 0.95)";
+                              borderColor = "#a855f7";
+                              borderStyle = "solid";
+                              iconColor = "#a855f7";
+                              labelBgColor = "bg-purple-100";
+                              labelTextColor = "text-purple-700";
+                            } else if (field.type === "fullName") {
+                              // Full Name - orange
+                              bgColor = "rgba(255, 237, 213, 0.95)";
+                              borderColor = "#f97316";
+                              borderStyle = "solid";
+                              iconColor = "#f97316";
+                              labelBgColor = "bg-orange-100";
+                              labelTextColor = "text-orange-700";
+                            } else {
+                              // Fallback - teal
+                              bgColor = "rgba(204, 251, 241, 0.95)";
+                              borderColor = "#14b8a6";
+                              borderStyle = "solid";
+                              iconColor = "#14b8a6";
+                              labelBgColor = "bg-teal-100";
+                              labelTextColor = "text-teal-700";
+                            }
+
+                            return (
+                              <div
+                                key={field.id}
+                                draggable={isSelected}
+                                onDragStart={(e) =>
+                                  handlePlacedFieldDragStart(e, field.id)
+                                }
+                                onDragEnd={handlePlacedFieldDragEnd}
+                                onClick={() => handleFieldClick(field.id)}
+                                className={`absolute pointer-events-auto ${
+                                  isSelected
+                                    ? "cursor-move z-50"
+                                    : "cursor-pointer z-10"
+                                } rounded flex items-center px-3 gap-2 shadow-lg transition-all group`}
+                                style={{
+                                  left: `${field.position.x}%`,
+                                  top: `${field.position.y}%`,
+                                  width: `${field.size.width}px`,
+                                  height: `${field.size.height}px`,
+                                  backgroundColor: bgColor,
+                                  border: `3px ${borderStyle} ${borderColor}`,
+                                }}
+                              >
+                                <div
+                                  className={`absolute -top-6 left-0 text-[10px] font-bold px-2 py-0.5 rounded ${labelBgColor} ${labelTextColor}`}
+                                >
+                                  {field.label}
+                                  {field.required && " *"}
+                                </div>
+                                <i
+                                  className={`${field.icon}`}
+                                  style={{ color: iconColor }}
+                                ></i>
+                                <span
+                                  className={`text-xs font-bold`}
+                                  style={{ color: iconColor }}
+                                >
+                                  {field.assignedName}
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleFieldDelete(field.id);
+                                  }}
+                                  className="absolute -top-3 -right-3 bg-white shadow-md border border-gray-200 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 hover:bg-red-50"
+                                >
+                                  <i className="fa-solid fa-times text-xs"></i>
+                                </button>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                      <div className="flex items-center gap-4 bg-white px-4 py-2 mt-4 rounded-lg shadow-sm border border-gray-200 z-40">
+                        <button 
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${currentPage === 1 ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                        >
+                          <i className="fa-solid fa-chevron-left mr-1"></i> Prev
+                        </button>
+                        <span className="text-sm font-bold text-gray-700">Page {currentPage} of {totalPages}</span>
+                        <button 
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${currentPage === totalPages ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                        >
+                          Next <i className="fa-solid fa-chevron-right ml-1"></i>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white relative w-full h-[1200px] shadow-2xl rounded-sm border border-gray-200 flex items-center justify-center">
+                      <div className="text-center">
+                        <i className="fa-solid fa-file-pdf text-6xl text-gray-300 mb-4"></i>
+                        <p className="text-gray-500">Loading PDF...</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </main>
+
+        
+        {/* Right Sidebar - Combined */}
         {/* Mobile backdrop */}
-        {showLeftSidebar && (
+        {showRightSidebar && (
           <div
             className="fixed inset-0 bg-black/40 z-30 lg:hidden"
-            onClick={() => setShowLeftSidebar(false)}
+            onClick={() => setShowRightSidebar(false)}
           />
         )}
         <aside
-          className={`fixed lg:relative z-40 lg:z-auto top-0 left-0 h-full flex flex-col bg-white overflow-y-auto shrink-0 shadow-sm transition-all duration-300 ease-in-out ${
-            showLeftSidebar
-              ? "w-80 lg:w-96 translate-x-0 border-r border-[#e5e7eb] opacity-100"
-              : "w-80 lg:w-0 -translate-x-full lg:translate-x-0 lg:overflow-hidden lg:border-r-0 lg:opacity-0"
+          className={`fixed lg:relative z-40 lg:z-auto top-0 right-0 h-full flex flex-col bg-white shrink-0 shadow-sm transition-all duration-300 ease-in-out ${
+            showRightSidebar
+              ? "w-80 lg:w-96 translate-x-0 border-l border-[#e5e7eb] opacity-100"
+              : "w-80 lg:w-0 translate-x-full lg:translate-x-0 lg:overflow-hidden lg:border-l-0 lg:opacity-0"
           }`}
         >
-          {/* Close button (shows on mobile, or when open on desktop as a quick collapse) */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <span className="font-bold text-gray-900">Recipients & Settings</span>
-            <button onClick={() => setShowLeftSidebar(false)} className="text-gray-500 hover:text-gray-700" title="Collapse Sidebar">
-              <i className="fa-solid fa-angles-left text-lg hidden lg:inline" />
-              <i className="fa-solid fa-times text-lg lg:hidden" />
-            </button>
+          {/* Header & Tabs */}
+          <div className="flex flex-col border-b border-gray-200">
+            <div className="flex items-center justify-between p-4 pb-2">
+              <span className="font-bold text-gray-900">Document Setup</span>
+              <button onClick={() => setShowRightSidebar(false)} className="text-gray-500 hover:text-gray-700" title="Collapse Sidebar">
+                <i className="fa-solid fa-angles-right text-lg hidden lg:inline" />
+                <i className="fa-solid fa-times text-lg lg:hidden" />
+              </button>
+            </div>
+            <div className="flex px-4 gap-4">
+              <button
+                onClick={() => setActiveSidebarTab("recipients")}
+                className={`pb-2 text-sm font-medium transition-colors border-b-2 ${
+                  activeSidebarTab === "recipients"
+                    ? "border-[#137fec] text-[#137fec]"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Recipients & Settings
+              </button>
+              <button
+                onClick={() => setActiveSidebarTab("fields")}
+                className={`pb-2 text-sm font-medium transition-colors border-b-2 ${
+                  activeSidebarTab === "fields"
+                    ? "border-[#137fec] text-[#137fec]"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Form Fields
+              </button>
+            </div>
           </div>
+
+          <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
+            {activeSidebarTab === "recipients" ? (
+              <div className="flex flex-col animate-fadeIn">
           {/* Recipients Section */}
           <div className="p-6 border-b border-[#f0f2f4]">
             <div className="flex items-center justify-between mb-4">
@@ -791,260 +1078,9 @@ const DocSignRequest = ({ onBack, onSuccess }) => {
               </div>
             </div>
           </div>
-        </aside>
-
-        {/* Main Document Preview Area */}
-        <main className="flex-1 bg-[#f6f7f8] relative flex flex-col">
-          {/* Upload Section - Show when no file */}
-          {!uploadedFile ? (
-            <div className="flex-1 flex items-center justify-center p-4 md:p-8 lg:p-12">
-              <div className="max-w-md w-full">
-                <div className="bg-white rounded-2xl shadow-lg border-2 border-dashed border-gray-300 p-12 text-center hover:border-[#137fec] hover:bg-blue-50/30 transition-all">
-                  <div className="mb-6">
-                    <i className="fa-solid fa-cloud-arrow-up text-6xl text-[#137fec]"></i>
-                  </div>
-                  <h3 className="text-xl font-bold text-[#111418] mb-2">
-                    Upload Document
-                  </h3>
-                  <p className="text-sm text-[#617589] mb-6">
-                    Drag and drop your PDF file here, or click to browse
-                  </p>
-                  <label className="inline-flex items-center gap-2 px-6 py-3 bg-[#137fec] hover:bg-blue-600 text-white rounded-lg font-semibold cursor-pointer transition-colors shadow-md hover:shadow-lg">
-                    <i className="fa-solid fa-file-pdf text-lg"></i>
-                    <span>
-                      {uploading ? "Uploading..." : "Choose PDF File"}
-                    </span>
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                      disabled={uploading}
-                    />
-                  </label>
-                  <p className="text-xs text-[#617589] mt-4">
-                    Maximum file size: 10MB
-                  </p>
-                </div>
               </div>
-            </div>
-          ) : (
-            <>
-              {/* PDF Viewer */}
-              <div className="flex-1 overflow-auto p-4 md:p-8 lg:p-12 flex justify-center items-start">
-                <div
-                  className="relative w-full max-w-[1000px]"
-                  style={{
-                    transform: `scale(${zoom / 100})`,
-                    transformOrigin: "top center",
-                  }}
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => {
-                    if (draggedPlacedFieldId) {
-                      handleRepositionDrop(e);
-                    } else {
-                      handleDrop(e);
-                    }
-                  }}
-                >
-                  {fileURL ? (
-                    <div className="relative w-full">
-                      <iframe
-                        src={fileURL}
-                        className="bg-white shadow-2xl rounded-sm border border-gray-200 w-full"
-                        style={{
-                          width: "100%",
-                          height: "1200px",
-                        }}
-                        title="PDF Preview"
-                      />
-
-                      {/* Drag overlay to capture drop events on top of iframe */}
-                      {(draggedField || draggedPlacedFieldId) && (
-                        <div
-                          className="absolute inset-0 z-30 bg-transparent"
-                          onDragOver={handleDragOver}
-                          onDrop={(e) => {
-                            if (draggedPlacedFieldId) {
-                              handleRepositionDrop(e);
-                            } else {
-                              handleDrop(e);
-                            }
-                          }}
-                        />
-                      )}
-
-                      {/* Overlay for dropped fields on current page */}
-                      <div className="absolute inset-0 pointer-events-none z-20">
-                        {placedFields
-                          .filter((field) => field.page === currentPage)
-                          .map((field) => {
-                            const isSelected = selectedFieldId === field.id;
-
-                            // Define colors based on field type
-                            let bgColor,
-                              borderColor,
-                              borderStyle,
-                              iconColor,
-                              labelBgColor,
-                              labelTextColor;
-
-                            if (isSelected) {
-                              // Selected state - yellow for all types
-                              bgColor = "rgba(254, 243, 199, 0.95)";
-                              borderColor = "#fbbf24";
-                              borderStyle = "solid";
-                              iconColor = "#b45309";
-                              labelBgColor = "bg-yellow-200";
-                              labelTextColor = "text-yellow-800";
-                            } else if (field.type === "signature") {
-                              // Signature - blue
-                              bgColor = "rgba(219, 234, 254, 0.95)";
-                              borderColor = "#3b82f6";
-                              borderStyle = "solid";
-                              iconColor = "#3b82f6";
-                              labelBgColor = "bg-blue-100";
-                              labelTextColor = "text-blue-700";
-                            } else if (field.type === "initials") {
-                              // Initials - indigo
-                              bgColor = "rgba(224, 231, 255, 0.95)";
-                              borderColor = "#6366f1";
-                              borderStyle = "solid";
-                              iconColor = "#6366f1";
-                              labelBgColor = "bg-indigo-100";
-                              labelTextColor = "text-indigo-700";
-                            } else if (field.type === "dateSigned") {
-                              // Date Signed - cyan
-                              bgColor = "rgba(207, 250, 254, 0.95)";
-                              borderColor = "#06b6d4";
-                              borderStyle = "solid";
-                              iconColor = "#06b6d4";
-                              labelBgColor = "bg-cyan-100";
-                              labelTextColor = "text-cyan-700";
-                            } else if (field.type === "textbox") {
-                              // Textbox - emerald
-                              bgColor = "rgba(209, 250, 229, 0.95)";
-                              borderColor = "#10b981";
-                              borderStyle = "solid";
-                              iconColor = "#10b981";
-                              labelBgColor = "bg-emerald-100";
-                              labelTextColor = "text-emerald-700";
-                            } else if (field.type === "checkbox") {
-                              // Checkbox - purple
-                              bgColor = "rgba(243, 232, 255, 0.95)";
-                              borderColor = "#a855f7";
-                              borderStyle = "solid";
-                              iconColor = "#a855f7";
-                              labelBgColor = "bg-purple-100";
-                              labelTextColor = "text-purple-700";
-                            } else if (field.type === "fullName") {
-                              // Full Name - orange
-                              bgColor = "rgba(255, 237, 213, 0.95)";
-                              borderColor = "#f97316";
-                              borderStyle = "solid";
-                              iconColor = "#f97316";
-                              labelBgColor = "bg-orange-100";
-                              labelTextColor = "text-orange-700";
-                            } else {
-                              // Fallback - teal
-                              bgColor = "rgba(204, 251, 241, 0.95)";
-                              borderColor = "#14b8a6";
-                              borderStyle = "solid";
-                              iconColor = "#14b8a6";
-                              labelBgColor = "bg-teal-100";
-                              labelTextColor = "text-teal-700";
-                            }
-
-                            return (
-                              <div
-                                key={field.id}
-                                draggable={isSelected}
-                                onDragStart={(e) =>
-                                  handlePlacedFieldDragStart(e, field.id)
-                                }
-                                onDragEnd={handlePlacedFieldDragEnd}
-                                onClick={() => handleFieldClick(field.id)}
-                                className={`absolute pointer-events-auto ${
-                                  isSelected
-                                    ? "cursor-move z-50"
-                                    : "cursor-pointer z-10"
-                                } rounded flex items-center px-3 gap-2 shadow-lg transition-all group`}
-                                style={{
-                                  left: `${field.position.x}%`,
-                                  top: `${field.position.y}%`,
-                                  width: `${field.size.width}px`,
-                                  height: `${field.size.height}px`,
-                                  backgroundColor: bgColor,
-                                  border: `3px ${borderStyle} ${borderColor}`,
-                                }}
-                              >
-                                <div
-                                  className={`absolute -top-6 left-0 text-[10px] font-bold px-2 py-0.5 rounded ${labelBgColor} ${labelTextColor}`}
-                                >
-                                  {field.label}
-                                  {field.required && " *"}
-                                </div>
-                                <i
-                                  className={`${field.icon}`}
-                                  style={{ color: iconColor }}
-                                ></i>
-                                <span
-                                  className={`text-xs font-bold`}
-                                  style={{ color: iconColor }}
-                                >
-                                  {field.assignedName}
-                                </span>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleFieldDelete(field.id);
-                                  }}
-                                  className="absolute -top-3 -right-3 bg-white shadow-md border border-gray-200 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 hover:bg-red-50"
-                                >
-                                  <i className="fa-solid fa-times text-xs"></i>
-                                </button>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-white relative w-full h-[1200px] shadow-2xl rounded-sm border border-gray-200 flex items-center justify-center">
-                      <div className="text-center">
-                        <i className="fa-solid fa-file-pdf text-6xl text-gray-300 mb-4"></i>
-                        <p className="text-gray-500">Loading PDF...</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </main>
-
-        {/* Right Sidebar - Form Fields */}
-        {/* Mobile backdrop */}
-        {showRightSidebar && (
-          <div
-            className="fixed inset-0 bg-black/40 z-30 lg:hidden"
-            onClick={() => setShowRightSidebar(false)}
-          />
-        )}
-        <aside
-          className={`fixed lg:relative z-40 lg:z-auto top-0 right-0 h-full flex flex-col bg-white shrink-0 shadow-sm transition-all duration-300 ease-in-out ${
-            showRightSidebar
-              ? "w-72 lg:w-64 translate-x-0 border-l border-[#e5e7eb] opacity-100"
-              : "w-72 lg:w-0 translate-x-full lg:translate-x-0 lg:overflow-hidden lg:border-l-0 lg:opacity-0"
-          }`}
-        >
-          {/* Close button (shows on mobile, or when open on desktop as a quick collapse) */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <span className="font-bold text-gray-900">Form Fields</span>
-            <button onClick={() => setShowRightSidebar(false)} className="text-gray-500 hover:text-gray-700" title="Collapse Sidebar">
-              <i className="fa-solid fa-angles-right text-lg hidden lg:inline" />
-              <i className="fa-solid fa-times text-lg lg:hidden" />
-            </button>
-          </div>
+            ) : (
+              <div className="flex flex-col flex-1 animate-fadeIn h-full">
           <div className="p-5 border-b border-[#f0f2f4]">
             <h3 className="text-base font-bold text-[#111418]">Form Fields</h3>
             <p className="text-xs text-[#617589] mt-1">
@@ -1270,7 +1306,12 @@ const DocSignRequest = ({ onBack, onSuccess }) => {
               </div>
             )}
           </div>
+        
+              </div>
+            )}
+          </div>
         </aside>
+
       </div>
     </div>
   );

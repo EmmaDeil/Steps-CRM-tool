@@ -3449,6 +3449,45 @@ async function start() {
     }
   });
 
+  // Send document signature reminder
+  app.post('/api/documents/:id/remind', authMiddleware, async (req, res) => {
+    try {
+      const document = await DocumentModel.findById(req.params.id);
+      if (!document) {
+        return res.status(404).json({ message: 'Document not found' });
+      }
+
+      const { recipientEmail } = req.body;
+      const recipient = (document.recipients || []).find(
+        r => String(r.email || '').trim().toLowerCase() === String(recipientEmail || '').trim().toLowerCase()
+      );
+
+      if (!recipient) {
+        return res.status(404).json({ message: 'Recipient not found on this document' });
+      }
+
+      const { sendSignatureRequestEmail } = require('./utils/emailService');
+      await sendSignatureRequestEmail(
+        {
+          _id: document._id,
+          name: document.name,
+          uploadedBy: document.uploadedByName || document.uploadedBy,
+          subject: document.metadata?.subject || `Reminder: Please sign ${document.name}`,
+          message: document.metadata?.message || 'This is a gentle reminder that your signature is requested on the document below.',
+          dueDate: document.dueDate,
+          customBranding: document.metadata?.customBranding || false,
+        },
+        recipient.email,
+        recipient.name
+      );
+
+      res.json({ success: true, message: `Reminder email sent to ${recipient.email}` });
+    } catch (err) {
+      console.error('Error sending reminder:', err);
+      res.status(500).json({ message: 'Failed to send reminder email' });
+    }
+  });
+
   // ==================== USER MANAGEMENT ROUTES ====================
 
   // Get active users for dropdown assignment (accessible by any authenticated user)

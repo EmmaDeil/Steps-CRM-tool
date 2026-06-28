@@ -4,6 +4,7 @@ import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../../context/useAuth";
 import ModuleLoader from "../common/ModuleLoader";
+import { PDFDocument } from 'pdf-lib';
 import Breadcrumb from "../Breadcrumb";
 
 const DocSignView = () => {
@@ -31,6 +32,10 @@ const DocSignView = () => {
   // Canvas drawing states
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
 
@@ -66,6 +71,17 @@ const DocSignView = () => {
         const doc = await apiService.documents.getById(id);
         setDocument(doc);
         setFilledFields(doc.fields || []);
+
+        try {
+          if (doc.fileURL) {
+            const res = await fetch(doc.fileURL);
+            const arrayBuffer = await res.arrayBuffer();
+            const pdfDoc = await PDFDocument.load(arrayBuffer);
+            setTotalPages(pdfDoc.getPageCount());
+          }
+        } catch (pdfErr) {
+          console.error("Failed to parse PDF pages:", pdfErr);
+        }
 
         // Find current user in recipients
         const actorEmail = String(user?.email || "").trim().toLowerCase();
@@ -430,22 +446,24 @@ const DocSignView = () => {
         {/* Right Side: Document rendering with fields overlay */}
         <section className="flex-1 bg-gray-800 rounded-xl border border-gray-700 shadow-inner flex flex-col justify-start items-center p-4 md:p-8 overflow-y-auto max-h-[calc(100vh-180px)] min-h-[500px]">
           <div className="relative w-full max-w-[1000px] bg-white shadow-2xl rounded overflow-hidden">
-            {/* The PDF Preview */}
-            {document.fileURL ? (
-              <iframe
-                src={document.fileURL}
-                className="w-full h-[1100px] bg-white border-0 z-0 pointer-events-auto"
-                title="Document View"
-              />
-            ) : (
-              <div className="w-full h-[1100px] bg-white flex items-center justify-center">
-                <i className="fa-solid fa-spinner fa-spin text-3xl text-gray-400" />
-              </div>
-            )}
+            <div className="relative w-full">
+              {/* The PDF Preview */}
+              {document.fileURL ? (
+                <iframe
+                  key={`pdf-page-${currentPage}`}
+                  src={`${document.fileURL}#page=${currentPage}&toolbar=0&navpanes=0&scrollbar=0`}
+                  className="w-full h-[1100px] bg-white border-0 z-0 pointer-events-none"
+                  title="Document View"
+                />
+              ) : (
+                <div className="w-full h-[1100px] bg-white flex items-center justify-center">
+                  <i className="fa-solid fa-spinner fa-spin text-3xl text-gray-400" />
+                </div>
+              )}
 
-            {/* Document Overlay of interactive fields */}
-            <div className="absolute inset-0 z-10 pointer-events-none">
-              {filledFields.map((field) => {
+              {/* Document Overlay of interactive fields */}
+              <div className="absolute inset-0 z-10 pointer-events-none">
+                {filledFields.filter(f => !f.page || f.page === currentPage).map((field) => {
                 const isMine = myRecipient && field.assignedTo === myRecipient.id;
                 const isSigned = !!field.value;
                 
@@ -534,6 +552,28 @@ const DocSignView = () => {
                   </div>
                 );
               })}
+              </div>
+              
+              {/* Pagination Controls */}
+              {document.fileURL && (
+                 <div className="flex items-center justify-center gap-4 bg-white px-4 py-2 mt-4 rounded-lg shadow-sm border border-gray-200 z-20">
+                   <button
+                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                     disabled={currentPage === 1}
+                     className={`px-3 py-1 rounded text-sm font-medium transition-colors ${currentPage === 1 ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                   >
+                     <i className="fa-solid fa-chevron-left mr-1"></i> Prev
+                   </button>
+                   <span className="text-sm font-bold text-gray-700">Page {currentPage} of {totalPages}</span>
+                   <button
+                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                     disabled={currentPage === totalPages}
+                     className={`px-3 py-1 rounded text-sm font-medium transition-colors ${currentPage === totalPages ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                   >
+                     Next <i className="fa-solid fa-chevron-right ml-1"></i>
+                   </button>
+                 </div>
+              )}
             </div>
           </div>
         </section>

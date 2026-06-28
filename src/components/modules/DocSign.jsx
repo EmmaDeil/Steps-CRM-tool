@@ -25,6 +25,10 @@ const DocSign = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Tracking Panel States
+  const [trackingDocId, setTrackingDocId] = useState(null);
+  const [remindingEmail, setRemindingEmail] = useState(null);
+
   const actorEmail = useMemo(() => String(user?.email || "").trim().toLowerCase(), [user]);
   const actorId = useMemo(() => String(user?.userId || user?._id || "").trim(), [user]);
 
@@ -66,6 +70,7 @@ const DocSign = () => {
         dueDate: formatDueDate(doc.dueDate),
         urgent: isUrgent(doc.dueDate),
         signedProgress: `${signedCount}/${recipients.length}`,
+        percentComplete: recipients.length > 0 ? Math.round((signedCount / recipients.length) * 100) : 0,
         isCompleted: doc.status === "Completed",
         recipientsList: recipients,
         document: doc,
@@ -95,6 +100,17 @@ const DocSign = () => {
       document: doc,
     }));
   }, [documentsList, actorEmail, actorId]);
+
+  // Requests currently sent by the user that are still pending signatures from others
+  const pendingSentRequests = useMemo(() => {
+    return sentRequests.filter(req => !req.isCompleted);
+  }, [sentRequests]);
+
+  // Selected document for tracking details
+  const selectedTrackingDoc = useMemo(() => {
+    if (!trackingDocId) return null;
+    return documentsList.find(doc => doc._id === trackingDocId);
+  }, [trackingDocId, documentsList]);
 
   // Map category values (like 'hr', 'legal') to readable layout labels
   const displayCategory = useCallback((cat) => {
@@ -156,6 +172,20 @@ const DocSign = () => {
       fetchDocuments();
     }
   }, [user, fetchDocuments]);
+
+  // Handle email reminder trigger
+  const handleSendReminder = async (docId, recipientEmail) => {
+    setRemindingEmail(recipientEmail);
+    try {
+      await apiService.post(`/api/documents/${docId}/remind`, { recipientEmail });
+      toast.success(`Reminder sent to ${recipientEmail}`);
+    } catch (err) {
+      console.error("Error sending reminder:", err);
+      toast.error("Failed to send signature reminder email");
+    } finally {
+      setRemindingEmail(null);
+    }
+  };
 
   const filteredTemplates = useMemo(() => {
     let result = [...templates];
@@ -325,28 +355,24 @@ const DocSign = () => {
   const getColorClasses = (color) => {
     const colors = {
       blue: {
-        bg: "bg-blue-100",
-        text: "text-blue-600",
-        ring: "ring-blue-700/10",
-        ringColor: "ring-inset ring-blue-700/10",
+        bg: "bg-blue-50 text-blue-600",
+        pill: "bg-blue-50 border-blue-200 text-blue-700",
+        badge: "bg-blue-500",
       },
       purple: {
-        bg: "bg-purple-100",
-        text: "text-purple-600",
-        ring: "ring-purple-700/10",
-        ringColor: "ring-inset ring-purple-700/10",
+        bg: "bg-purple-50 text-purple-600",
+        pill: "bg-purple-50 border-purple-200 text-purple-700",
+        badge: "bg-purple-500",
       },
       green: {
-        bg: "bg-green-100",
-        text: "text-green-600",
-        ring: "ring-green-700/10",
-        ringColor: "ring-inset ring-green-700/10",
+        bg: "bg-green-50 text-green-600",
+        pill: "bg-green-50 border-green-200 text-green-700",
+        badge: "bg-green-500",
       },
       orange: {
-        bg: "bg-orange-100",
-        text: "text-orange-600",
-        ring: "ring-orange-700/10",
-        ringColor: "ring-inset ring-orange-700/10",
+        bg: "bg-orange-50 text-orange-600",
+        pill: "bg-orange-50 border-orange-200 text-orange-700",
+        badge: "bg-orange-500",
       },
     };
     return colors[color] || colors.blue;
@@ -382,7 +408,7 @@ const DocSign = () => {
   }
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
+    <div className="w-full min-h-screen bg-[#f8fafc] px-4 flex flex-col font-sans">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
@@ -391,172 +417,211 @@ const DocSign = () => {
       />
 
       {/* Page Header */}
-      <header className="w-full bg-white border-b border-[#e5e7eb] py-3 shadow-sm">
-        <div className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 px-2">
-          <div>
-            <h2 className="text-2xl font-bold text-[#111418]"></h2>
-            <p className="text-sm text-[#617589] mt-1">
-              {/* Manage your pending actions and template library. */}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => setShowCreateTemplate(true)}
-              className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-[#111418] border border-[#dbe0e6] px-2 py-2.5 rounded-lg font-semibold shadow-sm transition-all active:scale-95"
-            >
-              <i className="fa-solid fa-plus-circle text-[18px]"></i>
-              New Template
-            </button>
-            <button
-              onClick={() => setShowRequestForm(true)}
-              className="flex items-center justify-center gap-2 bg-[#137fec] hover:bg-blue-600 text-white px-2 py-2.5 rounded-lg font-semibold shadow-md shadow-blue-500/20 transition-all hover:shadow-lg active:scale-95"
-            >
-              <i className="fa-solid fa-paper-plane text-[18px]"></i>
-              Send Signature
-            </button>
-          </div>
+      <header className="w-full bg-white border border-slate-100 py-5 px-6 rounded-2xl shadow-sm mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+            <i className="fa-solid fa-file-signature text-[#137fec]"></i>
+            Document Signing Portal
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Send, track, and manage your electronic signature workflows.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setShowCreateTemplate(true)}
+            className="flex items-center justify-center gap-2 bg-white hover:bg-slate-55 text-slate-750 border border-slate-200 px-4 py-2.5 rounded-xl font-semibold shadow-sm transition-all active:scale-98"
+          >
+            <i className="fa-solid fa-plus-circle text-[16px] text-slate-500"></i>
+            New Template
+          </button>
+          <button
+            onClick={() => setShowRequestForm(true)}
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-[#137fec] hover:from-blue-700 hover:to-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/25 transition-all hover:shadow-xl hover:shadow-blue-500/30 active:scale-98"
+          >
+            <i className="fa-solid fa-paper-plane text-[15px]"></i>
+            Send Signature
+          </button>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="w-full flex-1 overflow-y-auto py-0 scroll-smooth">
-        <div className="w-full space-y-10 px-3 py-6">
+      {/* Stats Dashboard Grid */}
+      {!loading && !error && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Card 1: Action Required */}
+          <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm flex items-center gap-4 relative overflow-hidden group hover:shadow-md transition-all duration-300">
+            <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500"></div>
+            <div className="size-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl font-bold shrink-0">
+              <i className="fa-solid fa-signature"></i>
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Action Required</p>
+              <h3 className="text-2xl font-black text-slate-800 mt-1">{inboxRequests.length}</h3>
+            </div>
+            {inboxRequests.length > 0 && (
+              <span className="absolute top-4 right-4 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+              </span>
+            )}
+          </div>
+
+          {/* Card 2: Total Sent */}
+          <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm flex items-center gap-4 relative overflow-hidden group hover:shadow-md transition-all duration-300">
+            <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
+            <div className="size-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl font-bold shrink-0">
+              <i className="fa-solid fa-paper-plane"></i>
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Requests Sent</p>
+              <h3 className="text-2xl font-black text-slate-800 mt-1">{sentRequests.length}</h3>
+            </div>
+          </div>
+
+          {/* Card 3: Awaiting Others */}
+          <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm flex items-center gap-4 relative overflow-hidden group hover:shadow-md transition-all duration-300">
+            <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500"></div>
+            <div className="size-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl font-bold shrink-0">
+              <i className="fa-solid fa-clock"></i>
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Awaiting Others</p>
+              <h3 className="text-2xl font-black text-slate-800 mt-1">{pendingSentRequests.length}</h3>
+            </div>
+          </div>
+
+          {/* Card 4: Completed */}
+          <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm flex items-center gap-4 relative overflow-hidden group hover:shadow-md transition-all duration-300">
+            <div className="absolute top-0 left-0 w-1.5 h-full bg-green-500"></div>
+            <div className="size-12 rounded-xl bg-green-50 text-green-600 flex items-center justify-center text-xl font-bold shrink-0">
+              <i className="fa-solid fa-circle-check"></i>
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Completed Docs</p>
+              <h3 className="text-2xl font-black text-slate-800 mt-1">{completedRequests.length}</h3>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content Viewport */}
+      <main className="w-full flex-1 flex flex-col lg:flex-row gap-6 relative">
+        <div className="flex-1 space-y-6">
           {loading ? (
             <ModuleLoader moduleName="Document Signing" />
           ) : error ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <i className="fa-solid fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
-              <p className="text-sm text-[#617589] mb-4">{error}</p>
+            <div className="flex flex-col items-center justify-center bg-white border border-slate-100 rounded-2xl py-20 shadow-sm">
+              <i className="fa-solid fa-exclamation-triangle text-5xl text-red-500 mb-4 animate-bounce"></i>
+              <p className="text-sm font-semibold text-slate-600 mb-4">{error}</p>
               <button
                 onClick={fetchDocuments}
-                className="px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+                className="px-5 py-2.5 bg-[#137fec] text-white rounded-xl hover:bg-blue-600 transition-all font-semibold active:scale-95"
               >
                 Retry
               </button>
             </div>
           ) : (
             <>
-              {/* Document Tabs Section */}
+              {/* Tabs Section */}
               <section className="w-full space-y-4">
-                {/* Tabs Selector */}
-                <div className="border-b border-gray-200">
-                  <nav className="flex space-x-8" aria-label="Tabs">
-                    <button
-                      onClick={() => setActiveTab("inbox")}
-                      className={`py-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition-all ${
-                        activeTab === "inbox"
-                          ? "border-[#137fec] text-[#137fec]"
-                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                      }`}
-                    >
-                      <i className="fa-solid fa-inbox text-[16px]"></i>
-                      Action Required
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                        activeTab === "inbox" ? "bg-blue-100 text-[#137fec]" : "bg-gray-100 text-gray-600"
-                      }`}>
-                        {inboxRequests.length}
-                      </span>
-                    </button>
+                {/* Tabs Selector Bar */}
+                <div className="bg-white p-1 rounded-xl border border-slate-200/60 shadow-sm flex max-w-md">
+                  <button
+                    onClick={() => setActiveTab("inbox")}
+                    className={`flex-1 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                      activeTab === "inbox"
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <i className="fa-solid fa-inbox text-[13px]"></i>
+                    Action Required
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                      activeTab === "inbox" ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600"
+                    }`}>
+                      {inboxRequests.length}
+                    </span>
+                  </button>
 
-                    <button
-                      onClick={() => setActiveTab("sent")}
-                      className={`py-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition-all ${
-                        activeTab === "sent"
-                          ? "border-[#137fec] text-[#137fec]"
-                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                      }`}
-                    >
-                      <i className="fa-solid fa-paper-plane text-[16px]"></i>
-                      Sent Requests
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                        activeTab === "sent" ? "bg-blue-100 text-[#137fec]" : "bg-gray-100 text-gray-600"
-                      }`}>
-                        {sentRequests.length}
-                      </span>
-                    </button>
+                  <button
+                    onClick={() => setActiveTab("sent")}
+                    className={`flex-1 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                      activeTab === "sent"
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <i className="fa-solid fa-paper-plane text-[13px]"></i>
+                    Sent Tracker
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                      activeTab === "sent" ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-600"
+                    }`}>
+                      {sentRequests.length}
+                    </span>
+                  </button>
 
-                    <button
-                      onClick={() => setActiveTab("completed")}
-                      className={`py-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition-all ${
-                        activeTab === "completed"
-                          ? "border-[#137fec] text-[#137fec]"
-                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                      }`}
-                    >
-                      <i className="fa-solid fa-check-double text-[16px]"></i>
-                      Completed
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                        activeTab === "completed" ? "bg-blue-100 text-[#137fec]" : "bg-gray-100 text-gray-600"
-                      }`}>
-                        {completedRequests.length}
-                      </span>
-                    </button>
-                  </nav>
+                  <button
+                    onClick={() => setActiveTab("completed")}
+                    className={`flex-1 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                      activeTab === "completed"
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <i className="fa-solid fa-check-double text-[13px]"></i>
+                    Completed
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                      activeTab === "completed" ? "bg-green-500 text-white" : "bg-slate-100 text-slate-600"
+                    }`}>
+                      {completedRequests.length}
+                    </span>
+                  </button>
                 </div>
 
+                {/* Inbox Tab Content */}
                 {activeTab === "inbox" && (
-                  <>
+                  <div className="space-y-3">
                     {inboxRequests.length === 0 ? (
-                      <div className="w-full bg-white p-8 rounded-xl border border-[#e5e7eb] text-center">
-                        <i className="fa-solid fa-inbox text-4xl text-[#617589] mb-3"></i>
-                        <p className="text-sm text-[#617589]">
-                          No pending actions required from you
+                      <div className="w-full bg-white p-12 rounded-2xl border border-slate-100 text-center shadow-sm">
+                        <i className="fa-solid fa-inbox text-5xl text-slate-300 mb-3"></i>
+                        <p className="text-sm font-semibold text-slate-500">
+                          No pending actions required from you.
                         </p>
                       </div>
                     ) : (
-                      <div className="w-full grid grid-cols-1 gap-4">
+                      <div className="grid grid-cols-1 gap-3">
                         {inboxRequests.map((request) => (
                           <div
                             key={request.id}
-                            className={`bg-white p-4 rounded-xl ${
-                              request.urgent
-                                ? "border-l-4 border-l-orange-500"
-                                : "border border-[#e5e7eb]"
-                            } border-y border-r border-r-[#e5e7eb] border-y-[#e5e7eb] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:shadow-md transition-all`}
+                            className={`bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:shadow-md transition-all duration-200 ${
+                              request.urgent ? "border-l-4 border-l-orange-500" : ""
+                            }`}
                           >
-                            <div className="flex items-start md:items-center gap-4">
-                              <div
-                                className={`size-10 rounded-full ${
-                                  getColorClasses(request.color).bg
-                                } ${
-                                  getColorClasses(request.color).text
-                                } flex items-center justify-center shrink-0`}
-                              >
-                                <span className="font-bold text-sm">
-                                  {request.initials}
-                                </span>
+                            <div className="flex items-center gap-4">
+                              <div className="size-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg font-bold shrink-0">
+                                {request.initials}
                               </div>
                               <div>
-                                <h4 className="font-bold text-[#111418] group-hover:text-[#137fec] transition-colors">
+                                <h4 className="font-extrabold text-slate-800 group-hover:text-blue-600 transition-colors text-base">
                                   {request.title}
                                 </h4>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-[#617589]">
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs font-medium text-slate-400">
                                   <span className="flex items-center gap-1">
-                                    <i className="fa-solid fa-user text-[14px]"></i>{" "}
-                                    Sent by {request.sender}
+                                    <i className="fa-solid fa-user"></i> Sent by {request.sender}
                                   </span>
-                                  <span className="hidden md:inline text-gray-300">
-                                    •
-                                  </span>
-                                  <span
-                                    className={`flex items-center gap-1 ${
-                                      request.urgent
-                                        ? "text-orange-600 font-medium"
-                                        : ""
-                                    }`}
-                                  >
-                                    <i className="fa-solid fa-calendar text-[14px]"></i>{" "}
-                                    Due: {request.dueDate}
+                                  <span>•</span>
+                                  <span className={request.urgent ? "text-orange-600 font-bold" : ""}>
+                                    <i className="fa-solid fa-calendar-days mr-1"></i> Due: {request.dueDate}
                                   </span>
                                 </div>
                               </div>
                             </div>
-                            <div className="flex items-center justify-end w-full md:w-auto pl-14 md:pl-0">
+                            <div className="flex items-center justify-end w-full md:w-auto">
                               <button
                                 onClick={() => handleReviewAndSign(request.id)}
-                                className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#111418] text-white hover:bg-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+                                className="w-full md:w-auto flex items-center justify-center gap-2 bg-slate-900 text-white hover:bg-slate-800 px-5 py-2.5 rounded-xl font-bold text-xs transition-colors shadow-sm active:scale-98"
                               >
-                                <i className="fa-solid fa-pen-nib text-[16px]"></i>
+                                <i className="fa-solid fa-pen-nib"></i>
                                 Review & Sign
                               </button>
                             </div>
@@ -564,148 +629,143 @@ const DocSign = () => {
                         ))}
                       </div>
                     )}
-                  </>
+                  </div>
                 )}
 
+                {/* Sent Requests Tracker Tab Content */}
                 {activeTab === "sent" && (
-                  <>
+                  <div className="space-y-3">
                     {sentRequests.length === 0 ? (
-                      <div className="w-full bg-white p-8 rounded-xl border border-[#e5e7eb] text-center">
-                        <i className="fa-solid fa-paper-plane text-4xl text-[#617589] mb-3"></i>
-                        <p className="text-sm text-[#617589]">
-                          No signature requests sent by you
+                      <div className="w-full bg-white p-12 rounded-2xl border border-slate-100 text-center shadow-sm">
+                        <i className="fa-solid fa-paper-plane text-5xl text-slate-300 mb-3"></i>
+                        <p className="text-sm font-semibold text-slate-500">
+                          No signature requests sent yet.
                         </p>
                       </div>
                     ) : (
-                      <div className="w-full grid grid-cols-1 gap-4">
+                      <div className="grid grid-cols-1 gap-3">
                         {sentRequests.map((request) => (
                           <div
                             key={request.id}
-                            className="bg-white p-4 rounded-xl border border-[#e5e7eb] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:shadow-md transition-all"
+                            className={`bg-white p-5 rounded-2xl border transition-all duration-200 shadow-sm flex flex-col gap-4 group hover:shadow-md ${
+                              trackingDocId === request.id ? "border-[#137fec] ring-2 ring-blue-500/10" : "border-slate-100"
+                            }`}
                           >
-                            <div className="flex items-start md:items-center gap-4">
-                              <div
-                                className={`size-10 rounded-full ${
-                                  getColorClasses(request.color).bg
-                                } ${
-                                  getColorClasses(request.color).text
-                                } flex items-center justify-center shrink-0`}
-                              >
-                                <span className="font-bold text-sm">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                              <div className="flex items-center gap-4">
+                                <div className="size-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg font-bold shrink-0">
                                   {request.initials}
-                                </span>
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-[#111418] group-hover:text-[#137fec] transition-colors">
-                                  {request.title}
-                                </h4>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-[#617589]">
-                                  <span className="flex items-center gap-1">
-                                    <i className="fa-solid fa-circle-info text-[14px]"></i>{" "}
-                                    Status: {request.isCompleted ? "Completed" : "Pending"}
-                                  </span>
-                                  <span className="hidden md:inline text-gray-300">
-                                    •
-                                  </span>
-                                  <span className="flex items-center gap-1">
-                                    <i className="fa-solid fa-users text-[14px]"></i>{" "}
-                                    Signed: {request.signedProgress}
-                                  </span>
-                                  <span className="hidden md:inline text-gray-300">
-                                    •
-                                  </span>
-                                  <span className="flex items-center gap-1">
-                                    <i className="fa-solid fa-calendar text-[14px]"></i>{" "}
-                                    Due: {request.dueDate}
-                                  </span>
                                 </div>
-                                {/* Recipients status list chips */}
-                                <div className="flex flex-wrap gap-1.5 mt-2">
-                                  {request.recipientsList.map((rec) => (
-                                    <span
-                                      key={rec.id || rec.email}
-                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
-                                        rec.status === "signed"
-                                          ? "bg-green-50 text-green-700 border-green-200"
-                                          : "bg-gray-50 text-gray-600 border-gray-200"
-                                      }`}
-                                    >
-                                      <i className={`fa-solid ${rec.status === "signed" ? "fa-circle-check text-green-500" : "fa-circle-notch fa-spin text-gray-400"}`}></i>
-                                      {rec.name}
+                                <div>
+                                  <h4 className="font-extrabold text-slate-800 group-hover:text-blue-600 transition-colors text-base">
+                                    {request.title}
+                                  </h4>
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs font-medium text-slate-400">
+                                    <span className="flex items-center gap-1.5">
+                                      <i className="fa-solid fa-calendar"></i> Sent: {formatDate(request.document.createdAt)}
                                     </span>
-                                  ))}
+                                    <span>•</span>
+                                    <span className="flex items-center gap-1.5">
+                                      <i className="fa-solid fa-calendar-days"></i> Due: {request.dueDate}
+                                    </span>
+                                  </div>
                                 </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 self-end md:self-center">
+                                <button
+                                  onClick={() => handleReviewAndSign(request.id)}
+                                  className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-xs transition-colors active:scale-98"
+                                >
+                                  <i className="fa-solid fa-eye"></i> View PDF
+                                </button>
+                                <button
+                                  onClick={() => setTrackingDocId(trackingDocId === request.id ? null : request.id)}
+                                  className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold text-xs transition-colors shadow-md shadow-blue-500/15 active:scale-98"
+                                >
+                                  <i className="fa-solid fa-location-crosshairs"></i> Track Progress
+                                </button>
                               </div>
                             </div>
-                            <div className="flex items-center justify-end w-full md:w-auto pl-14 md:pl-0">
-                              <button
-                                onClick={() => handleReviewAndSign(request.id)}
-                                className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#111418] text-white hover:bg-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
-                              >
-                                <i className="fa-solid fa-eye text-[16px]"></i>
-                                View Status
-                              </button>
+
+                            {/* visual progress bar indicator */}
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center pt-2 border-t border-slate-50">
+                              <div className="sm:col-span-4 flex items-center gap-2">
+                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                  request.isCompleted
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-amber-100 text-amber-700 animate-pulse"
+                                }`}>
+                                  {request.isCompleted ? "Completed" : "Awaiting Signatures"}
+                                </span>
+                                <span className="text-xs font-bold text-slate-400">•</span>
+                                <span className="text-xs font-bold text-slate-500">
+                                  {request.signedProgress} signed
+                                </span>
+                              </div>
+                              <div className="sm:col-span-8 flex items-center gap-3">
+                                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                  <div
+                                    style={{ width: `${request.percentComplete}%` }}
+                                    className={`h-full transition-all duration-300 ${
+                                      request.isCompleted ? "bg-green-500" : "bg-[#137fec]"
+                                    }`}
+                                  ></div>
+                                </div>
+                                <span className="text-xs font-black text-slate-700 w-10 text-right">
+                                  {request.percentComplete}%
+                                </span>
+                              </div>
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
-                  </>
+                  </div>
                 )}
 
+                {/* Completed Tab Content */}
                 {activeTab === "completed" && (
-                  <>
+                  <div className="space-y-3">
                     {completedRequests.length === 0 ? (
-                      <div className="w-full bg-white p-8 rounded-xl border border-[#e5e7eb] text-center">
-                        <i className="fa-solid fa-circle-check text-4xl text-[#617589] mb-3"></i>
-                        <p className="text-sm text-[#617589]">
-                          No completed signature requests
+                      <div className="w-full bg-white p-12 rounded-2xl border border-slate-100 text-center shadow-sm">
+                        <i className="fa-solid fa-circle-check text-5xl text-slate-300 mb-3"></i>
+                        <p className="text-sm font-semibold text-slate-500">
+                          No completed agreements yet.
                         </p>
                       </div>
                     ) : (
-                      <div className="w-full grid grid-cols-1 gap-4">
+                      <div className="grid grid-cols-1 gap-3">
                         {completedRequests.map((request) => (
                           <div
                             key={request.id}
-                            className="bg-white p-4 rounded-xl border border-[#e5e7eb] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:shadow-md transition-all"
+                            className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:shadow-md transition-all duration-200"
                           >
-                            <div className="flex items-start md:items-center gap-4">
-                              <div
-                                className={`size-10 rounded-full ${
-                                  getColorClasses(request.color).bg
-                                } ${
-                                  getColorClasses(request.color).text
-                                } flex items-center justify-center shrink-0`}
-                              >
-                                <span className="font-bold text-sm">
-                                  {request.initials}
-                                </span>
+                            <div className="flex items-center gap-4">
+                              <div className="size-11 rounded-xl bg-green-50 text-green-600 flex items-center justify-center text-lg font-bold shrink-0">
+                                {request.initials}
                               </div>
                               <div>
-                                <h4 className="font-bold text-[#111418] group-hover:text-[#137fec] transition-colors">
+                                <h4 className="font-extrabold text-slate-800 group-hover:text-blue-600 transition-colors text-base">
                                   {request.title}
                                 </h4>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-[#617589]">
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs font-medium text-slate-400">
                                   <span className="flex items-center gap-1">
-                                    <i className="fa-solid fa-user text-[14px]"></i>{" "}
-                                    Sent by {request.sender}
+                                    <i className="fa-solid fa-user"></i> Sent by {request.sender}
                                   </span>
-                                  <span className="hidden md:inline text-gray-300">
-                                    •
-                                  </span>
-                                  <span className="flex items-center gap-1">
-                                    <i className="fa-solid fa-circle-check text-green-600"></i>{" "}
-                                    Completed
+                                  <span>•</span>
+                                  <span className="flex items-center gap-1 text-green-600 font-semibold">
+                                    <i className="fa-solid fa-circle-check"></i> Completed
                                   </span>
                                 </div>
                               </div>
                             </div>
-                            <div className="flex items-center justify-end w-full md:w-auto pl-14 md:pl-0">
+                            <div className="flex items-center justify-end w-full md:w-auto">
                               <button
                                 onClick={() => handleReviewAndSign(request.id)}
-                                className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#111418] text-white hover:bg-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+                                className="w-full md:w-auto flex items-center justify-center gap-2 bg-slate-900 text-white hover:bg-slate-800 px-5 py-2.5 rounded-xl font-bold text-xs transition-colors shadow-sm active:scale-98"
                               >
-                                <i className="fa-solid fa-file-contract text-[16px]"></i>
+                                <i className="fa-solid fa-file-contract"></i>
                                 View Document
                               </button>
                             </div>
@@ -713,48 +773,46 @@ const DocSign = () => {
                         ))}
                       </div>
                     )}
-                  </>
+                  </div>
                 )}
               </section>
 
               {/* Divider */}
-              <div className="w-full h-px bg-gray-200"></div>
+              <div className="w-full h-px bg-slate-200/70 my-8"></div>
 
               {/* Saved Templates Section */}
-              <section className="w-full space-y-6">
-                <div className="flex items-center gap-2">
-                  <i className="fa-solid fa-folder-open text-[#137fec] text-[20px]"></i>
-                  <h3 className="text-lg font-bold text-[#111418]">
+              <section className="w-full space-y-5 pb-10">
+                <div className="flex items-center gap-2.5">
+                  <div className="size-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <i className="fa-solid fa-folder-open text-lg"></i>
+                  </div>
+                  <h3 className="text-xl font-extrabold text-slate-800">
                     Saved Templates
                   </h3>
                 </div>
 
-                {/* Filter Bar */}
-                <div className="w-full bg-white p-2 rounded-xl border border-[#e5e7eb] shadow-sm flex flex-col lg:flex-row gap-4 items-center justify-between">
-                  <div className="relative w-full lg:w-96 group">
-                    <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#617589] group-focus-within:text-[#137fec] transition-colors text-[18px]"></i>
+                {/* Filter and Control Bar */}
+                <div className="w-full bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex flex-col xl:flex-row gap-4 items-center justify-between">
+                  <div className="relative w-full xl:w-96 group">
+                    <i className="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#137fec] transition-colors text-[16px]"></i>
                     <input
                       type="text"
                       placeholder="Search templates by name..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full h-10 pl-10 pr-4 rounded-lg border border-[#dbe0e6] bg-gray-50 text-sm focus:ring-1 focus:ring-[#137fec] focus:border-[#137fec] outline-none transition-all placeholder:text-gray-400"
+                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:ring-2 focus:ring-[#137fec]/25 focus:border-[#137fec] outline-none transition-all placeholder:text-slate-400 font-medium"
                     />
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                  <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
                     {/* Category Filter */}
-                    <div className="relative min-w-[140px] flex-1 lg:flex-none">
-                      <i className="fa-solid fa-filter absolute left-2.5 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-[16px]"></i>
+                    <div className="relative min-w-[150px] flex-1 xl:flex-none">
+                      <i className="fa-solid fa-filter absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[14px]"></i>
                       <select
                         value={selectedCategory}
                         onChange={(e) => setSelectedCategory(e.target.value)}
-                        style={{
-                          appearance: "none",
-                          WebkitAppearance: "none",
-                          MozAppearance: "none",
-                        }}
-                        className="w-full h-10 pl-9 pr-8 rounded-lg border border-[#dbe0e6] bg-white text-sm outline-none focus:ring-1 focus:ring-[#137fec] cursor-pointer text-[#111418] font-medium"
+                        style={{ appearance: "none" }}
+                        className="w-full h-11 pl-9 pr-9 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-[#137fec]/25 cursor-pointer text-slate-700 font-bold"
                       >
                         <option>All Categories</option>
                         <option>HR &amp; People</option>
@@ -762,135 +820,119 @@ const DocSign = () => {
                         <option>Finance</option>
                         <option>Real Estate</option>
                       </select>
-                      <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-[14px]"></i>
+                      <i className="fa-solid fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[12px]"></i>
                     </div>
 
                     {/* Time Range Filter */}
-                    <div className="relative min-w-[140px] flex-1 lg:flex-none">
-                      <i className="fa-solid fa-calendar absolute left-2.5 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-[16px]"></i>
+                    <div className="relative min-w-[150px] flex-1 xl:flex-none">
+                      <i className="fa-solid fa-calendar absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[14px]"></i>
                       <select
                         value={selectedTimeRange}
                         onChange={(e) => setSelectedTimeRange(e.target.value)}
-                        style={{
-                          appearance: "none",
-                          WebkitAppearance: "none",
-                          MozAppearance: "none",
-                        }}
-                        className="w-full h-10 pl-9 pr-8 rounded-lg border border-[#dbe0e6] bg-white text-sm outline-none focus:ring-1 focus:ring-[#137fec] cursor-pointer text-[#111418] font-medium"
+                        style={{ appearance: "none" }}
+                        className="w-full h-11 pl-9 pr-9 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-[#137fec]/25 cursor-pointer text-slate-700 font-bold"
                       >
                         <option>Any Time</option>
                         <option>Last 7 Days</option>
                         <option>Last 30 Days</option>
                         <option>Last Year</option>
                       </select>
-                      <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[#617589] pointer-events-none text-[14px]"></i>
+                      <i className="fa-solid fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[12px]"></i>
                     </div>
 
-                    <div className="w-px h-6 bg-gray-200 hidden lg:block mx-1"></div>
+                    <div className="w-px h-6 bg-slate-200 hidden xl:block mx-1"></div>
 
                     {/* Sort Dropdown */}
-                    <div className="relative min-w-[160px] flex-1 lg:flex-none">
+                    <div className="relative min-w-[160px] flex-1 xl:flex-none">
                       <select
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
-                        style={{
-                          appearance: "none",
-                          WebkitAppearance: "none",
-                          MozAppearance: "none",
-                        }}
-                        className="w-full h-10 pl-3 pr-8 rounded-lg border border-[#dbe0e6] bg-white text-sm outline-none focus:ring-1 focus:ring-[#137fec] cursor-pointer text-[#111418] font-medium"
+                        style={{ appearance: "none" }}
+                        className="w-full h-11 pl-4 pr-9 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-[#137fec]/25 cursor-pointer text-slate-700 font-bold"
                       >
                         <option>Sort: Last Modified</option>
                         <option>Sort: Name (A-Z)</option>
                         <option>Sort: Date Created</option>
                       </select>
+                      <i className="fa-solid fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[12px]"></i>
                     </div>
                   </div>
                 </div>
 
                 {/* Templates Grid */}
                 {filteredTemplates.length === 0 ? (
-                  <div className="w-full bg-white p-8 rounded-xl border border-[#e5e7eb] text-center">
-                    <i className="fa-solid fa-folder text-4xl text-[#617589] mb-3"></i>
-                    <p className="text-sm text-[#617589]">No templates found</p>
+                  <div className="w-full bg-white p-12 rounded-2xl border border-slate-100 text-center shadow-sm">
+                    <i className="fa-solid fa-folder text-5xl text-slate-300 mb-3"></i>
+                    <p className="text-sm font-semibold text-slate-500">No templates match your filters.</p>
                   </div>
                 ) : (
                   <div className="w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                     {filteredTemplates.map((template) => (
                       <div
                         key={template.id}
-                        className="group bg-white rounded-xl border border-[#e5e7eb] hover:border-[#137fec] hover:shadow-[0_4px_20px_rgba(0,0,0,0.05)] transition-all flex flex-col overflow-hidden relative"
+                        className="group bg-white rounded-2xl border border-slate-100 hover:border-blue-500/50 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 flex flex-col overflow-hidden relative"
                       >
-                        {/* Template Preview */}
-                        <div className="h-44 bg-gray-50 border-b border-[#e5e7eb] relative flex items-center justify-center p-6 overflow-hidden">
-                          <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-50"></div>
-                          <div className="w-32 h-40 bg-white shadow-sm border border-gray-200 rounded flex flex-col p-3 gap-2 group-hover:scale-105 transition-transform duration-300 relative z-10">
-                            <div className="h-2 w-1/3 bg-gray-200 rounded"></div>
-                            <div className="h-1.5 w-full bg-gray-100 rounded"></div>
-                            <div className="h-1.5 w-full bg-gray-100 rounded"></div>
-                            <div className="h-1.5 w-2/3 bg-gray-100 rounded"></div>
+                        {/* Template Cover */}
+                        <div className="h-40 bg-slate-50 border-b border-slate-100 relative flex items-center justify-center p-6 overflow-hidden">
+                          <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:14px_14px] opacity-60"></div>
+                          <div className="w-24 h-32 bg-white shadow-md border border-slate-100 rounded-lg flex flex-col p-3 gap-2 group-hover:scale-105 transition-transform duration-300 relative z-10">
+                            <div className="h-1.5 w-1/3 bg-slate-200 rounded"></div>
+                            <div className="h-1 w-full bg-slate-100 rounded"></div>
+                            <div className="h-1 w-full bg-slate-100 rounded"></div>
+                            <div className="h-1 w-2/3 bg-slate-100 rounded"></div>
                             <div className="mt-auto flex justify-end">
-                              <div className="h-4 w-12 bg-blue-100 rounded-sm"></div>
+                              <div className="h-3 w-8 bg-blue-50 rounded-sm border border-blue-100"></div>
                             </div>
                           </div>
-                          <div className="absolute top-3 right-3 z-20">
+                          <div className="absolute top-4 right-4 z-20">
                             <span
-                              className={`inline-flex items-center rounded-md ${
-                                getColorClasses(template.categoryColor).bg
-                              } px-2 py-1 text-xs font-bold ${
-                                getColorClasses(template.categoryColor).text
-                              } ring-1 ${
-                                getColorClasses(template.categoryColor)
-                                  .ringColor
-                              } uppercase tracking-wide`}
+                              className={`inline-flex items-center rounded-lg px-2.5 py-1 text-[10px] font-black tracking-wider uppercase ${
+                                getColorClasses(template.categoryColor).pill
+                              } border shadow-sm`}
                             >
                               {template.category}
                             </span>
                           </div>
                         </div>
 
-                        {/* Template Info */}
+                        {/* Template Details */}
                         <div className="p-5 flex-1 flex flex-col">
-                          <div className="flex justify-between items-start mb-2">
-                            <h3 className="font-bold text-[#111418] text-lg truncate pr-2 group-hover:text-[#137fec] transition-colors">
-                              {template.title}
-                            </h3>
-                          </div>
-                          <p className="text-sm text-[#617589] line-clamp-2 mb-4">
+                          <h3 className="font-extrabold text-slate-800 text-base truncate pr-2 group-hover:text-blue-600 transition-colors mb-1.5">
+                            {template.title}
+                          </h3>
+                          <p className="text-xs font-semibold text-slate-400 line-clamp-2 mb-4 leading-relaxed">
                             {template.description}
                           </p>
 
-                          {/* Footer */}
-                          <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between">
+                          {/* Template Footer Actions */}
+                          <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
                             <div className="flex flex-col">
-                              <span className="text-[10px] uppercase font-bold text-[#617589] tracking-wider">
+                              <span className="text-[9px] uppercase font-black text-slate-300 tracking-wider">
                                 Last Modified
                               </span>
-                              <span className="text-xs font-medium text-[#111418]">
+                              <span className="text-xs font-bold text-slate-600 mt-0.5">
                                 {template.lastModified}
                               </span>
                             </div>
                             <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                               <button
-                                className="p-1.5 text-[#617589] hover:text-[#137fec] hover:bg-blue-50 rounded transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                 title="Preview Template"
                               >
-                                <i className="fa-solid fa-eye text-[18px]"></i>
+                                <i className="fa-solid fa-eye text-[16px]"></i>
                               </button>
                               <button
-                                className="p-1.5 text-[#617589] hover:text-[#137fec] hover:bg-blue-50 rounded transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                 title="Edit Template"
                               >
-                                <i className="fa-solid fa-pen-to-square text-[18px]"></i>
+                                <i className="fa-solid fa-pen-to-square text-[16px]"></i>
                               </button>
                               <button
-                                onClick={() =>
-                                  handleDeleteTemplate(template.id)
-                                }
-                                className="p-1.5 text-[#617589] hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                onClick={() => handleDeleteTemplate(template.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                 title="Delete Template"
                               >
-                                <i className="fa-solid fa-trash text-[18px]"></i>
+                                <i className="fa-solid fa-trash text-[16px]"></i>
                               </button>
                             </div>
                           </div>
@@ -903,6 +945,191 @@ const DocSign = () => {
             </>
           )}
         </div>
+
+        {/* Dynamic Signature Progress Tracking Drawer (Slide-Over Panel) */}
+        {selectedTrackingDoc && (
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 transition-opacity"
+              onClick={() => setTrackingDocId(null)}
+            ></div>
+
+            {/* Sidebar drawer */}
+            <div className="fixed inset-y-0 right-0 max-w-md w-full bg-white z-50 shadow-2xl flex flex-col h-full transform transition-transform duration-300 ease-in-out border-l border-slate-100 rounded-l-3xl overflow-hidden">
+              {/* Drawer Header */}
+              <div className="p-6 bg-slate-900 text-white flex justify-between items-center relative">
+                <div>
+                  <h3 className="text-lg font-extrabold flex items-center gap-2">
+                    <i className="fa-solid fa-location-crosshairs text-blue-400"></i>
+                    Signature Progress Tracker
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1 truncate max-w-[300px]">
+                    {selectedTrackingDoc.name}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setTrackingDocId(null)}
+                  className="size-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors text-white"
+                >
+                  <i className="fa-solid fa-times text-sm"></i>
+                </button>
+              </div>
+
+              {/* Drawer Body content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Visual completion ring/summary */}
+                <div className="bg-slate-50 border border-slate-100 p-5 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800">Completion Status</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {selectedTrackingDoc.recipients.filter(r => r.status === "signed").length} of{" "}
+                      {selectedTrackingDoc.recipients.length} recipients signed
+                    </p>
+                  </div>
+                  <div className="relative size-16 flex items-center justify-center font-black text-slate-800 text-base">
+                    {/* SVG circular progress indicator */}
+                    <svg className="absolute inset-0 size-full -rotate-90">
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r="28"
+                        stroke="#e2e8f0"
+                        strokeWidth="5"
+                        fill="transparent"
+                      />
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r="28"
+                        stroke="#137fec"
+                        strokeWidth="5"
+                        fill="transparent"
+                        strokeDasharray={175.9}
+                        strokeDashoffset={
+                          175.9 -
+                          (175.9 *
+                            (selectedTrackingDoc.recipients.filter(r => r.status === "signed").length /
+                              selectedTrackingDoc.recipients.length))
+                        }
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span className="z-10">
+                      {Math.round(
+                        (selectedTrackingDoc.recipients.filter(r => r.status === "signed").length /
+                          selectedTrackingDoc.recipients.length) *
+                          100
+                      )}
+                      %
+                    </span>
+                  </div>
+                </div>
+
+                {/* Signers workflow track list */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">Recipients Status</h4>
+                  <div className="space-y-3">
+                    {selectedTrackingDoc.recipients.map((rec, index) => {
+                      const isSigned = rec.status === "signed";
+                      return (
+                        <div
+                          key={rec._id || rec.id || index}
+                          className="flex items-start justify-between p-3.5 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-slate-200 transition-colors gap-3"
+                        >
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className={`size-8 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold ${
+                              isSigned ? "bg-green-50 text-green-600" : "bg-slate-50 text-slate-400"
+                            }`}>
+                              {isSigned ? (
+                                <i className="fa-solid fa-circle-check"></i>
+                              ) : (
+                                <span>{index + 1}</span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{rec.name}</p>
+                              <p className="text-[11px] font-semibold text-slate-400 truncate">{rec.email}</p>
+                              {isSigned && rec.signedAt && (
+                                <p className="text-[10px] text-green-600 font-bold mt-1">
+                                  Signed {formatDate(rec.signedAt)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 flex items-center">
+                            {isSigned ? (
+                              <span className="text-[10px] font-black text-green-600 uppercase bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
+                                Signed
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleSendReminder(selectedTrackingDoc._id, rec.email)}
+                                disabled={remindingEmail === rec.email}
+                                className="flex items-center justify-center gap-1 bg-[#137fec] hover:bg-blue-600 disabled:bg-blue-300 text-white px-2.5 py-1 rounded-lg font-bold text-[10px] shadow-sm transition-colors active:scale-95"
+                              >
+                                {remindingEmail === rec.email ? (
+                                  <i className="fa-solid fa-circle-notch fa-spin"></i>
+                                ) : (
+                                  <>
+                                    <i className="fa-solid fa-paper-plane text-[9px]"></i>
+                                    Remind
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Audit trail log */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">Document Timeline</h4>
+                  <div className="border-l border-slate-200 pl-4 ml-2 space-y-4 text-xs font-semibold text-slate-500">
+                    <div className="relative">
+                      <div className="absolute size-2 bg-blue-500 rounded-full -left-[21px] top-1.5 border border-white"></div>
+                      <p className="text-slate-700 font-bold">Document Created</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Uploaded by {selectedTrackingDoc.uploadedByName || "Sender"} on{" "}
+                        {new Date(selectedTrackingDoc.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+
+                    {selectedTrackingDoc.recipients.map((rec, idx) => {
+                      if (rec.status !== "signed") return null;
+                      return (
+                        <div key={idx} className="relative">
+                          <div className="absolute size-2 bg-green-500 rounded-full -left-[21px] top-1.5 border border-white"></div>
+                          <p className="text-slate-700 font-bold">Signed by {rec.name}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Completed signature on {rec.signedAt ? new Date(rec.signedAt).toLocaleString() : "Unknown date"}
+                          </p>
+                        </div>
+                      );
+                    })}
+
+                    {selectedTrackingDoc.status === "Completed" && (
+                      <div className="relative">
+                        <div className="absolute size-2 bg-green-600 rounded-full -left-[21px] top-1.5 border border-white"></div>
+                        <p className="text-green-700 font-bold flex items-center gap-1">
+                          <i className="fa-solid fa-circle-check"></i>
+                          Fully Completed
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          All parties have signed the document successfully.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
