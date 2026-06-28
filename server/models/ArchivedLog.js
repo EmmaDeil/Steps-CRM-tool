@@ -3,9 +3,9 @@ const mongoose = require('mongoose');
 const archivedLogSchema = new mongoose.Schema({
   // Original audit log data
   actor: {
-    userId: { type: String, required: true },
-    userName: { type: String, required: true },
-    userEmail: { type: String, required: true },
+    userId: String,
+    userName: String,
+    userEmail: String,
     initials: String,
   },
   action: { type: String, required: true },

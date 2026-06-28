@@ -731,6 +731,45 @@ async function sendItemReturnReminderEmail(ticketData, recipientEmail, recipient
   }
 }
 
+// Send document signed notification email
+async function sendDocumentSignedEmail(documentData, signerName, recipientEmail) {
+  if (!recipientEmail) return;
+
+  const viewLink = `${frontendUrl}/docsign/view/${documentData._id}`;
+  
+  const mailOptions = {
+    from: emailUser,
+    to: recipientEmail,
+    subject: `📝 Document Signed: ${documentData.name}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #137fec;">📝 Document Signed</h2>
+        <p>Hello,</p>
+        <p><strong>${signerName}</strong> has signed the document: <strong>${documentData.name}</strong>.</p>
+        <p>Current Document Status: <strong>${documentData.status}</strong></p>
+        <div style="margin: 30px 0;">
+          <a href="${viewLink}" style="background-color: #137fec; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
+            View Document Status
+          </a>
+        </div>
+        <p style="color: #9ca3af; font-size: 12px;">This is an automated notification. Please do not reply.</p>
+      </div>
+    `
+  };
+
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`📧 Document signed email would be sent to: ${recipientEmail}`);
+      return { success: true };
+    }
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error('Error sending document signed email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendApprovalEmail,
   sendPOReviewEmail,
@@ -740,6 +779,7 @@ module.exports = {
   sendSecurityAlertEmail,
   sendNotificationRuleEmail,
   sendSignatureRequestEmail,
+  sendDocumentSignedEmail,
   sendInventoryExpiryAlertEmail,
   sendItemReturnReminderEmail,
   transporter,

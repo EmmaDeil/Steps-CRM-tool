@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const EmployeeModel = require('../models/Employee');
 const UserModel = require('../models/User');
@@ -125,6 +126,52 @@ router.put('/employees/bulk-update', requireModuleAction('hrm', 'edit'), async (
   } catch (err) {
     console.error('Error in bulk update:', err);
     res.status(500).json({ success: false, message: 'Failed to perform bulk update' });
+  }
+});
+
+router.get('/employees/:id', requireModuleAction('hrm', 'view'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    let employee = null;
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      employee = await EmployeeModel.findById(id);
+      if (!employee) {
+        employee = await EmployeeModel.findOne({ userRef: id });
+        
+        // Auto-create missing employee record for existing users (e.g. seeded admin)
+        if (!employee) {
+          const user = await UserModel.findById(id);
+          if (user) {
+            const count = await EmployeeModel.countDocuments();
+            const employeeId = `EMP${String(count + 1).padStart(5, '0')}`;
+            employee = await EmployeeModel.create({
+              firstName: user.firstName || 'Unknown',
+              lastName: user.lastName || 'User',
+              email: user.email,
+              employeeId,
+              department: user.department || null,
+              jobTitle: user.jobTitle || null,
+              role: user.role,
+              status: user.status === 'Inactive' ? 'Terminated' : 'Active',
+              userRef: user._id,
+            });
+            user.employeeRef = employee._id;
+            await user.save();
+          }
+        }
+      }
+    } else {
+      employee = await EmployeeModel.findOne({ employeeId: id });
+    }
+
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+    res.json(employee);
+  } catch (err) {
+    console.error('Error fetching employee:', err);
+    res.status(500).json({ message: 'Failed to fetch employee' });
   }
 });
 
