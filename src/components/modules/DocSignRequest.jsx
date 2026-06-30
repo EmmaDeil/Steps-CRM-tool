@@ -782,7 +782,7 @@ const DocSignRequest = ({ onBack, onSuccess }) => {
         <aside
           className={`fixed lg:relative z-40 lg:z-auto top-0 right-0 h-full flex flex-col bg-white shrink-0 shadow-sm transition-all duration-300 ease-in-out ${
             showRightSidebar
-              ? "w-80 lg:w-96 translate-x-0 border-l border-[#e5e7eb] opacity-100"
+              ? "w-80 lg:w-[450px] translate-x-0 border-l border-[#e5e7eb] opacity-100"
               : "w-80 lg:w-0 translate-x-full lg:translate-x-0 lg:overflow-hidden lg:border-l-0 lg:opacity-0"
           }`}
         >
