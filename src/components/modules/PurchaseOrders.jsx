@@ -11,7 +11,6 @@ import Breadcrumb from "../Breadcrumb";
 import { apiService } from "../../services/api";
 import { toast } from "react-hot-toast";
 import DataTable from "../common/DataTable";
-import ModuleLoader from "../common/ModuleLoader";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const PurchaseOrders = () => {
@@ -34,6 +33,13 @@ const PurchaseOrders = () => {
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [isTogglingLock, setIsTogglingLock] = useState(false);
   const [isSubmittingApproval, setIsSubmittingApproval] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState({
+    workflow: false,
+    activity: false,
+    lineItems: false,
+    attachments: false,
+    comment: false,
+  });
   const [editForm, setEditForm] = useState({
     vendor: "",
     status: "draft",
@@ -595,27 +601,22 @@ const PurchaseOrders = () => {
       const { id, number } = pendingOpenPoRef.current;
       if (!id && !number) return;
 
-      pendingOpenPoRef.current = { id: "", number: "" };
-
       if (id) {
-        const match = purchaseOrders.find(
-          (po) => String(po._id || po.id) === String(id),
-        );
-        if (match) {
-          await openPurchaseOrderDetails(match);
-          return;
-        }
+        await openPurchaseOrderDetails({ _id: id });
+        pendingOpenPoRef.current = { id: "", number: "" };
+        return;
       }
 
       if (number) {
         await openPurchaseOrderByNumber(number);
+        pendingOpenPoRef.current = { id: "", number: "" };
       }
     };
 
-    if (purchaseOrders.length > 0) {
+    if (!loading) {
       runPendingOpen();
     }
-  }, [purchaseOrders, openPurchaseOrderByNumber]);
+  }, [loading, purchaseOrders, openPurchaseOrderByNumber]);
 
   const filteredMentionUsers = activeUsers
     .map((activeUser) => ({
@@ -1095,6 +1096,13 @@ const PurchaseOrders = () => {
   const showLockControl =
     !!selectedPo && (selectedPo?.isLocked || selectedPoStatus === "approved");
 
+  const toggleSection = (sectionKey) => {
+    setCollapsedSections((prev) => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey],
+    }));
+  };
+
   const updatePoLineItem = (index, field, value) => {
     setSelectedPo((prev) => {
       if (!prev) return prev;
@@ -1359,7 +1367,7 @@ const PurchaseOrders = () => {
   ];
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 px-1 flex flex-col">
+    <div className="w-full min-h-screen bg-[#f6f7f8] flex flex-col">
       <Breadcrumb
         items={
           selectedPo
@@ -1386,7 +1394,7 @@ const PurchaseOrders = () => {
       />
 
       {/* Main Content */}
-      <main className="flex-1 max-w-[1490px] mx-auto w-full px-1 py-6">
+      <main className="flex-1 py-3 px-4 max-w-[1440px] mx-auto w-full">
         {loadingPoDetails && (
           <div className="rounded-xl border border-[#dbe0e6] bg-white p-6 mb-6 text-sm text-[#617589]">
             <i className="fa-solid fa-circle-notch fa-spin mr-2"></i>
@@ -1643,330 +1651,366 @@ const PurchaseOrders = () => {
               <div className="rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50 flex items-center justify-between">
                   <h3 className="text-lg font-bold text-[#111418]">Workflow</h3>
+                  <button
+                    type="button"
+                    onClick={() => toggleSection("workflow")}
+                    className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
+                  >
+                    {collapsedSections.workflow ? "Expand" : "Collapse"}
+                  </button>
                 </div>
-                <div className="p-6 space-y-3 text-sm">
-                  <div>
-                    <p className="text-[#617589]">PO Lock Status</p>
-                    <p className="text-[#111418] font-semibold">
-                      {selectedPo?.isLocked ? "Locked" : "Unlocked"}
-                    </p>
-                  </div>
-                  {Array.isArray(selectedPo?.approvalChain) &&
-                  selectedPo.approvalChain.length > 0 ? (
+                {!collapsedSections.workflow && (
+                  <div className="p-6 space-y-3 text-sm">
                     <div>
-                      <p className="text-[#617589] mb-1">Approval Steps</p>
-                      <div className="space-y-2">
-                        {selectedPo.approvalChain.map((step, idx) => (
-                          <div
-                            key={`${step.level || idx}-${step.approverName || step.approverRole || "approver"}`}
-                            className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50"
-                          >
-                            <p className="text-sm font-semibold text-[#111418]">
-                              Level {step.level || idx + 1}:{" "}
-                              {step.approverName ||
-                                step.approverRole ||
-                                "Approver"}
-                            </p>
-                            <p className="text-xs text-[#617589] capitalize">
-                              {step.status || "awaiting"}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
+                      <p className="text-[#617589]">PO Lock Status</p>
+                      <p className="text-[#111418] font-semibold">
+                        {selectedPo?.isLocked ? "Locked" : "Unlocked"}
+                      </p>
                     </div>
-                  ) : (
-                    <p className="text-[#617589] text-sm">
-                      No explicit approval chain configured.
-                    </p>
-                  )}
+                    {Array.isArray(selectedPo?.approvalChain) &&
+                    selectedPo.approvalChain.length > 0 ? (
+                      <div>
+                        <p className="text-[#617589] mb-1">Approval Steps</p>
+                        <div className="space-y-2">
+                          {selectedPo.approvalChain.map((step, idx) => (
+                            <div
+                              key={`${step.level || idx}-${step.approverName || step.approverRole || "approver"}`}
+                              className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50"
+                            >
+                              <p className="text-sm font-semibold text-[#111418]">
+                                Level {step.level || idx + 1}:{" "}
+                                {step.approverName ||
+                                  step.approverRole ||
+                                  "Approver"}
+                              </p>
+                              <p className="text-xs text-[#617589] capitalize">
+                                {step.status || "awaiting"}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[#617589] text-sm">
+                        No explicit approval chain configured.
+                      </p>
+                    )}
 
-                  <hr className="my-3" />
+                    <hr className="my-3" />
 
-                  <div>
-                    <p className="text-[#617589]">Request Title</p>
-                    <p className="text-[#111418] font-semibold">
-                      {getRequestBreakdownValue("requestTitle") ||
-                        selectedPo?.linkedMaterialRequestId?.requestId ||
-                        selectedPo?.linkedMaterialRequestId?.reason ||
-                        selectedPo?.linkedMaterialRequestId?.lineItems?.[0]
-                          ?.description ||
-                        selectedPo?.requestTitle ||
-                        selectedPo?.notes ||
-                        "Untitled Request"}
-                    </p>
+                    <div>
+                      <p className="text-[#617589]">Request Title</p>
+                      <p className="text-[#111418] font-semibold">
+                        {getRequestBreakdownValue("requestTitle") ||
+                          selectedPo?.linkedMaterialRequestId?.requestId ||
+                          selectedPo?.linkedMaterialRequestId?.reason ||
+                          selectedPo?.linkedMaterialRequestId?.lineItems?.[0]
+                            ?.description ||
+                          selectedPo?.requestTitle ||
+                          selectedPo?.notes ||
+                          "Untitled Request"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[#617589]">Material Request ID</p>
+                      {(() => {
+                        const materialRequestMeta =
+                          getMaterialRequestLinkMeta();
+                        return materialRequestMeta.id ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openMaterialRequestDetails(materialRequestMeta.id)
+                            }
+                            className="text-[#137fec] font-semibold hover:underline"
+                          >
+                            {materialRequestMeta.label}
+                          </button>
+                        ) : (
+                          <p className="text-[#111418] font-semibold">
+                            {materialRequestMeta.label}
+                          </p>
+                        );
+                      })()}
+                    </div>
+                    <div>
+                      <p className="text-[#617589]">Requested By</p>
+                      <p className="text-[#111418] font-semibold">
+                        {getRequestBreakdownValue("requestedBy") || "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[#617589]">Department</p>
+                      <p className="text-[#111418] font-semibold">
+                        {getRequestBreakdownValue("department") || "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[#617589]">Request Type</p>
+                      <p className="text-[#111418] font-semibold">
+                        {getRequestBreakdownValue("requestType") || "N/A"}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[#617589]">Material Request ID</p>
-                    {(() => {
-                      const materialRequestMeta = getMaterialRequestLinkMeta();
-                      return materialRequestMeta.id ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openMaterialRequestDetails(materialRequestMeta.id)
-                          }
-                          className="text-[#137fec] font-semibold hover:underline"
-                        >
-                          {materialRequestMeta.label}
-                        </button>
-                      ) : (
-                        <p className="text-[#111418] font-semibold">
-                          {materialRequestMeta.label}
-                        </p>
-                      );
-                    })()}
-                  </div>
-                  <div>
-                    <p className="text-[#617589]">Requested By</p>
-                    <p className="text-[#111418] font-semibold">
-                      {getRequestBreakdownValue("requestedBy") || "N/A"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[#617589]">Department</p>
-                    <p className="text-[#111418] font-semibold">
-                      {getRequestBreakdownValue("department") || "N/A"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[#617589]">Request Type</p>
-                    <p className="text-[#111418] font-semibold">
-                      {getRequestBreakdownValue("requestType") || "N/A"}
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
             <div className="mt-6 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50 flex items-center justify-between">
                 <h3 className="text-lg font-bold text-[#111418]">Activity</h3>
+                <button
+                  type="button"
+                  onClick={() => toggleSection("activity")}
+                  className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
+                >
+                  {collapsedSections.activity ? "Expand" : "Collapse"}
+                </button>
               </div>
-              <div className="p-6 space-y-3">
-                {Array.isArray(selectedPo?.activities) &&
-                selectedPo.activities.length > 0 ? (
-                  selectedPo.activities
-                    .slice()
-                    .sort(
-                      (a, b) =>
-                        new Date(a.timestamp || 0).getTime() -
-                        new Date(b.timestamp || 0).getTime(),
-                    )
-                    .map((entry, idx) => (
-                      <div
-                        key={`${entry.type || "activity"}-${idx}`}
-                        className="flex items-start gap-3"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                          <i className="fa-solid fa-clock text-xs text-[#617589]"></i>
+              {!collapsedSections.activity && (
+                <div className="p-6 space-y-3">
+                  {Array.isArray(selectedPo?.activities) &&
+                  selectedPo.activities.length > 0 ? (
+                    selectedPo.activities
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          new Date(a.timestamp || 0).getTime() -
+                          new Date(b.timestamp || 0).getTime(),
+                      )
+                      .map((entry, idx) => (
+                        <div
+                          key={`${entry.type || "activity"}-${idx}`}
+                          className="flex items-start gap-3"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                            <i className="fa-solid fa-clock text-xs text-[#617589]"></i>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm text-[#111418] whitespace-pre-wrap">
+                              <span className="font-semibold">
+                                {entry.author || "System"}
+                              </span>{" "}
+                              {String(entry.text || "Updated purchase order")
+                                .split(
+                                  /(@\w+(?:\s\w+)?|Invoice #[a-zA-Z0-9_-]+)/,
+                                )
+                                .map((part, pIdx) => {
+                                  if (/^@\w+/.test(part)) {
+                                    return (
+                                      <span
+                                        key={pIdx}
+                                        className="text-[#137fec] font-semibold"
+                                      >
+                                        {part}
+                                      </span>
+                                    );
+                                  } else if (
+                                    /^Invoice #[a-zA-Z0-9_-]+/.test(part)
+                                  ) {
+                                    const invNum = part.replace("Invoice-", "");
+                                    return (
+                                      <button
+                                        key={pIdx}
+                                        type="button"
+                                        onClick={() =>
+                                          openInvoiceFromActivity(invNum)
+                                        }
+                                        className="inline-flex items-center text-[#137fec] hover:text-blue-700 hover:underline font-semibold mx-0.5"
+                                      >
+                                        {part}
+                                      </button>
+                                    );
+                                  }
+                                  return <span key={pIdx}>{part}</span>;
+                                })}
+                            </p>
+                            <p className="text-xs text-[#617589] mt-0.5">
+                              {entry.timestamp
+                                ? new Date(entry.timestamp).toLocaleString()
+                                : "Unknown time"}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm text-[#111418] whitespace-pre-wrap">
-                            <span className="font-semibold">
-                              {entry.author || "System"}
-                            </span>{" "}
-                            {String(entry.text || "Updated purchase order")
-                              .split(/(@\w+(?:\s\w+)?|Invoice #[a-zA-Z0-9_-]+)/)
-                              .map((part, pIdx) => {
-                                if (/^@\w+/.test(part)) {
-                                  return (
-                                    <span
-                                      key={pIdx}
-                                      className="text-[#137fec] font-semibold"
-                                    >
-                                      {part}
-                                    </span>
-                                  );
-                                } else if (
-                                  /^Invoice #[a-zA-Z0-9_-]+/.test(part)
-                                ) {
-                                  const invNum = part.replace("Invoice-", "");
-                                  return (
-                                    <button
-                                      key={pIdx}
-                                      type="button"
-                                      onClick={() =>
-                                        openInvoiceFromActivity(invNum)
-                                      }
-                                      className="inline-flex items-center text-[#137fec] hover:text-blue-700 hover:underline font-semibold mx-0.5"
-                                    >
-                                      {part}
-                                    </button>
-                                  );
-                                }
-                                return <span key={pIdx}>{part}</span>;
-                              })}
-                          </p>
-                          <p className="text-xs text-[#617589] mt-0.5">
-                            {entry.timestamp
-                              ? new Date(entry.timestamp).toLocaleString()
-                              : "Unknown time"}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                ) : (
-                  <p className="text-sm text-[#617589]">No activity yet.</p>
-                )}
-              </div>
+                      ))
+                  ) : (
+                    <p className="text-sm text-[#617589]">No activity yet.</p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="mt-6 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-[#dbe0e6] bg-gray-50 flex items-center justify-between">
                 <h3 className="text-lg font-bold text-[#111418]">Items</h3>
-                {isEditing && !selectedPo?.isLocked && (
+                <div className="flex items-center gap-3">
+                  {isEditing && !selectedPo?.isLocked && (
+                    <button
+                      type="button"
+                      onClick={addPoLineItem}
+                      className="text-xs font-semibold text-[#137fec] hover:text-[#0d6efd]"
+                    >
+                      +
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={addPoLineItem}
-                    className="text-xs font-semibold text-[#137fec] hover:text-[#0d6efd]"
+                    onClick={() => toggleSection("lineItems")}
+                    className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
                   >
-                    +
+                    {collapsedSections.lineItems ? "Expand" : "Collapse"}
                   </button>
-                )}
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
-                        Item
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
-                        Qty
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
-                        Unit
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
-                        Unit Cost
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
-                        Total
-                      </th>
-                      {isEditing && !selectedPo?.isLocked && (
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
-                          Remove
+              {!collapsedSections.lineItems && (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
+                          Item
                         </th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {(selectedPo.lineItems || []).map((item, idx) => (
-                      <tr key={`${item.itemName || "item"}-${idx}`}>
-                        <td className="px-4 py-3 text-sm font-medium text-[#111418]">
-                          {isEditing && !selectedPo?.isLocked ? (
-                            <input
-                              type="text"
-                              value={item.itemName || ""}
-                              onChange={(e) =>
-                                updatePoLineItem(
-                                  idx,
-                                  "itemName",
-                                  e.target.value,
-                                )
-                              }
-                              className="w-full rounded border border-gray-300 px-2 py-1"
-                            />
-                          ) : (
-                            item.itemName || "-"
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-[#111418]">
-                          {isEditing && !selectedPo?.isLocked ? (
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.quantity || 0}
-                              onChange={(e) =>
-                                updatePoLineItem(
-                                  idx,
-                                  "quantity",
-                                  e.target.value,
-                                )
-                              }
-                              className="w-24 rounded border border-gray-300 px-2 py-1"
-                            />
-                          ) : (
-                            item.quantity || 0
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-[#617589]">
-                          {isEditing && !selectedPo?.isLocked ? (
-                            <select
-                              value={item.quantityType || ""}
-                              onChange={(e) =>
-                                updatePoLineItem(
-                                  idx,
-                                  "quantityType",
-                                  e.target.value,
-                                )
-                              }
-                              className="w-56 rounded border border-gray-300 px-2 py-1"
-                            >
-                              <option value="">
-                                {unitOptions.length === 0
-                                  ? "No active units"
-                                  : "Select unit"}
-                              </option>
-                              {Array.from(
-                                new Set(
-                                  [...unitOptions, item.quantityType].filter(
-                                    Boolean,
-                                  ),
-                                ),
-                              ).map((option) => (
-                                <option key={option} value={option}>
-                                  {getPoUnitLabel(option)}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            item.quantityType || "-"
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-[#111418] text-right">
-                          {isEditing && !selectedPo?.isLocked ? (
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.0"
-                              value={item.amount || 0}
-                              onChange={(e) =>
-                                updatePoLineItem(idx, "amount", e.target.value)
-                              }
-                              className="w-28 rounded border border-gray-300 px-2 py-1 text-right"
-                            />
-                          ) : (
-                            formatPoCurrency(
-                              item.amount || 0,
-                              resolvePoCurrency(selectedPo),
-                            )
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-[#111418] text-right">
-                          {formatPoCurrency(
-                            (Number(item.quantity) || 0) *
-                              (Number(item.amount) || 0),
-                            resolvePoCurrency(selectedPo),
-                          )}
-                        </td>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
+                          Qty
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-[#617589] uppercase">
+                          Unit
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
+                          Unit Cost
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
+                          Total
+                        </th>
                         {isEditing && !selectedPo?.isLocked && (
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => removePoLineItem(idx)}
-                              className="text-red-600 hover:text-red-700"
-                              title="Remove item"
-                            >
-                              <i className="fa-solid fa-trash"></i>
-                            </button>
-                          </td>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-[#617589] uppercase">
+                            Remove
+                          </th>
                         )}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {(selectedPo.lineItems || []).map((item, idx) => (
+                        <tr key={`${item.itemName || "item"}-${idx}`}>
+                          <td className="px-4 py-3 text-sm font-medium text-[#111418]">
+                            {isEditing && !selectedPo?.isLocked ? (
+                              <input
+                                type="text"
+                                value={item.itemName || ""}
+                                onChange={(e) =>
+                                  updatePoLineItem(
+                                    idx,
+                                    "itemName",
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-full rounded border border-gray-300 px-2 py-1"
+                              />
+                            ) : (
+                              item.itemName || "-"
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-[#111418]">
+                            {isEditing && !selectedPo?.isLocked ? (
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.quantity || 0}
+                                onChange={(e) =>
+                                  updatePoLineItem(
+                                    idx,
+                                    "quantity",
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-24 rounded border border-gray-300 px-2 py-1"
+                              />
+                            ) : (
+                              item.quantity || 0
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-[#617589]">
+                            {isEditing && !selectedPo?.isLocked ? (
+                              <select
+                                value={item.quantityType || ""}
+                                onChange={(e) =>
+                                  updatePoLineItem(
+                                    idx,
+                                    "quantityType",
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-56 rounded border border-gray-300 px-2 py-1"
+                              >
+                                <option value="">
+                                  {unitOptions.length === 0
+                                    ? "No active units"
+                                    : "Select unit"}
+                                </option>
+                                {Array.from(
+                                  new Set(
+                                    [...unitOptions, item.quantityType].filter(
+                                      Boolean,
+                                    ),
+                                  ),
+                                ).map((option) => (
+                                  <option key={option} value={option}>
+                                    {getPoUnitLabel(option)}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              item.quantityType || "-"
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-[#111418] text-right">
+                            {isEditing && !selectedPo?.isLocked ? (
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.0"
+                                value={item.amount || 0}
+                                onChange={(e) =>
+                                  updatePoLineItem(
+                                    idx,
+                                    "amount",
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-28 rounded border border-gray-300 px-2 py-1 text-right"
+                              />
+                            ) : (
+                              formatPoCurrency(
+                                item.amount || 0,
+                                resolvePoCurrency(selectedPo),
+                              )
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-[#111418] text-right">
+                            {formatPoCurrency(
+                              (Number(item.quantity) || 0) *
+                                (Number(item.amount) || 0),
+                              resolvePoCurrency(selectedPo),
+                            )}
+                          </td>
+                          {isEditing && !selectedPo?.isLocked && (
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => removePoLineItem(idx)}
+                                className="text-red-600 hover:text-red-700"
+                                title="Remove item"
+                              >
+                                <i className="fa-solid fa-trash"></i>
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-hidden">
@@ -1974,47 +2018,56 @@ const PurchaseOrders = () => {
                 <h3 className="text-lg font-bold text-[#111418]">
                   Attachments
                 </h3>
+                <button
+                  type="button"
+                  onClick={() => toggleSection("attachments")}
+                  className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
+                >
+                  {collapsedSections.attachments ? "Expand" : "Collapse"}
+                </button>
               </div>
-              <div className="p-6">
-                {Array.isArray(
-                  selectedPo?.linkedMaterialRequestId?.attachments,
-                ) &&
-                selectedPo.linkedMaterialRequestId.attachments.length > 0 ? (
-                  <div className="flex flex-wrap gap-3">
-                    {selectedPo.linkedMaterialRequestId.attachments.map(
-                      (file, idx) => {
-                        const attachmentHref = getAttachmentHref(file);
-                        const attachmentName = getAttachmentName(file, idx);
-                        return attachmentHref ? (
-                          <a
-                            key={`${attachmentName}-${idx}`}
-                            href={attachmentHref}
-                            target="_blank"
-                            rel="noreferrer"
-                            download={attachmentName}
-                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-[#111418] text-sm hover:bg-gray-100"
-                          >
-                            <i className="fa-solid fa-paperclip text-[#617589]"></i>
-                            <span>{attachmentName}</span>
-                          </a>
-                        ) : (
-                          <div
-                            key={`${attachmentName}-${idx}`}
-                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-[#111418] text-sm"
-                          >
-                            <i className="fa-solid fa-file text-[#617589]"></i>
-                            <span>{attachmentName}</span>
-                          </div>
-                        );
-                      },
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-[#617589]">
-                    No attachments on source request.
-                  </p>
-                )}
-              </div>
+              {!collapsedSections.attachments && (
+                <div className="p-6">
+                  {Array.isArray(
+                    selectedPo?.linkedMaterialRequestId?.attachments,
+                  ) &&
+                  selectedPo.linkedMaterialRequestId.attachments.length > 0 ? (
+                    <div className="flex flex-wrap gap-3">
+                      {selectedPo.linkedMaterialRequestId.attachments.map(
+                        (file, idx) => {
+                          const attachmentHref = getAttachmentHref(file);
+                          const attachmentName = getAttachmentName(file, idx);
+                          return attachmentHref ? (
+                            <a
+                              key={`${attachmentName}-${idx}`}
+                              href={attachmentHref}
+                              target="_blank"
+                              rel="noreferrer"
+                              download={attachmentName}
+                              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-[#111418] text-sm hover:bg-gray-100"
+                            >
+                              <i className="fa-solid fa-paperclip text-[#617589]"></i>
+                              <span>{attachmentName}</span>
+                            </a>
+                          ) : (
+                            <div
+                              key={`${attachmentName}-${idx}`}
+                              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-[#111418] text-sm"
+                            >
+                              <i className="fa-solid fa-file text-[#617589]"></i>
+                              <span>{attachmentName}</span>
+                            </div>
+                          );
+                        },
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[#617589]">
+                      No attachments on source request.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="mt-6 rounded-xl border border-[#dbe0e6] bg-white shadow-sm overflow-visible">
@@ -2024,106 +2077,115 @@ const PurchaseOrders = () => {
                   <span className="text-xs text-[#617589]">
                     Use @ to mention active users
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => toggleSection("comment")}
+                    className="text-xs font-semibold text-[#617589] hover:text-[#111418]"
+                  >
+                    {collapsedSections.comment ? "Expand" : "Collapse"}
+                  </button>
                 </div>
               </div>
-              <div className="p-6">
-                <label className="flex flex-col gap-1.5 relative">
-                  <textarea
-                    ref={commentInputRef}
-                    rows="4"
-                    value={editForm.comment}
-                    disabled={selectedPo?.isLocked}
-                    onChange={(e) => {
-                      const nextValue = e.target.value;
-                      setEditForm((prev) => ({
-                        ...prev,
-                        comment: nextValue,
-                      }));
+              {!collapsedSections.comment && (
+                <div className="p-6">
+                  <label className="flex flex-col gap-1.5 relative">
+                    <textarea
+                      ref={commentInputRef}
+                      rows="4"
+                      value={editForm.comment}
+                      disabled={selectedPo?.isLocked}
+                      onChange={(e) => {
+                        const nextValue = e.target.value;
+                        setEditForm((prev) => ({
+                          ...prev,
+                          comment: nextValue,
+                        }));
 
-                      const cursor =
-                        e.target.selectionStart ?? nextValue.length;
-                      const beforeCursor = nextValue.slice(0, cursor);
-                      const mentionMatch = beforeCursor.match(
-                        /(?:^|\s)@([a-zA-Z0-9._-]*)$/,
-                      );
+                        const cursor =
+                          e.target.selectionStart ?? nextValue.length;
+                        const beforeCursor = nextValue.slice(0, cursor);
+                        const mentionMatch = beforeCursor.match(
+                          /(?:^|\s)@([a-zA-Z0-9._-]*)$/,
+                        );
 
-                      if (mentionMatch) {
-                        setCommentMentionSearch(mentionMatch[1] || "");
+                        if (mentionMatch) {
+                          setCommentMentionSearch(mentionMatch[1] || "");
+                          setShowCommentMentionDropdown(true);
+                        } else {
+                          setShowCommentMentionDropdown(false);
+                          setCommentMentionSearch("");
+                        }
+                      }}
+                      onKeyDown={async (e) => {
+                        if (
+                          e.key === "Enter" &&
+                          !e.shiftKey &&
+                          !showCommentMentionDropdown
+                        ) {
+                          e.preventDefault();
+                          await handleSendPoComment();
+                        }
+                      }}
+                      placeholder={
+                        selectedPo?.isLocked
+                          ? "Unlock purchase order to edit comments"
+                          : "Add a comment... Use @ to mention someone (Enter to send, Shift+Enter for new line)"
+                      }
+                      className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-[#111418] placeholder-[#617589] focus:border-[#137fec] focus:ring-1 focus:ring-[#137fec] min-h-[70px] resize-y outline-none transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
+                    {showCommentMentionDropdown && (
+                      <div className="absolute z-50 top-full left-0 right-0 -mt-2 bg-white rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                        {filteredMentionUsers.length > 0 ? (
+                          filteredMentionUsers.map((activeUser) => (
+                            <button
+                              key={activeUser.id || activeUser.name}
+                              type="button"
+                              onClick={() =>
+                                insertCommentMention(activeUser.name)
+                              }
+                              className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                            >
+                              <strong className="text-[#111418] text-sm">
+                                {activeUser.name}
+                              </strong>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-4 py-3 text-center text-[#617589] text-sm">
+                            No users found
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </label>
+                  <div className="mt-3 flex items-center justify-between">
+                    <button
+                      type="button"
+                      disabled={selectedPo?.isLocked}
+                      onClick={() => {
+                        insertCommentAtCursor("@");
                         setShowCommentMentionDropdown(true);
-                      } else {
-                        setShowCommentMentionDropdown(false);
                         setCommentMentionSearch("");
+                      }}
+                      className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-[#617589] hover:text-[#111418] transition-colors rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <i className="fa-solid fa-at text-sm"></i>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSendPoComment}
+                      disabled={
+                        isSendingComment ||
+                        selectedPo?.isLocked ||
+                        !editForm.comment?.trim()
                       }
-                    }}
-                    onKeyDown={async (e) => {
-                      if (
-                        e.key === "Enter" &&
-                        !e.shiftKey &&
-                        !showCommentMentionDropdown
-                      ) {
-                        e.preventDefault();
-                        await handleSendPoComment();
-                      }
-                    }}
-                    placeholder={
-                      selectedPo?.isLocked
-                        ? "Unlock purchase order to edit comments"
-                        : "Add a comment... Use @ to mention someone (Enter to send, Shift+Enter for new line)"
-                    }
-                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-[#111418] placeholder-[#617589] focus:border-[#137fec] focus:ring-1 focus:ring-[#137fec] min-h-[70px] resize-y outline-none transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  />
-                  {showCommentMentionDropdown && (
-                    <div className="absolute z-50 top-full left-0 right-0 -mt-2 bg-white rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
-                      {filteredMentionUsers.length > 0 ? (
-                        filteredMentionUsers.map((activeUser) => (
-                          <button
-                            key={activeUser.id || activeUser.name}
-                            type="button"
-                            onClick={() =>
-                              insertCommentMention(activeUser.name)
-                            }
-                            className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
-                          >
-                            <strong className="text-[#111418] text-sm">
-                              {activeUser.name}
-                            </strong>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="px-4 py-3 text-center text-[#617589] text-sm">
-                          No users found
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </label>
-                <div className="mt-3 flex items-center justify-between">
-                  <button
-                    type="button"
-                    disabled={selectedPo?.isLocked}
-                    onClick={() => {
-                      insertCommentAtCursor("@");
-                      setShowCommentMentionDropdown(true);
-                      setCommentMentionSearch("");
-                    }}
-                    className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-[#617589] hover:text-[#111418] transition-colors rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <i className="fa-solid fa-at text-sm"></i>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSendPoComment}
-                    disabled={
-                      isSendingComment ||
-                      selectedPo?.isLocked ||
-                      !editForm.comment?.trim()
-                    }
-                    className="px-4 py-2 rounded-lg bg-[#137fec] text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSendingComment ? "Sending..." : "Send"}
-                  </button>
+                      className="px-4 py-2 rounded-lg bg-[#137fec] text-white text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSendingComment ? "Sending..." : "Send"}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </>
         ) : (

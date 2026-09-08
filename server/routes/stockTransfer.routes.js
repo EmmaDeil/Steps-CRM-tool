@@ -5,7 +5,6 @@ const StockTransfer = require('../models/StockTransfer');
 const InventoryItem = require('../models/InventoryItem');
 const StockMovement = require('../models/StockMovement');
 const { authMiddleware } = require('../middleware/auth');
-const { requireModuleAction } = require('../middleware/moduleAccess');
 const {
   getStockAtLocation,
   updateStockLevel,
@@ -17,7 +16,7 @@ const { consumeBatchesFIFO, addBatch, syncItemQuantityAndDates } = require('../u
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 // GET all transfers (paginated)
-router.get('/', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const { page = 1, limit = 20, status, fromLocationId, toLocationId, search } = req.query;
     const pageNum  = Math.max(1, parseInt(page));
@@ -50,7 +49,7 @@ router.get('/', authMiddleware, requireModuleAction('inventory', 'view'), async 
 });
 
 // GET single transfer
-router.get('/:id', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
+router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const transfer = await StockTransfer.findById(req.params.id)
       .populate('requestedBy', 'firstName lastName')
@@ -64,7 +63,7 @@ router.get('/:id', authMiddleware, requireModuleAction('inventory', 'view'), asy
 });
 
 // POST create a new transfer request
-router.post('/', authMiddleware, requireModuleAction('inventory', 'create'), async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
   try {
     const { fromLocationId, fromLocationName, toLocationId, toLocationName, lineItems, notes } = req.body;
 
@@ -120,7 +119,7 @@ router.post('/', authMiddleware, requireModuleAction('inventory', 'create'), asy
 });
 
 // POST approve & execute a transfer
-router.post('/:id/approve', authMiddleware, requireModuleAction('inventory', 'approve'), async (req, res) => {
+router.post('/:id/approve', authMiddleware, async (req, res) => {
   try {
     const transfer = await StockTransfer.findById(req.params.id);
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
@@ -218,7 +217,7 @@ router.post('/:id/approve', authMiddleware, requireModuleAction('inventory', 'ap
 });
 
 // POST cancel a transfer
-router.post('/:id/cancel', authMiddleware, requireModuleAction('inventory', 'delete'), async (req, res) => {
+router.post('/:id/cancel', authMiddleware, async (req, res) => {
   try {
     const transfer = await StockTransfer.findById(req.params.id);
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
@@ -235,7 +234,7 @@ router.post('/:id/cancel', authMiddleware, requireModuleAction('inventory', 'del
 });
 
 // GET waybill — returns printable HTML
-router.get('/:id/waybill', authMiddleware, requireModuleAction('inventory', 'view'), async (req, res) => {
+router.get('/:id/waybill', authMiddleware, async (req, res) => {
   try {
     const transfer = await StockTransfer.findById(req.params.id);
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });

@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import AuthContext from "../../context/AuthContext";
-import ModuleLoader from "../common/ModuleLoader";
 
 import axios from "axios";
 
@@ -15,16 +14,12 @@ const Attendance = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showMarkModal, setShowMarkModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [markForm, setMarkForm] = useState({
     name: "",
     employeeId: "",
     status: "present",
-    date: new Date().toISOString().split('T')[0],
   });
   const [isMarking, setIsMarking] = useState(false);
-  const [isClockingIn, setIsClockingIn] = useState(false);
-  const [isClockingOut, setIsClockingOut] = useState(false);
 
   // Determine if the user has elevated permissions to view reports/export data
   const isElevatedUser =
@@ -43,7 +38,7 @@ const Attendance = () => {
       const API_BASE_URL =
         import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
-      const response = await axios.get(`${API_BASE_URL}/api/attendance?date=${selectedDate}`, {
+      const response = await axios.get(`${API_BASE_URL}/api/attendance`, {
         timeout: 30000,
         headers: {
           "Content-Type": "application/json",
@@ -67,7 +62,7 @@ const Attendance = () => {
 
   useEffect(() => {
     fetchAttendanceData();
-  }, [selectedDate]);
+  }, []);
 
   const handleExportData = () => {
     if (!attendanceData?.records || attendanceData.records.length === 0) {
@@ -127,44 +122,18 @@ const Attendance = () => {
     }
   };
 
-  const handleClockIn = async () => {
-    try {
-      setIsClockingIn(true);
-      const token = localStorage.getItem("authToken");
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
-      await axios.post(`${API_BASE_URL}/api/attendance/clock-in`, {}, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      });
-      toast.success("Clocked in successfully");
-      await fetchAttendanceData();
-    } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.error || "Failed to clock in");
-    } finally {
-      setIsClockingIn(false);
-    }
-  };
-
-  const handleClockOut = async () => {
-    try {
-      setIsClockingOut(true);
-      const token = localStorage.getItem("authToken");
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
-      await axios.post(`${API_BASE_URL}/api/attendance/clock-out`, {}, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      });
-      toast.success("Clocked out successfully");
-      await fetchAttendanceData();
-    } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.error || "Failed to clock out");
-    } finally {
-      setIsClockingOut(false);
-    }
-  };
-
   if (loading) {
-    return <ModuleLoader moduleName="Attendance" />;
+    return (
+      <div className="p-4 text-center">
+        <div
+          className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"
+          role="status"
+        >
+          <span className="sr-only">Loading...</span>
+        </div>
+        <p className="mt-3 text-gray-600">Loading attendance data...</p>
+      </div>
+    );
   }
 
   if (error) {
@@ -241,15 +210,7 @@ const Attendance = () => {
         </div>
 
         <div className="mt-4">
-          <div className="flex justify-between items-center mb-3">
-            <h4 className="text-xl font-semibold">Check-ins for {selectedDate}</h4>
-            <input 
-              type="date" 
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          <h4 className="text-xl font-semibold mb-3">Today's Check-ins</h4>
           {attendanceData?.records && attendanceData.records.length > 0 ? (
             <div className="bg-white rounded-lg shadow divide-y divide-gray-200">
               {attendanceData.records.map((record, index) => (
@@ -298,26 +259,6 @@ const Attendance = () => {
                               hour12: true,
                             },
                           )}
-                          {record.checkOutTime && (
-                            <>
-                              {" | "}Check-out:{" "}
-                              {new Date(record.checkOutTime).toLocaleTimeString(
-                                "en-US",
-                                {
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                  hour12: true,
-                                },
-                              )}{" "}
-                              ({(() => {
-                                const diffMs = new Date(record.checkOutTime) - new Date(record.checkInTime);
-                                const diffMins = Math.floor(diffMs / 60000);
-                                const hrs = Math.floor(diffMins / 60);
-                                const mins = diffMins % 60;
-                                return `${hrs}h ${mins}m worked`;
-                              })()})
-                            </>
-                          )}
                         </div>
                       )}
                     </div>
@@ -335,56 +276,12 @@ const Attendance = () => {
         <div className="mt-4">
           <h4 className="text-xl font-semibold mb-3">Quick Actions</h4>
           <div className="flex flex-col sm:flex-row gap-2">
-            {(() => {
-              const myName = authUser?.fullName || `${authUser?.firstName || ""} ${authUser?.lastName || ""}`.trim();
-              const myRecord = attendanceData?.records?.find(
-                (r) => r.name?.toLowerCase() === myName?.toLowerCase()
-              );
-
-              if (!myRecord) {
-                return (
-                  <button
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-                    onClick={handleClockIn}
-                    disabled={isClockingIn}
-                  >
-                    <i className="fa-solid fa-right-to-bracket"></i>
-                    {isClockingIn ? "Clocking In..." : "Clock In"}
-                  </button>
-                );
-              }
-
-              if (!myRecord.checkOutTime) {
-                return (
-                  <button
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-                    onClick={handleClockOut}
-                    disabled={isClockingOut}
-                  >
-                    <i className="fa-solid fa-right-from-bracket"></i>
-                    {isClockingOut ? "Clocking Out..." : "Clock Out"}
-                  </button>
-                );
-              }
-
-              return (
-                <button
-                  className="px-4 py-2 bg-gray-200 text-gray-500 border border-gray-300 rounded-lg font-medium cursor-not-allowed flex items-center justify-center gap-2"
-                  disabled
-                >
-                  <i className="fa-solid fa-circle-check text-green-600"></i>
-                  Clocked Out for Today
-                </button>
-              );
-            })()}
-            {isElevatedUser && (
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                onClick={() => setShowMarkModal(true)}
-              >
-                Mark Attendance (Admin)
-              </button>
-            )}
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              onClick={() => setShowMarkModal(true)}
+            >
+              Mark Attendance
+            </button>
             {isElevatedUser && (
               <>
                 <button

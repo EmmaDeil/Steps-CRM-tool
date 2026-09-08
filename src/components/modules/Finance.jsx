@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 import { useAuth } from "../../context/useAuth";
-import { apiService, getBackendConnectionMessage } from "../../services/api";
+import { apiService } from "../../services/api";
 import Reconcile from "./Reconcile";
 import AccountsPayable from "./AccountsPayable";
 import JournalHistory from "./JournalHistory";
@@ -15,7 +15,6 @@ import JournalEntry from "./JournalEntry";
 import VendorManagement from "./VendorManagement";
 import Budget from "./Budget";
 import Invoicing from "./Invoicing";
-import ReconciliationManagement from "./ReconciliationManagement";
 
 const Finance = () => {
   const { user } = useAuth();
@@ -33,33 +32,8 @@ const Finance = () => {
   const [showJournalEntry, setShowJournalEntry] = useState(false);
   const [showVendorManagement, setShowVendorManagement] = useState(false);
   const [showBudget, setShowBudget] = useState(false);
-  const [showFinanceReports, setShowFinanceReports] = useState(false);
   const [showInvoicing, setShowInvoicing] = useState(false);
   const [showQuickAction, setShowQuickAction] = useState(false);
-  const [reconciliationBreakdowns, setReconciliationBreakdowns] = useState([]);
-  const [reportLoading, setReportLoading] = useState(false);
-  const [reportRows, setReportRows] = useState([]);
-  const [reportTypeFilter, setReportTypeFilter] = useState("all");
-  const [reportStatusFilter, setReportStatusFilter] = useState("all");
-  const [reportPeriodFilter, setReportPeriodFilter] = useState("last90");
-  const [reportSearch, setReportSearch] = useState("");
-  const [reportPage, setReportPage] = useState(1);
-  const [reportSummary, setReportSummary] = useState({
-    budgetAllocated: 0,
-    budgetSpent: 0,
-    paymentMade: 0,
-    paymentOutstanding: 0,
-  });
-  const [showReconciliationManagement, setShowReconciliationManagement] =
-    useState(false);
-  const [showReconciliationHistory, setShowReconciliationHistory] =
-    useState(false);
-  const [reconciliationPrefillData, setReconciliationPrefillData] =
-    useState(null);
-  const [reconciliationOpenedFromHistory, setReconciliationOpenedFromHistory] =
-    useState(false);
-  const [reconciliationFreshStart, setReconciliationFreshStart] =
-    useState(false);
 
   const location = useLocation();
 
@@ -67,9 +41,6 @@ const Finance = () => {
     const shouldOpenFromState = Boolean(location.state?.openInvoicing);
     const shouldOpenFromSession =
       sessionStorage.getItem("financeOpenInvoicing") === "1";
-    const shouldOpenReconciliationFromState = Boolean(
-      location.state?.openRetirementReconciliation,
-    );
 
     if (shouldOpenFromState || shouldOpenFromSession) {
       setShowInvoicing(true);
@@ -77,21 +48,10 @@ const Finance = () => {
         sessionStorage.removeItem("financeOpenInvoicing");
       }
     }
-
-    if (shouldOpenReconciliationFromState) {
-      setShowReconciliationHistory(true);
-    }
   }, [location.state]);
 
   const displayName =
     user?.firstName || user?.fullName?.split(" ")[0] || "User";
-  const currentUserId = user?.id || user?._id || user?.userId || "";
-
-  const extractList = (response) => {
-    if (Array.isArray(response)) return response;
-    if (Array.isArray(response?.data)) return response.data;
-    return [];
-  };
 
   const fetchFinanceData = async () => {
     try {
@@ -138,184 +98,15 @@ const Finance = () => {
     } catch (err) {
       console.error("Error fetching recent POs:", err);
       setRecentPOs([]);
-      const connectionMessage = await getBackendConnectionMessage(
-        err,
-        "Recent purchase orders",
-      );
-      toast.error(
-        connectionMessage ||
-          "Failed to load recent purchase orders. Showing an empty list.",
-      );
+      if (!err?.response) {
+        toast.error(
+          "Finance data source is taking too long. Showing empty recent purchase orders.",
+        );
+      }
     } finally {
       setPoLoading(false);
     }
   }, []);
-
-  const fetchReconciliationBreakdowns = useCallback(async () => {
-    if (!currentUserId) {
-      setReconciliationBreakdowns([]);
-      return;
-    }
-
-    try {
-      const response = await apiService.get(
-        `/api/retirement-breakdown?userId=${currentUserId}`,
-        {
-          timeout: 20000,
-        },
-      );
-      setReconciliationBreakdowns(extractList(response));
-    } catch (err) {
-      console.error("Error fetching retirement breakdowns:", err);
-      setReconciliationBreakdowns([]);
-    }
-  }, [currentUserId]);
-
-  const extractPoRows = (response) => {
-    return (
-      (Array.isArray(response?.data?.purchaseOrders) &&
-        response.data.purchaseOrders) ||
-      (Array.isArray(response?.data?.orders) && response.data.orders) ||
-      (Array.isArray(response?.purchaseOrders) && response.purchaseOrders) ||
-      (Array.isArray(response?.orders) && response.orders) ||
-      []
-    );
-  };
-
-  const fetchReportData = useCallback(async () => {
-    setReportLoading(true);
-    try {
-      const [poRes, budgetRes, reconciliationRes] = await Promise.allSettled([
-        apiService.get("/api/purchase-orders", {
-          params: { status: "all", limit: 200, page: 1 },
-          timeout: 15000,
-        }),
-        apiService.get("/api/budget/categories", { timeout: 12000 }),
-        currentUserId
-          ? apiService.get(
-              `/api/retirement-breakdown?userId=${currentUserId}`,
-              {
-                timeout: 12000,
-              },
-            )
-          : Promise.resolve([]),
-      ]);
-
-      const purchaseOrders =
-        poRes.status === "fulfilled" ? extractPoRows(poRes.value) : [];
-      const budgetCategories =
-        budgetRes.status === "fulfilled"
-          ? Array.isArray(budgetRes.value)
-            ? budgetRes.value
-            : Array.isArray(budgetRes.value?.data)
-              ? budgetRes.value.data
-              : []
-          : [];
-      const reconciliations =
-        reconciliationRes.status === "fulfilled"
-          ? Array.isArray(reconciliationRes.value)
-            ? reconciliationRes.value
-            : Array.isArray(reconciliationRes.value?.data)
-              ? reconciliationRes.value.data
-              : []
-          : [];
-
-      const paymentRows = purchaseOrders.map((po) => {
-        const total = Number(po.totalAmount || 0);
-        const paid = Number(po.paidAmount || 0);
-        const outstanding = Math.max(0, total - paid);
-        const normalizedStatus = String(po.status || "").toLowerCase();
-        const paymentStatus =
-          normalizedStatus === "paid"
-            ? "paid"
-            : normalizedStatus === "partly_paid" || paid > 0
-              ? "partly_paid"
-              : normalizedStatus === "payment_pending"
-                ? "payment_pending"
-                : normalizedStatus || "pending";
-
-        return {
-          id: `po-${po._id || po.id || po.poNumber}`,
-          type: "payment",
-          reference: po.poNumber || po._id,
-          title: po.vendor || "Vendor",
-          status: paymentStatus,
-          date: po.orderDate || po.createdAt || "",
-          amount: paid,
-          secondaryAmount: outstanding,
-        };
-      });
-
-      const budgetRows = budgetCategories.map((budget) => {
-        const allocated = Number(budget.allocated || 0);
-        const spent = Number(budget.spent || 0);
-        const utilization = allocated > 0 ? (spent / allocated) * 100 : 0;
-        return {
-          id: `budget-${budget._id || budget.name}`,
-          type: "budget",
-          reference: budget.name || budget._id,
-          title: budget.period || "Budget",
-          status:
-            utilization > 100
-              ? "over_budget"
-              : utilization >= 75
-                ? "high_utilization"
-                : "healthy",
-          date: budget.updatedAt || budget.createdAt || "",
-          amount: spent,
-          secondaryAmount: allocated,
-        };
-      });
-
-      const reconciliationRows = reconciliations.map((entry) => ({
-        id: `recon-${entry._id || `${entry.userId}-${entry.monthYear}`}`,
-        type: "reconciliation",
-        reference: entry.monthYear || entry._id,
-        title: entry.employeeName || "Employee",
-        status: entry.status || "draft",
-        date: entry.updatedAt || entry.createdAt || "",
-        amount: Number(entry.totalExpenses || 0),
-        secondaryAmount: Number(entry.newOpeningBalance || 0),
-      }));
-
-      const budgetAllocated = budgetCategories.reduce(
-        (sum, item) => sum + Number(item.allocated || 0),
-        0,
-      );
-      const budgetSpent = budgetCategories.reduce(
-        (sum, item) => sum + Number(item.spent || 0),
-        0,
-      );
-      const paymentMade = paymentRows.reduce(
-        (sum, item) => sum + Number(item.amount || 0),
-        0,
-      );
-      const paymentOutstanding = paymentRows.reduce(
-        (sum, item) => sum + Number(item.secondaryAmount || 0),
-        0,
-      );
-
-      setReportSummary({
-        budgetAllocated,
-        budgetSpent,
-        paymentMade,
-        paymentOutstanding,
-      });
-      setReportRows([...paymentRows, ...budgetRows, ...reconciliationRows]);
-    } catch (err) {
-      console.error("Error loading finance reports:", err);
-      setReportRows([]);
-      setReportSummary({
-        budgetAllocated: 0,
-        budgetSpent: 0,
-        paymentMade: 0,
-        paymentOutstanding: 0,
-      });
-      toast.error("Unable to load finance reports");
-    } finally {
-      setReportLoading(false);
-    }
-  }, [currentUserId]);
 
   useEffect(() => {
     fetchFinanceData();
@@ -324,61 +115,6 @@ const Finance = () => {
   useEffect(() => {
     fetchRecentPOs();
   }, [fetchRecentPOs]);
-
-  useEffect(() => {
-    fetchReconciliationBreakdowns();
-  }, [fetchReconciliationBreakdowns]);
-
-  useEffect(() => {
-    if (!showFinanceReports) return;
-    fetchReportData();
-  }, [showFinanceReports, fetchReportData]);
-
-  useEffect(() => {
-    setReportPage(1);
-  }, [reportTypeFilter, reportStatusFilter, reportPeriodFilter, reportSearch]);
-
-  const buildReconciliationPrefillData = (monthYear) => {
-    const monthBreakdowns = reconciliationBreakdowns.filter(
-      (breakdown) => breakdown.monthYear === monthYear,
-    );
-
-    const openingBalance = monthBreakdowns[0]?.previousClosingBalance || 0;
-    const totalInflow = monthBreakdowns.reduce(
-      (sum, breakdown) => sum + (breakdown.inflowAmount || 0),
-      0,
-    );
-    const allLineItems = [];
-    const allEvidenceFiles = [];
-
-    monthBreakdowns.forEach((breakdown) => {
-      if (breakdown.lineItems && breakdown.lineItems.length > 0) {
-        allLineItems.push(...breakdown.lineItems);
-      }
-      if (breakdown.evidenceFiles && breakdown.evidenceFiles.length > 0) {
-        allEvidenceFiles.push(...breakdown.evidenceFiles);
-      }
-    });
-
-    return {
-      monthYear,
-      lineItems: allLineItems,
-      evidenceFiles: allEvidenceFiles,
-      previousClosingBalance: openingBalance,
-      inflowAmount: totalInflow,
-    };
-  };
-
-  const openReconciliationManagement = (
-    prefillData,
-    { fromHistory = false, freshStart = false } = {},
-  ) => {
-    setReconciliationPrefillData(prefillData || null);
-    setReconciliationOpenedFromHistory(fromHistory);
-    setReconciliationFreshStart(freshStart);
-    setShowReconciliationHistory(false);
-    setShowReconciliationManagement(true);
-  };
 
   const getFilteredPOs = () => {
     if (poFilter === "approved") {
@@ -398,326 +134,6 @@ const Finance = () => {
     );
   }
 
-  if (showFinanceReports) {
-    const REPORT_PAGE_SIZE = 12;
-    const now = new Date();
-    const periodCutoff =
-      reportPeriodFilter === "thisMonth"
-        ? new Date(now.getFullYear(), now.getMonth(), 1)
-        : reportPeriodFilter === "last30"
-          ? new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-          : reportPeriodFilter === "last90"
-            ? new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-            : null;
-
-    const filteredRows = reportRows.filter((row) => {
-      const rowDate = row.date ? new Date(row.date) : null;
-      const matchesPeriod =
-        !periodCutoff || (rowDate && rowDate >= periodCutoff);
-      const matchesType =
-        reportTypeFilter === "all" || row.type === reportTypeFilter;
-      const matchesStatus =
-        reportStatusFilter === "all" ||
-        String(row.status || "").toLowerCase() === reportStatusFilter;
-      const needle = reportSearch.trim().toLowerCase();
-      const matchesSearch =
-        !needle ||
-        String(row.reference || "")
-          .toLowerCase()
-          .includes(needle) ||
-        String(row.title || "")
-          .toLowerCase()
-          .includes(needle);
-      return matchesPeriod && matchesType && matchesStatus && matchesSearch;
-    });
-
-    const budgetUtilizationPct =
-      reportSummary.budgetAllocated > 0
-        ? (reportSummary.budgetSpent / reportSummary.budgetAllocated) * 100
-        : 0;
-    const totalReportItems = filteredRows.length;
-    const totalReportPages = Math.max(
-      1,
-      Math.ceil(totalReportItems / REPORT_PAGE_SIZE),
-    );
-    const currentReportPage = Math.min(reportPage, totalReportPages);
-    const reportPageStart = (currentReportPage - 1) * REPORT_PAGE_SIZE;
-    const pagedRows = filteredRows.slice(
-      reportPageStart,
-      reportPageStart + REPORT_PAGE_SIZE,
-    );
-
-    const exportRowsAsCsv = () => {
-      if (filteredRows.length === 0) {
-        toast.error("No report data to export");
-        return;
-      }
-
-      const headers = [
-        "Type",
-        "Reference",
-        "Title",
-        "Status",
-        "Primary Amount",
-        "Secondary Amount",
-        "Date",
-      ];
-      const escapeCell = (value) => {
-        const cell = String(value ?? "").replaceAll('"', '""');
-        return `"${cell}"`;
-      };
-      const lines = [headers.map(escapeCell).join(",")];
-
-      filteredRows.forEach((row) => {
-        lines.push(
-          [
-            row.type,
-            row.reference,
-            row.title,
-            String(row.status || "").replaceAll("_", " "),
-            Number(row.amount || 0).toFixed(2),
-            Number(row.secondaryAmount || 0).toFixed(2),
-            row.date ? new Date(row.date).toISOString().slice(0, 10) : "",
-          ]
-            .map(escapeCell)
-            .join(","),
-        );
-      });
-
-      const blob = new Blob([lines.join("\n")], {
-        type: "text/csv;charset=utf-8;",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `finance-reports-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    };
-
-    const exportRowsAsJson = () => {
-      if (filteredRows.length === 0) {
-        toast.error("No report data to export");
-        return;
-      }
-
-      const blob = new Blob([JSON.stringify(filteredRows, null, 2)], {
-        type: "application/json;charset=utf-8;",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `finance-reports-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    };
-
-    return (
-      <div className="w-full min-h-screen bg-gray-50 px-1">
-        <Breadcrumb
-          items={[
-            { label: "Home", href: "/home", icon: "fa-house" },
-            {
-              label: "Finance",
-              icon: "fa-coins",
-              onClick: () => setShowFinanceReports(false),
-            },
-            { label: "Reports", icon: "fa-chart-bar" },
-          ]}
-        />
-        <div className="p-3 space-y-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Budget Utilization
-              </p>
-              <p className="mt-2 text-3xl font-black text-slate-900">
-                {budgetUtilizationPct.toFixed(1)}%
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {formatCurrency(reportSummary.budgetSpent)} spent of{" "}
-                {formatCurrency(reportSummary.budgetAllocated)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Payment Made
-              </p>
-              <p className="mt-2 text-3xl font-black text-emerald-700">
-                {formatCurrency(reportSummary.paymentMade)}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Captured from purchase orders and AP activities
-              </p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Outstanding Payments
-              </p>
-              <p className="mt-2 text-3xl font-black text-rose-700">
-                {formatCurrency(reportSummary.paymentOutstanding)}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Remaining unpaid amount across tracked purchase orders
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <select
-                value={reportTypeFilter}
-                onChange={(e) => setReportTypeFilter(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="all">All Types</option>
-                <option value="payment">Payments</option>
-                <option value="budget">Budget Utilization</option>
-                <option value="reconciliation">Reconciliations</option>
-              </select>
-              <select
-                value={reportStatusFilter}
-                onChange={(e) => setReportStatusFilter(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="all">All Statuses</option>
-                <option value="paid">Paid</option>
-                <option value="payment_pending">Payment Pending</option>
-                <option value="partly_paid">Partly Paid</option>
-                <option value="healthy">Budget Healthy</option>
-                <option value="high_utilization">High Utilization</option>
-                <option value="over_budget">Over Budget</option>
-                <option value="submitted">Submitted</option>
-                <option value="reconciled">Reconciled</option>
-              </select>
-              <select
-                value={reportPeriodFilter}
-                onChange={(e) => setReportPeriodFilter(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="last30">Last 30 days</option>
-                <option value="last90">Last 90 days</option>
-                <option value="thisMonth">This month</option>
-                <option value="all">All time</option>
-              </select>
-              <input
-                value={reportSearch}
-                onChange={(e) => setReportSearch(e.target.value)}
-                placeholder="Search reference or title"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-              <button
-                onClick={exportRowsAsCsv}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                <i className="fa-solid fa-file-csv"></i>
-                Export CSV
-              </button>
-              <button
-                onClick={exportRowsAsJson}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                <i className="fa-solid fa-file-code"></i>
-                Export JSON
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
-            {reportLoading ? (
-              <div className="p-6">
-                <Skeleton count={4} height={44} />
-              </div>
-            ) : filteredRows.length === 0 ? (
-              <div className="p-8">
-                <EmptyState
-                  icon="📊"
-                  title="No report records found"
-                  description="Adjust your filters to broaden the report data."
-                />
-              </div>
-            ) : (
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Type
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Reference
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Title
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Primary Amount
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Secondary Amount
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Date
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {pagedRows.map((row) => (
-                    <tr key={row.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-sm capitalize text-slate-700">
-                        {row.type}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-mono text-slate-600">
-                        {row.reference || "-"}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium text-slate-900">
-                        {row.title || "-"}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-700">
-                        {String(row.status || "-").replaceAll("_", " ")}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-semibold text-slate-900">
-                        {formatCurrency(Number(row.amount || 0))}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-700">
-                        {formatCurrency(Number(row.secondaryAmount || 0))}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-500">
-                        {row.date
-                          ? new Date(row.date).toLocaleDateString()
-                          : "-"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          {!reportLoading && filteredRows.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
-              <Pagination
-                currentPage={currentReportPage}
-                totalPages={totalReportPages}
-                onPageChange={setReportPage}
-                itemsPerPage={REPORT_PAGE_SIZE}
-                totalItems={totalReportItems}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   if (showInvoicing) {
     return (
       <div className="w-full min-h-screen bg-gray-50 px-1">
@@ -725,249 +141,6 @@ const Finance = () => {
           <div className="flex h-full grow flex-col w-full">
             <div className="p-2">
               <Invoicing onBackToFinance={() => setShowInvoicing(false)} />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (showReconciliationManagement) {
-    return (
-      <ReconciliationManagement
-        onBack={() => {
-          setShowReconciliationManagement(false);
-          setReconciliationOpenedFromHistory(false);
-          setReconciliationFreshStart(false);
-          fetchReconciliationBreakdowns();
-        }}
-        onBackToHistory={() => {
-          setShowReconciliationManagement(false);
-          setReconciliationFreshStart(false);
-          setShowReconciliationHistory(true);
-        }}
-        showHistoryBreadcrumb={reconciliationOpenedFromHistory}
-        forceFreshStart={reconciliationFreshStart}
-        onBreakdownUpdated={fetchReconciliationBreakdowns}
-        initialMonthYear={reconciliationPrefillData?.monthYear || ""}
-        initialLineItems={reconciliationPrefillData?.lineItems || []}
-        initialEvidenceFiles={reconciliationPrefillData?.evidenceFiles || []}
-        initialPreviousClosingBalance={
-          reconciliationPrefillData?.previousClosingBalance
-        }
-        initialInflowAmount={reconciliationPrefillData?.inflowAmount}
-      />
-    );
-  }
-
-  if (showReconciliationHistory) {
-    const monthlyData = {};
-    reconciliationBreakdowns.forEach((breakdown) => {
-      const monthKey = breakdown.monthYear;
-      if (!monthlyData[monthKey]) {
-        monthlyData[monthKey] = {
-          monthYear: monthKey,
-          previousClosingBalance: breakdown.previousClosingBalance || 0,
-          totalInflow: 0,
-          totalExpenses: 0,
-          latestBalance: 0,
-          latestStatus: "draft",
-          latestCreatedAt: "",
-        };
-      }
-
-      monthlyData[monthKey].totalInflow += breakdown.inflowAmount || 0;
-      monthlyData[monthKey].totalExpenses += breakdown.totalExpenses || 0;
-      monthlyData[monthKey].latestBalance = breakdown.newOpeningBalance || 0;
-
-      const createdAt = String(
-        breakdown.createdAt || breakdown.updatedAt || "",
-      );
-      if (
-        !monthlyData[monthKey].latestCreatedAt ||
-        createdAt > monthlyData[monthKey].latestCreatedAt
-      ) {
-        monthlyData[monthKey].latestCreatedAt = createdAt;
-        monthlyData[monthKey].latestStatus = breakdown.status || "draft";
-      }
-    });
-
-    const monthlyArray = Object.values(monthlyData).sort((a, b) =>
-      b.monthYear.localeCompare(a.monthYear),
-    );
-
-    return (
-      <div className="w-full min-h-screen bg-gray-50 px-1">
-        <Breadcrumb
-          items={[
-            { label: "Home", href: "/home", icon: "fa-house" },
-            {
-              label: "Finance",
-              icon: "fa-coins",
-              onClick: () => setShowReconciliationHistory(false),
-            },
-            { label: "Reconciliation", icon: "fa-history" },
-          ]}
-        />
-
-        <div className="space-y-6 p-3">
-          <div className="rounded-xl border border-[#dbe0e6] bg-white p-6 shadow-lg">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold text-[#111418] flex items-center gap-2">
-                  <i className="fa-solid fa-history text-slate-700"></i>
-                  Reconciliation History
-                </h2>
-                <p className="mt-1 text-sm text-[#617589]">
-                  Select a month to continue or start a new reconciliation.
-                </p>
-              </div>
-              <button
-                onClick={() =>
-                  openReconciliationManagement(null, {
-                    fromHistory: true,
-                    freshStart: true,
-                  })
-                }
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-slate-900"
-              >
-                <i className="fa-solid fa-plus"></i>
-                New
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-[#dbe0e6] bg-white shadow-lg">
-            <div className="overflow-x-auto">
-              {reconciliationBreakdowns.length === 0 ? (
-                <div className="px-6 py-12 text-center">
-                  <i className="fa-solid fa-inbox mb-4 text-6xl text-gray-300"></i>
-                  <p className="mb-2 text-lg text-[#617589]">
-                    No reconciliation breakdowns found
-                  </p>
-                  <p className="mb-6 text-sm text-[#617589]">
-                    Create a new reconciliation to get started
-                  </p>
-                  <button
-                    onClick={() =>
-                      openReconciliationManagement(null, {
-                        fromHistory: true,
-                        freshStart: true,
-                      })
-                    }
-                    className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-6 py-3 font-semibold text-white transition-all hover:bg-slate-900"
-                  >
-                    <i className="fa-solid fa-plus"></i>
-                    Create New Reconciliation
-                  </button>
-                </div>
-              ) : (
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Month
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Previous Balance
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Total Inflow
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Total Expenses
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Closing Balance
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Status
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {monthlyArray.map((monthData, idx) => {
-                      const [year, month] = (monthData.monthYear || "").split(
-                        "-",
-                      );
-                      const monthName = month
-                        ? new Date(year, parseInt(month) - 1, 1).toLocaleString(
-                            "en-US",
-                            {
-                              month: "long",
-                              year: "numeric",
-                            },
-                          )
-                        : monthData.monthYear;
-
-                      return (
-                        <tr
-                          key={idx}
-                          className="hover:bg-gray-50 transition-colors"
-                        >
-                          <td className="px-6 py-4 text-sm font-medium text-blue-600">
-                            {monthName}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-semibold text-gray-600">
-                            {formatCurrency(
-                              monthData.previousClosingBalance || 0,
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-semibold text-green-600">
-                            {formatCurrency(monthData.totalInflow || 0)}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-semibold text-red-600">
-                            {formatCurrency(monthData.totalExpenses || 0)}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-semibold text-blue-600">
-                            {formatCurrency(monthData.latestBalance || 0)}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                monthData.latestStatus === "reconciled"
-                                  ? "bg-blue-100 text-blue-700"
-                                  : monthData.latestStatus === "submitted"
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-amber-100 text-amber-700"
-                              }`}
-                            >
-                              {monthData.latestStatus === "reconciled"
-                                ? "Locked"
-                                : monthData.latestStatus === "submitted"
-                                  ? "Submitted"
-                                  : "Draft"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openReconciliationManagement(
-                                  buildReconciliationPrefillData(
-                                    monthData.monthYear,
-                                  ),
-                                  { fromHistory: true },
-                                )
-                              }
-                              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-900"
-                            >
-                              {monthData.latestStatus === "reconciled"
-                                ? "Open Review"
-                                : monthData.latestStatus === "submitted"
-                                  ? "Review"
-                                  : "View Details"}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
             </div>
           </div>
         </div>
@@ -1100,16 +273,6 @@ const Finance = () => {
                           },
                         },
                         {
-                          icon: "fa-history",
-                          color: "text-slate-600",
-                          bg: "bg-slate-100 dark:bg-slate-700/50",
-                          label: "Reconciliation",
-                          action: () => {
-                            setShowReconciliationHistory(true);
-                            setShowQuickAction(false);
-                          },
-                        },
-                        {
                           icon: "fa-users",
                           color: "text-indigo-600",
                           bg: "bg-indigo-50 dark:bg-indigo-900/30",
@@ -1204,7 +367,7 @@ const Finance = () => {
               </button>
 
               <button
-                onClick={() => setShowFinanceReports(true)}
+                onClick={() => toast("Reports module coming soon")}
                 className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform">
@@ -1236,18 +399,6 @@ const Finance = () => {
                 </div>
                 <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
                   Invoicing
-                </span>
-              </button>
-
-              <button
-                onClick={() => setShowReconciliationHistory(true)}
-                className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer h-40"
-              >
-                <div className="flex size-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 group-hover:scale-110 transition-transform">
-                  <i className="fa-solid fa-clock-rotate-left text-[28px]"></i>
-                </div>
-                <span className="text-sm font-semibold text-slate-900 dark:text-white text-center">
-                  Reconciliation
                 </span>
               </button>
 

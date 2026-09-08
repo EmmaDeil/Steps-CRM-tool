@@ -60,7 +60,7 @@ const HRM = () => {
   const [employeePage, setEmployeePage] = useState(1);
   const [employeeTotal, setEmployeeTotal] = useState(0);
   const [employeeTotalPages, setEmployeeTotalPages] = useState(1);
-  const [employeePageSize, setEmployeePageSize] = useState(20);
+  const EMPLOYEES_PAGE_SIZE = 20;
 
   // Department management state
   const [showDeptModal, setShowDeptModal] = useState(false);
@@ -102,9 +102,6 @@ const HRM = () => {
   const [showLeaveAllocationModal, setShowLeaveAllocationModal] =
     useState(false);
   const [leaveAllocationLoading, setLeaveAllocationLoading] = useState(false);
-  const [leaveAllocationEmployees, setLeaveAllocationEmployees] = useState([]);
-  const [leaveAllocationEmployeesLoading, setLeaveAllocationEmployeesLoading] =
-    useState(false);
   const [showPayroll, setShowPayroll] = useState(false);
   const [showEmployeeProfile, setShowEmployeeProfile] = useState(false);
   const [showEmployeeDirectoryPage, setShowEmployeeDirectoryPage] =
@@ -118,7 +115,6 @@ const HRM = () => {
   const fetchAllInFlightRef = useRef(false);
   const fetchEmployeesInFlightRef = useRef(false);
   const networkToastShownRef = useRef(false);
-  const employeeDirectoryTopRef = useRef(null);
   const [startEmployeeInEditMode, setStartEmployeeInEditMode] = useState(false);
   const [organogramEmployees, setOrganogramEmployees] = useState([]);
   const [organogramLoading, setOrganogramLoading] = useState(false);
@@ -220,59 +216,7 @@ const HRM = () => {
     return fallback;
   };
 
-  const fetchAllEmployeesForLeaveAllocation = async () => {
-    if (leaveAllocationEmployeesLoading) {
-      return;
-    }
-
-    setLeaveAllocationEmployeesLoading(true);
-    try {
-      const pageSize = 100;
-      let page = 1;
-      let totalPages = 1;
-      const allEmployees = [];
-
-      while (page <= totalPages) {
-        const params = new URLSearchParams({
-          page: String(page),
-          limit: String(pageSize),
-        });
-
-        const response = await apiService.get(
-          `/api/hr/employees?${params.toString()}`,
-        );
-        const payload = toObjectPayload(response, {});
-        const pageEmployees = Array.isArray(payload?.data)
-          ? payload.data
-          : toArrayPayload(response);
-
-        allEmployees.push(...pageEmployees);
-        totalPages = payload?.pagination?.totalPages || 1;
-        page += 1;
-      }
-
-      const normalizedEmployees = allEmployees
-        .map((emp) => ({
-          id: emp.id || emp._id,
-          name: emp.name || emp.fullName || emp.email || "",
-          department: emp.department || "",
-          role: emp.role || emp.jobTitle || "Employee",
-        }))
-        .filter((emp) => Boolean(emp.id && emp.name));
-
-      setLeaveAllocationEmployees(normalizedEmployees);
-    } catch (error) {
-      console.error("Error fetching leave allocation employees:", error);
-      setLeaveAllocationEmployees([]);
-    } finally {
-      setLeaveAllocationEmployeesLoading(false);
-    }
-  };
-
-  const fetchEmployees = async (
-    pageToLoad = employeePage,
-    pageSize = employeePageSize,
-  ) => {
+  const fetchEmployees = async (pageToLoad = employeePage) => {
     if (fetchEmployeesInFlightRef.current) {
       return true;
     }
@@ -283,7 +227,7 @@ const HRM = () => {
     try {
       const params = new URLSearchParams({
         page: String(pageToLoad),
-        limit: String(pageSize),
+        limit: String(EMPLOYEES_PAGE_SIZE),
       });
 
       if (search) {
@@ -293,13 +237,10 @@ const HRM = () => {
       const empRes = await apiService.get(
         `/api/hr/employees?${params.toString()}`,
       );
-      const responsePayload =
-        empRes && typeof empRes === "object" ? empRes : {};
+      const responsePayload = toObjectPayload(empRes, {});
       const employeeList = Array.isArray(responsePayload?.data)
         ? responsePayload.data
-        : Array.isArray(empRes)
-          ? empRes
-          : [];
+        : toArrayPayload(empRes);
       const pagination = responsePayload?.pagination || {};
 
       setEmployees(employeeList);
@@ -308,7 +249,9 @@ const HRM = () => {
       setEmployeeTotalPages(
         pagination.totalPages ||
           Math.max(
-            Math.ceil((pagination.total || employeeList.length) / pageSize),
+            Math.ceil(
+              (pagination.total || employeeList.length) / EMPLOYEES_PAGE_SIZE,
+            ),
             1,
           ),
       );
@@ -360,10 +303,7 @@ const HRM = () => {
         apiService.get("/api/hr/leave-allocations"),
       ]);
 
-      const employeesLoaded = await fetchEmployees(
-        employeePage,
-        employeePageSize,
-      );
+      const employeesLoaded = await fetchEmployees(employeePage);
 
       const [reqRes, anaRes, leaveRes, perfRes, trainRes, payRes, allocRes] =
         await dashboardPromise;
@@ -452,17 +392,10 @@ const HRM = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
 
-  useEffect(() => {
-    if (showLeaveAllocationModal) {
-      fetchAllEmployeesForLeaveAllocation();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showLeaveAllocationModal]);
-
   const loadOrganogramData = async () => {
     setOrganogramLoading(true);
     try {
-      const batchLimit = 20;
+      const batchLimit = 100;
       let page = 1;
       let totalPages = 1;
       const allEmployees = [];
@@ -608,7 +541,7 @@ const HRM = () => {
 
       await refreshDepartments();
       await loadOrganogramData();
-      await fetchEmployees(employeePage, employeePageSize);
+      await fetchEmployees(employeePage);
       toast.success("Organogram updated successfully");
     } catch (error) {
       console.error("Failed to save organogram changes:", error);
@@ -666,16 +599,7 @@ const HRM = () => {
     }, 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, employeePageSize]);
-
-  useEffect(() => {
-    if (showEmployeeDirectoryPage) {
-      employeeDirectoryTopRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }
-  }, [employeePage, employeePageSize, showEmployeeDirectoryPage]);
+  }, [search]);
 
   const approveLeave = async (id) => {
     try {
@@ -952,7 +876,6 @@ const HRM = () => {
         }}
         employeeData={selectedEmployee}
         initialEditMode={startEmployeeInEditMode}
-        fullWidth
       />
     );
   }
@@ -997,11 +920,7 @@ const HRM = () => {
           )}
           {fullPage ? (
             <button
-              onClick={() => {
-                setEmployeePageSize(20);
-                setShowEmployeeDirectoryPage(false);
-                fetchEmployees(1, 20);
-              }}
+              onClick={() => setShowEmployeeDirectoryPage(false)}
               className="text-primary text-sm font-bold hover:underline"
             >
               Back to Dashboard
@@ -1010,9 +929,7 @@ const HRM = () => {
             <button
               onClick={() => {
                 setSearch("");
-                setEmployeePageSize(50);
                 setShowEmployeeDirectoryPage(true);
-                fetchEmployees(1, 50);
               }}
               className="text-primary text-sm font-bold hover:underline"
             >
@@ -1047,15 +964,13 @@ const HRM = () => {
           Showing{" "}
           {employees.length === 0
             ? 0
-            : (employeePage - 1) * employeePageSize + 1}
-          -{Math.min(employeePage * employeePageSize, totalEmployees)} of{" "}
+            : (employeePage - 1) * EMPLOYEES_PAGE_SIZE + 1}
+          -{Math.min(employeePage * EMPLOYEES_PAGE_SIZE, totalEmployees)} of{" "}
           {totalEmployees}
         </span>
         <div className="flex items-center gap-2">
           <button
-            onClick={() =>
-              fetchEmployees(Math.max(employeePage - 1, 1), employeePageSize)
-            }
+            onClick={() => fetchEmployees(Math.max(employeePage - 1, 1))}
             disabled={employeesLoading || employeePage <= 1}
             className="px-2.5 py-1 border border-slate-200 dark:border-slate-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -1066,10 +981,7 @@ const HRM = () => {
           </span>
           <button
             onClick={() =>
-              fetchEmployees(
-                Math.min(employeePage + 1, employeeTotalPages),
-                employeePageSize,
-              )
+              fetchEmployees(Math.min(employeePage + 1, employeeTotalPages))
             }
             disabled={employeesLoading || employeePage >= employeeTotalPages}
             className="px-2.5 py-1 border border-slate-200 dark:border-slate-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1083,7 +995,7 @@ const HRM = () => {
 
   if (showEmployeeDirectoryPage) {
     return (
-      <div className="w-full min-h-screen bg-gray-50 px-0">
+      <div className="w-full min-h-screen bg-gray-50 px-1">
         <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
           <div className="flex h-full grow flex-col w-full">
             <Breadcrumb
@@ -1097,7 +1009,7 @@ const HRM = () => {
                 { label: "Employee Directory", icon: "fa-people-group" },
               ]}
             />
-            <div ref={employeeDirectoryTopRef} className="p-0 sm:p-2">
+            <div className="p-2">
               {renderEmployeeDirectorySection({ fullPage: true })}
             </div>
           </div>
@@ -1531,29 +1443,17 @@ const HRM = () => {
                               {allocation.year}
                             </span>
                           </div>
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                          <div className="grid grid-cols-2 gap-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-slate-500">Annual:</span>
                               <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                {allocation.annualLeave || 0} days
+                                {allocation.annualLeave} days
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500">Sick:</span>
                               <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                {allocation.sickLeave || 0} days
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">Personal:</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                {allocation.personalLeave || 0} days
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">Unpaid:</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                {allocation.unpaidLeave || 0} days
+                                {allocation.sickLeave} days
                               </span>
                             </div>
                           </div>
@@ -2524,7 +2424,7 @@ const HRM = () => {
                             required
                             value={leaveAllocationForm.employeeId}
                             onChange={(e) => {
-                              const selectedEmp = leaveAllocationEmployees.find(
+                              const selectedEmp = employees.find(
                                 (emp) => emp.id === e.target.value,
                               );
                               setLeaveAllocationForm({
@@ -2536,17 +2436,11 @@ const HRM = () => {
                             className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 appearance-none focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer"
                           >
                             <option value="">Select Employee</option>
-                            {leaveAllocationEmployeesLoading ? (
-                              <option value="">Loading employees...</option>
-                            ) : leaveAllocationEmployees.length === 0 ? (
-                              <option value="">No employees found</option>
-                            ) : (
-                              leaveAllocationEmployees.map((emp) => (
-                                <option key={emp.id} value={emp.id}>
-                                  {emp.name} - {emp.department}
-                                </option>
-                              ))
-                            )}
+                            {employees.map((emp) => (
+                              <option key={emp.id} value={emp.id}>
+                                {emp.name} - {emp.department}
+                              </option>
+                            ))}
                           </select>
                         </label>
 
@@ -2610,24 +2504,6 @@ const HRM = () => {
 
                         <label className="flex flex-col w-full">
                           <p className="text-slate-700 text-sm font-medium pb-2">
-                            Unpaid Leave (days)
-                          </p>
-                          <input
-                            type="number"
-                            min="0"
-                            value={leaveAllocationForm.unpaidLeave}
-                            onChange={(e) =>
-                              setLeaveAllocationForm({
-                                ...leaveAllocationForm,
-                                unpaidLeave: parseInt(e.target.value) || 0,
-                              })
-                            }
-                            className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
-                          />
-                        </label>
-
-                        <label className="flex flex-col w-full">
-                          <p className="text-slate-700 text-sm font-medium pb-2">
                             Year <span className="text-red-500">*</span>
                           </p>
                           <input
@@ -2657,10 +2533,9 @@ const HRM = () => {
                             required
                             value={leaveAllocationForm.managerId}
                             onChange={(e) => {
-                              const selectedManager =
-                                leaveAllocationEmployees.find(
-                                  (emp) => emp.id === e.target.value,
-                                );
+                              const selectedManager = employees.find(
+                                (emp) => emp.id === e.target.value,
+                              );
                               setLeaveAllocationForm({
                                 ...leaveAllocationForm,
                                 managerId: e.target.value,
@@ -2670,17 +2545,11 @@ const HRM = () => {
                             className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 appearance-none focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer"
                           >
                             <option value="">Select Manager</option>
-                            {leaveAllocationEmployeesLoading ? (
-                              <option value="">Loading employees...</option>
-                            ) : leaveAllocationEmployees.length === 0 ? (
-                              <option value="">No employees found</option>
-                            ) : (
-                              leaveAllocationEmployees.map((emp) => (
-                                <option key={emp.id} value={emp.id}>
-                                  {emp.name}
-                                </option>
-                              ))
-                            )}
+                            {employees.map((emp) => (
+                              <option key={emp.id} value={emp.id}>
+                                {emp.name} - {emp.role}
+                              </option>
+                            ))}
                           </select>
                         </label>
                       </div>

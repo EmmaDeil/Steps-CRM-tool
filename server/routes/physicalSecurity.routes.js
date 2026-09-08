@@ -1,14 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { CameraFeed, SecurityLog, SecurityPersonnel, SecurityBadge } = require('../models/PhysicalSecurity');
-const { authMiddleware } = require('../middleware/auth');
 const { checkSecurityRole } = require('../middleware/securityAuth'); // Reusing existing role check
-const { requireModuleAction } = require('../middleware/moduleAccess');
 
 // Protect all physical security routes. Assuming Admins and standard users with 'Security' access can view.
 // In a real system, you might refine this.
-router.use(authMiddleware);
-router.use(requireModuleAction('security', 'view'));
 router.use(checkSecurityRole(['Admin', 'Employee', 'Manager'])); 
 
 // No mock data seeding. Database starts empty until cameras are configured.
@@ -27,7 +23,7 @@ router.get('/cameras', async (req, res) => {
 });
 
 // POST /api/physical-security/cameras (Configure a new feed)
-router.post('/cameras', requireModuleAction('security', 'create'), async (req, res) => {
+router.post('/cameras', async (req, res) => {
     try {
         const newCamera = new CameraFeed({
             name: req.body.name,
@@ -43,7 +39,7 @@ router.post('/cameras', requireModuleAction('security', 'create'), async (req, r
 });
 
 // PUT /api/physical-security/cameras/:id (For status updates or motion alerts)
-router.put('/cameras/:id', requireModuleAction('security', 'edit'), async (req, res) => {
+router.put('/cameras/:id', async (req, res) => {
     try {
         const camera = await CameraFeed.findByIdAndUpdate(req.params.id, req.body, { new: true });
         if (!camera) return res.status(404).json({ message: 'Camera not found' });
@@ -80,7 +76,7 @@ router.get('/logs/all', async (req, res) => {
 });
 
 // POST /api/physical-security/logs (For guards logging visitor entry, or systems logging faults)
-router.post('/logs', requireModuleAction('security', 'create'), async (req, res) => {
+router.post('/logs', async (req, res) => {
     try {
         const newLog = new SecurityLog(req.body);
         const savedLog = await newLog.save();
@@ -108,7 +104,7 @@ router.get('/personnel', async (req, res) => {
 const VisitorPass = require('../models/VisitorPass');
 
 // POST /api/physical-security/visitor-passes - Create a new visitor pass (generates QR token)
-router.post('/visitor-passes', requireModuleAction('security', 'create'), async (req, res) => {
+router.post('/visitor-passes', async (req, res) => {
     try {
         const pass = new VisitorPass({
             createdBy: req.body.createdBy || 'Security Officer',
@@ -143,7 +139,7 @@ router.get('/visitor-passes', async (req, res) => {
 });
 
 // PUT /api/physical-security/visitor-passes/:id/checkout - Check out a visitor
-router.put('/visitor-passes/:id/checkout', requireModuleAction('security', 'edit'), async (req, res) => {
+router.put('/visitor-passes/:id/checkout', async (req, res) => {
     try {
         const pass = await VisitorPass.findByIdAndUpdate(
             req.params.id,
@@ -180,7 +176,7 @@ router.get('/badges', async (req, res) => {
 });
 
 // POST /api/physical-security/badges - Issue a new badge
-router.post('/badges', requireModuleAction('security', 'create'), async (req, res) => {
+router.post('/badges', async (req, res) => {
     try {
         const { holderName, department, badgeType, accessLevel, expiresAt, notes, issuedBy } = req.body;
         if (!holderName) return res.status(400).json({ message: 'Holder name is required' });
@@ -219,7 +215,7 @@ router.post('/badges', requireModuleAction('security', 'create'), async (req, re
 });
 
 // PUT /api/physical-security/badges/:id/revoke - Revoke a badge
-router.put('/badges/:id/revoke', requireModuleAction('security', 'edit'), async (req, res) => {
+router.put('/badges/:id/revoke', async (req, res) => {
     try {
         const badge = await SecurityBadge.findByIdAndUpdate(
             req.params.id,

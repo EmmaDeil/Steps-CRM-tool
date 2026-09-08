@@ -24,7 +24,6 @@ const AdvanceRequestModel = require('./models/AdvanceRequest');
 const RefundRequestModel = require('./models/RefundRequest');
 const RetirementBreakdownModel = require('./models/RetirementBreakdown');
 const DocumentModel = require('./models/Document');
-const TemplateModel = require('./models/Template');
 const UserModel = require('./models/User');
 const SecuritySettingsModel = require('./models/SecuritySettings');
 const AuditLogModel = require('./models/AuditLog');
@@ -39,16 +38,7 @@ const RoleModel = require('./models/Role');
 const BudgetCategoryModel = require('./models/BudgetCategory');
 const InventoryItemModel = require('./models/InventoryItem');
 const NotificationModel = require('./models/Notification');
-const BankTransactionModel = require('./models/BankTransaction');
-const ReconciliationModel = require('./models/Reconciliation');
-const JournalEntryModel = require('./models/JournalEntry');
-const PerformanceReviewModel = require('./models/PerformanceReview');
-const PayrollRunModel = require('./models/PayrollRun');
 const { validatePassword, getPasswordPolicy } = require('./utils/passwordValidator');
-const {
-  filterAccessibleModules,
-  hasModuleAction,
-} = require('./utils/moduleAccess');
 
 // Static lists used to seed the DB when empty
 const DEFAULT_ROLES = [
@@ -132,8 +122,7 @@ const DEFAULT_JOB_TITLES = [
 ];
 const VendorModel = require('./models/Vendor');
 const approvalRuleRoutes = require('./routes/approvalRule.routes');
-const appRoutes = require('./routes/app.routes');
-const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP, sendInventoryExpiryAlertEmail, sendWelcomeVerificationEmail, sendDocumentSignedEmail } = require('./utils/emailService');
+const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP, sendInventoryExpiryAlertEmail, sendWelcomeVerificationEmail } = require('./utils/emailService');
 const { sendSMSOTP } = require('./utils/smsService');
 const { buildApprovalChain } = require('./utils/approvalRuleHelper');
 const { Server } = require('socket.io');
@@ -171,31 +160,6 @@ app.use(cors({
   optionsSuccessStatus: 200,
 }));
 
-const getRateLimitKey = (req) => {
-  const forwardedFor = req.headers['x-forwarded-for'];
-  if (forwardedFor) {
-    return forwardedFor.split(',')[0].trim();
-  }
-
-  if (req.headers['cf-connecting-ip']) {
-    return req.headers['cf-connecting-ip'];
-  }
-
-  if (req.headers['x-real-ip']) {
-    return req.headers['x-real-ip'];
-  }
-
-  if (req.socket?.remoteAddress) {
-    return req.socket.remoteAddress;
-  }
-
-  if (req.connection?.remoteAddress) {
-    return req.connection.remoteAddress;
-  }
-
-  return req.ip || 'unknown';
-};
-
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -203,7 +167,6 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
-  keyGenerator: getRateLimitKey,
 });
 
 // Apply rate limiter to all requests
@@ -215,14 +178,10 @@ const authLimiter = rateLimit({
   max: 20, // increased for developement convenience
   skipSuccessfulRequests: true,
   message: 'Too many failed requests, please try again later.',
-  keyGenerator: getRateLimitKey,
 });
 
 // Trust proxy - enables correct client IP extraction when behind reverse proxy
-const trustProxySetting = Number.isInteger(Number(process.env.TRUST_PROXY))
-  ? Number(process.env.TRUST_PROXY)
-  : (isServerlessRuntime ? 1 : 0);
-app.set('trust proxy', trustProxySetting);
+app.set('trust proxy', true);
 
 // Utility function to extract complete client IP address
 const getClientIP = (req) => {
@@ -315,29 +274,20 @@ if (!MONGODB_URI) {
   }
 }
 
-const mongoConnectionOptions = (useTls) => ({
-  serverSelectionTimeoutMS: 30000, // Increased to 30 seconds
-  socketTimeoutMS: 45000,
-  family: 4, // Use IPv4, skip trying IPv6
-  maxPoolSize: 10,
-  minPoolSize: 2,
-  ...(useTls ? {
-    tls: true, // Enable TLS/SSL for Atlas connections
-    tlsAllowInvalidCertificates: false,
-  } : {}),
-  retryWrites: true,
-  w: 'majority',
-});
-
-const connectToMongo = async (uri) => {
-  const useTls = /^mongodb\+srv:\/\//i.test(uri);
-  await mongoose.connect(uri, mongoConnectionOptions(useTls));
-};
-
 async function start() {
   if (mongoose.connection.readyState !== 1) {
     try {
-      await connectToMongo(MONGODB_URI);
+      await mongoose.connect(MONGODB_URI, {
+        serverSelectionTimeoutMS: 30000, // Increased to 30 seconds
+        socketTimeoutMS: 45000,
+        family: 4, // Use IPv4, skip trying IPv6
+        maxPoolSize: 10,
+        minPoolSize: 2,
+        tls: true, // Enable TLS/SSL
+        tlsAllowInvalidCertificates: false,
+        retryWrites: true,
+        w: 'majority',
+      });
       console.log('✓ Connected to MongoDB');
 
       // Handle MongoDB connection events
@@ -369,8 +319,7 @@ async function start() {
         { id: 12, name: "Analytics", componentName: "Analytics" },
         { id: 13, name: "Policy", componentName: "Policy" },
         { id: 14, name: "Incident Reporting", componentName: "IncidentReporting" },
-        { id: 15, name: "Contacts", componentName: "Contact" },
-        { id: 16, name: "Sales", componentName: "Sales" },
+        { id: 15, name: "Sales", componentName: "Sales" },
       ];
 
       // Seed modules if empty or update with new modules
@@ -413,43 +362,9 @@ async function start() {
       String(user?.role || '').trim().toLowerCase(),
     );
 
-  const canReconcileBreakdowns = (user) => {
-    if (hasAdminPrivileges(user)) return true;
-    return String(user?.department || '').trim().toLowerCase().includes('finance');
-  };
-
   const canManageVendors = (user) =>
     hasAdminPrivileges(user) ||
     ['editor'].includes(String(user?.role || '').trim().toLowerCase());
-
-  const getRoleUserManagementPermission = async (roleName, permissionKey) => {
-    const role = await RoleModel.findOne({ name: roleName }).lean();
-    return role?.permissions?.userManagement?.[permissionKey] === true;
-  };
-
-  const hasUserManagementPermission = async (user, permissionKey) => {
-    if (hasAdminPrivileges(user)) return true;
-
-    const userOverride = user?.permissions?.userManagement?.[permissionKey];
-    if (typeof userOverride === 'boolean') return userOverride;
-
-    return getRoleUserManagementPermission(user?.role, permissionKey);
-  };
-
-  const requireUserManagementPermission = (permissionKey) => {
-    return async (req, res, next) => {
-      try {
-        const allowed = await hasUserManagementPermission(req.user, permissionKey);
-        if (!allowed) {
-          return res.status(403).json({ message: 'Insufficient permissions' });
-        }
-        next();
-      } catch (err) {
-        console.error('User-management permission check error:', err);
-        return res.status(500).json({ message: 'Permission check failed' });
-      }
-    };
-  };
 
   // ==================== HEALTH CHECK ROUTE ====================
 
@@ -1110,18 +1025,15 @@ async function start() {
     }
   });
 
-  app.get('/api/modules', authMiddleware, async (req, res) => {
+  app.get('/api/modules', async (req, res) => {
     const mods = await api.getModules();
-    res.json(filterAccessibleModules(req.user, mods));
+    res.json(mods);
   });
 
-  app.get('/api/modules/:id', authMiddleware, async (req, res) => {
+  app.get('/api/modules/:id', async (req, res) => {
     const id = req.params.id;
     const mod = await api.getModuleById(id);
     if (!mod) return res.status(404).json({ message: 'Not found' });
-    if (!hasModuleAction(req.user, mod?.name || mod?.id, 'view')) {
-      return res.status(403).json({ message: 'Insufficient module permissions' });
-    }
     res.json(mod);
   });
 
@@ -1191,13 +1103,6 @@ async function start() {
   const adminRoutes = require('./routes/admin.routes');
   app.use('/api/admin', adminRoutes);
 
-  // ============ CONTACTS ROUTES ============
-  const contactsRoutes = require('./routes/contacts.routes');
-  app.use('/api/contacts', contactsRoutes);
-
-  // ============ APP DATA ROUTES (application API key) ============
-  app.use('/api/app', appRoutes);
-
   // ============ BUDGET ROUTES ============
   const budgetRoutes = require('./routes/budget.routes');
   app.use('/api/budget', budgetRoutes);
@@ -1239,10 +1144,6 @@ async function start() {
   // ============ MAINTENANCE ROUTES ============
   const maintenanceRoutes = require('./routes/maintenance.routes');
   app.use('/api/maintenance', maintenanceRoutes);
-
-  // ============ SALES ROUTES ============
-  const salesRoutes = require('./routes/sales.routes');
-  app.use('/api/sales', salesRoutes);
 
   // ============ INCIDENT REPORT ROUTES ============
   const incidentReportRoutes = require('./routes/incidentReport.routes');
@@ -1413,6 +1314,10 @@ async function start() {
   const inventoryRoutes = require('./routes/inventory.routes');
   app.use('/api/inventory', inventoryRoutes);
 
+  // ============ SALES ROUTES ============
+  const salesRoutes = require('./routes/sales.routes');
+  app.use('/api/sales', salesRoutes);
+
   // Models needed for Analytics aggregation
   const AttendanceModel = require('./models/Attendance');
   const LeaveRequestModel = require('./models/LeaveRequest');
@@ -1421,63 +1326,35 @@ async function start() {
 
   app.get('/api/analytics/reports', async (req, res) => {
     try {
-      if (mongoose.connection.readyState !== 1) {
-        console.warn('Analytics API: Database not connected, returning 503');
-        return res.status(503).json({ success: false, error: 'Database connection unavailable' });
+      // 1. Attendance Data Aggregation
+      let attendanceRecords = [];
+      try {
+        attendanceRecords = await AttendanceModel.find().lean();
+      } catch(e) {}
+
+      // Group attendance by week
+      const attendanceData = [];
+      if (attendanceRecords.length > 0) {
+        // Sort by date and group into weeks
+        const sorted = attendanceRecords.sort((a, b) => new Date(a.date || a.createdAt) - new Date(b.date || b.createdAt));
+        const weekSize = Math.ceil(sorted.length / 4) || 1;
+        for (let i = 0; i < 4; i++) {
+          const chunk = sorted.slice(i * weekSize, (i + 1) * weekSize);
+          if (chunk.length === 0) break;
+          const present = chunk.filter(a => (a.status || '').toLowerCase() === 'present').length;
+          const absent = chunk.filter(a => (a.status || '').toLowerCase() === 'absent').length;
+          const late = chunk.filter(a => (a.status || '').toLowerCase() === 'late').length;
+          attendanceData.push({ name: `Week ${i + 1}`, present, absent, late });
+        }
       }
 
-      const withTimeout = (promise, ms = 5000) => 
-        Promise.race([
-          promise,
-          new Promise((resolve) => setTimeout(() => resolve(null), ms))
-        ]);
-
-      const EmployeeModel = require('./models/Employee');
-      const ReportModel = require('./models/Report');
-      const MaintenanceTicketModel = require('./models/MaintenanceTicket');
-      const MaterialRequestModel = require('./models/MaterialRequest');
-
-      const [
-        attendanceRecordsResult,
-        leavesResult,
-        travelsResult,
-        purchasesResult,
-        ticketsResult,
-        materialReqsResult,
-        totalEmployeesResult,
-        reportCountResult
-      ] = await Promise.all([
-        withTimeout(AttendanceModel.find().lean().catch(() => [])),
-        withTimeout(LeaveRequestModel.find().lean().catch(() => [])),
-        withTimeout(TravelRequestModel.find().lean().catch(() => [])),
-        withTimeout(PurchaseOrderModel.find().lean().catch(() => [])),
-        withTimeout(MaintenanceTicketModel.find().lean().catch(() => [])),
-        withTimeout(MaterialRequestModel.find().lean().catch(() => [])),
-        withTimeout(EmployeeModel.countDocuments({ status: 'Active' }).catch(() => 0)),
-        withTimeout(ReportModel.countDocuments().catch(() => 0))
-      ]);
-
-      if (!attendanceRecordsResult) {
-        // If timeout reached, return 503 immediately
-        return res.status(503).json({ success: false, error: 'Analytics queries timed out' });
-      }
-
-      const attendanceRecords = attendanceRecordsResult || [];
-      const leaves = leavesResult || [];
-      const travels = travelsResult || [];
-      const purchases = purchasesResult || [];
-      const tickets = ticketsResult || [];
-      const materialReqs = materialReqsResult || [];
-      const totalEmployees = totalEmployeesResult || 0;
-      const reportCount = reportCountResult || 0;
-      const materialRequests = materialReqs;
-
-      const getUsdAmountFromPurchase = (po) => {
-        const currency = String(po?.currency || '').trim().toUpperCase();
-        if (currency !== 'USD') return 0;
-        const amount = Number(po?.totalAmount ?? po?.amount ?? 0);
-        return Number.isFinite(amount) && amount > 0 ? amount : 0;
-      };
+      // 2. Approvals Aggregation (Leave, Travel, Purchase Orders)
+      let leaves = [], travels = [], purchases = [];
+      try {
+        leaves = await LeaveRequestModel.find().lean();
+        travels = await TravelRequestModel.find().lean();
+        purchases = await PurchaseOrderModel.find().lean();
+      } catch(e) {}
 
       const allRequests = [...leaves, ...travels, ...purchases];
       let approvedCount = 0;
@@ -1516,12 +1393,11 @@ async function start() {
       if (purchases.length > 0) {
         const byMonth = {};
         purchases.forEach(po => {
-          const amount = getUsdAmountFromPurchase(po);
-          if (amount <= 0) return;
           const date = new Date(po.createdAt || po.date || Date.now());
           const monthName = date.toLocaleString('en-US', { month: 'short' });
           const key = `${date.getFullYear()}-${date.getMonth()}`;
           if (!byMonth[key]) byMonth[key] = { name: monthName, revenue: 0, expenses: 0 };
+          const amount = Number(po.totalAmount || po.amount || 0);
           byMonth[key].expenses += amount;
           byMonth[key].revenue += Math.floor(amount * 1.35);
         });
@@ -1531,40 +1407,28 @@ async function start() {
         });
       }
 
-      // Group attendance by week
-      const attendanceData = [];
-      if (attendanceRecords.length > 0) {
-        // Sort by date and group into weeks
-        const sorted = attendanceRecords.sort((a, b) => new Date(a.date || a.createdAt) - new Date(b.date || b.createdAt));
-        const weekSize = Math.ceil(sorted.length / 4) || 1;
-        for (let i = 0; i < 4; i++) {
-          const chunk = sorted.slice(i * weekSize, (i + 1) * weekSize);
-          if (chunk.length === 0) break;
-          const present = chunk.filter(a => (a.status || '').toLowerCase() === 'present').length;
-          const absent = chunk.filter(a => (a.status || '').toLowerCase() === 'absent').length;
-          const late = chunk.filter(a => (a.status || '').toLowerCase() === 'late').length;
-          attendanceData.push({ name: `Week ${i + 1}`, present, absent, late });
-        }
-      }
-
       // 4. Facility Usage (from maintenance tickets)
       const facilityData = [];
-      if (tickets.length > 0) {
-        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const byDay = {};
-        dayNames.forEach(d => { byDay[d] = { usage: 0, maintenance: 0 }; });
-        tickets.forEach(t => {
-          const date = new Date(t.createdAt || t.date || Date.now());
-          const day = dayNames[date.getDay()];
-          byDay[day].maintenance++;
-          byDay[day].usage++;
-        });
-        ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(d => {
-          if (byDay[d].usage > 0 || byDay[d].maintenance > 0) {
-            facilityData.push({ name: d, ...byDay[d] });
-          }
-        });
-      }
+      try {
+        const MaintenanceTicketModel = require('./models/MaintenanceTicket');
+        const tickets = await MaintenanceTicketModel.find().lean();
+        if (tickets.length > 0) {
+          const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+          const byDay = {};
+          dayNames.forEach(d => { byDay[d] = { usage: 0, maintenance: 0 }; });
+          tickets.forEach(t => {
+            const date = new Date(t.createdAt || t.date || Date.now());
+            const day = dayNames[date.getDay()];
+            byDay[day].maintenance++;
+            byDay[day].usage++;
+          });
+          ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(d => {
+            if (byDay[d].usage > 0 || byDay[d].maintenance > 0) {
+              facilityData.push({ name: d, ...byDay[d] });
+            }
+          });
+        }
+      } catch(e) {}
 
       // 5. Custom Report - Combined overview from all modules
       // Calculate attendance counts (needed by customData and stats)
@@ -1620,10 +1484,7 @@ async function start() {
         const finRejected = purchases.filter(p => (p.status || '').toLowerCase().includes('rejected')).length;
         const finPending = purchases.length - finApproved - finRejected;
         let finTotalAmount = 0;
-        purchases.forEach(p => { finTotalAmount += getUsdAmountFromPurchase(p); });
-        const nonUsdOrders = purchases.filter(
-          p => String(p?.currency || '').trim().toUpperCase() !== 'USD',
-        ).length;
+        purchases.forEach(p => { finTotalAmount += Number(p.totalAmount || p.amount || 0); });
         customData.push({
           name: 'Finance',
           total: purchases.length,
@@ -1634,7 +1495,6 @@ async function start() {
           stats: [
             { label: 'Purchase Orders', value: purchases.length, icon: 'fa-file-invoice-dollar', color: 'blue' },
             { label: 'Total Amount', value: '$' + finTotalAmount.toLocaleString(), icon: 'fa-dollar-sign', color: 'green' },
-            { label: 'Non-USD Excluded', value: nonUsdOrders, icon: 'fa-filter-circle-xmark', color: 'orange' },
             { label: 'Approved', value: finApproved, icon: 'fa-circle-check', color: 'green' },
             { label: 'Pending', value: finPending, icon: 'fa-hourglass-half', color: 'orange' },
           ],
@@ -1687,48 +1547,70 @@ async function start() {
         };
       }
       // Material requests
-      if (materialReqs.length > 0) {
-        const matApproved = materialReqs.filter(m => (m.status || '').toLowerCase() === 'approved').length;
-        const matRejected = materialReqs.filter(m => (m.status || '').toLowerCase() === 'rejected').length;
-        const matPending = materialReqs.length - matApproved - matRejected;
-        customData.push({
-          name: 'Materials',
-          total: materialReqs.length,
-          active: matApproved,
-          issues: matRejected
-        });
-        moduleDetails.Materials = {
-          stats: [
-            { label: 'Total Requests', value: materialReqs.length, icon: 'fa-boxes-stacked', color: 'blue' },
-            { label: 'Approved', value: matApproved, icon: 'fa-circle-check', color: 'green' },
-            { label: 'Pending', value: matPending, icon: 'fa-hourglass-half', color: 'orange' },
-            { label: 'Rejected', value: matRejected, icon: 'fa-circle-xmark', color: 'red' },
-          ],
-          rate: materialReqs.length > 0 ? ((matApproved / materialReqs.length) * 100).toFixed(1) + '%' : '0%',
-          rateLabel: 'Fulfillment Rate'
-        };
-      }
+      try {
+        const MaterialRequestModelCustom = require('./models/MaterialRequest');
+        const materialReqs = await MaterialRequestModelCustom.find().lean();
+        if (materialReqs.length > 0) {
+          const matApproved = materialReqs.filter(m => (m.status || '').toLowerCase() === 'approved').length;
+          const matRejected = materialReqs.filter(m => (m.status || '').toLowerCase() === 'rejected').length;
+          const matPending = materialReqs.length - matApproved - matRejected;
+          customData.push({
+            name: 'Materials',
+            total: materialReqs.length,
+            active: matApproved,
+            issues: matRejected
+          });
+          moduleDetails.Materials = {
+            stats: [
+              { label: 'Total Requests', value: materialReqs.length, icon: 'fa-boxes-stacked', color: 'blue' },
+              { label: 'Approved', value: matApproved, icon: 'fa-circle-check', color: 'green' },
+              { label: 'Pending', value: matPending, icon: 'fa-hourglass-half', color: 'orange' },
+              { label: 'Rejected', value: matRejected, icon: 'fa-circle-xmark', color: 'red' },
+            ],
+            rate: materialReqs.length > 0 ? ((matApproved / materialReqs.length) * 100).toFixed(1) + '%' : '0%',
+            rateLabel: 'Fulfillment Rate'
+          };
+        }
+      } catch(e) {}
 
       // Calculate Stats from real data
       const avgAttendance = totalAttendanceRecords > 0 ? ((presentCount / totalAttendanceRecords) * 100).toFixed(1) + '%' : '0%';
 
+      // Get total employees count
+      let totalEmployees = 0;
+      try {
+        const EmployeeModel = require('./models/Employee');
+        totalEmployees = await EmployeeModel.countDocuments({ status: 'Active' });
+      } catch(e) {}
+
       // Calculate financial metrics from real data
       let totalExpenses = 0;
       purchases.forEach(po => {
-        totalExpenses += getUsdAmountFromPurchase(po);
+        totalExpenses += Number(po.totalAmount || po.amount || 0);
       });
       const totalRevenue = Math.floor(totalExpenses * 1.35);
       const netProfit = totalRevenue - totalExpenses;
       const avgTransaction = allRequests.length > 0 ? Math.floor(totalExpenses / allRequests.length) : 0;
 
+      // Get total reports count
+      let reportCount = 0;
+      try {
+        const ReportModel = require('./models/Report');
+        reportCount = await ReportModel.countDocuments();
+      } catch(e) {}
+
       // Calculate facility usage from material requests
       let facilityUsagePercent = "0%";
       let facilityChange = "No data";
-      if (materialRequests.length > 0) {
-        const approvedRequests = materialRequests.filter(mr => (mr.status || '').toLowerCase() === 'approved').length;
-        facilityUsagePercent = ((approvedRequests / materialRequests.length) * 100).toFixed(0) + '%';
-        facilityChange = `${materialRequests.length} total requests`;
-      }
+      try {
+        const MaterialRequestModel = require('./models/MaterialRequest');
+        const materialRequests = await MaterialRequestModel.find().lean();
+        if (materialRequests.length > 0) {
+          const approvedRequests = materialRequests.filter(mr => (mr.status || '').toLowerCase() === 'approved').length;
+          facilityUsagePercent = ((approvedRequests / materialRequests.length) * 100).toFixed(0) + '%';
+          facilityChange = `${materialRequests.length} total requests`;
+        }
+      } catch(e) {}
 
       const totalApprovals = allRequests.length;
       const rejectionRate = totalApprovals > 0 ? ((rejectedCount / totalApprovals) * 100).toFixed(1) + '%' : '0%';
@@ -1951,21 +1833,14 @@ async function start() {
       } else if (reportType === 'Financial Report') {
         const query = hasDateFilter ? { createdAt: dateFilter } : {};
         const purchases = await PurchaseOrderModel.find(query).lean();
-        const usdPurchases = purchases.filter(
-          po => String(po?.currency || '').trim().toUpperCase() === 'USD',
-        );
         let totalExpenses = 0;
-        usdPurchases.forEach(po => {
-          totalExpenses += Number(po.totalAmount || po.amount || 0);
-        });
+        purchases.forEach(po => { totalExpenses += Number(po.totalAmount || po.amount || 0); });
         reportData = {
-          totalPurchaseOrders: usdPurchases.length,
-          excludedNonUsdOrders: purchases.length - usdPurchases.length,
-          currency: 'USD',
+          totalPurchaseOrders: purchases.length,
           totalExpenses,
-          avgOrderValue: usdPurchases.length > 0 ? Math.floor(totalExpenses / usdPurchases.length) : 0,
-          summary: usdPurchases.length > 0
-            ? `${usdPurchases.length} USD purchase orders totaling $${totalExpenses.toLocaleString()}.`
+          avgOrderValue: purchases.length > 0 ? Math.floor(totalExpenses / purchases.length) : 0,
+          summary: purchases.length > 0
+            ? `${purchases.length} purchase orders totaling $${totalExpenses.toLocaleString()}.`
             : 'No financial records found for the selected period.'
         };
       } else if (reportType === 'Approval Statistics') {
@@ -2194,131 +2069,150 @@ async function start() {
   const SystemSettingsModel = require('./models/SystemSettings');
   const axios = require('axios');
   
-  // POST /api/attendance - Manual override by HR/Admin
-  app.post('/api/attendance', authMiddleware, async (req, res) => {
+  let localAttendanceRecords = [];
+
+  const normalizeAttendanceRecord = (record) => ({
+    _id: record._id,
+    id: record.id ?? record._id,
+    name: record.name || record.user || 'Demo User',
+    user: record.user || record.name || 'Demo User',
+    employeeId: record.employeeId || '',
+    status: record.status || 'present',
+    date: record.date || new Date(record.checkInTime || record.createdAt || Date.now()).toISOString(),
+    checkInTime: record.checkInTime || record.createdAt || new Date(),
+    source: record.source || 'database',
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  });
+
+  const computeAttendanceStats = (records = []) => ({
+    presentCount: records.filter((r) => ['present', 'on-time'].includes(String(r.status || '').toLowerCase())).length,
+    leaveCount: records.filter((r) => ['leave', 'on-leave'].includes(String(r.status || '').toLowerCase())).length,
+    absentCount: records.filter((r) => String(r.status || '').toLowerCase() === 'absent').length,
+    lateCount: records.filter((r) => String(r.status || '').toLowerCase() === 'late').length,
+  });
+
+  app.post('/api/attendance', async (req, res) => {
     try {
-      const { name, employeeId, status, date } = req.body;
-      const targetDate = date || new Date().toISOString().split('T')[0];
-      
-      let employee = await EmployeeModel.findOne({ employeeId });
-      
-      const record = await AttendanceModel.findOneAndUpdate(
-        { employeeId, date: targetDate },
-        { 
-          name: name || employee?.name || 'Demo User',
-          employeeRef: employee?._id,
-          status: status || 'present',
-          checkInTime: new Date()
+      const { name, employeeId, status } = req.body;
+      const cleanName = String(name || '').trim() || 'Demo User';
+      const cleanEmployeeId = String(employeeId || '').trim() || 'EMP-1337';
+      const cleanStatus = String(status || 'present').trim().toLowerCase() || 'present';
+      const checkInTime = new Date();
+      const attendanceDate = checkInTime.toISOString().slice(0, 10);
+
+      const nextIdCandidate = await AttendanceModel.countDocuments().catch(() => 0);
+      const persistedRecord = await AttendanceModel.findOneAndUpdate(
+        { employeeId: cleanEmployeeId, date: attendanceDate },
+        {
+          $set: {
+            name: cleanName,
+            user: cleanName,
+            employeeId: cleanEmployeeId,
+            status: cleanStatus,
+            date: attendanceDate,
+            checkInTime,
+            source: 'local-attendance-form',
+          },
+          $setOnInsert: {
+            id: nextIdCandidate + 1,
+          },
         },
-        { upsert: true, new: true }
+        { new: true, upsert: true, runValidators: true },
       );
 
-      res.status(201).json({ message: 'Attendance marked', record });
-    } catch (e) {
-      console.error('Error marking attendance:', e);
-      res.status(500).json({ error: 'Failed to mark attendance' });
-    }
-  });
-
-  // POST /api/attendance/clock-in - Self-serve
-  app.post('/api/attendance/clock-in', authMiddleware, async (req, res) => {
-    try {
-      const user = req.user;
-      let employeeId = 'N/A';
-      let name = user.fullName || `${user.firstName} ${user.lastName}`;
-      let employeeRef = user.employeeRef || null;
-      
-      if (employeeRef) {
-        const emp = await EmployeeModel.findById(employeeRef);
-        if (emp) employeeId = emp.employeeId || 'N/A';
-      } else {
-        const emp = await EmployeeModel.findOne({ email: user.email });
-        if (emp) {
-          employeeId = emp.employeeId || 'N/A';
-          employeeRef = emp._id;
-        }
-      }
-      
-      const today = new Date().toISOString().split('T')[0];
-      
-      const record = await AttendanceModel.findOneAndUpdate(
-        { employeeId, date: today },
-        { 
-          name,
-          employeeRef,
-          status: 'present',
-          checkInTime: new Date(),
-          $setOnInsert: { checkOutTime: null }
-        },
-        { upsert: true, new: true }
-      );
-      
-      res.status(200).json({ message: 'Clocked in successfully', record });
-    } catch (e) {
-      console.error('Clock-in error:', e);
-      res.status(500).json({ error: 'Failed to clock in' });
-    }
-  });
-
-  // POST /api/attendance/clock-out - Self-serve
-  app.post('/api/attendance/clock-out', authMiddleware, async (req, res) => {
-    try {
-      const user = req.user;
-      let employeeId = 'N/A';
-      if (user.employeeRef) {
-        const emp = await EmployeeModel.findById(user.employeeRef);
-        if (emp) employeeId = emp.employeeId || 'N/A';
-      } else {
-        const emp = await EmployeeModel.findOne({ email: user.email });
-        if (emp) employeeId = emp.employeeId || 'N/A';
-      }
-      
-      const today = new Date().toISOString().split('T')[0];
-      
-      const record = await AttendanceModel.findOneAndUpdate(
-        { employeeId, date: today },
-        { checkOutTime: new Date() },
-        { new: true }
-      );
-      
-      if (!record) {
-        return res.status(404).json({ error: 'No clock-in record found for today' });
-      }
-      
-      res.status(200).json({ message: 'Clocked out successfully', record });
-    } catch (e) {
-      console.error('Clock-out error:', e);
-      res.status(500).json({ error: 'Failed to clock out' });
-    }
-  });
-
-  // GET /api/attendance
-  app.get('/api/attendance', authMiddleware, async (req, res) => {
-    try {
-      const targetDate = req.query.date || new Date().toISOString().split('T')[0];
-      
-      const records = await AttendanceModel.find({ date: targetDate }).sort({ checkInTime: -1 }).lean();
-      const totalEmployees = await EmployeeModel.countDocuments({ status: 'Active' });
-      
-      const presentCount = records.filter(r => r.status === 'present' || r.status === 'on-time').length;
-      const leaveCount = records.filter(r => r.status === 'leave' || r.status === 'on-leave').length;
-      const lateCount = records.filter(r => r.status === 'late').length;
-      
-      // Calculate absent as active employees - (present + leave + late)
-      const accountedFor = presentCount + leaveCount + lateCount;
-      const absentCount = Math.max(0, totalEmployees - accountedFor);
-
-      res.json({ 
-        records, 
-        totalEmployees,
-        presentCount,
-        leaveCount,
-        absentCount,
-        lateCount
+      const normalized = normalizeAttendanceRecord(persistedRecord);
+      const cacheKey = `${cleanEmployeeId}:${attendanceDate}`;
+      const existingCacheIndex = localAttendanceRecords.findIndex((record) => {
+        const recordDate = String(record.date || '').slice(0, 10);
+        return `${String(record.employeeId || '')}:${recordDate}` === cacheKey;
       });
+      if (existingCacheIndex >= 0) {
+        localAttendanceRecords[existingCacheIndex] = normalized;
+      } else {
+        localAttendanceRecords.unshift(normalized);
+      }
+      if (localAttendanceRecords.length > 50) localAttendanceRecords.pop();
+
+      res.status(201).json({ message: 'Attendance marked', record: normalized });
+    } catch (e) {
+      console.error(e);
+
+      const fallbackRecord = {
+        name: String(req.body?.name || '').trim() || 'Demo User',
+        employeeId: String(req.body?.employeeId || '').trim() || 'EMP-1337',
+        status: String(req.body?.status || 'present').trim().toLowerCase() || 'present',
+        checkInTime: new Date(),
+        source: 'in-memory-fallback',
+      };
+
+      localAttendanceRecords.unshift(fallbackRecord);
+      if (localAttendanceRecords.length > 50) localAttendanceRecords.pop();
+
+      res.status(201).json({ message: 'Attendance marked using fallback storage', record: fallbackRecord });
+    }
+  });
+
+  app.get('/api/attendance', async (req, res) => {
+    try {
+      const settings = await SystemSettingsModel.findOne();
+      const apiKey = settings?.attendanceApiKey;
+
+      if (apiKey) {
+        const endpoints = [
+          'https://attendance-app-swart-iota.vercel.app/api/attendance',
+          'https://attendance-app-swart-iota.vercel.app/api/hr/employees',
+          'https://attendance-app-swart-iota.vercel.app/attendance',
+          'https://attendance-app-swart-iota.vercel.app/'
+        ];
+
+        for (const url of endpoints) {
+          try {
+            const response = await axios.get(url, {
+              headers: { 'x-api-key': apiKey },
+              timeout: 5000 // 5 seconds timeout
+            });
+            if (response.data) {
+              return res.json(response.data);
+            }
+          } catch (err) {
+            // Ignore errors for individual endpoints, move to next
+            console.log(`Endpoint ${url} failed: ${err.message}`);
+          }
+        }
+
+        console.error('All external attendance endpoints failed.');
+      }
     } catch (error) {
-      console.error('Error fetching attendance:', error);
-      res.status(500).json({ error: 'Failed to fetch attendance data' });
+      console.error('Error in external attendance proxy:', error.message);
+    }
+
+    try {
+      const persistedRecords = await AttendanceModel.find()
+        .sort({ checkInTime: -1, createdAt: -1 })
+        .limit(500)
+        .lean();
+      const records = persistedRecords.length > 0
+        ? persistedRecords.map(normalizeAttendanceRecord)
+        : localAttendanceRecords;
+      const stats = computeAttendanceStats(records);
+
+      res.json({
+        records,
+        totalEmployees: records.length,
+        ...stats,
+      });
+    } catch (dbError) {
+      console.error('Error loading persisted attendance records:', dbError);
+
+      const records = localAttendanceRecords;
+      const stats = computeAttendanceStats(records);
+
+      res.json({
+        records,
+        totalEmployees: records.length,
+        ...stats,
+      });
     }
   });
 
@@ -2566,6 +2460,25 @@ async function start() {
         ],
       });
 
+      materialRequest.linkedPurchaseOrderId = purchaseOrder._id;
+      materialRequest.linkedPurchaseOrderIds = Array.isArray(materialRequest.linkedPurchaseOrderIds)
+        ? [...new Set([...materialRequest.linkedPurchaseOrderIds.map(String), String(purchaseOrder._id)])]
+        : [purchaseOrder._id];
+
+      await NotificationModel.create({
+        title: `Purchase Order created: ${purchaseOrder.poNumber}`,
+        message: `A purchase order was created from material request ${materialRequest.requestId}.`,
+        type: 'success',
+        category: 'procurement',
+        source: 'material-request-approval',
+        sourceKey: `material-request-po-created-${purchaseOrder._id}`,
+        metadata: {
+          materialRequestId: materialRequest._id,
+          purchaseOrderId: purchaseOrder._id,
+          purchaseOrderNumber: purchaseOrder.poNumber,
+        },
+      });
+
       materialRequest.activities.push({
         type: 'po_created',
         author: req.user?.fullName || req.user?.email || 'System',
@@ -2738,44 +2651,9 @@ async function start() {
           </div>
         `,
       };
-          const isDnsLookupFailure = /ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(err.message || '');
-          const shouldTryLocalFallback = !isServerlessRuntime && isDnsLookupFailure && MONGODB_URI !== LOCAL_MONGODB_URI;
-
-          if (shouldTryLocalFallback) {
-            console.warn('Primary MongoDB host could not be resolved. Trying local MongoDB fallback at', LOCAL_MONGODB_URI);
-            try {
-              await mongoose.disconnect().catch(() => {});
-              await connectToMongo(LOCAL_MONGODB_URI);
-              console.log('✓ Connected to local MongoDB fallback');
-
-              mongoose.connection.on('error', (connectionError) => {
-                console.error('MongoDB connection error:', connectionError);
-              });
-
-              mongoose.connection.on('disconnected', () => {
-                console.warn('MongoDB disconnected. Attempting to reconnect...');
-              });
-
-              mongoose.connection.on('reconnected', () => {
-                console.log('✓ MongoDB reconnected');
-              });
-
-              return;
-            } catch (fallbackErr) {
-              console.error('✗ Failed to connect to MongoDB');
-              console.error('  Primary URI error:', err.message);
-              console.error('  Fallback URI error:', fallbackErr.message);
-              console.error('  Ensure MongoDB is running locally or set MONGODB_URI to a reachable Atlas URI in server/.env');
-              if (!isServerlessRuntime) {
-                process.exit(1);
-              }
-              throw fallbackErr;
-            }
-          }
-
 
       if (process.env.NODE_ENV !== 'production') {
-          console.error('  Please ensure MongoDB is running and MONGODB_URI points to a reachable database in server/.env');
+        console.log('📧 Approval email would be sent to:', mailOptions.to);
         return res.json({ success: true, message: 'Email logged (dev mode)' });
       }
 
@@ -2792,7 +2670,7 @@ async function start() {
   });
 
   // Advance Request endpoints
-  app.get('/api/advance-requests', authMiddleware, async (req, res) => {
+  app.get('/api/advance-requests', async (req, res) => {
     try {
       const userId = req.query.userId;
       const query = userId ? { userId } : {};
@@ -2804,7 +2682,7 @@ async function start() {
     }
   });
 
-  app.post('/api/advance-requests', authMiddleware, async (req, res) => {
+  app.post('/api/advance-requests', async (req, res) => {
     try {
       const requestData = { ...req.body };
       
@@ -2833,7 +2711,7 @@ async function start() {
     }
   });
 
-  app.put('/api/advance-requests/:id', authMiddleware, async (req, res) => {
+  app.put('/api/advance-requests/:id', async (req, res) => {
     try {
       const updated = await AdvanceRequestModel.findByIdAndUpdate(
         req.params.id,
@@ -2849,7 +2727,7 @@ async function start() {
   });
 
   // Refund Request endpoints
-  app.get('/api/refund-requests', authMiddleware, async (req, res) => {
+  app.get('/api/refund-requests', async (req, res) => {
     try {
       const userId = req.query.userId;
       const query = userId ? { userId } : {};
@@ -2861,7 +2739,7 @@ async function start() {
     }
   });
 
-  app.post('/api/refund-requests', authMiddleware, async (req, res) => {
+  app.post('/api/refund-requests', async (req, res) => {
     try {
       const requestData = { ...req.body };
       
@@ -2890,7 +2768,7 @@ async function start() {
     }
   });
 
-  app.put('/api/refund-requests/:id', authMiddleware, async (req, res) => {
+  app.put('/api/refund-requests/:id', async (req, res) => {
     try {
       const updated = await RefundRequestModel.findByIdAndUpdate(
         req.params.id,
@@ -2906,15 +2784,10 @@ async function start() {
   });
 
   // Retirement Breakdown endpoints
-  app.get('/api/retirement-breakdown', authMiddleware, async (req, res) => {
+  app.get('/api/retirement-breakdown', async (req, res) => {
     try {
-      const isPrivileged = hasAdminPrivileges(req.user);
-      const actorId = String(req.user?._id || req.user?.id || '').trim();
-      const requestedUserId = String(req.query?.userId || '').trim();
-      const query = isPrivileged && requestedUserId
-        ? { userId: requestedUserId }
-        : { userId: actorId };
-
+      const userId = req.query.userId;
+      const query = userId ? { userId } : {};
       const breakdowns = await RetirementBreakdownModel.find(query).sort({ createdAt: -1 });
       res.json(breakdowns);
     } catch (err) {
@@ -2923,21 +2796,12 @@ async function start() {
     }
   });
 
-  app.post('/api/retirement-breakdown', authMiddleware, async (req, res) => {
+  app.post('/api/retirement-breakdown', async (req, res) => {
     try {
-      const actorId = String(req.user?._id || req.user?.id || '').trim();
-      const actorName = String(
-        req.user?.fullName ||
-          [req.user?.firstName, req.user?.lastName].filter(Boolean).join(' ') ||
-          req.user?.name ||
-          req.user?.email ||
-          '',
-      ).trim();
-
       const payload = {
         ...req.body,
-        userId: actorId,
-        employeeName: actorName || String(req.body?.employeeName || '').trim(),
+        userId: String(req.body?.userId || '').trim(),
+        employeeName: String(req.body?.employeeName || '').trim(),
       };
 
       if (!payload.userId) {
@@ -2951,24 +2815,6 @@ async function start() {
         return res.status(400).json({
           success: false,
           error: 'employeeName is required',
-        });
-      }
-
-      const existingDraft = await RetirementBreakdownModel.findOne({
-        userId: payload.userId,
-        monthYear: payload.monthYear,
-        status: 'draft',
-      }).sort({ updatedAt: -1 });
-
-      if (existingDraft) {
-        const updated = await RetirementBreakdownModel.findByIdAndUpdate(
-          existingDraft._id,
-          payload,
-          { new: true, runValidators: true },
-        );
-        return res.status(200).json({
-          message: 'Breakdown updated successfully',
-          data: updated,
         });
       }
 
@@ -2987,119 +2833,18 @@ async function start() {
     }
   });
 
-  app.put('/api/retirement-breakdown/:id', authMiddleware, async (req, res) => {
+  app.put('/api/retirement-breakdown/:id', async (req, res) => {
     try {
-      const target = await RetirementBreakdownModel.findById(req.params.id);
-      if (!target) return res.status(404).json({ message: 'Breakdown not found' });
-
-      const actorId = String(req.user?._id || req.user?.id || '').trim();
-      const isPrivileged = hasAdminPrivileges(req.user);
-
-      if (!isPrivileged && String(target.userId || '').trim() !== actorId) {
-        return res.status(403).json({ message: 'Not authorized to update this breakdown' });
-      }
-
       const updated = await RetirementBreakdownModel.findByIdAndUpdate(
         req.params.id,
         req.body,
-        { new: true, runValidators: true }
+        { new: true }
       );
-
+      if (!updated) return res.status(404).json({ message: 'Breakdown not found' });
       res.json({ message: 'Breakdown updated', data: updated });
     } catch (err) {
       console.error('Error updating retirement breakdown:', err);
       res.status(500).json({ message: 'Failed to update breakdown' });
-    }
-  });
-
-  app.post('/api/retirement-breakdown/:id/reconcile', authMiddleware, async (req, res) => {
-    try {
-      if (!canReconcileBreakdowns(req.user)) {
-        return res.status(403).json({ message: 'Only Finance/Admin can reconcile this breakdown' });
-      }
-
-      const target = await RetirementBreakdownModel.findById(req.params.id);
-      if (!target) return res.status(404).json({ message: 'Breakdown not found' });
-
-      if (String(target.status || '').toLowerCase() === 'reconciled') {
-        return res.status(400).json({ message: 'Breakdown already reconciled' });
-      }
-
-      const actorId = String(req.user?._id || req.user?.id || '').trim();
-      const actorName = String(
-        req.user?.fullName ||
-          [req.user?.firstName, req.user?.lastName].filter(Boolean).join(' ') ||
-          req.user?.name ||
-          req.user?.email ||
-          'Finance',
-      ).trim();
-
-      const nextLineItems = Array.isArray(req.body?.lineItems)
-        ? req.body.lineItems
-        : target.lineItems;
-      const nextTotalExpenses = Number.isFinite(Number(req.body?.totalExpenses))
-        ? Number(req.body.totalExpenses)
-        : (Array.isArray(nextLineItems)
-            ? nextLineItems.reduce(
-                (sum, item) =>
-                  sum + (Number(item?.quantity) || 0) * (Number(item?.amount) || 0),
-                0,
-              )
-            : target.totalExpenses || 0);
-      const nextPreviousClosing = Number.isFinite(Number(req.body?.previousClosingBalance))
-        ? Number(req.body.previousClosingBalance)
-        : Number(target.previousClosingBalance || 0);
-      const nextInflow = Number.isFinite(Number(req.body?.inflowAmount))
-        ? Number(req.body.inflowAmount)
-        : Number(target.inflowAmount || 0);
-      const nextOpeningBalance = Number.isFinite(Number(req.body?.newOpeningBalance))
-        ? Number(req.body.newOpeningBalance)
-        : nextPreviousClosing + nextInflow - nextTotalExpenses;
-
-      target.lineItems = nextLineItems;
-      if (Array.isArray(req.body?.evidenceFiles)) {
-        target.evidenceFiles = req.body.evidenceFiles;
-      }
-      target.previousClosingBalance = nextPreviousClosing;
-      target.inflowAmount = nextInflow;
-      target.totalExpenses = nextTotalExpenses;
-      target.newOpeningBalance = nextOpeningBalance;
-      target.status = 'reconciled';
-      target.reconciledDate = new Date().toISOString().split('T')[0];
-      target.reconciledById = actorId;
-      target.reconciledByName = actorName;
-
-      await target.save();
-      return res.json({ message: 'Breakdown reconciled successfully', data: target });
-    } catch (err) {
-      console.error('Error reconciling retirement breakdown:', err);
-      return res.status(500).json({ message: 'Failed to reconcile breakdown' });
-    }
-  });
-
-  app.post('/api/retirement-breakdown/:id/unlock', authMiddleware, async (req, res) => {
-    try {
-      if (!hasAdminPrivileges(req.user)) {
-        return res.status(403).json({ message: 'Only Admin can unlock this breakdown' });
-      }
-
-      const target = await RetirementBreakdownModel.findById(req.params.id);
-      if (!target) return res.status(404).json({ message: 'Breakdown not found' });
-
-      if (String(target.status || '').toLowerCase() !== 'reconciled') {
-        return res.status(400).json({ message: 'Only reconciled breakdowns can be unlocked' });
-      }
-
-      target.status = 'submitted';
-      target.reconciledDate = undefined;
-      target.reconciledById = undefined;
-      target.reconciledByName = undefined;
-
-      await target.save();
-      return res.json({ message: 'Breakdown unlocked successfully', data: target });
-    } catch (err) {
-      console.error('Error unlocking retirement breakdown:', err);
-      return res.status(500).json({ message: 'Failed to unlock breakdown' });
     }
   });
 
@@ -3146,79 +2891,6 @@ async function start() {
     }
   });
 
-  // ==================== DOCUMENT TEMPLATES API ====================
-
-  // Get all templates
-  app.get('/api/documents/templates', authMiddleware, async (req, res) => {
-    try {
-      const templates = await TemplateModel.find({}).sort({ createdAt: -1 });
-      res.json(templates);
-    } catch (err) {
-      console.error('Error fetching templates:', err);
-      res.status(500).json({ message: 'Failed to fetch templates' });
-    }
-  });
-
-  // Get template by ID
-  app.get('/api/documents/templates/:id', authMiddleware, async (req, res) => {
-    try {
-      const template = await TemplateModel.findById(req.params.id);
-      if (!template) {
-        return res.status(404).json({ message: 'Template not found' });
-      }
-      res.json(template);
-    } catch (err) {
-      console.error('Error fetching template:', err);
-      res.status(500).json({ message: 'Failed to fetch template' });
-    }
-  });
-
-  // Create a new template
-  app.post('/api/documents/templates', authMiddleware, async (req, res) => {
-    try {
-      const payload = {
-        ...req.body,
-        uploadedBy: String(req.user?._id || ''),
-        uploadedByName: req.user?.fullName || req.user?.email || '',
-      };
-
-      const template = new TemplateModel(payload);
-      const saved = await template.save();
-      res.status(201).json(saved);
-    } catch (err) {
-      console.error('Error creating template:', err);
-      res.status(500).json({ message: 'Failed to create template' });
-    }
-  });
-
-  // Delete a template
-  app.delete('/api/documents/templates/:id', authMiddleware, async (req, res) => {
-    try {
-      const existing = await TemplateModel.findById(req.params.id);
-      if (!existing) {
-        return res.status(404).json({ message: 'Template not found' });
-      }
-
-      const actorId = String(req.user?._id || '');
-      const actorEmail = String(req.user?.email || '').trim().toLowerCase();
-      const uploader = String(existing.uploadedBy || '').trim().toLowerCase();
-      const isOwner = hasAdminPrivileges(req.user) || uploader === actorId.toLowerCase() || uploader === actorEmail;
-
-      if (!isOwner) {
-        return res.status(403).json({ message: 'Only the template owner can delete this template' });
-      }
-
-      const deleted = await TemplateModel.findByIdAndDelete(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ message: 'Template not found' });
-      }
-      res.json({ message: 'Template deleted successfully' });
-    } catch (err) {
-      console.error('Error deleting template:', err);
-      res.status(500).json({ message: 'Failed to delete template' });
-    }
-  });
-
   // Get a single document by ID
   app.get('/api/documents/:id', authMiddleware, async (req, res) => {
     try {
@@ -3250,31 +2922,31 @@ async function start() {
       const document = new DocumentModel(payload);
       const saved = await document.save();
       
-      // Send email to all recipients in the background so we don't block document creation response
+      // Send email to all recipients
       if (saved.recipients && saved.recipients.length > 0) {
         const { sendSignatureRequestEmail } = require('./utils/emailService');
         
         for (const recipient of saved.recipients) {
           if (recipient.email) {
-            sendSignatureRequestEmail(
-              {
-                _id: saved._id,
-                name: saved.name,
-                uploadedBy: saved.uploadedBy,
-                subject: saved.metadata?.subject,
-                message: saved.metadata?.message,
-                dueDate: saved.dueDate,
-                customBranding: saved.metadata?.customBranding || false,
-              },
-              recipient.email,
-              recipient.name
-            )
-            .then(() => {
+            try {
+              await sendSignatureRequestEmail(
+                {
+                  _id: saved._id,
+                  name: saved.name,
+                  uploadedBy: saved.uploadedBy,
+                  subject: saved.metadata?.subject,
+                  message: saved.metadata?.message,
+                  dueDate: saved.dueDate,
+                  customBranding: saved.metadata?.customBranding || false,
+                },
+                recipient.email,
+                recipient.name
+              );
               console.log(`✅ Signature request email sent to ${recipient.email}`);
-            })
-            .catch((emailError) => {
+            } catch (emailError) {
               console.error(`❌ Failed to send email to ${recipient.email}:`, emailError);
-            });
+              // Continue even if email fails - don't block document creation
+            }
           }
         }
       }
@@ -3294,31 +2966,13 @@ async function start() {
         return res.status(404).json({ message: 'Document not found' });
       }
 
-      const actorId = String(req.user?._id || '');
-      const actorEmail = String(req.user?.email || '').trim().toLowerCase();
-      const uploader = String(existing.uploadedBy || '').trim().toLowerCase();
-      const isOwner = hasAdminPrivileges(req.user) || uploader === actorId.toLowerCase() || uploader === actorEmail;
-
-      const isRecipient = (existing.recipients || []).some(
-        (rec) => String(rec.email || '').trim().toLowerCase() === actorEmail || String(rec.id || '') === actorId
-      );
-
-      if (!isOwner && !isRecipient) {
-        return res.status(403).json({ message: 'Only the document owner or assigned recipients can update this document' });
-      }
-
-      // Restrict payload for non-owners (recipients can only update fields, recipients list, or status)
-      let updatePayload = req.body;
-      if (!isOwner) {
-        updatePayload = {};
-        if (req.body.fields) updatePayload.fields = req.body.fields;
-        if (req.body.recipients) updatePayload.recipients = req.body.recipients;
-        if (req.body.status) updatePayload.status = req.body.status;
+      if (!hasAdminPrivileges(req.user) && String(existing.uploadedBy || '') !== String(req.user?._id || '')) {
+        return res.status(403).json({ message: 'Only the document owner can update this document' });
       }
 
       const updated = await DocumentModel.findByIdAndUpdate(
         req.params.id,
-        updatePayload,
+        req.body,
         { new: true }
       );
       if (!updated) {
@@ -3392,27 +3046,8 @@ async function start() {
 
       await document.save();
 
-      // Send email notifications to uploader and recipients
-      try {
-        const signerName = req.user?.fullName || req.user?.email || 'A recipient';
-        
-        // Notify uploader if there is an email
-        if (document.uploaderEmail) {
-          await sendDocumentSignedEmail(document, signerName, document.uploaderEmail);
-        }
-        
-        // Notify other recipients
-        if (Array.isArray(document.recipients)) {
-          for (const rec of document.recipients) {
-            const recEmail = String(rec?.email || '').trim().toLowerCase();
-            if (recEmail && recEmail !== actorEmail) {
-              await sendDocumentSignedEmail(document, signerName, recEmail);
-            }
-          }
-        }
-      } catch (emailErr) {
-        console.error('Error sending signature emails:', emailErr);
-      }
+      // TODO: Send email notifications to recipients
+      // You can implement email sending here using the emailService
 
       res.json({ message: 'Document signed successfully', document });
     } catch (err) {
@@ -3429,12 +3064,7 @@ async function start() {
         return res.status(404).json({ message: 'Document not found' });
       }
 
-      const actorId = String(req.user?._id || '');
-      const actorEmail = String(req.user?.email || '').trim().toLowerCase();
-      const uploader = String(existing.uploadedBy || '').trim().toLowerCase();
-      const isOwner = hasAdminPrivileges(req.user) || uploader === actorId.toLowerCase() || uploader === actorEmail;
-
-      if (!isOwner) {
+      if (!hasAdminPrivileges(req.user) && String(existing.uploadedBy || '') !== String(req.user?._id || '')) {
         return res.status(403).json({ message: 'Only the document owner can delete this document' });
       }
 
@@ -3449,68 +3079,12 @@ async function start() {
     }
   });
 
-  // Send document signature reminder
-  app.post('/api/documents/:id/remind', authMiddleware, async (req, res) => {
-    try {
-      const document = await DocumentModel.findById(req.params.id);
-      if (!document) {
-        return res.status(404).json({ message: 'Document not found' });
-      }
-
-      const { recipientEmail } = req.body;
-      const recipient = (document.recipients || []).find(
-        r => String(r.email || '').trim().toLowerCase() === String(recipientEmail || '').trim().toLowerCase()
-      );
-
-      if (!recipient) {
-        return res.status(404).json({ message: 'Recipient not found on this document' });
-      }
-
-      const { sendSignatureRequestEmail } = require('./utils/emailService');
-      await sendSignatureRequestEmail(
-        {
-          _id: document._id,
-          name: document.name,
-          uploadedBy: document.uploadedByName || document.uploadedBy,
-          subject: document.metadata?.subject || `Reminder: Please sign ${document.name}`,
-          message: document.metadata?.message || 'This is a gentle reminder that your signature is requested on the document below.',
-          dueDate: document.dueDate,
-          customBranding: document.metadata?.customBranding || false,
-        },
-        recipient.email,
-        recipient.name
-      );
-
-      res.json({ success: true, message: `Reminder email sent to ${recipient.email}` });
-    } catch (err) {
-      console.error('Error sending reminder:', err);
-      res.status(500).json({ message: 'Failed to send reminder email' });
-    }
-  });
-
   // ==================== USER MANAGEMENT ROUTES ====================
 
-  // Get active users for dropdown assignment (accessible by any authenticated user)
-  app.get('/api/users/dropdown', authMiddleware, async (req, res) => {
-    try {
-      const users = await UserModel.find({ status: 'Active' })
-        .select('firstName lastName fullName email _id')
-        .sort({ firstName: 1, lastName: 1 });
-      res.json(users);
-    } catch (error) {
-      console.error('Error fetching dropdown users:', error);
-      res.status(500).json({ error: 'Failed to fetch users list' });
-    }
-  });
-
   // Get all users with optional filtering
-  app.get('/api/users', authMiddleware, requireUserManagementPermission('viewUsers'), async (req, res) => {
+  app.get('/api/users', authMiddleware, async (req, res) => {
     try {
       const { role, status, search } = req.query;
-      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-      const requestedLimit = parseInt(req.query.limit, 10);
-      const hasPagination = Number.isFinite(requestedLimit);
-      const limit = hasPagination ? Math.min(Math.max(requestedLimit, 1), 100) : null;
       
       let userQuery = {};
       if (role) userQuery.role = role;
@@ -3523,16 +3097,11 @@ async function start() {
       }
 
       // Fetch users from UserModel
-      const baseQuery = UserModel.find(userQuery)
+      const users = await UserModel.find(userQuery)
         .select('-resetPasswordToken -resetPasswordExpires')
         .sort({ createdAt: -1 })
         .populate('invitedBy', 'fullName email')
         .lean();
-
-      const total = await UserModel.countDocuments(userQuery);
-      const users = hasPagination
-        ? await baseQuery.skip((page - 1) * limit).limit(limit)
-        : await baseQuery;
 
       // Auto-link unlinked employees: create User accounts for employees without one
       try {
@@ -3586,25 +3155,13 @@ async function start() {
       }
 
       // Re-fetch users after auto-linking (includes newly created user accounts)
-      if (!hasPagination) {
-        const allUsers = await UserModel.find(userQuery)
-          .select('-resetPasswordToken -resetPasswordExpires')
-          .sort({ createdAt: -1 })
-          .populate('invitedBy', 'fullName email')
-          .lean();
+      const allUsers = await UserModel.find(userQuery)
+        .select('-resetPasswordToken -resetPasswordExpires')
+        .sort({ createdAt: -1 })
+        .populate('invitedBy', 'fullName email')
+        .lean();
 
-        return res.json(allUsers);
-      }
-
-      return res.json({
-        data: users,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.max(Math.ceil(total / limit), 1),
-        },
-      });
+      res.json(allUsers);
     } catch (err) {
       console.error('Error fetching users:', err);
       res.status(500).json({ message: 'Failed to fetch users', error: err.message });
@@ -3615,11 +3172,8 @@ async function start() {
   app.get('/api/users/:id', authMiddleware, async (req, res) => {
     try {
       const isSelf = String(req.user?._id || '') === String(req.params.id || '');
-      if (!isSelf) {
-        const allowed = await hasUserManagementPermission(req.user, 'viewUsers');
-        if (!allowed) {
-          return res.status(403).json({ message: 'Insufficient permissions' });
-        }
+      if (!isSelf && !hasAdminPrivileges(req.user)) {
+        return res.status(403).json({ message: 'Insufficient permissions' });
       }
 
       const user = await UserModel.findById(req.params.id)
@@ -3638,7 +3192,7 @@ async function start() {
   });
 
   // Create new user
-  app.post('/api/users', authMiddleware, requireUserManagementPermission('inviteUsers'), async (req, res) => {
+  app.post('/api/users', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const { fullName, email, role, permissions, invitedBy } = req.body;
 
@@ -3713,7 +3267,7 @@ async function start() {
   });
 
   // Update user
-  app.patch('/api/users/:id', authMiddleware, requireUserManagementPermission('editUsers'), async (req, res) => {
+  app.patch('/api/users/:id', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const { fullName, email, role, status, permissions } = req.body;
       
@@ -3767,7 +3321,7 @@ async function start() {
   });
 
   // Delete user
-  app.delete('/api/users/:id', authMiddleware, requireUserManagementPermission('editUsers'), async (req, res) => {
+  app.delete('/api/users/:id', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const user = await UserModel.findByIdAndDelete(req.params.id);
 
@@ -3792,7 +3346,7 @@ async function start() {
   });
 
   // Request password reset
-  app.post('/api/users/:id/reset-password', authMiddleware, requireUserManagementPermission('editUsers'), async (req, res) => {
+  app.post('/api/users/:id/reset-password', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const user = await UserModel.findById(req.params.id);
 
@@ -3822,7 +3376,7 @@ async function start() {
   });
 
   // Update user status (activate/deactivate)
-  app.patch('/api/users/:id/status', authMiddleware, requireUserManagementPermission('editUsers'), async (req, res) => {
+  app.patch('/api/users/:id/status', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const { status } = req.body;
 
@@ -5795,8 +5349,8 @@ async function start() {
     try {
       const { search } = req.query;
       const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-      const requestedLimit = parseInt(req.query.limit, 10) || 100;
-      const limit = Math.min(Math.max(requestedLimit, 1), 500);
+      const requestedLimit = parseInt(req.query.limit, 10) || 20;
+      const limit = Math.min(Math.max(requestedLimit, 1), 100);
       const skip = (page - 1) * limit;
       let query = {};
 
@@ -6530,25 +6084,13 @@ async function start() {
 
       // Create audit log
       await AuditLogModel.create({
-        actor: {
-          userId: String(req.body.deletedBy || req.user?._id || 'system'),
-          userName: req.user?.fullName || req.user?.email || 'System',
-          userEmail: req.user?.email || '',
-          initials: String(req.user?.fullName || req.user?.email || 'SY')
-            .substring(0, 2)
-            .toUpperCase(),
-        },
-        action: 'User Deleted',
-        actionColor: 'red',
-        ipAddress: req.ip || '127.0.0.1',
-        userAgent: req.get('user-agent') || 'system',
-        description: `Employee ${deleted.name || deleted.email} deleted`,
-        status: 'Success',
-        metadata: {
-          employeeId: id,
-          employeeName: deleted.name,
-          email: deleted.email,
-        },
+        userId: req.body.deletedBy || 'system',
+        action: 'DELETE_EMPLOYEE',
+        resource: 'Employee',
+        resourceId: id,
+        details: { employeeName: deleted.name, email: deleted.email },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
       });
 
       res.json({ success: true, message: 'Employee deleted successfully' });
@@ -6894,26 +6436,6 @@ async function start() {
       leaveRequest.status = 'approved';
       leaveRequest.hrApprovedAt = new Date();
       leaveRequest.hrComments = 'Approved from HR dashboard';
-
-      // Update leave balance
-      try {
-        const LeaveAllocation = require('./models/LeaveAllocation');
-        const allocation = await LeaveAllocation.findOne({
-          employeeId: leaveRequest.employeeId,
-          year: new Date(leaveRequest.fromDate).getFullYear()
-        });
-        if (allocation) {
-          await api.updateLeaveUsage(
-            leaveRequest.employeeId,
-            new Date(leaveRequest.fromDate).getFullYear(),
-            leaveRequest.leaveType,
-            leaveRequest.days
-          );
-        }
-      } catch (err) {
-        console.error('Leave allocation update failed:', err);
-      }
-
       await leaveRequest.save();
 
       res.json({ message: 'Approved', success: true, data: leaveRequest });
@@ -6973,67 +6495,14 @@ async function start() {
   // Performance - Calculate from actual data
   app.get('/api/hr/performance', async (_req, res) => {
     try {
-      // Seed default reviews if none exist
-      const count = await PerformanceReviewModel.countDocuments();
-      if (count === 0) {
-        const employees = await EmployeeModel.find().limit(5);
-        if (employees.length > 0) {
-          const reviewsToSeed = [
-            {
-              employeeId: employees[0]._id,
-              reviewPeriod: 'Q3 2026',
-              status: 'completed',
-              selfRating: 4,
-              managerRating: 4,
-              overallRating: 4,
-              selfComments: 'Good quarter',
-              managerComments: 'Great work',
-              completedAt: new Date(),
-            },
-            {
-              employeeId: employees[1]._id,
-              reviewPeriod: 'Q3 2026',
-              status: 'pending_self',
-            },
-            {
-              employeeId: employees[2]._id,
-              reviewPeriod: 'Q3 2026',
-              status: 'pending_manager',
-            },
-          ];
-          if (employees[3]) {
-            reviewsToSeed.push({
-              employeeId: employees[3]._id,
-              reviewPeriod: 'Q3 2026',
-              status: 'completed',
-              selfRating: 5,
-              managerRating: 5,
-              overallRating: 5,
-              completedAt: new Date(),
-            });
-          }
-          if (employees[4]) {
-            reviewsToSeed.push({
-              employeeId: employees[4]._id,
-              reviewPeriod: 'Q3 2026',
-              status: 'pending_self',
-            });
-          }
-          await PerformanceReviewModel.insertMany(reviewsToSeed);
-        }
-      }
-
-      const total = await PerformanceReviewModel.countDocuments({ reviewPeriod: 'Q3 2026' });
-      const completed = await PerformanceReviewModel.countDocuments({ reviewPeriod: 'Q3 2026', status: 'completed' });
-      const selfReviews = await PerformanceReviewModel.countDocuments({ reviewPeriod: 'Q3 2026', status: 'pending_self' });
-      const managerReviews = await PerformanceReviewModel.countDocuments({ reviewPeriod: 'Q3 2026', status: 'pending_manager' });
-
-      res.json({
-        q3CompletedPct: total > 0 ? Math.round((completed / total) * 100) : 85,
-        pending: {
-          selfReviews: total > 0 ? selfReviews : 12,
-          managerReviews: total > 0 ? managerReviews : 4,
-        },
+      // TODO: Implement actual performance tracking
+      // For now, return default structure
+      res.json({ 
+        q3CompletedPct: 85, 
+        pending: { 
+          selfReviews: 12, 
+          managerReviews: 4 
+        } 
       });
     } catch (err) {
       console.error('Error fetching performance:', err);
@@ -7081,31 +6550,17 @@ async function start() {
     }
   });
 
-  // Payroll Next - Calculate from actual data
+  // Payroll Next - TODO: Implement payroll tracking
   app.get('/api/hr/payroll-next', async (_req, res) => {
     try {
-      const currentPeriod = new Date().toISOString().slice(0, 7); // e.g. "2026-06"
-      let payrollRun = await PayrollRunModel.findOne({ period: currentPeriod });
+      // TODO: Implement actual payroll tracking
+      // For now, return default structure
+      const nextPayrollDate = new Date();
+      nextPayrollDate.setDate(nextPayrollDate.getDate() + (31 - nextPayrollDate.getDate()));
       
-      if (!payrollRun) {
-        // Calculate payment date (end of current month)
-        const paymentDate = new Date();
-        paymentDate.setDate(paymentDate.getDate() + (30 - paymentDate.getDate()));
-        paymentDate.setHours(0, 0, 0, 0);
-
-        payrollRun = await PayrollRunModel.create({
-          period: currentPeriod,
-          paymentDate,
-          status: 'approved',
-          totalGrossPay: 5000000,
-          totalDeductions: 500000,
-          totalNetPay: 4500000,
-        });
-      }
-
-      res.json({
-        date: payrollRun.paymentDate.toISOString().split('T')[0],
-        runApproved: payrollRun.status === 'approved' || payrollRun.status === 'paid',
+      res.json({ 
+        date: nextPayrollDate.toISOString().split('T')[0], 
+        runApproved: true 
       });
     } catch (err) {
       console.error('Error fetching payroll info:', err);
@@ -7149,8 +6604,7 @@ async function start() {
   // ===========================
   
   // Get leave requests (with optional filters)
-  // Get leave requests (with optional filters)
-  app.get('/api/approval/leave-requests', authMiddleware, async (req, res) => {
+  app.get('/api/approval/leave-requests', async (req, res) => {
     try {
       const query = {};
       if (req.query.employeeId) query.employeeId = req.query.employeeId;
@@ -7166,7 +6620,7 @@ async function start() {
   });
 
   // Create leave request
-  app.post('/api/approval/leave-requests', authMiddleware, async (req, res) => {
+  app.post('/api/approval/leave-requests', async (req, res) => {
     try {
       const request = await api.createLeaveRequest(req.body);
       res.status(201).json({ success: true, data: request });
@@ -7176,457 +6630,98 @@ async function start() {
     }
   });
 
-  // ===========================
-  // Travel Request Routes
-  // ===========================
-  
-  // Get travel requests (with optional filters)
-  app.get('/api/approval/travel-requests', authMiddleware, async (req, res) => {
+  // Manager approves leave request
+  app.post('/api/approval/leave-requests/:id/manager-approve', async (req, res) => {
     try {
-      const query = {};
-      if (req.query.employeeId) query.employeeId = req.query.employeeId;
-      if (req.query.managerId) query.managerId = req.query.managerId;
-      if (req.query.status) query.status = req.query.status;
+      const { comments } = req.body;
+      const request = await api.updateLeaveRequestStatus(
+        req.params.id,
+        'approved_manager',
+        comments,
+        'manager'
+      );
       
-      const requests = await api.getTravelRequests(query);
-      res.json({ success: true, data: requests });
-    } catch (error) {
-      console.error('Error fetching travel requests:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // Create travel request
-  app.post('/api/approval/travel-requests', authMiddleware, async (req, res) => {
-    try {
-      const request = await api.createTravelRequest(req.body);
-      res.status(201).json({ success: true, data: request });
-    } catch (error) {
-      console.error('Error creating travel request:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // Update travel booking details (after manager approval)
-  app.post('/api/approval/travel-requests/:id/book', authMiddleware, async (req, res) => {
-    try {
-      const bookingData = {
-        ticketBooked: req.body.ticketBooked || false,
-        bookedBy: req.body.bookedBy,
-        bookingReference: req.body.bookingReference,
-        hotelBooked: req.body.hotelBooked || false,
-        hotelDetails: req.body.hotelDetails,
-      };
+      // Send email to HR for final approval
+      // You can add email logic here
       
-      const request = await api.updateTravelBooking(req.params.id, bookingData);
       res.json({ success: true, data: request });
     } catch (error) {
-      console.error('Error booking travel:', error);
+      console.error('Error approving leave request:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
 
-  // =====================================================
-  // Unified Approval Workflow Action Routes
-  // =====================================================
-
-  // GET pending approvals for the current user
-  app.get('/api/approval/pending', authMiddleware, async (req, res) => {
+  // Manager rejects leave request
+  app.post('/api/approval/leave-requests/:id/manager-reject', async (req, res) => {
     try {
-      const currentUserId = String(req.user?._id || '');
-      const currentUserEmail = String(req.user?.email || '').toLowerCase().trim();
-
-      const LeaveRequestModel = require('./models/LeaveRequest');
-      const TravelRequestModel = require('./models/TravelRequest');
-
-      // Leave Requests pending
-      const leaveQuery = {
-        $or: [
-          {
-            usesRuleBasedApproval: true,
-            status: 'pending_manager',
-            approvalChain: {
-              $elemMatch: {
-                status: 'pending',
-                $or: [
-                  { approverId: currentUserId },
-                  { approverEmail: currentUserEmail }
-                ]
-              }
-            }
-          },
-          {
-            usesRuleBasedApproval: { $ne: true },
-            status: 'pending_manager',
-            $or: [
-              { managerId: currentUserId },
-              { managerEmail: currentUserEmail }
-            ]
-          }
-        ]
-      };
-
-      // Travel Requests pending
-      const travelQuery = {
-        $or: [
-          {
-            usesRuleBasedApproval: true,
-            status: 'pending_manager',
-            approvalChain: {
-              $elemMatch: {
-                status: 'pending',
-                $or: [
-                  { approverId: currentUserId },
-                  { approverEmail: currentUserEmail }
-                ]
-              }
-            }
-          },
-          {
-            usesRuleBasedApproval: { $ne: true },
-            status: 'pending_manager',
-            $or: [
-              { managerId: currentUserId },
-              { managerEmail: currentUserEmail }
-            ]
-          }
-        ]
-      };
-
-      // Advance Requests pending
-      const advanceQuery = {
-        $or: [
-          {
-            usesRuleBasedApproval: true,
-            status: 'pending',
-            approvalChain: {
-              $elemMatch: {
-                status: 'pending',
-                $or: [
-                  { approverId: currentUserId },
-                  { approverEmail: currentUserEmail }
-                ]
-              }
-            }
-          },
-          {
-            usesRuleBasedApproval: { $ne: true },
-            status: 'pending',
-            $or: [
-              { approverEmail: currentUserEmail }
-            ]
-          }
-        ]
-      };
-
-      // Refund Requests pending
-      const refundQuery = {
-        $or: [
-          {
-            usesRuleBasedApproval: true,
-            status: 'pending',
-            approvalChain: {
-              $elemMatch: {
-                status: 'pending',
-                $or: [
-                  { approverId: currentUserId },
-                  { approverEmail: currentUserEmail }
-                ]
-              }
-            }
-          },
-          {
-            usesRuleBasedApproval: { $ne: true },
-            status: 'pending',
-            $or: [
-              { approverEmail: currentUserEmail }
-            ]
-          }
-        ]
-      };
-
-      const [leaveReqs, travelReqs, advanceReqs, refundReqs] = await Promise.all([
-        LeaveRequestModel.find(leaveQuery).sort({ createdAt: -1 }),
-        TravelRequestModel.find(travelQuery).sort({ createdAt: -1 }),
-        AdvanceRequestModel.find(advanceQuery).sort({ createdAt: -1 }),
-        RefundRequestModel.find(refundQuery).sort({ createdAt: -1 })
-      ]);
-
-      const formatRequest = (type, req) => {
-        let details = '';
-        if (type === 'leave') {
-          details = `${req.leaveType ? String(req.leaveType).toUpperCase() : 'LEAVE'} leave for ${req.days} days (${req.fromDate ? new Date(req.fromDate).toLocaleDateString() : 'N/A'} to ${req.toDate ? new Date(req.toDate).toLocaleDateString() : 'N/A'})`;
-        } else if (type === 'travel') {
-          details = `Travel to ${req.destination || 'N/A'} for ${req.numberOfDays || 0} days`;
-        } else if (type === 'advance') {
-          details = `Advance of ${req.amount || 0} ${req.currency || 'NGN'} for ${req.purpose || 'N/A'}`;
-        } else if (type === 'refund') {
-          details = `Refund of ${req.amount || 0} ${req.currency || 'NGN'} for ${req.category || 'N/A'}`;
-        }
-
-        return {
-          id: req._id,
-          type,
-          employeeName: req.employeeName,
-          employeeId: req.employeeId,
-          department: req.department,
-          details,
-          amount: req.amount || req.budget || null,
-          currency: req.currency || 'USD',
-          date: req.requestDate || req.createdAt,
-          status: req.status,
-          attachment: req.attachment || null,
-          attachmentName: req.attachmentName || null,
-          currentApprovalLevel: req.currentApprovalLevel || 1,
-          usesRuleBasedApproval: req.usesRuleBasedApproval || false
-        };
-      };
-
-      const formatted = [
-        ...leaveReqs.map(r => formatRequest('leave', r)),
-        ...travelReqs.map(r => formatRequest('travel', r)),
-        ...advanceReqs.map(r => formatRequest('advance', r)),
-        ...refundReqs.map(r => formatRequest('refund', r))
-      ];
-
-      res.json({ success: true, data: formatted });
-    } catch (error) {
-      console.error('Error fetching pending approvals:', error);
-      res.status(500).json({ success: false, message: 'Failed to fetch pending approvals', error: error.message });
-    }
-  });
-
-  // Approve a request
-  app.post('/api/approval/:moduleType/:id/approve', authMiddleware, async (req, res) => {
-    try {
-      const { moduleType, id } = req.params;
       const { comments } = req.body;
+      const request = await api.updateLeaveRequestStatus(
+        req.params.id,
+        'rejected_manager',
+        comments,
+        'manager'
+      );
       
-      const currentUserId = String(req.user?._id || '');
-      const currentUserEmail = String(req.user?.email || '').toLowerCase().trim();
-
-      let model;
-      let requestTypeLabel = '';
-      if (moduleType === 'leave') {
-        model = require('./models/LeaveRequest');
-        requestTypeLabel = 'Leave Request';
-      } else if (moduleType === 'travel') {
-        model = require('./models/TravelRequest');
-        requestTypeLabel = 'Travel Request';
-      } else if (moduleType === 'advance') {
-        model = require('./models/AdvanceRequest');
-        requestTypeLabel = 'Advance Request';
-      } else if (moduleType === 'refund') {
-        model = require('./models/RefundRequest');
-        requestTypeLabel = 'Refund Request';
-      } else {
-        return res.status(400).json({ success: false, message: 'Invalid module type' });
-      }
-
-      const request = await model.findById(id);
-      if (!request) {
-        return res.status(404).json({ success: false, message: 'Request not found' });
-      }
-
-      const normalizedStatus = String(request.status || '').toLowerCase();
-      if (['approved', 'rejected', 'completed', 'cancelled'].includes(normalizedStatus)) {
-        return res.status(400).json({ success: false, message: `Request is already ${request.status}` });
-      }
-
-      // 1. Process rule-based chain if enabled
-      if (request.usesRuleBasedApproval && Array.isArray(request.approvalChain) && request.approvalChain.length > 0) {
-        const pendingStep = request.approvalChain.find(step => step.status === 'pending');
-        if (!pendingStep) {
-          return res.status(400).json({ success: false, message: 'No active pending approval level found' });
-        }
-
-        const isApprover = (
-          (pendingStep.approverId && String(pendingStep.approverId).trim() === currentUserId) ||
-          (pendingStep.approverEmail && String(pendingStep.approverEmail).toLowerCase().trim() === currentUserEmail)
-        );
-
-        if (!isApprover && String(req.user?.role || '').toLowerCase() !== 'admin') {
-          return res.status(403).json({ success: false, message: 'Only the assigned approver can approve this level' });
-        }
-
-        pendingStep.status = 'approved';
-        pendingStep.approvedAt = new Date();
-        pendingStep.comments = comments || 'Approved';
-
-        // Check if there is a next level to await approval
-        const nextStep = request.approvalChain.find(step => step.status === 'awaiting');
-        if (nextStep) {
-          nextStep.status = 'pending';
-          request.currentApprovalLevel = nextStep.level;
-
-          if (moduleType === 'leave' || moduleType === 'travel') {
-            request.managerId = nextStep.approverId;
-            request.managerName = nextStep.approverName;
-            request.managerEmail = nextStep.approverEmail;
-            request.status = 'pending_manager';
-          } else {
-            request.approver = nextStep.approverName;
-            request.approverEmail = nextStep.approverEmail;
-            request.status = 'pending';
-          }
-
-          await request.save();
-
-          // Send approval notification email
-          try {
-            await sendApprovalEmail({
-              ...request.toObject(),
-              approver: nextStep.approverName,
-              approverEmail: nextStep.approverEmail,
-              to: nextStep.approverEmail,
-              requestType: requestTypeLabel,
-              additionalInfo: `Awaiting your review at Level ${nextStep.level}.`
-            });
-          } catch (err) {
-            console.error('Email send failed:', err);
-          }
-
-          return res.json({ success: true, message: `Approved level ${pendingStep.level} and forwarded to ${nextStep.approverName}`, data: request });
-        }
-      } else {
-        // Fallback checks (legacy flow)
-        const isApprover = (
-          (request.managerId && String(request.managerId).trim() === currentUserId) ||
-          (request.managerEmail && String(request.managerEmail).toLowerCase().trim() === currentUserEmail) ||
-          (request.approverEmail && String(request.approverEmail).toLowerCase().trim() === currentUserEmail)
-        );
-
-        if (!isApprover && String(req.user?.role || '').toLowerCase() !== 'admin') {
-          return res.status(403).json({ success: false, message: 'Only the assigned manager/approver can approve this request' });
-        }
-      }
-
-      // 2. Final Approval step (either dynamic chain completed or fallback approved)
-      request.status = 'approved';
-      if (moduleType === 'leave') {
-        request.hrApprovedAt = new Date();
-        request.hrComments = comments || 'Approved';
-        
-        // Update leave balance
-        try {
-          const LeaveAllocation = require('./models/LeaveAllocation');
-          const allocation = await LeaveAllocation.findOne({
-            employeeId: request.employeeId,
-            year: new Date(request.fromDate).getFullYear()
-          });
-          if (allocation) {
-            await api.updateLeaveUsage(
-              request.employeeId,
-              new Date(request.fromDate).getFullYear(),
-              request.leaveType,
-              request.days
-            );
-          }
-        } catch (err) {
-          console.error('Leave allocation update failed:', err);
-        }
-      } else if (moduleType === 'travel') {
-        request.managerApprovedAt = new Date();
-        request.managerComments = comments || 'Approved';
-        request.status = 'pending_booking';
-      } else {
-        // Advance/refund approvals
-        request.rejectionReason = undefined;
-      }
-
-      await request.save();
-      res.json({ success: true, message: 'Request fully approved', data: request });
+      res.json({ success: true, data: request });
     } catch (error) {
-      console.error('Error approving request:', error);
-      res.status(500).json({ success: false, message: 'Failed to approve request', error: error.message });
+      console.error('Error rejecting leave request:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 
-  // Reject a request
-  app.post('/api/approval/:moduleType/:id/reject', authMiddleware, async (req, res) => {
+  // HR approves leave request (final approval)
+  app.post('/api/approval/leave-requests/:id/hr-approve', async (req, res) => {
     try {
-      const { moduleType, id } = req.params;
       const { comments } = req.body;
+      const request = await api.updateLeaveRequestStatus(
+        req.params.id,
+        'approved',
+        comments,
+        'hr'
+      );
       
-      const currentUserId = String(req.user?._id || '');
-      const currentUserEmail = String(req.user?.email || '').toLowerCase().trim();
-
-      let model;
-      if (moduleType === 'leave') {
-        model = require('./models/LeaveRequest');
-      } else if (moduleType === 'travel') {
-        model = require('./models/TravelRequest');
-      } else if (moduleType === 'advance') {
-        model = require('./models/AdvanceRequest');
-      } else if (moduleType === 'refund') {
-        model = require('./models/RefundRequest');
-      } else {
-        return res.status(400).json({ success: false, message: 'Invalid module type' });
-      }
-
-      const request = await model.findById(id);
-      if (!request) {
-        return res.status(404).json({ success: false, message: 'Request not found' });
-      }
-
-      const normalizedStatus = String(request.status || '').toLowerCase();
-      if (['approved', 'rejected', 'completed', 'cancelled'].includes(normalizedStatus)) {
-        return res.status(400).json({ success: false, message: `Request is already ${request.status}` });
-      }
-
-      // Check if user is active approver
-      if (request.usesRuleBasedApproval && Array.isArray(request.approvalChain) && request.approvalChain.length > 0) {
-        const pendingStep = request.approvalChain.find(step => step.status === 'pending');
-        if (!pendingStep) {
-          return res.status(400).json({ success: false, message: 'No active pending approval level found' });
-        }
-
-        const isApprover = (
-          (pendingStep.approverId && String(pendingStep.approverId).trim() === currentUserId) ||
-          (pendingStep.approverEmail && String(pendingStep.approverEmail).toLowerCase().trim() === currentUserEmail)
+      // Update leave allocation usage
+      const allocation = await api.getLeaveAllocations({
+        employeeId: request.employeeId,
+        year: new Date(request.fromDate).getFullYear()
+      });
+      
+      if (allocation && allocation.length > 0 && request.leaveType !== 'unpaid') {
+        await api.updateLeaveUsage(
+          request.employeeId,
+          new Date(request.fromDate).getFullYear(),
+          request.leaveType,
+          request.days
         );
-
-        if (!isApprover && String(req.user?.role || '').toLowerCase() !== 'admin') {
-          return res.status(403).json({ success: false, message: 'Only the assigned approver can reject this request' });
-        }
-
-        pendingStep.status = 'rejected';
-        pendingStep.approvedAt = new Date();
-        pendingStep.comments = comments || 'Rejected';
-      } else {
-        const isApprover = (
-          (request.managerId && String(request.managerId).trim() === currentUserId) ||
-          (request.managerEmail && String(request.managerEmail).toLowerCase().trim() === currentUserEmail) ||
-          (request.approverEmail && String(request.approverEmail).toLowerCase().trim() === currentUserEmail)
-        );
-
-        if (!isApprover && String(req.user?.role || '').toLowerCase() !== 'admin') {
-          return res.status(403).json({ success: false, message: 'Only the assigned manager/approver can reject this request' });
-        }
       }
-
-      request.status = 'rejected';
-      if (moduleType === 'leave') {
-        request.hrRejectedAt = new Date();
-        request.hrComments = comments || 'Rejected';
-      } else if (moduleType === 'travel') {
-        request.managerRejectedAt = new Date();
-        request.managerComments = comments || 'Rejected';
-        request.status = 'cancelled';
-      } else {
-        request.rejectionReason = comments || 'Rejected';
-      }
-
-      await request.save();
-      res.json({ success: true, message: 'Request rejected successfully', data: request });
+      
+      res.json({ success: true, data: request });
     } catch (error) {
-      console.error('Error rejecting request:', error);
-      res.status(500).json({ success: false, message: 'Failed to reject request', error: error.message });
+      console.error('Error approving leave request:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 
-  // Legacy manual Email sending routes (secured)
-  app.post('/api/send-leave-approval-email', authMiddleware, async (req, res) => {
+  // HR rejects leave request
+  app.post('/api/approval/leave-requests/:id/hr-reject', async (req, res) => {
+    try {
+      const { comments } = req.body;
+      const request = await api.updateLeaveRequestStatus(
+        req.params.id,
+        'rejected',
+        comments,
+        'hr'
+      );
+      
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error rejecting leave request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Send leave approval email (to manager or HR)
+  app.post('/api/send-leave-approval-email', async (req, res) => {
     try {
       const {
         to,
@@ -7659,7 +6754,94 @@ async function start() {
     }
   });
 
-  app.post('/api/send-travel-approval-email', authMiddleware, async (req, res) => {
+  // ===========================
+  // Travel Request Routes
+  // ===========================
+  
+  // Get travel requests (with optional filters)
+  app.get('/api/approval/travel-requests', async (req, res) => {
+    try {
+      const query = {};
+      if (req.query.employeeId) query.employeeId = req.query.employeeId;
+      if (req.query.managerId) query.managerId = req.query.managerId;
+      if (req.query.status) query.status = req.query.status;
+      
+      const requests = await api.getTravelRequests(query);
+      res.json({ success: true, data: requests });
+    } catch (error) {
+      console.error('Error fetching travel requests:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Create travel request
+  app.post('/api/approval/travel-requests', async (req, res) => {
+    try {
+      const request = await api.createTravelRequest(req.body);
+      res.status(201).json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error creating travel request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Manager approves travel request
+  app.post('/api/approval/travel-requests/:id/manager-approve', async (req, res) => {
+    try {
+      const { comments } = req.body;
+      const request = await api.updateTravelRequestStatus(
+        req.params.id,
+        'approved_manager',
+        comments,
+        'manager'
+      );
+      
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error approving travel request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Manager rejects travel request
+  app.post('/api/approval/travel-requests/:id/manager-reject', async (req, res) => {
+    try {
+      const { comments } = req.body;
+      const request = await api.updateTravelRequestStatus(
+        req.params.id,
+        'rejected_manager',
+        comments,
+        'manager'
+      );
+      
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error rejecting travel request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Update travel booking details (after manager approval)
+  app.post('/api/approval/travel-requests/:id/book', async (req, res) => {
+    try {
+      const bookingData = {
+        ticketBooked: req.body.ticketBooked || false,
+        bookedBy: req.body.bookedBy,
+        bookingReference: req.body.bookingReference,
+        hotelBooked: req.body.hotelBooked || false,
+        hotelDetails: req.body.hotelDetails,
+      };
+      
+      const request = await api.updateTravelBooking(req.params.id, bookingData);
+      res.json({ success: true, data: request });
+    } catch (error) {
+      console.error('Error booking travel:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Send travel approval email (to manager)
+  app.post('/api/send-travel-approval-email', async (req, res) => {
     try {
       const {
         to,
@@ -7871,62 +7053,18 @@ async function start() {
   // Get reconciliation data
   app.get('/api/finance/reconciliation', async (req, res) => {
     try {
-      const bankTransactions = await BankTransactionModel.find().lean();
-      
-      const PaymentModel = require('./models/Payment');
-      const InvoiceModel = require('./models/Invoice');
-      
-      const payments = await PaymentModel.find({ status: { $in: ['completed', 'processing'] } }).lean();
-      const invoices = await InvoiceModel.find({ status: 'paid' }).lean();
-      
-      const matchedLedgerIds = new Set();
-      bankTransactions.forEach(t => {
-        if (t.matched && t.matchedWith) {
-          matchedLedgerIds.add(t.matchedWith.toString());
-        }
-      });
-
-      const ledgerTransactions = [
-        ...payments.map(p => ({
-          _id: p._id.toString(),
-          date: p.paymentDate ? new Date(p.paymentDate).toISOString().split('T')[0] : '',
-          ref: p.paymentNumber,
-          payee: p.vendor?.vendorName || 'Vendor',
-          amount: -p.amount,
-          matched: matchedLedgerIds.has(p._id.toString())
-        })),
-        ...invoices.map(inv => ({
-          _id: inv._id.toString(),
-          date: inv.paidAt ? new Date(inv.paidAt).toISOString().split('T')[0] : '',
-          ref: inv.invoiceNumber,
-          payee: inv.billTo,
-          amount: inv.totalAmount,
-          matched: matchedLedgerIds.has(inv._id.toString())
-        }))
-      ];
-
-      const statementStart = 150000;
-      const matchedSum = bankTransactions
-        .filter(t => t.matched)
-        .reduce((sum, t) => sum + t.amount, 0);
-      const clearedBalance = statementStart + matchedSum;
+      // TODO: Fetch actual data from database
+      const bankTransactions = [];
+      const ledgerTransactions = [];
 
       res.json({
         success: true,
         data: {
           bankTransactions,
           ledgerTransactions,
-          statementStart,
-          statementEnd: clearedBalance, // dynamically sets statementEnd to match clearedBalance when reconciled
-          clearedBalance,
-          account: {
-            name: "Main Business Account",
-            number: "8739"
-          },
-          period: {
-            start: "2026-06-01",
-            end: "2026-06-30"
-          }
+          statementStart: 0,
+          statementEnd: 0,
+          clearedBalance: 0,
         },
       });
     } catch (error) {
@@ -7940,13 +7078,8 @@ async function start() {
     try {
       const { bankTransactions, ledgerTransactions } = req.body;
       
-      if (bankTransactions && bankTransactions.length > 0 && ledgerTransactions && ledgerTransactions.length > 0) {
-        const ledgerId = ledgerTransactions[0];
-        await BankTransactionModel.updateMany(
-          { _id: { $in: bankTransactions } },
-          { $set: { matched: true, matchedWith: new mongoose.Types.ObjectId(ledgerId) } }
-        );
-      }
+      // TODO: Implement actual matching logic with database
+      // For now, just return success
       
       res.json({
         success: true,
@@ -7963,28 +7096,18 @@ async function start() {
     try {
       const { account, period, statementEnd, clearedBalance } = req.body;
       
-      const matchedBankTxs = await BankTransactionModel.find({ matched: true }).lean();
-      const bankTxIds = matchedBankTxs.map(t => t._id);
-      const ledgerTxIds = matchedBankTxs.map(t => t.matchedWith).filter(Boolean);
-      
-      const reconciliation = await ReconciliationModel.create({
-        account,
-        period: {
-          start: period.start || "2026-06-01",
-          end: period.end || "2026-06-30"
-        },
-        statementEnd,
-        clearedBalance,
-        status: 'completed',
-        completedAt: new Date(),
-        bankTransactions: bankTxIds,
-        ledgerTransactions: ledgerTxIds
-      });
+      // TODO: Save reconciliation record to database
       
       res.json({
         success: true,
         message: 'Reconciliation completed successfully',
-        data: reconciliation
+        data: {
+          account,
+          period,
+          statementEnd,
+          clearedBalance,
+          completedAt: new Date(),
+        },
       });
     } catch (error) {
       console.error('Error completing reconciliation:', error);
@@ -7997,23 +7120,16 @@ async function start() {
     try {
       const { account, period, bankTransactions, ledgerTransactions } = req.body;
       
-      const draft = await ReconciliationModel.create({
-        account,
-        period: {
-          start: period.start || "2026-06-01",
-          end: period.end || "2026-06-30"
-        },
-        statementEnd: 0,
-        clearedBalance: 0,
-        status: 'draft',
-        bankTransactions: (bankTransactions || []).map(id => new mongoose.Types.ObjectId(id)),
-        ledgerTransactions: (ledgerTransactions || []).map(id => new mongoose.Types.ObjectId(id))
-      });
+      // TODO: Save draft to database
       
       res.json({
         success: true,
         message: 'Draft saved successfully',
-        data: draft
+        data: {
+          account,
+          period,
+          savedAt: new Date(),
+        },
       });
     } catch (error) {
       console.error('Error saving draft:', error);
@@ -8024,24 +7140,17 @@ async function start() {
   // Import bank statement
   app.post('/api/finance/reconciliation/import', async (req, res) => {
     try {
-      const sampleTxs = [
-        { date: '2026-06-05', description: 'PAY-2606-53829 Cash Outflow', amount: -15000 },
-        { date: '2026-06-10', description: 'INV-2606-00001 Payment Received', amount: 45000 },
-        { date: '2026-06-12', description: 'PAY-2606-12749 Vendor payment', amount: -23000 },
-        { date: '2026-06-15', description: 'Office Supplies purchase', amount: -5400 },
-        { date: '2026-06-18', description: 'Client Invoice INV-2606-00002', amount: 89000 },
-        { date: '2026-06-20', description: 'Utility Bill Payment', amount: -12000 },
-        { date: '2026-06-22', description: 'Salary payout bank transfer', amount: -250000 },
-        { date: '2026-06-25', description: 'INV-2606-00003 Direct deposit', amount: 120000 }
-      ];
+      const { mapping, ignoreFirstRow } = req.body;
       
-      const inserted = await BankTransactionModel.insertMany(sampleTxs);
+      // TODO: Process uploaded CSV file and parse transactions
+      // For now, return success with sample data
       
       res.json({
         success: true,
         message: 'Bank statement imported successfully',
         data: {
-          imported: inserted.length,
+          imported: 45,
+          mapped: mapping,
           timestamp: new Date(),
         },
       });
@@ -8616,29 +7725,17 @@ async function start() {
   // Get journal entries
   app.get('/api/finance/journal-entries', async (req, res) => {
     try {
-      const { status, page = 1, limit = 10 } = req.query;
-      const query = {};
-      if (status) {
-        query.status = status;
-      }
+      const { status, journalType, page = 1 } = req.query;
       
-      const skip = (parseInt(page) - 1) * parseInt(limit);
+      // TODO: Fetch actual data from database
+      const entries = [];
       
-      const [entries, total] = await Promise.all([
-        JournalEntryModel.find(query)
-          .sort({ date: -1 })
-          .skip(skip)
-          .limit(parseInt(limit))
-          .lean(),
-        JournalEntryModel.countDocuments(query)
-      ]);
-
       res.json({
         success: true,
         data: {
           entries,
-          totalPages: Math.ceil(total / parseInt(limit)) || 1,
-          currentPage: parseInt(page),
+          totalPages: 0,
+          currentPage: page,
         },
       });
     } catch (error) {
@@ -8667,22 +7764,24 @@ async function start() {
         });
       }
       
-      // Save journal entry to database
-      const entry = await JournalEntryModel.create({
-        date: date ? new Date(date) : new Date(),
-        referenceNumber,
-        currency: currency || 'NGN',
-        memo,
-        lineItems,
-        totalDebit,
-        totalCredit,
-        status: 'posted'
-      });
+      // TODO: Save journal entry to database
+      // For now, return success
       
       res.json({
         success: true,
         message: 'Journal entry saved successfully',
-        data: entry,
+        data: {
+          _id: 'je-' + Date.now(),
+          date,
+          referenceNumber,
+          currency,
+          memo,
+          lineItems,
+          totalDebit,
+          totalCredit,
+          status: 'Draft',
+          createdAt: new Date(),
+        },
       });
     } catch (error) {
       console.error('Error creating journal entry:', error);
@@ -9337,52 +8436,9 @@ async function start() {
     console.log(`📅 Inventory expiry alerts scheduled daily at 8:00 AM (next run: ${nextRun.toLocaleString()})`);
   };
 
-  const runItemReturnReminderJob = async () => {
-    try {
-      const MaintenanceTicketModel = require('./models/MaintenanceTicket');
-      const { sendItemReturnReminderEmail } = require('./utils/emailService');
-
-      const now = new Date();
-      const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-
-      const tickets = await MaintenanceTicketModel.find({
-        category: 'Item Movement',
-        movementType: 'Temporary',
-        reminderSent: { $ne: true },
-        status: { $nin: ['Completed', 'Cancelled'] },
-        returnDate: { $lte: oneHourFromNow }
-      }).populate('reportedBy');
-
-      for (const ticket of tickets) {
-        if (!ticket.reportedBy || !ticket.reportedBy.email) {
-          console.log(`⚠️ Skip reminder for ticket ${ticket.ticketNumber || ticket._id}: No requester email found.`);
-          continue;
-        }
-
-        const recipientEmail = ticket.reportedBy.email;
-        const recipientName = `${ticket.reportedBy.firstName || ''} ${ticket.reportedBy.lastName || ''}`.trim() || 'Employee';
-
-        console.log(`📧 Sending return reminder email for ticket ${ticket.ticketNumber} to ${recipientEmail}`);
-        const result = await sendItemReturnReminderEmail(ticket, recipientEmail, recipientName);
-
-        if (result && result.success) {
-          ticket.reminderSent = true;
-          await ticket.save();
-        }
-      }
-    } catch (err) {
-      console.error('❌ Error running item return reminder job:', err);
-    }
-  };
-
   if (!isServerlessRuntime) {
     scheduleInventoryExpiryAlertJob();
     runInventoryExpiryAlertJob().catch((err) => console.error('Error running initial inventory expiry alert job:', err));
-    
-    // Start the item return reminder job every 5 minutes
-    setInterval(runItemReturnReminderJob, 5 * 60 * 1000);
-    // Also run it once immediately on startup
-    runItemReturnReminderJob().catch((err) => console.error('Error running initial item return reminder job:', err));
   }
 
   // Graceful shutdown

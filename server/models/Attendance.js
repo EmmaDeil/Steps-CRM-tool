@@ -1,16 +1,16 @@
 const mongoose = require('mongoose');
 
 const AttendanceSchema = new mongoose.Schema({
-  employeeRef: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
-  employeeId: { type: String, required: true },
-  name: { type: String, required: true },
-  date: { type: String, required: true }, // Format: YYYY-MM-DD
-  checkInTime: { type: Date },
-  checkOutTime: { type: Date },
-  status: { type: String, required: true, default: 'present' },
-}, { timestamps: true });
-
-// Ensure one record per employee per day
-AttendanceSchema.index({ employeeId: 1, date: 1 }, { unique: true });
+  id: { type: Number, unique: true, sparse: true },
+  user: { type: String },
+  name: { type: String, default: '' },
+  employeeId: { type: String, default: '' },
+  date: { type: String, default: '' },
+  checkInTime: { type: Date, default: Date.now },
+  status: { type: String, required: true },
+  source: { type: String, default: 'local' },
+}, {
+  timestamps: true,
+});
 
 module.exports = mongoose.model('Attendance', AttendanceSchema);

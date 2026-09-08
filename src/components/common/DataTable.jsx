@@ -6,7 +6,6 @@ const DataTable = ({
   isLoading = false,
   emptyMessage = "No records found.",
   keyExtractor = (item, index) => item._id || item.id || index,
-  onRowClick,
 }) => {
   return (
     <div className="overflow-x-auto overflow-y-visible">
@@ -50,25 +49,7 @@ const DataTable = ({
             data.map((item, index) => (
               <tr
                 key={keyExtractor(item, index)}
-                className={`hover:bg-gray-50 transition-colors ${
-                  typeof onRowClick === "function" ? "cursor-pointer" : ""
-                }`}
-                onClick={
-                  typeof onRowClick === "function"
-                    ? () => onRowClick(item, index)
-                    : undefined
-                }
-                onKeyDown={
-                  typeof onRowClick === "function"
-                    ? (event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          onRowClick(item, index);
-                        }
-                      }
-                    : undefined
-                }
-                tabIndex={typeof onRowClick === "function" ? 0 : undefined}
+                className="hover:bg-gray-50 transition-colors"
               >
                 {columns.map((col, colIndex) => (
                   <td

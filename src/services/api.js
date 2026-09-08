@@ -14,62 +14,6 @@ const api = axios.create({
   },
 });
 
-const healthApi = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 3000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-const isTimeoutError = (error) =>
-  error?.code === 'ECONNABORTED' || /timeout/i.test(error?.message || '');
-
-const isNetworkReachabilityError = (error) => {
-  const text = `${error?.code || ''} ${error?.message || ''}`;
-  return /ERR_NETWORK|NETWORK ERROR|ECONNREFUSED|EHOSTUNREACH|ENOTFOUND|ECONNRESET/i.test(
-    text,
-  );
-};
-
-const probeBackendHealth = async () => {
-  try {
-    const response = await healthApi.get('/api/health');
-    return {
-      reachable: true,
-      healthy: response?.data?.success === true,
-      status: response?.data?.data?.status || 'unknown',
-    };
-  } catch (error) {
-    return {
-      reachable: false,
-      healthy: false,
-      error,
-    };
-  }
-};
-
-export const getBackendConnectionMessage = async (
-  error,
-  featureName = 'The server',
-) => {
-  if (isTimeoutError(error)) {
-    const health = await probeBackendHealth();
-    return health.reachable
-      ? `${featureName} is responding slowly. The backend is up, but this request timed out.`
-      : `${featureName} could not be reached. Please make sure the backend is running.`;
-  }
-
-  if (isNetworkReachabilityError(error)) {
-    const health = await probeBackendHealth();
-    return health.reachable
-      ? `${featureName} is reachable, but the browser could not complete the request.`
-      : `${featureName} is not reachable from this browser. Check that the backend is running and accessible.`;
-  }
-
-  return null;
-};
-
 // Request interceptor - Add auth token
 api.interceptors.request.use(
   async (config) => {
@@ -116,7 +60,7 @@ api.interceptors.response.use(
     } else if (error.response?.status >= 500) {
       toast.error('Server error. Please try again later.');
     } else if (error.code === 'ECONNABORTED') {
-      console.warn('Request timed out while waiting for the backend response.');
+      toast.error('Request timeout. Please check your connection.');
     } else if (!error.response) {
       // Network error
       console.error('Network error:', error.message);
@@ -157,9 +101,9 @@ export const apiService = {
   },
 
   accounting: {
-    getTransactions: (params) => api.get('/api/accounting/transactions', { params }),
-    createTransaction: (data) => api.post('/api/accounting/transactions', data),
-    getStats: () => api.get('/api/accounting/stats'),
+    getTransactions: (params) => api.get('/api/finance/journal-entries', { params }),
+    createTransaction: (data) => api.post('/api/finance/journal-entries', data),
+    getStats: () => api.get('/api/finance/reconciliation'),
   },
 
   inventory: {
@@ -177,10 +121,10 @@ export const apiService = {
   },
 
   facility: {
-    getTickets: (params) => api.get('/api/facility/tickets', { params }),
-    createTicket: (data) => api.post('/api/facility/tickets', data),
-    updateTicket: (id, data) => api.put(`/api/facility/tickets/${id}`, data),
-    getStats: () => api.get('/api/facility/stats'),
+    getTickets: (params) => api.get('/api/maintenance', { params }),
+    createTicket: (data) => api.post('/api/maintenance', data),
+    updateTicket: (id, data) => api.put(`/api/maintenance/${id}`, data),
+    getStats: () => api.get('/api/maintenance/stats'),
   },
 
   finance: {
@@ -224,6 +168,24 @@ export const apiService = {
     update: (id, data) => api.patch(`/api/documents/${id}`, data),
     sign: (id, data) => api.post(`/api/documents/${id}/sign`, data),
     delete: (id) => api.delete(`/api/documents/${id}`),
+  },
+
+  sales: {
+    getOrders: (params) => api.get('/api/sales/orders', { params }),
+    getOrder: (id) => api.get(`/api/sales/orders/${id}`),
+    createOrder: (data) => api.post('/api/sales/orders', data),
+    updateOrder: (id, data) => api.put(`/api/sales/orders/${id}`, data),
+    confirmOrder: (id) => api.post(`/api/sales/orders/${id}/confirm`),
+    fulfillOrder: (id) => api.post(`/api/sales/orders/${id}/fulfill`),
+    cancelOrder: (id, data) => api.post(`/api/sales/orders/${id}/cancel`, data),
+    recordPayment: (id, data) => api.post(`/api/sales/orders/${id}/record-payment`, data),
+    generateInvoice: (id, data) => api.post(`/api/sales/orders/${id}/generate-invoice`, data),
+    getStats: () => api.get('/api/sales/stats'),
+    getCustomers: (params) => api.get('/api/sales/customers', { params }),
+    getCustomer: (id) => api.get(`/api/sales/customers/${id}`),
+    createCustomer: (data) => api.post('/api/sales/customers', data),
+    updateCustomer: (id, data) => api.put(`/api/sales/customers/${id}`, data),
+    deleteCustomer: (id) => api.delete(`/api/sales/customers/${id}`),
   },
 
   user: {

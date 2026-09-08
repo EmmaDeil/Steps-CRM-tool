@@ -108,6 +108,8 @@ const loadModuleComponent = (componentName) => {
     materialrequest: "MaterialRequests",
     materialrequests: "MaterialRequests",
     materialrequestmodule: "MaterialRequests",
+    sales: "Sales",
+    salesmodule: "Sales",
   };
 
   const finalComponentName =
@@ -146,12 +148,11 @@ const iconMap = {
   Security: { icon: "fa-lock", color: "red" },
   "Incident Reporting": { icon: "fa-triangle-exclamation", color: "red" },
   DocSign: { icon: "fa-pen-fancy", color: "pink" },
-  Contacts: { icon: "fa-address-book", color: "indigo" },
-  Sales: { icon: "fa-sack-dollar", color: "emerald" },
   // "": { icon: "fa-pen-fancy", color: "pink" },
   Admin: { icon: "fa-sliders", color: "gray" },
   Policy: { icon: "fa-file-shield", color: "gray" },
   Budget: { icon: "fa-wallet", color: "blue" },
+  Sales: { icon: "fa-handshake", color: "emerald" },
 };
 
 export default function Home() {

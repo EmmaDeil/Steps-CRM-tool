@@ -1,138 +1,92 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/useAuth";
 import { apiService } from "../../services/api";
+import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
-import ModuleLoader from "../common/ModuleLoader";
-import { toast } from "react-hot-toast";
-
-const initialAdvanceForm = {
-  amount: "",
-  reason: "",
-  currency: "USD",
-  purpose: "",
-  attachment: "",
-  attachmentName: "",
-};
-
-const initialRefundForm = {
-  amount: "",
-  reason: "",
-  category: "",
-  receiptNumber: "",
-  transactionDate: "",
-  currency: "NGN",
-};
-
-const initialLeaveForm = {
-  leaveType: "",
-  fromDate: "",
-  toDate: "",
-  reason: "",
-  managerId: "",
-  managerName: "",
-  managerEmail: "",
-  attachment: "",
-  attachmentName: "",
-};
-
-const initialTravelForm = {
-  currentLocation: "",
-  destination: "",
-  purpose: "",
-  fromDate: "",
-  toDate: "",
-  accommodationRequired: false,
-  budget: "",
-  description: "",
-  managerId: "",
-  managerName: "",
-  managerEmail: "",
-};
-
-const formatDate = (value) => {
-  if (!value) return "N/A";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
-};
-
-const formatMoney = (value, currency = "USD") => {
-  const amount = Number(value || 0);
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency || "USD",
-      maximumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    return amount.toFixed(2);
-  }
-};
-
-const getStatusClass = (status = "") => {
-  const normalized = String(status).toLowerCase();
-  if (normalized.includes("approved") || normalized.includes("completed")) return "bg-green-100 text-green-800";
-  if (normalized.includes("rejected") || normalized.includes("cancelled")) return "bg-red-100 text-red-800";
-  if (normalized.includes("pending") || normalized.includes("open") || normalized.includes("assigned") || normalized.includes("in progress") || normalized.includes("on hold")) return "bg-amber-100 text-amber-800";
-  return "bg-slate-100 text-slate-700";
-};
+import { formatCurrency } from "../../services/currency";
+import RetirementManagement from "./RetirementManagement";
 
 const Approval = () => {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
   const [advanceRequests, setAdvanceRequests] = useState([]);
   const [refundRequests, setRefundRequests] = useState([]);
-  const [leaveRequests, setLeaveRequests] = useState([]);
-  const [travelRequests, setTravelRequests] = useState([]);
-  const [pendingApprovals, setPendingApprovals] = useState([]);
-  const [activeTab, setActiveTab] = useState("my-requests");
-  const [selectedPendingRequest, setSelectedPendingRequest] = useState(null);
-  const [selectedMyRequest, setSelectedMyRequest] = useState(null);
-  const [showLeaveBalanceModal, setShowLeaveBalanceModal] = useState(false);
-  const [approvalActionType, setApprovalActionType] = useState("");
-  const [actionComments, setActionComments] = useState("");
-  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
-
+  const [retirementBreakdowns, setRetirementBreakdowns] = useState([]);
+  const [leaveRequests, _setLeaveRequests] = useState([]);
+  const [travelRequests, _setTravelRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showAdvanceForm, setShowAdvanceForm] = useState(false);
   const [showRefundForm, setShowRefundForm] = useState(false);
+  const [showRetirementManagement, setShowRetirementManagement] =
+    useState(false);
+  const [showRetirementHistory, setShowRetirementHistory] = useState(false);
+  const [showMonthDetails, setShowMonthDetails] = useState(false);
+  const [showLeaveHistory, setShowLeaveHistory] = useState(false);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
+  const [showTravelHistory, setShowTravelHistory] = useState(false);
   const [showTravelForm, setShowTravelForm] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [activeHistoryPill, setActiveHistoryPill] = useState("all");
+  const [selectedMonthYear, setSelectedMonthYear] = useState(null);
+  const [editingLineItems, setEditingLineItems] = useState({});
 
-  const [advanceFormData, setAdvanceFormData] = useState(initialAdvanceForm);
-  const [refundFormData, setRefundFormData] = useState(initialRefundForm);
-  const [leaveFormData, setLeaveFormData] = useState(initialLeaveForm);
-  const [travelFormData, setTravelFormData] = useState(initialTravelForm);
-  const [travelFormLoading, setTravelFormLoading] = useState(false);
-
-  const [facilityRequests, setFacilityRequests] = useState([]);
-  const [showFacilityForm, setShowFacilityForm] = useState(false);
-  const [facilityFormLoading, setFacilityFormLoading] = useState(false);
-  const [facilityFormData, setFacilityFormData] = useState({
-    title: "",
-    description: "",
-    requestType: "General Query / Concern",
-    movementType: "Permanent",
-    returnDate: "",
-    fromLocation: "",
-    toLocation: "",
-    building: "",
-    floor: "",
-    room: "",
-    priority: "Medium",
-    issueCategory: "General Maintenance",
-    attachment: "",
-    attachmentName: ""
+  // Leave form state
+  const [leaveFormData, setLeaveFormData] = useState({
+    leaveType: "",
+    fromDate: "",
+    toDate: "",
+    reason: "",
+    managerId: "",
+    managerName: "",
+    managerEmail: "",
   });
-
   const [leaveAllocation, setLeaveAllocation] = useState(null);
   const [calculatedDays, setCalculatedDays] = useState(0);
   const [remainingLeave, setRemainingLeave] = useState(null);
 
+  // Travel form state
+  const [travelFormData, setTravelFormData] = useState({
+    currentLocation: "",
+    destination: "",
+    purpose: "",
+    fromDate: "",
+    toDate: "",
+    numberOfDays: 0,
+    numberOfNights: 0,
+    accommodationRequired: false,
+    budget: "",
+    description: "",
+    managerId: "",
+    managerName: "",
+    managerEmail: "",
+  });
+  const [travelFormLoading, setTravelFormLoading] = useState(false);
+
+  const [_staffList, _setStaffList] = useState([]);
+  const [approverSuggestions, _setApproverSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [advanceFormData, setAdvanceFormData] = useState({
+    amount: "",
+    reason: "",
+    approver: "",
+    approverEmail: "",
+    currency: "USD",
+    purpose: "",
+  });
+  const [refundFormData, setRefundFormData] = useState({
+    amount: "",
+    reason: "",
+    category: "",
+    receiptNumber: "",
+    transactionDate: "",
+    approver: "",
+    approverEmail: "",
+    currency: "USD",
+  });
+
+  // Get current user's info
   const currentUserName = user?.fullName || "Current User";
   const currentUserId = user?.id || user?._id || user?.userId || "";
   const currentEmployeeId = user?.publicMetadata?.employeeId || "EMP999";
   const currentDepartment = user?.publicMetadata?.department || "General";
+  const hasFetchedStaffRef = useRef(false);
 
   const extractList = (response) => {
     if (Array.isArray(response)) return response;
@@ -141,133 +95,61 @@ const Approval = () => {
     return [];
   };
 
-  const fetchData = async () => {
-    if (!currentUserId) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const [advanceRes, refundRes, leaveRes, travelRes, pendingRes, facilityRes] =
-        await Promise.allSettled([
-          apiService.get(`/api/advance-requests?userId=${currentUserId}`, {
-            timeout: 20000,
-          }),
-          apiService.get(`/api/refund-requests?userId=${currentUserId}`, {
-            timeout: 20000,
-          }),
-          apiService.get(
-            `/api/approval/leave-requests?employeeId=${currentEmployeeId}`,
-            { timeout: 20000 },
-          ),
-          apiService.get(
-            `/api/approval/travel-requests?employeeId=${currentEmployeeId}`,
-            { timeout: 20000 },
-          ),
-          apiService.get(
-            `/api/approval/pending`,
-            { timeout: 20000 },
-          ),
-          apiService.get(
-            `/api/maintenance?mine=true`,
-            { timeout: 20000 },
-          ),
-        ]);
-
-      setAdvanceRequests(
-        advanceRes.status === "fulfilled" ? extractList(advanceRes.value) : [],
-      );
-      setRefundRequests(
-        refundRes.status === "fulfilled" ? extractList(refundRes.value) : [],
-      );
-      setLeaveRequests(
-        leaveRes.status === "fulfilled" ? extractList(leaveRes.value) : [],
-      );
-      setTravelRequests(
-        travelRes.status === "fulfilled" ? extractList(travelRes.value) : [],
-      );
-      setPendingApprovals(
-        pendingRes.status === "fulfilled" ? extractList(pendingRes.value) : [],
-      );
-      setFacilityRequests(
-        facilityRes.status === "fulfilled" && facilityRes.value && Array.isArray(facilityRes.value.tickets)
-          ? facilityRes.value.tickets
-          : []
-      );
-
-      if (
-        advanceRes.status === "rejected" ||
-        refundRes.status === "rejected" ||
-        leaveRes.status === "rejected" ||
-        travelRes.status === "rejected" ||
-        pendingRes.status === "rejected" ||
-        facilityRes.status === "rejected"
-      ) {
-        console.error("One or more approval lists failed to load.", {
-          advanceRes,
-          refundRes,
-          leaveRes,
-          travelRes,
-          pendingRes,
-          facilityRes,
+  // Fetch staff list for approver selection
+  useEffect(() => {
+    const fetchStaffList = async () => {
+      try {
+        const response = await apiService.get("/api/hr/employees", {
+          timeout: 20000,
         });
+        const employees = extractList(response);
+        if (employees.length > 0) {
+          _setStaffList(
+            employees.map((emp) => ({
+              id: emp._id || emp.id,
+              name: emp.fullName || emp.name,
+              email: emp.email,
+              role: emp.role || emp.department || "Employee",
+            })),
+          );
+        }
+      } catch (error) {
+        console.error("Error fetching staff list:", error);
       }
-    } catch (error) {
-      console.error("Error loading approval data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  const handleApprovalAction = async (e) => {
-    e.preventDefault();
-    if (!selectedPendingRequest || !approvalActionType) return;
+    if (hasFetchedStaffRef.current) return;
+    hasFetchedStaffRef.current = true;
+    fetchStaffList();
+  }, []);
 
-    setIsSubmittingAction(true);
-    try {
-      const response = await apiService.post(
-        `/api/approval/${selectedPendingRequest.type}/${selectedPendingRequest.id}/${approvalActionType}`,
-        { comments: actionComments }
-      );
-
-      if (response?.success) {
-        toast.success(`Request ${approvalActionType === "approve" ? "approved" : "rejected"} successfully!`);
-      } else {
-        toast.success("Action submitted successfully");
-      }
-
-      setSelectedPendingRequest(null);
-      setActionComments("");
-      await fetchData();
-    } catch (error) {
-      console.error(`Error processing approval action:`, error);
-      const errMsg = error?.response?.data?.message || error?.message || "Failed to submit action";
-      toast.error(errMsg);
-    } finally {
-      setIsSubmittingAction(false);
-    }
-  };
-
+  // Fetch leave allocation for current user
   useEffect(() => {
     const fetchLeaveAllocation = async () => {
       try {
         const response = await apiService.get(
           `/api/hr/leave-allocations?employeeId=${currentEmployeeId}&year=${new Date().getFullYear()}`,
         );
+        if (response && Array.isArray(response) && response.length > 0) {
+          setLeaveAllocation(response[0]);
+          // Set manager info if available for both leave and travel forms
+          if (response[0].managerId) {
+            const managerInfo = {
+              managerId: response[0].managerId,
+              managerName: response[0].managerName,
+              managerEmail: response[0].managerEmail || "",
+            };
 
-        if (Array.isArray(response) && response.length > 0) {
-          const allocation = response[0];
-          setLeaveAllocation(allocation);
+            setLeaveFormData((prev) => ({
+              ...prev,
+              ...managerInfo,
+            }));
 
-          const managerInfo = {
-            managerId: allocation.managerId || "",
-            managerName: allocation.managerName || "",
-            managerEmail: allocation.managerEmail || "",
-          };
-
-          setLeaveFormData((prev) => ({ ...prev, ...managerInfo }));
-          setTravelFormData((prev) => ({ ...prev, ...managerInfo }));
+            setTravelFormData((prev) => ({
+              ...prev,
+              ...managerInfo,
+            }));
+          }
         }
       } catch (error) {
         console.error("Error fetching leave allocation:", error);
@@ -279,72 +161,66 @@ const Approval = () => {
     }
   }, [currentEmployeeId]);
 
+  // Calculate days and remaining leave when dates or leave type changes
   useEffect(() => {
-    if (!leaveFormData.fromDate || !leaveFormData.toDate) {
-      setCalculatedDays(0);
-      setRemainingLeave(null);
-      return;
-    }
-
-    const from = new Date(leaveFormData.fromDate);
-    const to = new Date(leaveFormData.toDate);
     if (
-      Number.isNaN(from.getTime()) ||
-      Number.isNaN(to.getTime()) ||
-      to < from
+      leaveFormData.fromDate &&
+      leaveFormData.toDate &&
+      leaveFormData.leaveType &&
+      leaveAllocation
     ) {
-      setCalculatedDays(0);
-      setRemainingLeave(null);
-      return;
-    }
+      const from = new Date(leaveFormData.fromDate);
+      const to = new Date(leaveFormData.toDate);
 
-    let days = 0;
-    const current = new Date(from);
-    while (current <= to) {
-      const dayOfWeek = current.getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        days += 1;
+      if (to >= from) {
+        // Calculate business days (excluding weekends)
+        let days = 0;
+        const current = new Date(from);
+        while (current <= to) {
+          const dayOfWeek = current.getDay();
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            // Not Sunday or Saturday
+            days++;
+          }
+          current.setDate(current.getDate() + 1);
+        }
+        setCalculatedDays(days);
+
+        // Calculate remaining leave based on type
+        let allocated = 0;
+        let used = 0;
+
+        switch (leaveFormData.leaveType) {
+          case "annual":
+            allocated = leaveAllocation.annualLeave || 0;
+            used = leaveAllocation.annualLeaveUsed || 0;
+            break;
+          case "sick":
+            allocated = leaveAllocation.sickLeave || 0;
+            used = leaveAllocation.sickLeaveUsed || 0;
+            break;
+          case "personal":
+            allocated = leaveAllocation.personalLeave || 0;
+            used = leaveAllocation.personalLeaveUsed || 0;
+            break;
+          case "unpaid":
+            allocated = 999; // Unlimited unpaid leave
+            used = 0;
+            break;
+          default:
+            allocated = 0;
+            used = 0;
+        }
+
+        const remaining = allocated - used - days;
+        setRemainingLeave({
+          allocated,
+          used,
+          requested: days,
+          remaining,
+        });
       }
-      current.setDate(current.getDate() + 1);
     }
-
-    setCalculatedDays(days);
-
-    if (!leaveFormData.leaveType || !leaveAllocation) {
-      setRemainingLeave(null);
-      return;
-    }
-
-    let allocated = 0;
-    let used = 0;
-    switch (leaveFormData.leaveType) {
-      case "annual":
-        allocated = leaveAllocation.annualLeave || 0;
-        used = leaveAllocation.annualLeaveUsed || 0;
-        break;
-      case "sick":
-        allocated = leaveAllocation.sickLeave || 0;
-        used = leaveAllocation.sickLeaveUsed || 0;
-        break;
-      case "personal":
-        allocated = leaveAllocation.personalLeave || 0;
-        used = leaveAllocation.personalLeaveUsed || 0;
-        break;
-      case "unpaid":
-        allocated = leaveAllocation.unpaidLeave || 0;
-        used = leaveAllocation.unpaidLeaveUsed || 0;
-        break;
-      default:
-        allocated = 0;
-        used = 0;
-    }
-
-    setRemainingLeave({
-      allocated,
-      used,
-      requested: days,
-      remaining: allocated - used - days,
-    });
   }, [
     leaveFormData.fromDate,
     leaveFormData.toDate,
@@ -352,172 +228,275 @@ const Approval = () => {
     leaveAllocation,
   ]);
 
+  // Calculate travel days and nights when dates change
   useEffect(() => {
-    if (!travelFormData.fromDate || !travelFormData.toDate) {
-      return;
+    if (travelFormData.fromDate && travelFormData.toDate) {
+      const from = new Date(travelFormData.fromDate);
+      const to = new Date(travelFormData.toDate);
+
+      if (to >= from) {
+        // Calculate total days (inclusive)
+        const timeDiff = to.getTime() - from.getTime();
+        const days = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end days
+        const nights = Math.max(0, days - 1); // Nights are typically one less than days
+
+        setTravelFormData((prev) => ({
+          ...prev,
+          numberOfDays: days,
+          numberOfNights: nights,
+        }));
+      }
     }
-
-    const from = new Date(travelFormData.fromDate);
-    const to = new Date(travelFormData.toDate);
-    if (
-      Number.isNaN(from.getTime()) ||
-      Number.isNaN(to.getTime()) ||
-      to < from
-    ) {
-      setTravelFormData((prev) => ({
-        ...prev,
-        numberOfDays: 0,
-        numberOfNights: 0,
-      }));
-      return;
-    }
-
-    const timeDiff = to.getTime() - from.getTime();
-    const days = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
-    const nights = Math.max(0, days - 1);
-
-    setTravelFormData((prev) => ({
-      ...prev,
-      numberOfDays: days,
-      numberOfNights: nights,
-    }));
   }, [travelFormData.fromDate, travelFormData.toDate]);
+
+  // Fetch data from MongoDB
+  const fetchData = async () => {
+    if (!currentUserId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const [advanceRes, refundRes, retirementRes] = await Promise.allSettled([
+        apiService.get(`/api/advance-requests?userId=${currentUserId}`, {
+          timeout: 20000,
+        }),
+        apiService.get(`/api/refund-requests?userId=${currentUserId}`, {
+          timeout: 20000,
+        }),
+        apiService.get(`/api/retirement-breakdown?userId=${currentUserId}`, {
+          timeout: 20000,
+        }),
+      ]);
+
+      const nextAdvance =
+        advanceRes.status === "fulfilled" ? extractList(advanceRes.value) : [];
+      const nextRefund =
+        refundRes.status === "fulfilled" ? extractList(refundRes.value) : [];
+      const nextRetirement =
+        retirementRes.status === "fulfilled"
+          ? extractList(retirementRes.value)
+          : [];
+
+      setAdvanceRequests(nextAdvance);
+      setRefundRequests(nextRefund);
+      setRetirementBreakdowns(nextRetirement);
+
+      if (
+        advanceRes.status === "rejected" ||
+        refundRes.status === "rejected" ||
+        retirementRes.status === "rejected"
+      ) {
+        toast.error("Some approval data failed to load");
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      toast.error("Failed to load requests");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUserId, currentEmployeeId]);
+  }, [currentUserId]);
 
   const handleAdvanceSubmit = async (e) => {
     e.preventDefault();
 
-    if (!advanceFormData.amount || Number(advanceFormData.amount) <= 0) {
-      toast.error("Invalid advance amount");
+    // Approver will be auto-assigned by backend based on approval rules
+
+    // Validate amount
+    if (!advanceFormData.amount || parseFloat(advanceFormData.amount) <= 0) {
+      toast.error("Please enter a valid amount");
       return;
     }
 
+    const newRequest = {
+      employeeName: currentUserName,
+      employeeId: currentEmployeeId,
+      department: currentDepartment,
+      userId: currentUserId,
+      amount: parseFloat(advanceFormData.amount),
+      reason: advanceFormData.reason,
+      approver: advanceFormData.approver,
+      approverEmail: advanceFormData.approverEmail,
+      currency: advanceFormData.currency,
+      purpose: advanceFormData.purpose,
+      status: "pending",
+      requestDate: new Date().toISOString().split("T")[0],
+      hasRetirement: false,
+    };
+
     try {
-      const response = await apiService.post("/api/advance-requests", {
-        employeeName: currentUserName,
-        employeeId: currentEmployeeId,
-        department: currentDepartment,
-        userId: currentUserId,
-        amount: Number(advanceFormData.amount),
-        reason: advanceFormData.reason,
-        currency: advanceFormData.currency,
-        purpose: advanceFormData.purpose,
-        attachment: advanceFormData.attachment || null,
-        attachmentName: advanceFormData.attachmentName || null,
-        status: "pending",
-        requestDate: new Date().toISOString().split("T")[0],
-        hasRetirement: false,
-      });
+      // Save to database
+      const response = await apiService.post(
+        "/api/advance-requests",
+        newRequest,
+      );
 
       if (!response) {
-        throw new Error("Failed to save advance request");
+        throw new Error("Failed to save request to database");
       }
 
-      setAdvanceFormData(initialAdvanceForm);
+      // Send email to approver
+      try {
+        await apiService.post("/api/send-approval-email", {
+          to: advanceFormData.approverEmail,
+          employeeName: currentUserName,
+          employeeId: currentEmployeeId,
+          department: currentDepartment,
+          amount: advanceFormData.amount,
+          currency: advanceFormData.currency,
+          reason: advanceFormData.reason,
+          purpose: advanceFormData.purpose,
+          approver: advanceFormData.approver,
+          requestType: "advance",
+          repaymentPeriod: "N/A",
+        });
+      } catch (emailError) {
+        console.warn("Email notification failed:", emailError);
+        toast.warning("Request saved but email notification failed");
+      }
+
       setShowAdvanceForm(false);
-      toast.success("Advance request submitted successfully!");
-      await fetchData();
+      setAdvanceFormData({
+        amount: "",
+        reason: "",
+        approver: "",
+        approverEmail: "",
+        currency: "USD",
+        purpose: "",
+      });
+      toast.success("Request submitted successfully");
+      fetchData(); // Refresh data
     } catch (error) {
       console.error("Error submitting advance request:", error);
-      toast.error("Failed to submit advance request");
+      toast.error(error.message || "Failed to submit request");
     }
   };
 
   const handleRefundSubmit = async (e) => {
     e.preventDefault();
 
-    if (!refundFormData.amount || Number(refundFormData.amount) <= 0) {
-      console.warn("Validation failed: invalid refund amount");
+    // Approver will be auto-assigned by backend based on approval rules
+
+    // Validate amount
+    if (!refundFormData.amount || parseFloat(refundFormData.amount) <= 0) {
+      toast.error("Please enter a valid amount");
       return;
     }
 
+    // Validate category
     if (!refundFormData.category) {
-      console.warn("Validation failed: refund category is required");
+      toast.error("Please select a category");
       return;
     }
+
+    const newRequest = {
+      employeeName: currentUserName,
+      employeeId: currentEmployeeId,
+      department: currentDepartment,
+      userId: currentUserId,
+      amount: parseFloat(refundFormData.amount),
+      reason: refundFormData.reason,
+      category: refundFormData.category,
+      receiptNumber: refundFormData.receiptNumber,
+      transactionDate: refundFormData.transactionDate,
+      approver: refundFormData.approver,
+      approverEmail: refundFormData.approverEmail,
+      currency: refundFormData.currency,
+      status: "pending",
+      requestDate: new Date().toISOString().split("T")[0],
+    };
 
     try {
-      const response = await apiService.post("/api/refund-requests", {
-        employeeName: currentUserName,
-        employeeId: currentEmployeeId,
-        department: currentDepartment,
-        userId: currentUserId,
-        amount: Number(refundFormData.amount),
-        reason: refundFormData.reason,
-        category: refundFormData.category,
-        receiptNumber: refundFormData.receiptNumber,
-        transactionDate: refundFormData.transactionDate,
-        currency: refundFormData.currency,
-        status: "pending",
-        requestDate: new Date().toISOString().split("T")[0],
-      });
+      // Save to database
+      const response = await apiService.post(
+        "/api/refund-requests",
+        newRequest,
+      );
 
       if (!response) {
-        throw new Error("Failed to save refund request");
+        throw new Error("Failed to save refund request to database");
       }
 
-      setRefundFormData(initialRefundForm);
       setShowRefundForm(false);
-      await fetchData();
+      setRefundFormData({
+        amount: "",
+        reason: "",
+        category: "",
+        receiptNumber: "",
+        transactionDate: "",
+        approver: "",
+        approverEmail: "",
+        currency: "USD",
+      });
+      toast.success("Refund request submitted successfully");
+      fetchData(); // Refresh data
     } catch (error) {
       console.error("Error submitting refund request:", error);
+      toast.error(error.message || "Failed to submit refund request");
     }
   };
 
   const handleLeaveSubmit = async (e) => {
     e.preventDefault();
 
-    if (
-      !leaveFormData.leaveType ||
-      !leaveFormData.fromDate ||
-      !leaveFormData.toDate
-    ) {
-      toast.error("Leave type and dates are required");
+    // Validation
+    if (!leaveFormData.leaveType) {
+      toast.error("Please select leave type");
       return;
     }
 
-    if (!leaveFormData.attachment) {
-      toast.error("An attachment is required to submit a leave request");
+    if (!leaveFormData.fromDate || !leaveFormData.toDate) {
+      toast.error("Please select dates");
       return;
     }
 
+    // Manager will be auto-assigned by backend based on approval rules
+
+    // Check if enough leave balance
     if (
       remainingLeave &&
       remainingLeave.remaining < 0 &&
       leaveFormData.leaveType !== "unpaid"
     ) {
-      toast.error("Insufficient leave balance");
+      toast.error(`Insufficient ${leaveFormData.leaveType} leave balance`);
       return;
     }
 
+    const newRequest = {
+      employeeName: currentUserName,
+      employeeId: currentEmployeeId,
+      department: currentDepartment,
+      userId: currentUserId,
+      leaveType: leaveFormData.leaveType,
+      fromDate: leaveFormData.fromDate,
+      toDate: leaveFormData.toDate,
+      days: calculatedDays,
+      reason: leaveFormData.reason,
+      managerId: leaveFormData.managerId,
+      managerName: leaveFormData.managerName,
+      managerEmail: leaveFormData.managerEmail,
+      status: "pending_manager",
+      requestDate: new Date().toISOString().split("T")[0],
+    };
+
     try {
-      const response = await apiService.post("/api/approval/leave-requests", {
-        employeeName: currentUserName,
-        employeeId: currentEmployeeId,
-        department: currentDepartment,
-        userId: currentUserId,
-        leaveType: leaveFormData.leaveType,
-        fromDate: leaveFormData.fromDate,
-        toDate: leaveFormData.toDate,
-        days: calculatedDays,
-        reason: leaveFormData.reason,
-        attachment: leaveFormData.attachment,
-        attachmentName: leaveFormData.attachmentName,
-        managerId: leaveFormData.managerId,
-        managerName: leaveFormData.managerName,
-        managerEmail: leaveFormData.managerEmail,
-        status: "pending_manager",
-        requestDate: new Date().toISOString().split("T")[0],
-      });
+      // Save to database
+      const response = await apiService.post(
+        "/api/approval/leave-requests",
+        newRequest,
+      );
 
       if (!response) {
         throw new Error("Failed to save leave request");
       }
 
+      // Send email to manager
       try {
         await apiService.post("/api/send-leave-approval-email", {
           to: leaveFormData.managerEmail,
@@ -532,71 +511,101 @@ const Approval = () => {
           approvalStage: "manager",
         });
       } catch (emailError) {
-        console.error("Leave approval email failed:", emailError);
+        console.warn("Email notification failed:", emailError);
       }
 
-      setLeaveFormData((prev) => ({
-        ...initialLeaveForm,
-        managerId: prev.managerId,
-        managerName: prev.managerName,
-        managerEmail: prev.managerEmail,
-      }));
       setShowLeaveForm(false);
-      toast.success("Leave request submitted successfully!");
-      await fetchData();
+      setLeaveFormData({
+        leaveType: "",
+        fromDate: "",
+        toDate: "",
+        reason: "",
+        managerId: leaveAllocation?.managerId || "",
+        managerName: leaveAllocation?.managerName || "",
+        managerEmail: leaveAllocation?.managerEmail || "",
+      });
+      setCalculatedDays(0);
+      setRemainingLeave(null);
+      toast.success("Leave request submitted to manager for approval");
+      fetchData();
     } catch (error) {
       console.error("Error submitting leave request:", error);
-      toast.error("Failed to submit leave request");
+      toast.error(error.message || "Failed to submit leave request");
     }
   };
 
   const handleTravelSubmit = async (e) => {
     e.preventDefault();
 
-    if (
-      !travelFormData.currentLocation ||
-      !travelFormData.destination ||
-      !travelFormData.purpose ||
-      !travelFormData.fromDate ||
-      !travelFormData.toDate ||
-      !travelFormData.managerId ||
-      !travelFormData.managerEmail ||
-      !travelFormData.budget ||
-      Number(travelFormData.budget) <= 0
-    ) {
-      console.warn("Validation failed: travel request is incomplete");
+    // Validation
+    if (!travelFormData.currentLocation) {
+      toast.error("Please enter your current location");
       return;
     }
+
+    if (!travelFormData.destination) {
+      toast.error("Please enter destination");
+      return;
+    }
+
+    if (!travelFormData.purpose) {
+      toast.error("Please select purpose");
+      return;
+    }
+
+    if (!travelFormData.fromDate || !travelFormData.toDate) {
+      toast.error("Please select travel dates");
+      return;
+    }
+
+    if (!travelFormData.managerId || !travelFormData.managerEmail) {
+      toast.error(
+        "Manager information is required. Please contact HR to assign a manager.",
+      );
+      return;
+    }
+
+    if (!travelFormData.budget || parseFloat(travelFormData.budget) <= 0) {
+      toast.error("Please enter a valid budget");
+      return;
+    }
+
+    const newRequest = {
+      employeeName: currentUserName,
+      employeeId: currentEmployeeId,
+      department: currentDepartment,
+      userId: currentUserId,
+      currentLocation: travelFormData.currentLocation,
+      destination: travelFormData.destination,
+      purpose: travelFormData.purpose,
+      fromDate: travelFormData.fromDate,
+      toDate: travelFormData.toDate,
+      numberOfDays: travelFormData.numberOfDays,
+      numberOfNights: travelFormData.numberOfNights,
+      accommodationRequired: travelFormData.accommodationRequired,
+      budget: parseFloat(travelFormData.budget),
+      description: travelFormData.description,
+      managerId: travelFormData.managerId,
+      managerName: travelFormData.managerName,
+      managerEmail: travelFormData.managerEmail,
+      status: "pending_manager",
+      requestDate: new Date().toISOString().split("T")[0],
+    };
 
     try {
       setTravelFormLoading(true);
 
-      const response = await apiService.post("/api/approval/travel-requests", {
-        employeeName: currentUserName,
-        employeeId: currentEmployeeId,
-        department: currentDepartment,
-        userId: currentUserId,
-        currentLocation: travelFormData.currentLocation,
-        destination: travelFormData.destination,
-        purpose: travelFormData.purpose,
-        fromDate: travelFormData.fromDate,
-        toDate: travelFormData.toDate,
-        numberOfDays: travelFormData.numberOfDays,
-        numberOfNights: travelFormData.numberOfNights,
-        accommodationRequired: travelFormData.accommodationRequired,
-        budget: Number(travelFormData.budget),
-        description: travelFormData.description,
-        managerId: travelFormData.managerId,
-        managerName: travelFormData.managerName,
-        managerEmail: travelFormData.managerEmail,
-        status: "pending_manager",
-        requestDate: new Date().toISOString().split("T")[0],
-      });
+      // Save to database
+      const response = await apiService.post(
+        "/api/approval/travel-requests",
+        newRequest,
+      );
 
       if (!response) {
         throw new Error("Failed to save travel request");
       }
 
+      // Send email to manager
       try {
         await apiService.post("/api/send-travel-approval-email", {
           to: travelFormData.managerEmail,
@@ -615,2439 +624,2230 @@ const Approval = () => {
           approvalStage: "manager",
         });
       } catch (emailError) {
-        console.error("Travel approval email failed:", emailError);
+        console.warn("Email notification failed:", emailError);
       }
 
-      setTravelFormData((prev) => ({
-        ...initialTravelForm,
-        managerId: prev.managerId,
-        managerName: prev.managerName,
-        managerEmail: prev.managerEmail,
-      }));
       setShowTravelForm(false);
-      await fetchData();
+      setTravelFormData({
+        currentLocation: "",
+        destination: "",
+        purpose: "",
+        fromDate: "",
+        toDate: "",
+        numberOfDays: 0,
+        numberOfNights: 0,
+        accommodationRequired: false,
+        budget: "",
+        description: "",
+        managerId: leaveAllocation?.managerId || "",
+        managerName: leaveAllocation?.managerName || "",
+        managerEmail: leaveAllocation?.managerEmail || "",
+      });
+      toast.success("Travel request submitted to manager for approval");
+      fetchData();
     } catch (error) {
       console.error("Error submitting travel request:", error);
+      toast.error(error.message || "Failed to submit travel request");
     } finally {
       setTravelFormLoading(false);
     }
   };
 
-  const handleFacilitySubmit = async (e) => {
-    e.preventDefault();
-
-    if (!facilityFormData.title || !facilityFormData.description || !facilityFormData.building) {
-      toast.error("Please fill in all required fields.");
-      return;
-    }
-
-    if (facilityFormData.requestType === "Item Movement") {
-      if (!facilityFormData.fromLocation || !facilityFormData.toLocation) {
-        toast.error("Please specify both source and destination locations for item movement.");
-        return;
-      }
-      if (facilityFormData.movementType === "Temporary" && !facilityFormData.returnDate) {
-        toast.error("Please specify a return date and time for temporary movement.");
-        return;
-      }
-    }
-
-    let category = "General Maintenance";
-    if (facilityFormData.requestType === "Item Movement") {
-      category = "Item Movement";
-    } else if (facilityFormData.requestType === "Report a Maintenance Issue") {
-      category = facilityFormData.issueCategory || "General Maintenance";
-    } else if (facilityFormData.requestType === "General Query / Concern") {
-      category = "Other";
-    } else if (facilityFormData.requestType === "Other") {
-      category = "Other";
-    }
-
-    setFacilityFormLoading(true);
-    try {
-      const response = await apiService.post("/api/maintenance", {
-        title: facilityFormData.title,
-        description: facilityFormData.description,
-        category,
-        priority: facilityFormData.priority,
-        location: {
-          building: facilityFormData.building,
-          floor: facilityFormData.floor || "",
-          room: facilityFormData.room || ""
-        },
-        movementType: facilityFormData.requestType === "Item Movement" ? facilityFormData.movementType : undefined,
-        fromLocation: facilityFormData.requestType === "Item Movement" ? facilityFormData.fromLocation : undefined,
-        toLocation: facilityFormData.requestType === "Item Movement" ? facilityFormData.toLocation : undefined,
-        returnDate: (facilityFormData.requestType === "Item Movement" && facilityFormData.movementType === "Temporary") ? facilityFormData.returnDate : undefined,
-        attachments: facilityFormData.attachment ? [
-          {
-            filename: facilityFormData.attachmentName,
-            url: facilityFormData.attachment
-          }
-        ] : []
-      });
-
-      if (!response) {
-        throw new Error("Failed to submit facility request");
-      }
-
-      setFacilityFormData({
-        title: "",
-        description: "",
-        requestType: "General Query / Concern",
-        movementType: "Permanent",
-        returnDate: "",
-        fromLocation: "",
-        toLocation: "",
-        building: "",
-        floor: "",
-        room: "",
-        priority: "Medium",
-        issueCategory: "General Maintenance",
-        attachment: "",
-        attachmentName: ""
-      });
-      setShowFacilityForm(false);
-      toast.success("Facility request submitted successfully!");
-      await fetchData();
-    } catch (error) {
-      console.error("Error submitting facility request:", error);
-      toast.error(error.response?.data?.error || "Failed to submit facility request");
-    } finally {
-      setFacilityFormLoading(false);
-    }
-  };
-
-  const handleMyRequestClick = (request) => {
-    setSelectedMyRequest(request);
-  };
-
-  const requestSummary = [
-    {
-      title: "Advance Requests",
-      count: advanceRequests.length,
-      icon: "fa-wallet",
-      accent: "blue",
-      onNew: () => setShowAdvanceForm(true),
-    },
-    {
-      title: "Refund Requests",
-      count: refundRequests.length,
-      icon: "fa-money-bill-transfer",
-      accent: "green",
-      onNew: () => setShowRefundForm(true),
-    },
-    {
-      title: "Leave Requests",
-      count: leaveRequests.length,
-      icon: "fa-calendar-days",
-      accent: "orange",
-      onNew: () => setShowLeaveForm(true),
-    },
-    {
-      title: "Travel Requests",
-      count: travelRequests.length,
-      icon: "fa-plane",
-      accent: "indigo",
-      onNew: () => setShowTravelForm(true),
-    },
-  ];
-
-  const summaryTheme = {
-    blue: {
-      iconBg: "bg-blue-100",
-      iconText: "text-blue-600",
-      button: "bg-blue-600 hover:bg-blue-700",
-    },
-    green: {
-      iconBg: "bg-emerald-100",
-      iconText: "text-emerald-600",
-      button: "bg-emerald-600 hover:bg-emerald-700",
-    },
-    orange: {
-      iconBg: "bg-orange-100",
-      iconText: "text-orange-600",
-      button: "bg-orange-600 hover:bg-orange-700",
-    },
-    indigo: {
-      iconBg: "bg-indigo-100",
-      iconText: "text-indigo-600",
-      button: "bg-indigo-600 hover:bg-indigo-700",
-    },
-  };
-
-  const renderTable = (title, rows, columns, emptyText, onRowClick, headerAction) => (
-    <div className="rounded-xl border border-[#dbe0e6] bg-white shadow-sm">
-      <div className="border-b border-[#dbe0e6] px-6 py-4 flex justify-between items-center">
-        <h3 className="text-lg font-bold text-[#111418]">{title}</h3>
-        {headerAction}
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[800px]">
-          <thead className="bg-slate-50">
-            <tr>
-              {columns.map((column) => (
-                <th
-                  key={column}
-                  className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600"
-                >
-                  {column}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {rows.length === 0 ? (
-              <tr>
-                <td
-                  className="px-6 py-10 text-center text-slate-500"
-                  colSpan={columns.length}
-                >
-                  {emptyText}
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, index) => (
-                <tr
-                  key={row.id || `${title}-${index}`}
-                  className={`hover:bg-slate-50 ${onRowClick ? "cursor-pointer" : ""}`}
-                  onClick={() => onRowClick && onRowClick(row.originalData)}
-                >
-                  {row.cells.map((cell, cellIndex) => (
-                    <td
-                      key={cellIndex}
-                      className="px-6 py-4 text-sm text-[#111418]"
-                    >
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-
-  const getLeaveTypeAllocationInfo = () => {
-    if (!leaveFormData.leaveType || !leaveAllocation) return { allocated: 0, used: 0, available: 0 };
-    
-    let allocated = 0;
-    let used = 0;
-    switch (leaveFormData.leaveType) {
-      case "annual":
-        allocated = leaveAllocation.annualLeave || 0;
-        used = leaveAllocation.annualLeaveUsed || 0;
-        break;
-      case "sick":
-        allocated = leaveAllocation.sickLeave || 0;
-        used = leaveAllocation.sickLeaveUsed || 0;
-        break;
-      case "personal":
-        allocated = leaveAllocation.personalLeave || 0;
-        used = leaveAllocation.personalLeaveUsed || 0;
-        break;
-      case "unpaid":
-        allocated = leaveAllocation.unpaidLeave || 0;
-        used = leaveAllocation.unpaidLeaveUsed || 0;
-        break;
-      default:
-        allocated = 0;
-        used = 0;
-    }
-    return {
-      allocated,
-      used,
-      available: allocated === 999 ? "Unlimited" : allocated - used
-    };
-  };
-
-  const allocationInfo = getLeaveTypeAllocationInfo();
-
-  const historyPills = [
-    { id: "all", label: "All History", icon: "fa-list-ul", count: advanceRequests.length + refundRequests.length + leaveRequests.length + travelRequests.length + facilityRequests.length },
-    { id: "leave", label: "Leaves", icon: "fa-calendar-days", count: leaveRequests.length },
-    { id: "travel", label: "Travels", icon: "fa-plane", count: travelRequests.length },
-    { id: "advance", label: "Advances", icon: "fa-wallet", count: advanceRequests.length },
-    { id: "refund", label: "Refunds", icon: "fa-money-bill-transfer", count: refundRequests.length },
-    { id: "facility", label: "Facility Requests", icon: "fa-building-circle-exclamation", count: facilityRequests.length },
-  ];
+  // Show retirement management view if user clicks "Retire" button
+  if (showRetirementManagement) {
+    return (
+      <RetirementManagement onBack={() => setShowRetirementManagement(false)} />
+    );
+  }
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 px-1">
+    <div className="w-full min-h-screen bg-gray-50 px-1">
       <Breadcrumb
         items={[
           { label: "Home", href: "/home", icon: "fa-house" },
           { label: "Approval", icon: "fa-clipboard-check" },
         ]}
       />
-
-      {/* Dynamic Action Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between px-6 pt-6 pb-2 gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold text-[#111418] tracking-tight">Approvals & Requests</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Submit advance, refund, leave, and travel requests, and approve team submissions.
-          </p>
-        </div>
-        <div className="relative">
-          <button
-            onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-sm"
-          >
-            <i className="fa-solid fa-plus text-xs" />
-            <span>New Request</span>
-            <i className="fa-solid fa-chevron-down text-xs ml-1" />
-          </button>
-          
-          {dropdownOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setDropdownOpen(false)} />
-              <div className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-lg z-20">
-                <button
-                  onClick={() => {
-                    setShowAdvanceForm(true);
-                    setDropdownOpen(false);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-100 text-blue-600">
-                    <i className="fa-solid fa-wallet text-xs" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">Advance Expense</p>
-                    <p className="text-xs text-slate-500">Request cash or prepayment</p>
-                  </div>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowRefundForm(true);
-                    setDropdownOpen(false);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-100 text-emerald-600">
-                    <i className="fa-solid fa-money-bill-transfer text-xs" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">Refund</p>
-                    <p className="text-xs text-slate-500">Expense reimbursements</p>
-                  </div>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowLeaveForm(true);
-                    setDropdownOpen(false);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-orange-100 text-orange-600">
-                    <i className="fa-solid fa-calendar-days text-xs" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">Leave Request</p>
-                    <p className="text-xs text-slate-500">Annual or sick leave</p>
-                  </div>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowTravelForm(true);
-                    setDropdownOpen(false);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-100 text-indigo-600">
-                    <i className="fa-solid fa-plane text-xs" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">Travel Request</p>
-                    <p className="text-xs text-slate-500">Plan business travel</p>
-                  </div>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowFacilityForm(true);
-                    setDropdownOpen(false);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-purple-100 text-purple-600">
-                    <i className="fa-solid fa-building-circle-exclamation text-xs" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">Facility Request</p>
-                    <p className="text-xs text-slate-500">Report issue, transfer items, query</p>
-                  </div>
-                </button>
+      <div className="space-y-6 p-3">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="bg-white rounded-lg border border-[#dbe0e6] shadow-sm p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
+                <i className="fa-solid fa-wallet text-blue-600 text-xl"></i>
               </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-6 p-4 md:p-6">
-        {loading ? <ModuleLoader moduleName="Approvals" /> : null}
-
-        {/* Metrics Grid */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {requestSummary.map((item) => {
-            const theme = summaryTheme[item.accent];
-
-            return (
-              <div
-                key={item.title}
-                className="rounded-xl border border-[#dbe0e6] bg-white p-5 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm text-[#617589] font-medium">{item.title}</p>
-                    <p className="mt-1 text-3xl font-bold text-[#111418]">
-                      {item.count}
-                    </p>
-                  </div>
-                  <div
-                    className={`flex h-12 w-12 items-center justify-center rounded-xl ${theme.iconBg}`}
-                  >
-                    <i
-                      className={`fa-solid ${item.icon} ${theme.iconText} text-xl`}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 mb-6">
-          <button
-            onClick={() => setActiveTab("my-requests")}
-            className={`px-6 py-3 font-semibold text-sm transition-colors border-b-2 -mb-px ${
-              activeTab === "my-requests"
-                ? "border-blue-600 text-blue-600 font-bold"
-                : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            My Requests
-          </button>
-          <button
-            onClick={() => setActiveTab("pending-approvals")}
-            className={`px-6 py-3 font-semibold text-sm transition-colors border-b-2 -mb-px flex items-center gap-2 ${
-              activeTab === "pending-approvals"
-                ? "border-blue-600 text-blue-600 font-bold"
-                : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Pending Approvals
-            {pendingApprovals.length > 0 && (
-              <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
-                {pendingApprovals.length}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {activeTab === "my-requests" ? (
-          <>
-            <div className="space-y-6">
-              {/* Pills Filter */}
-              <div className="flex flex-wrap gap-2 pb-2">
-                {historyPills.map((pill) => (
-                  <button
-                    key={pill.id}
-                    onClick={() => setActiveHistoryPill(pill.id)}
-                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all ${
-                      activeHistoryPill === pill.id
-                        ? "bg-slate-900 text-white shadow-sm"
-                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    <i className={`fa-solid ${pill.icon} text-xs`} />
-                    <span>{pill.label}</span>
-                    <span className={`ml-1 rounded-full px-2 py-0.5 text-xs font-bold ${
-                      activeHistoryPill === pill.id
-                        ? "bg-white/20 text-white"
-                        : "bg-slate-100 text-slate-500"
-                    }`}>
-                      {pill.count}
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Dynamic Tables rendering based on pill selection */}
-              {activeHistoryPill === "all" && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    {renderTable(
-                      "Advance History",
-                      advanceRequests.map((request) => ({
-                        id: request._id || request.id,
-                        originalData: { ...request, type: "advance" },
-                        cells: [
-                          request.requestDate
-                            ? formatDate(request.requestDate)
-                            : formatDate(request.createdAt),
-                          request.purpose || "N/A",
-                          formatMoney(request.amount, request.currency),
-                          <span
-                            key={`${request._id || request.id}-status`}
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                          >
-                            {request.status || "pending"}
-                          </span>,
-                        ],
-                      })),
-                      ["Date", "Purpose", "Amount", "Status"],
-                      "No advance requests found.",
-                      handleMyRequestClick
-                    )}
-
-                    {renderTable(
-                      "Refund History",
-                      refundRequests.map((request) => ({
-                        id: request._id || request.id,
-                        originalData: { ...request, type: "refund" },
-                        cells: [
-                          request.requestDate
-                            ? formatDate(request.requestDate)
-                            : formatDate(request.createdAt),
-                          request.category || "N/A",
-                          formatMoney(request.amount, request.currency),
-                          <span
-                            key={`${request._id || request.id}-status`}
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                          >
-                            {request.status || "pending"}
-                          </span>,
-                        ],
-                      })),
-                      ["Date", "Category", "Amount", "Status"],
-                      "No refund requests found.",
-                      handleMyRequestClick
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    {renderTable(
-                      "Leave History",
-                      leaveRequests.map((request) => ({
-                        id: request._id || request.id,
-                        originalData: { ...request, type: "leave" },
-                        cells: [
-                          `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
-                          request.leaveType || "Leave",
-                          `${request.days || 0} day(s)`,
-                          <span
-                            key={`${request._id || request.id}-status`}
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                          >
-                            {request.status || "pending"}
-                          </span>,
-                        ],
-                      })),
-                      ["Dates", "Type", "Days", "Status"],
-                      "No leave requests found.",
-                      handleMyRequestClick,
-                      <button
-                        onClick={() => setShowLeaveBalanceModal(true)}
-                        className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 bg-blue-50/70 border border-blue-100 rounded-lg px-2.5 py-1.5 transition-colors"
-                      >
-                        <i className="fa-solid fa-chart-simple" />
-                        <span>Leave Balance</span>
-                      </button>
-                    )}
-
-                    {renderTable(
-                      "Travel History",
-                      travelRequests.map((request) => ({
-                        id: request._id || request.id,
-                        originalData: { ...request, type: "travel" },
-                        cells: [
-                          `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
-                          request.destination || "N/A",
-                          request.budget ? formatMoney(request.budget) : "N/A",
-                          <span
-                            key={`${request._id || request.id}-status`}
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                          >
-                            {request.status || "pending"}
-                          </span>,
-                        ],
-                      })),
-                      ["Dates", "Destination", "Budget", "Status"],
-                      "No travel requests found.",
-                      handleMyRequestClick
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 gap-6 mt-6">
-                    {renderTable(
-                      "Facility Requests",
-                      facilityRequests.map((request) => ({
-                        id: request._id || request.id,
-                        originalData: { ...request, type: "facility" },
-                        cells: [
-                          request.createdAt ? formatDate(request.createdAt) : "N/A",
-                          request.ticketNumber || "N/A",
-                          request.title || "N/A",
-                          request.category || "N/A",
-                          <span
-                            key={`${request._id || request.id}-status`}
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                          >
-                            {request.status || "Open"}
-                          </span>,
-                        ],
-                      })),
-                      ["Date Requested", "Ticket No.", "Request Summary", "Category / Type", "Status"],
-                      "No facility requests found.",
-                      handleMyRequestClick
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {activeHistoryPill === "advance" && (
-                renderTable(
-                  "Advance History",
-                  advanceRequests.map((request) => ({
-                    id: request._id || request.id,
-                    originalData: { ...request, type: "advance" },
-                    cells: [
-                      request.requestDate
-                        ? formatDate(request.requestDate)
-                        : formatDate(request.createdAt),
-                      request.purpose || "N/A",
-                      formatMoney(request.amount, request.currency),
-                      <span
-                        key={`${request._id || request.id}-status`}
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                      >
-                        {request.status || "pending"}
-                      </span>,
-                    ],
-                  })),
-                  ["Date", "Purpose", "Amount", "Status"],
-                  "No advance requests found.",
-                  handleMyRequestClick
-                )
-              )}
-
-              {activeHistoryPill === "refund" && (
-                renderTable(
-                  "Refund History",
-                  refundRequests.map((request) => ({
-                    id: request._id || request.id,
-                    originalData: { ...request, type: "refund" },
-                    cells: [
-                      request.requestDate
-                        ? formatDate(request.requestDate)
-                        : formatDate(request.createdAt),
-                      request.category || "N/A",
-                      formatMoney(request.amount, request.currency),
-                      <span
-                        key={`${request._id || request.id}-status`}
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                      >
-                        {request.status || "pending"}
-                      </span>,
-                    ],
-                  })),
-                  ["Date", "Category", "Amount", "Status"],
-                  "No refund requests found.",
-                  handleMyRequestClick
-                )
-              )}
-
-              {activeHistoryPill === "leave" && (
-                renderTable(
-                  "Leave History",
-                  leaveRequests.map((request) => ({
-                    id: request._id || request.id,
-                    originalData: { ...request, type: "leave" },
-                    cells: [
-                      `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
-                      request.leaveType || "Leave",
-                      `${request.days || 0} day(s)`,
-                      <span
-                        key={`${request._id || request.id}-status`}
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                      >
-                        {request.status || "pending"}
-                      </span>,
-                    ],
-                  })),
-                  ["Dates", "Type", "Days", "Status"],
-                  "No leave requests found.",
-                  handleMyRequestClick,
-                  <button
-                    onClick={() => setShowLeaveBalanceModal(true)}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 bg-blue-50/70 border border-blue-100 rounded-lg px-2.5 py-1.5 transition-colors"
-                  >
-                    <i className="fa-solid fa-chart-simple" />
-                    <span>Leave Balance</span>
-                  </button>
-                )
-              )}
-
-              {activeHistoryPill === "travel" && (
-                renderTable(
-                  "Travel History",
-                  travelRequests.map((request) => ({
-                    id: request._id || request.id,
-                    originalData: { ...request, type: "travel" },
-                    cells: [
-                      `${formatDate(request.fromDate)} - ${formatDate(request.toDate)}`,
-                      request.destination || "N/A",
-                      request.budget ? formatMoney(request.budget) : "N/A",
-                      <span
-                        key={`${request._id || request.id}-status`}
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                      >
-                        {request.status || "pending"}
-                      </span>,
-                    ],
-                  })),
-                  ["Dates", "Destination", "Budget", "Status"],
-                  "No travel requests found.",
-                  handleMyRequestClick
-                )
-              )}
-
-              {activeHistoryPill === "facility" && (
-                renderTable(
-                  "Facility Requests",
-                  facilityRequests.map((request) => ({
-                    id: request._id || request.id,
-                    originalData: { ...request, type: "facility" },
-                    cells: [
-                      request.createdAt ? formatDate(request.createdAt) : "N/A",
-                      request.ticketNumber || "N/A",
-                      request.title || "N/A",
-                      request.category || "N/A",
-                      <span
-                        key={`${request._id || request.id}-status`}
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}
-                      >
-                        {request.status || "Open"}
-                      </span>,
-                    ],
-                  })),
-                  ["Date Requested", "Ticket No.", "Request Summary", "Category / Type", "Status"],
-                  "No facility requests found.",
-                  handleMyRequestClick
-                )
-              )}
-            </div>
-
-            {showLeaveBalanceModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
-                  <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
-                    <h3 className="text-lg font-bold text-slate-900">Leave Balance</h3>
-                    <button
-                      onClick={() => setShowLeaveBalanceModal(false)}
-                      className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
-                    >
-                      <i className="fa-solid fa-times" />
-                    </button>
-                  </div>
-                  <div className="p-6">
-                    {leaveAllocation ? (
-                      <div className="space-y-3.5 text-sm">
-                        <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Annual Leave</p>
-                            <p className="mt-1 text-2xl font-bold text-slate-900">{leaveAllocation.annualLeave || 0}</p>
-                          </div>
-                        </div>
-                        <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sick Leave</p>
-                            <p className="mt-1 text-2xl font-bold text-slate-900">{leaveAllocation.sickLeave || 0}</p>
-                          </div>
-                        </div>
-                        <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Personal Leave</p>
-                            <p className="mt-1 text-2xl font-bold text-slate-900">{leaveAllocation.personalLeave || 0}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-slate-500 text-center">Leave allocation data unavailable.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="rounded-2xl border border-[#dbe0e6] bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-900">Approvals Inbox</h3>
-                <p className="text-sm text-slate-500">Action request submissions routed to you.</p>
+                <p className="text-sm text-[#617589]">Advance Requests</p>
+                <p className="text-2xl font-bold text-[#111418]">
+                  {advanceRequests.length}
+                </p>
               </div>
             </div>
-            {pendingApprovals.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                <i className="fa-solid fa-clipboard-check text-4xl mb-3 text-slate-300"></i>
-                <p className="font-medium text-slate-500">All caught up!</p>
-                <p className="text-xs text-slate-400 mt-1">No requests currently pending your decision.</p>
+          </div>
+          <div className="bg-white rounded-lg border border-[#dbe0e6] shadow-sm p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
+                <i className="fa-solid fa-money-bill-transfer text-green-600 text-xl"></i>
+              </div>
+              <div>
+                <p className="text-sm text-[#617589]">Refund Requests</p>
+                <p className="text-2xl font-bold text-[#111418]">
+                  {refundRequests.length}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg border border-[#dbe0e6] shadow-sm p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center">
+                <i className="fa-solid fa-history text-orange-600 text-xl"></i>
+              </div>
+              <div>
+                <p className="text-sm text-[#617589]">Total Records</p>
+                <p className="text-2xl font-bold text-[#111418]">
+                  {advanceRequests.length + refundRequests.length}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Request Cards Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Advance Expense Request Card */}
+          <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+                <i className="fa-solid fa-wallet text-blue-600 text-3xl"></i>
+              </div>
+              <h3 className="text-2xl font-bold text-[#111418] mb-2">
+                Advance Expense
+              </h3>
+              <p className="text-sm text-[#617589] mb-6">
+                Request an advance for expenses
+              </p>
+              <button
+                onClick={() => setShowAdvanceForm(true)}
+                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
+              >
+                <i className="fa-solid fa-plus text-lg"></i>
+                New Request
+              </button>
+            </div>
+          </div>
+
+          {/* Refund Request Card */}
+          <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                <i className="fa-solid fa-money-bill-transfer text-green-600 text-3xl"></i>
+              </div>
+              <h3 className="text-2xl font-bold text-[#111418] mb-2">
+                Refund Request
+              </h3>
+              <p className="text-sm text-[#617589] mb-6">
+                Request a refund for expenses
+              </p>
+              <button
+                onClick={() => setShowRefundForm(true)}
+                className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
+              >
+                <i className="fa-solid fa-plus text-lg"></i>
+                New Request
+              </button>
+            </div>
+          </div>
+
+          {/* Retirement Card */}
+          <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mx-auto mb-4">
+                <i className="fa-solid fa-history text-purple-600 text-3xl"></i>
+              </div>
+              <h3 className="text-2xl font-bold text-[#111418] mb-2">
+                Retirement History
+              </h3>
+              <p className="text-sm text-[#617589] mb-6">
+                View retirement breakdown history
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => setShowRetirementHistory(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
+                >
+                  <i className="fa-solid fa-list text-lg"></i>
+                  View History
+                </button>
+                <button
+                  onClick={() => setShowRetirementManagement(true)}
+                  className="px-6 py-2 border-2 border-purple-600 text-purple-600 rounded-lg hover:bg-purple-50 transition-all font-semibold flex items-center gap-2 mx-auto"
+                >
+                  <i className="fa-solid fa-plus text-sm"></i>
+                  New Request
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Leave Request Card */}
+          <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center mx-auto mb-4">
+                <i className="fa-solid fa-calendar-days text-orange-600 text-3xl"></i>
+              </div>
+              <h3 className="text-2xl font-bold text-[#111418] mb-2">
+                Leave Request
+              </h3>
+              <p className="text-sm text-[#617589] mb-6">
+                Manage your leave and vacation days
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => setShowLeaveHistory(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
+                >
+                  <i className="fa-solid fa-history text-lg"></i>
+                  View History
+                </button>
+                <button
+                  onClick={() => setShowLeaveForm(true)}
+                  className="px-6 py-2 border-2 border-orange-600 text-orange-600 rounded-lg hover:bg-orange-50 transition-all font-semibold flex items-center gap-2 mx-auto"
+                >
+                  <i className="fa-solid fa-plus text-sm"></i>
+                  Request Leave
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Travel Request Card */}
+          <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+                <i className="fa-solid fa-plane text-blue-600 text-3xl"></i>
+              </div>
+              <h3 className="text-2xl font-bold text-[#111418] mb-2">
+                Travel Request
+              </h3>
+              <p className="text-sm text-[#617589] mb-6">
+                Manage business travel and trip requests
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => setShowTravelHistory(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
+                >
+                  <i className="fa-solid fa-history text-lg"></i>
+                  View History
+                </button>
+                <button
+                  onClick={() => setShowTravelForm(true)}
+                  className="px-6 py-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-all font-semibold flex items-center gap-2 mx-auto"
+                >
+                  <i className="fa-solid fa-plus text-sm"></i>
+                  New Request
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* History Table - Full Screen */}
+        <div>
+          <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg">
+            <div className="p-6 border-b border-[#dbe0e6]">
+              <h3 className="text-2xl font-bold text-[#111418] flex items-center gap-2">
+                <i className="fa-solid fa-history text-orange-600 text-2xl"></i>
+                Request History
+              </h3>
+            </div>
+
+            {loading ? (
+              <div className="p-8 text-center text-[#617589]">
+                <i className="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                <p>Loading requests...</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[800px] text-left text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 font-semibold text-slate-600">Requester</th>
-                      <th className="px-6 py-3 font-semibold text-slate-600">Type</th>
-                      <th className="px-6 py-3 font-semibold text-slate-600">Details</th>
-                      <th className="px-6 py-3 font-semibold text-slate-600 font-medium">Attachment</th>
-                      <th className="px-6 py-3 font-semibold text-slate-600">Date</th>
-                      <th className="px-6 py-3 font-semibold text-slate-600 text-right">Actions</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Purpose/Category
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Amount
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Approver
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Status
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {pendingApprovals.map((req) => (
-                      <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4 font-semibold text-slate-900">{req.employeeName}</td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                            req.type === 'leave' ? 'bg-orange-100 text-orange-800' :
-                            req.type === 'travel' ? 'bg-indigo-100 text-indigo-800' :
-                            req.type === 'advance' ? 'bg-blue-100 text-blue-800' :
-                            'bg-emerald-100 text-emerald-800'
-                          }`}>
-                            {req.type.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-slate-600 max-w-xs truncate" title={req.details}>
-                          {req.details}
-                        </td>
-                        <td className="px-6 py-4">
-                          {req.attachment ? (
-                            <a
-                              href={req.attachment}
-                              download={req.attachmentName || "attachment"}
-                              className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-semibold"
-                              title={req.attachmentName}
-                            >
-                              <i className="fa-solid fa-paperclip text-xs" />
-                              <span className="max-w-[100px] truncate text-xs">{req.attachmentName || "View"}</span>
-                            </a>
-                          ) : (
-                            <span className="text-slate-400 text-xs">None</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-slate-500">{formatDate(req.date)}</td>
-                        <td className="px-6 py-4 text-right flex justify-end gap-2">
-                          <button
-                            onClick={() => {
-                              setSelectedPendingRequest(req);
-                              setApprovalActionType("approve");
-                            }}
-                            className="inline-flex items-center justify-center rounded-lg bg-green-600 text-white font-semibold text-xs px-3 py-1.5 hover:bg-green-700 transition-colors"
-                          >
-                            <i className="fa-solid fa-check mr-1.5"></i> Approve
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedPendingRequest(req);
-                              setApprovalActionType("reject");
-                            }}
-                            className="inline-flex items-center justify-center rounded-lg bg-red-600 text-white font-semibold text-xs px-3 py-1.5 hover:bg-red-700 transition-colors"
-                          >
-                            <i className="fa-solid fa-xmark mr-1.5"></i> Reject
-                          </button>
+                  <tbody className="divide-y divide-gray-200">
+                    {[...advanceRequests, ...refundRequests].length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="px-6 py-12 text-center text-[#617589]"
+                        >
+                          <i className="fa-solid fa-inbox text-4xl mb-3 opacity-50"></i>
+                          <p className="text-lg">No requests found</p>
+                          <p className="text-sm mt-1">
+                            Create a new advance or refund request to get
+                            started
+                          </p>
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      [...advanceRequests, ...refundRequests]
+                        .sort(
+                          (a, b) =>
+                            new Date(b.requestDate) - new Date(a.requestDate),
+                        )
+                        .map((record, idx) => (
+                          <tr
+                            key={idx}
+                            className="hover:bg-gray-50 transition-colors"
+                          >
+                            <td className="px-6 py-4">
+                              <span
+                                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
+                                  record.purpose
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-green-100 text-green-800"
+                                }`}
+                              >
+                                <i
+                                  className={`fa-solid ${
+                                    record.purpose
+                                      ? "fa-wallet"
+                                      : "fa-money-bill-transfer"
+                                  }`}
+                                ></i>
+                                {record.purpose ? "Advance" : "Refund"}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-[#111418]">
+                              {record.requestDate}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-[#111418] font-medium">
+                              {record.purpose || record.category}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-semibold text-[#111418]">
+                              {formatCurrency(record.amount)}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-[#617589]">
+                              {record.approver}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
+                                  record.status === "approved"
+                                    ? "bg-green-100 text-green-800"
+                                    : record.status === "rejected"
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-yellow-100 text-yellow-800"
+                                }`}
+                              >
+                                {record.status.charAt(0).toUpperCase() +
+                                  record.status.slice(1)}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                    )}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
-        )}
-      </div>
-
-      {/* Action Dialog Modal */}
-      {selectedPendingRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
-              <h3 className="text-lg font-bold text-slate-900">
-                Confirm {approvalActionType === "approve" ? "Approval" : "Rejection"}
-              </h3>
-              <button
-                onClick={() => {
-                  setSelectedPendingRequest(null);
-                  setActionComments("");
-                }}
-                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
-              >
-                <i className="fa-solid fa-times" />
-              </button>
-            </div>
-            <form onSubmit={handleApprovalAction} className="p-6 space-y-4 overflow-y-auto flex-grow">
-              <div>
-                <p className="text-sm text-slate-600">
-                  Are you sure you want to <strong>{approvalActionType}</strong> this {selectedPendingRequest.type} request from <strong>{selectedPendingRequest.employeeName}</strong>?
-                </p>
-                <p className="text-xs text-slate-500 mt-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  {selectedPendingRequest.details}
-                </p>
-              </div>
-
-              {selectedPendingRequest.attachment && (
-                <div>
-                  <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                    Supporting Attachment
-                  </span>
-                  <a
-                    href={selectedPendingRequest.attachment}
-                    download={selectedPendingRequest.attachmentName || "attachment"}
-                    className="inline-flex w-full items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
-                  >
-                    <span className="flex items-center gap-2 truncate">
-                      <i className="fa-solid fa-paperclip text-xs" />
-                      <span className="truncate">{selectedPendingRequest.attachmentName || "Download Attachment"}</span>
-                    </span>
-                    <i className="fa-solid fa-download text-xs" />
-                  </a>
-                </div>
-              )}
-
-              <div>
-                <label className="mb-2 block text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Comments / Remarks (Optional)
-                </label>
-                <textarea
-                  value={actionComments}
-                  onChange={(e) => setActionComments(e.target.value)}
-                  rows="3"
-                  className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Provide details or instructions here..."
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedPendingRequest(null);
-                    setActionComments("");
-                  }}
-                  className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  disabled={isSubmittingAction}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className={`flex-1 rounded-lg text-white font-semibold text-sm px-4 py-2 transition-colors ${
-                    approvalActionType === "approve"
-                      ? "bg-green-600 hover:bg-green-700"
-                      : "bg-red-600 hover:bg-red-700"
-                  }`}
-                  disabled={isSubmittingAction}
-                >
-                  {isSubmittingAction ? "Submitting..." : `Yes, ${approvalActionType}`}
-                </button>
-              </div>
-            </form>
-          </div>
         </div>
-      )}
 
-      {showAdvanceForm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
-              <h3 className="text-xl font-bold text-slate-900">
-                New Advance Request
-              </h3>
-              <button
-                onClick={() => setShowAdvanceForm(false)}
-                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
-              >
-                <i className="fa-solid fa-times" />
-              </button>
-            </div>
-            <form
-              onSubmit={handleAdvanceSubmit}
-              className="space-y-4 overflow-y-auto p-6 flex-grow"
-            >
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Amount
-                </label>
-                <input
-                  type="number"
-                  value={advanceFormData.amount}
-                  onChange={(e) =>
-                    setAdvanceFormData({
-                      ...advanceFormData,
-                      amount: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Purpose
-                </label>
-                <select
-                  value={advanceFormData.purpose}
-                  onChange={(e) =>
-                    setAdvanceFormData({
-                      ...advanceFormData,
-                      purpose: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                  required
-                >
-                  <option value="">Select purpose...</option>
-                  <option value="Medical Emergency">Medical Emergency</option>
-                  <option value="Home Repair">Home Repair</option>
-                  <option value="Education">Education</option>
-                  <option value="Travel">Travel</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Reason
-                </label>
-                <textarea
-                  value={advanceFormData.reason}
-                  onChange={(e) =>
-                    setAdvanceFormData({
-                      ...advanceFormData,
-                      reason: e.target.value,
-                    })
-                  }
-                  rows="4"
-                  className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Currency
-                  </label>
-                  <select
-                    value={advanceFormData.currency}
-                    onChange={(e) =>
-                      setAdvanceFormData({
-                        ...advanceFormData,
-                        currency: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                  >
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                    <option value="NGN">NGN</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Supporting Document
-                </label>
-                {!advanceFormData.attachment ? (
-                  <div className="flex justify-center rounded-lg border-2 border-dashed border-slate-300 px-6 py-6 transition-colors hover:border-slate-400">
-                    <div className="text-center">
-                      <i className="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2" />
-                      <div className="mt-1 flex text-sm text-slate-600 justify-center">
-                        <label className="relative cursor-pointer rounded-md bg-white font-semibold text-blue-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 hover:text-blue-500">
-                          <span>Upload a file</span>
-                          <input
-                            type="file"
-                            className="sr-only"
-                            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  setAdvanceFormData((prev) => ({
-                                    ...prev,
-                                    attachment: reader.result,
-                                    attachmentName: file.name,
-                                  }));
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                          />
-                        </label>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-1">PDF, PNG, JPG, or DOC up to 5MB</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
-                        <i className="fa-solid fa-file-lines" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900 truncate max-w-xs" title={advanceFormData.attachmentName}>
-                          {advanceFormData.attachmentName}
-                        </p>
-                        <p className="text-xs text-slate-500">Ready to upload</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAdvanceFormData((prev) => ({
-                          ...prev,
-                          attachment: "",
-                          attachmentName: "",
-                        }));
-                      }}
-                      className="rounded-full p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
-                    >
-                      <i className="fa-solid fa-trash-can" />
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-3 pt-2">
+        {/* Modals */}
+        {/* Advance Expense Modal */}
+        {showAdvanceForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between rounded-t-xl flex-shrink-0">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <i className="fa-solid fa-wallet"></i>
+                  New Advance Request
+                </h2>
                 <button
-                  type="button"
                   onClick={() => setShowAdvanceForm(false)}
-                  className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700"
+                  className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors flex-shrink-0"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white"
-                >
-                  Submit
+                  <i className="fa-solid fa-times text-lg"></i>
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
 
-      {showRefundForm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
-              <h3 className="text-xl font-bold text-slate-900">
-                New Refund Request
-              </h3>
-              <button
-                onClick={() => setShowRefundForm(false)}
-                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+              <form
+                onSubmit={handleAdvanceSubmit}
+                className="flex-1 overflow-y-auto p-6 space-y-5"
               >
-                <i className="fa-solid fa-times" />
-              </button>
-            </div>
-            <form
-              onSubmit={handleRefundSubmit}
-              className="space-y-4 overflow-y-auto p-6 flex-grow"
-            >
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Amount
-                </label>
-                <input
-                  type="number"
-                  value={refundFormData.amount}
-                  onChange={(e) =>
-                    setRefundFormData({
-                      ...refundFormData,
-                      amount: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Category
-                </label>
-                <select
-                  value={refundFormData.category}
-                  onChange={(e) =>
-                    setRefundFormData({
-                      ...refundFormData,
-                      category: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                  required
-                >
-                  <option value="">Select category...</option>
-                  <option value="Travel">Travel</option>
-                  <option value="Office Supplies">Office Supplies</option>
-                  <option value="Equipment">Equipment</option>
-                  <option value="Training">Training</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Reason
-                </label>
-                <textarea
-                  value={refundFormData.reason}
-                  onChange={(e) =>
-                    setRefundFormData({
-                      ...refundFormData,
-                      reason: e.target.value,
-                    })
-                  }
-                  rows="4"
-                  className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Currency
-                  </label>
-                  <select
-                    value={refundFormData.currency}
-                    onChange={(e) =>
-                      setRefundFormData({
-                        ...refundFormData,
-                        currency: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                  >
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                    <option value="NGN">NGN</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Receipt Number
-                  </label>
-                  <input
-                    type="text"
-                    value={refundFormData.receiptNumber}
-                    onChange={(e) =>
-                      setRefundFormData({
-                        ...refundFormData,
-                        receiptNumber: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Transaction Date
-                </label>
-                <input
-                  type="date"
-                  value={refundFormData.transactionDate}
-                  onChange={(e) =>
-                    setRefundFormData({
-                      ...refundFormData,
-                      transactionDate: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowRefundForm(false)}
-                  className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white"
-                >
-                  Submit
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      {showLeaveForm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
-              <h3 className="text-xl font-bold text-slate-900">
-                New Leave Request
-              </h3>
-              <button
-                onClick={() => setShowLeaveForm(false)}
-                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
-              >
-                <i className="fa-solid fa-times" />
-              </button>
-            </div>
-            <form
-              onSubmit={handleLeaveSubmit}
-              className="space-y-4 overflow-y-auto p-6 flex-grow"
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Leave Type
-                  </label>
-                  <select
-                    value={leaveFormData.leaveType}
-                    onChange={(e) =>
-                      setLeaveFormData({
-                        ...leaveFormData,
-                        leaveType: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                    required
-                  >
-                    <option value="">Select type...</option>
-                    <option value="annual">Annual</option>
-                    <option value="sick">Sick</option>
-                    <option value="personal">Personal</option>
-                    <option value="unpaid">Unpaid</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Requested Days
-                  </label>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
-                    {calculatedDays}
-                  </div>
-                </div>
-              </div>
-
-              {leaveFormData.leaveType && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Total Allocation
-                    </label>
-                    <input
-                      type="text"
-                      value={allocationInfo.allocated === 999 ? "Unlimited" : `${allocationInfo.allocated} days`}
-                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600 cursor-not-allowed"
-                      readOnly
-                      disabled
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Available Balance
-                    </label>
-                    <input
-                      type="text"
-                      value={typeof allocationInfo.available === "number" ? `${allocationInfo.available} days` : allocationInfo.available}
-                      className={`w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 cursor-not-allowed font-semibold ${
-                        typeof allocationInfo.available === "number" && allocationInfo.available <= 0
-                          ? "text-red-600"
-                          : "text-emerald-600"
-                      }`}
-                      readOnly
-                      disabled
-                    />
-                  </div>
-                </div>
-              )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    From
-                  </label>
-                  <input
-                    type="date"
-                    value={leaveFormData.fromDate}
-                    onChange={(e) =>
-                      setLeaveFormData({
-                        ...leaveFormData,
-                        fromDate: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    To
-                  </label>
-                  <input
-                    type="date"
-                    value={leaveFormData.toDate}
-                    onChange={(e) =>
-                      setLeaveFormData({
-                        ...leaveFormData,
-                        toDate: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                    required
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Reason
-                </label>
-                <textarea
-                  value={leaveFormData.reason}
-                  onChange={(e) =>
-                    setLeaveFormData({
-                      ...leaveFormData,
-                      reason: e.target.value,
-                    })
-                  }
-                  rows="4"
-                  className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Supporting Attachment <span className="text-red-500">*</span>
-                </label>
-                {!leaveFormData.attachment ? (
-                  <div className="flex justify-center rounded-lg border-2 border-dashed border-slate-300 px-6 py-6 transition-colors hover:border-slate-400">
-                    <div className="text-center">
-                      <i className="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2" />
-                      <div className="mt-1 flex text-sm text-slate-600 justify-center">
-                        <label className="relative cursor-pointer rounded-md bg-white font-semibold text-blue-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 hover:text-blue-500">
-                          <span>Upload a file</span>
-                          <input
-                            type="file"
-                            className="sr-only"
-                            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  setLeaveFormData((prev) => ({
-                                    ...prev,
-                                    attachment: reader.result,
-                                    attachmentName: file.name,
-                                  }));
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                          />
-                        </label>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-1">PDF, PNG, JPG, or DOC up to 5MB</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
-                        <i className="fa-solid fa-file-lines" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900 truncate max-w-xs" title={leaveFormData.attachmentName}>
-                          {leaveFormData.attachmentName}
-                        </p>
-                        <p className="text-xs text-slate-500">Ready to upload</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLeaveFormData((prev) => ({
-                          ...prev,
-                          attachment: "",
-                          attachmentName: "",
-                        }));
-                      }}
-                      className="rounded-full p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
-                    >
-                      <i className="fa-solid fa-trash-can" />
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <input type="hidden" value={leaveFormData.managerId} readOnly />
-                <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                  <span className="block text-xs text-slate-500">Manager</span>
-                  {leaveFormData.managerName || "Not assigned"}
-                </div>
-                <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700 sm:col-span-2">
-                  <span className="block text-xs text-slate-500">
-                    Manager Email
-                  </span>
-                  {leaveFormData.managerEmail || "Not assigned"}
-                </div>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowLeaveForm(false)}
-                  className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 rounded-lg bg-orange-600 px-4 py-3 font-semibold text-white"
-                >
-                  Submit
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      {showTravelForm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
-              <h3 className="text-xl font-bold text-slate-900">
-                New Travel Request
-              </h3>
-              <button
-                onClick={() => setShowTravelForm(false)}
-                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
-              >
-                <i className="fa-solid fa-times" />
-              </button>
-            </div>
-            <form
-              onSubmit={handleTravelSubmit}
-              className="space-y-4 overflow-y-auto p-6 flex-grow"
-            >
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Current Location
-                  </label>
-                  <input
-                    type="text"
-                    value={travelFormData.currentLocation}
-                    onChange={(e) =>
-                      setTravelFormData({
-                        ...travelFormData,
-                        currentLocation: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Destination
-                  </label>
-                  <input
-                    type="text"
-                    value={travelFormData.destination}
-                    onChange={(e) =>
-                      setTravelFormData({
-                        ...travelFormData,
-                        destination: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Purpose
-                  </label>
-                  <input
-                    type="text"
-                    value={travelFormData.purpose}
-                    onChange={(e) =>
-                      setTravelFormData({
-                        ...travelFormData,
-                        purpose: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Budget
+                  <label className="block text-sm font-medium text-[#111418] mb-2">
+                    Amount <span className="text-red-600">*</span>
                   </label>
                   <input
                     type="number"
-                    value={travelFormData.budget}
+                    className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={advanceFormData.amount}
                     onChange={(e) =>
-                      setTravelFormData({
-                        ...travelFormData,
-                        budget: e.target.value,
+                      setAdvanceFormData({
+                        ...advanceFormData,
+                        amount: e.target.value,
                       })
                     }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    From
-                  </label>
-                  <input
-                    type="date"
-                    value={travelFormData.fromDate}
-                    onChange={(e) =>
-                      setTravelFormData({
-                        ...travelFormData,
-                        fromDate: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
+                    min="0"
+                    step="0.01"
                     required
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    To
+                  <label className="block text-sm font-medium text-[#111418] mb-2">
+                    Reason <span className="text-red-600">*</span>
                   </label>
-                  <input
-                    type="date"
-                    value={travelFormData.toDate}
+                  <textarea
+                    className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={advanceFormData.reason}
                     onChange={(e) =>
-                      setTravelFormData({
-                        ...travelFormData,
-                        toDate: e.target.value,
+                      setAdvanceFormData({
+                        ...advanceFormData,
+                        reason: e.target.value,
                       })
                     }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-3"
+                    rows="4"
                     required
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                  <span className="block text-xs text-slate-500">Days</span>
-                  {travelFormData.numberOfDays}
-                </div>
-                <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                  <span className="block text-xs text-slate-500">Nights</span>
-                  {travelFormData.numberOfNights}
-                </div>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Description
-                </label>
-                <textarea
-                  value={travelFormData.description}
-                  onChange={(e) =>
-                    setTravelFormData({
-                      ...travelFormData,
-                      description: e.target.value,
-                    })
-                  }
-                  rows="4"
-                  className="w-full rounded-lg border border-slate-200 px-4 py-3"
-                />
-              </div>
-              <div className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={travelFormData.accommodationRequired}
-                  onChange={(e) =>
-                    setTravelFormData({
-                      ...travelFormData,
-                      accommodationRequired: e.target.checked,
-                    })
-                  }
-                />
-                <span>Accommodation required</span>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700 sm:col-span-1">
-                  <span className="block text-xs text-slate-500">Manager</span>
-                  {travelFormData.managerName || "Not assigned"}
-                </div>
-                <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700 sm:col-span-2">
-                  <span className="block text-xs text-slate-500">
-                    Manager Email
-                  </span>
-                  {travelFormData.managerEmail || "Not assigned"}
-                </div>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowTravelForm(false)}
-                  className="flex-1 rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-700"
-                  disabled={travelFormLoading}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white"
-                  disabled={travelFormLoading}
-                >
-                  {travelFormLoading ? "Submitting..." : "Submit"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      {showFacilityForm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
-              <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <i className="fa-solid fa-building-circle-exclamation text-blue-600" />
-                New Facility Request
-              </h3>
-              <button
-                onClick={() => setShowFacilityForm(false)}
-                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
-              >
-                <i className="fa-solid fa-times" />
-              </button>
-            </div>
-            <form
-              onSubmit={handleFacilitySubmit}
-              className="space-y-4 overflow-y-auto p-6 flex-grow"
-            >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                    Request Type <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={facilityFormData.requestType}
-                    onChange={(e) =>
-                      setFacilityFormData({
-                        ...facilityFormData,
-                        requestType: e.target.value,
-                        movementType: "Permanent",
-                        returnDate: "",
-                        fromLocation: "",
-                        toLocation: "",
-                        issueCategory: "General Maintenance"
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
-                    required
-                  >
-                    <option value="General Query / Concern">General Query / Concern</option>
-                    <option value="Report a Maintenance Issue">Report a Maintenance Issue (Leakage, etc.)</option>
-                    <option value="Item Movement">Item Movement / Transfer</option>
-                    <option value="Other">Other Request</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[#111418] mb-2">
+                      Currency <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value={advanceFormData.currency}
+                      onChange={(e) =>
+                        setAdvanceFormData({
+                          ...advanceFormData,
+                          currency: e.target.value,
+                        })
+                      }
+                      required
+                    >
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                      <option value="GBP">GBP</option>
+                      <option value="JPY">JPY</option>
+                      <option value="INR">INR</option>
+                      <option value="AUD">AUD</option>
+                      <option value="CAD">CAD</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#111418] mb-2">
+                      Purpose <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value={advanceFormData.purpose}
+                      onChange={(e) =>
+                        setAdvanceFormData({
+                          ...advanceFormData,
+                          purpose: e.target.value,
+                        })
+                      }
+                      required
+                    >
+                      <option value="">Select purpose...</option>
+                      <option value="Medical Emergency">
+                        Medical Emergency
+                      </option>
+                      <option value="Home Repair">Home Repair</option>
+                      <option value="Education">Education</option>
+                      <option value="Vehicle Purchase">Vehicle Purchase</option>
+                      <option value="Family Emergency">Family Emergency</option>
+                      <option value="Debt Repayment">Debt Repayment</option>
+                      <option value="Business Investment">
+                        Business Investment
+                      </option>
+                      <option value="Travel">Travel</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                    Priority <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={facilityFormData.priority}
-                    onChange={(e) =>
-                      setFacilityFormData({
-                        ...facilityFormData,
-                        priority: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
-                    required
-                  >
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                    <option value="Urgent">Urgent</option>
-                  </select>
-                </div>
-              </div>
-
-              {facilityFormData.requestType === "Report a Maintenance Issue" && (
-                <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 transition-all">
-                  <label className="mb-1.5 block text-sm font-semibold text-blue-900">
-                    Issue Category <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={facilityFormData.issueCategory}
-                    onChange={(e) =>
-                      setFacilityFormData({
-                        ...facilityFormData,
-                        issueCategory: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
-                    required
-                  >
-                    <option value="General Maintenance">General Maintenance</option>
-                    <option value="Plumbing">Plumbing (e.g. water leakage, pipes)</option>
-                    <option value="Electrical">Electrical (e.g. lighting, outlets)</option>
-                    <option value="HVAC">HVAC (e.g. heating, AC, ventilation)</option>
-                    <option value="Carpentry">Carpentry (e.g. doors, furniture repair)</option>
-                    <option value="Painting">Painting</option>
-                    <option value="Cleaning">Cleaning / Janitorial</option>
-                    <option value="Safety & Security">Safety & Security</option>
-                    <option value="IT Equipment">IT Equipment (Power/Cabling)</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-              )}
-
-              {facilityFormData.requestType === "Item Movement" && (
-                <div className="p-4 bg-indigo-50/40 rounded-xl border border-indigo-100 transition-all space-y-4">
-                  <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-1.5">
-                    <i className="fa-solid fa-truck-ramp-box" />
-                    Item Movement Specifications
-                  </h4>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Auto-Approval Routing Info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
                     <div>
-                      <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                        Movement Type <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={facilityFormData.movementType}
-                        onChange={(e) =>
-                          setFacilityFormData({
-                            ...facilityFormData,
-                            movementType: e.target.value,
-                            returnDate: ""
-                          })
-                        }
-                        className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        required
-                      >
-                        <option value="Permanent">Permanent</option>
-                        <option value="Temporary">Temporary</option>
-                      </select>
+                      <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                        Auto-Approval Routing
+                      </h4>
+                      <p className="text-xs text-blue-700">
+                        This request will be automatically routed through the
+                        approval chain based on configured rules. Approvers will
+                        be assigned according to the request amount and approval
+                        workflow settings.
+                      </p>
                     </div>
+                  </div>
+                </div>
 
-                    {facilityFormData.movementType === "Temporary" && (
-                      <div>
-                        <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                          Return Date & Time <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          required={facilityFormData.movementType === "Temporary"}
-                          type="datetime-local"
-                          value={facilityFormData.returnDate}
-                          onChange={(e) =>
-                            setFacilityFormData({
-                              ...facilityFormData,
-                              returnDate: e.target.value,
-                            })
-                          }
-                          className="w-full rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                        />
-                        <p className="mt-1 text-[11px] text-amber-700">
-                          <i className="fa-solid fa-bell mr-1" />
-                          You'll receive an email reminder 1 hour before this scheduled return.
-                        </p>
+                <div style={{ display: "none" }}>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418]"
+                      value={advanceFormData.approver}
+                      onChange={(e) => {
+                        setAdvanceFormData({
+                          ...advanceFormData,
+                          approver: e.target.value,
+                        });
+                      }}
+                    />
+                    {showSuggestions && approverSuggestions.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#dbe0e6] rounded-lg shadow-lg max-h-40 overflow-y-auto z-10">
+                        {approverSuggestions.map((staff, idx) => (
+                          <div
+                            key={idx}
+                            className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-[#111418] text-sm border-b border-[#dbe0e6] last:border-b-0"
+                            onClick={() => {
+                              setAdvanceFormData({
+                                ...advanceFormData,
+                                approver: staff.name,
+                                approverEmail: staff.email,
+                              });
+                              setShowSuggestions(false);
+                            }}
+                          >
+                            <div className="font-medium">{staff.name}</div>
+                            <div className="text-xs text-[#617589]">
+                              {staff.email}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                        From (Source Location) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        required={facilityFormData.requestType === "Item Movement"}
-                        type="text"
-                        placeholder="e.g. Floor 2, Desk 204"
-                        value={facilityFormData.fromLocation}
-                        onChange={(e) =>
-                          setFacilityFormData({
-                            ...facilityFormData,
-                            fromLocation: e.target.value,
-                          })
-                        }
-                        className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                        To (Destination Location) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        required={facilityFormData.requestType === "Item Movement"}
-                        type="text"
-                        placeholder="e.g. Floor 3, Room 311"
-                        value={facilityFormData.toLocation}
-                        onChange={(e) =>
-                          setFacilityFormData({
-                            ...facilityFormData,
-                            toLocation: e.target.value,
-                          })
-                        }
-                        className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                      />
-                    </div>
-                  </div>
                 </div>
-              )}
 
-              <div>
-                <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                  Request Summary / Title <span className="text-red-500">*</span>
-                </label>
-                <input
-                  required
-                  type="text"
-                  placeholder="e.g. Broken water pipe / Move executive desk"
-                  value={facilityFormData.title}
-                  onChange={(e) =>
-                    setFacilityFormData({
-                      ...facilityFormData,
-                      title: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
+                <div className="flex gap-3 pt-6">
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                  >
+                    <i className="fa-solid fa-check"></i>
+                    Submit Request
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanceForm(false)}
+                    className="flex-1 px-4 py-3 bg-gray-200 text-[#111418] font-semibold rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Refund Request Modal */}
+        {showRefundForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+              <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4 flex items-center justify-between rounded-t-xl flex-shrink-0">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <i className="fa-solid fa-money-bill-transfer"></i>
+                  New Refund Request
+                </h2>
+                <button
+                  onClick={() => setShowRefundForm(false)}
+                  className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors flex-shrink-0"
+                >
+                  <i className="fa-solid fa-times text-lg"></i>
+                </button>
               </div>
 
-              <div>
-                <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                  Request Details / Description <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  required
-                  rows="3"
-                  placeholder="Provide any additional details or background information..."
-                  value={facilityFormData.description}
-                  onChange={(e) =>
-                    setFacilityFormData({
-                      ...facilityFormData,
-                      description: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
-
-              <div className="border-t border-slate-100 pt-4 space-y-3">
-                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                  <i className="fa-solid fa-location-dot text-red-500" />
-                  Building Location Details
-                </h4>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <form
+                onSubmit={handleRefundSubmit}
+                className="flex-1 overflow-y-auto p-6 space-y-5"
+              >
+                <div>
+                  <label className="block text-sm font-medium text-[#111418] mb-2">
+                    Amount <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    value={refundFormData.amount}
+                    onChange={(e) =>
+                      setRefundFormData({
+                        ...refundFormData,
+                        amount: e.target.value,
+                      })
+                    }
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                      Building <span className="text-red-500">*</span>
+                    <label className="block text-sm font-medium text-[#111418] mb-2">
+                      Currency <span className="text-red-600">*</span>
                     </label>
-                    <input
+                    <select
+                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      value={refundFormData.currency}
+                      onChange={(e) =>
+                        setRefundFormData({
+                          ...refundFormData,
+                          currency: e.target.value,
+                        })
+                      }
                       required
-                      type="text"
-                      placeholder="e.g. Main Office"
-                      value={facilityFormData.building}
+                    >
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                      <option value="GBP">GBP</option>
+                      <option value="JPY">JPY</option>
+                      <option value="INR">INR</option>
+                      <option value="AUD">AUD</option>
+                      <option value="CAD">CAD</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#111418] mb-2">
+                      Category <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      value={refundFormData.category}
                       onChange={(e) =>
-                        setFacilityFormData({
-                          ...facilityFormData,
-                          building: e.target.value,
+                        setRefundFormData({
+                          ...refundFormData,
+                          category: e.target.value,
                         })
                       }
-                      className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                    />
+                      required
+                    >
+                      <option value="">Select category...</option>
+                      <option value="Travel">Travel</option>
+                      <option value="Office Supplies">Office Supplies</option>
+                      <option value="Equipment">Equipment</option>
+                      <option value="Training">Training</option>
+                      <option value="Entertainment">Entertainment</option>
+                      <option value="Meals">Meals</option>
+                      <option value="Accommodation">Accommodation</option>
+                      <option value="Other">Other</option>
+                    </select>
                   </div>
-
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                      Floor
+                    <label className="block text-sm font-medium text-[#111418] mb-2">
+                      Receipt Number
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. 2nd Floor"
-                      value={facilityFormData.floor}
+                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      value={refundFormData.receiptNumber}
                       onChange={(e) =>
-                        setFacilityFormData({
-                          ...facilityFormData,
-                          floor: e.target.value,
+                        setRefundFormData({
+                          ...refundFormData,
+                          receiptNumber: e.target.value,
                         })
                       }
-                      className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      placeholder="e.g., RCP-12345"
                     />
                   </div>
-
                   <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                      Room / Area
+                    <label className="block text-sm font-medium text-[#111418] mb-2">
+                      Transaction Date <span className="text-red-600">*</span>
                     </label>
                     <input
-                      type="text"
-                      placeholder="e.g. Room 205"
-                      value={facilityFormData.room}
+                      type="date"
+                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      value={refundFormData.transactionDate}
                       onChange={(e) =>
-                        setFacilityFormData({
-                          ...facilityFormData,
-                          room: e.target.value,
+                        setRefundFormData({
+                          ...refundFormData,
+                          transactionDate: e.target.value,
                         })
                       }
-                      className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      required
                     />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#111418] mb-2">
+                    Reason <span className="text-red-600">*</span>
+                  </label>
+                  <textarea
+                    className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418] focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    value={refundFormData.reason}
+                    onChange={(e) =>
+                      setRefundFormData({
+                        ...refundFormData,
+                        reason: e.target.value,
+                      })
+                    }
+                    rows="4"
+                    placeholder="Describe the expense and why refund is needed..."
+                    required
+                  />
+                </div>
+
+                {/* Auto-Approval Routing Info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
+                    <div>
+                      <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                        Auto-Approval Routing
+                      </h4>
+                      <p className="text-xs text-blue-700">
+                        This request will be automatically routed through the
+                        approval chain based on configured rules. Approvers will
+                        be assigned according to the request amount and approval
+                        workflow settings.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "none" }}>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      className="w-full px-4 py-2 border border-[#dbe0e6] rounded-lg bg-white text-[#111418]"
+                      value={refundFormData.approver}
+                      onChange={(e) => {
+                        setRefundFormData({
+                          ...refundFormData,
+                          approver: e.target.value,
+                        });
+                      }}
+                    />
+                    {showSuggestions && approverSuggestions.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#dbe0e6] rounded-lg shadow-lg max-h-40 overflow-y-auto z-10">
+                        {approverSuggestions.map((staff, idx) => (
+                          <div
+                            key={idx}
+                            className="px-4 py-2 hover:bg-green-50 cursor-pointer text-[#111418] text-sm border-b border-[#dbe0e6] last:border-b-0"
+                            onClick={() => {
+                              setRefundFormData({
+                                ...refundFormData,
+                                approver: staff.name,
+                                approverEmail: staff.email,
+                              });
+                              setShowSuggestions(false);
+                            }}
+                          >
+                            <div className="font-medium">{staff.name}</div>
+                            <div className="text-xs text-[#617589]">
+                              {staff.email}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-6">
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                  >
+                    <i className="fa-solid fa-check"></i>
+                    Submit Request
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowRefundForm(false)}
+                    className="flex-1 px-4 py-3 bg-gray-200 text-[#111418] font-semibold rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Retirement History Modal */}
+        {showRetirementHistory && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+              <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 flex items-center justify-between rounded-t-xl flex-shrink-0">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <i className="fa-solid fa-history"></i>
+                  Retirement Breakdown History
+                </h2>
+                <button
+                  onClick={() => setShowRetirementHistory(false)}
+                  className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors flex-shrink-0"
+                >
+                  <i className="fa-solid fa-times text-lg"></i>
+                </button>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Supporting Documents (Optional)
-                </label>
-                {!facilityFormData.attachment ? (
-                  <div className="flex justify-center rounded-lg border-2 border-dashed border-slate-300 px-6 py-6 transition-colors hover:border-slate-400">
-                    <div className="text-center">
-                      <i className="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2" />
-                      <div className="mt-1 flex text-sm text-slate-600 justify-center">
-                        <label className="relative cursor-pointer rounded-md bg-white font-semibold text-blue-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 hover:text-blue-500">
-                          <span>Upload a file</span>
-                          <input
-                            type="file"
-                            className="sr-only"
-                            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  setFacilityFormData((prev) => ({
-                                    ...prev,
-                                    attachment: reader.result,
-                                    attachmentName: file.name,
-                                  }));
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                          />
-                        </label>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-1">PDF, PNG, JPG, or DOC up to 5MB</p>
-                    </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                {retirementBreakdowns.length === 0 ? (
+                  <div className="text-center py-12">
+                    <i className="fa-solid fa-inbox text-6xl text-gray-300 mb-4"></i>
+                    <p className="text-lg text-[#617589] mb-2">
+                      No retirement breakdowns found
+                    </p>
+                    <p className="text-sm text-[#617589] mb-6">
+                      Create a new retirement breakdown to get started
+                    </p>
+                    <button
+                      onClick={() => {
+                        setShowRetirementHistory(false);
+                        setShowRetirementManagement(true);
+                      }}
+                      className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold inline-flex items-center gap-2"
+                    >
+                      <i className="fa-solid fa-plus"></i>
+                      Create New Breakdown
+                    </button>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
-                        <i className="fa-solid fa-file-lines" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900 truncate max-w-xs" title={facilityFormData.attachmentName}>
-                          {facilityFormData.attachmentName}
-                        </p>
-                        <p className="text-xs text-slate-500">Ready to upload</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFacilityFormData((prev) => ({
-                          ...prev,
-                          attachment: "",
-                          attachmentName: "",
-                        }));
-                      }}
-                      className="rounded-full p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
-                    >
-                      <i className="fa-solid fa-trash-can" />
-                    </button>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Month
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Previous Balance
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Total Inflow
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Total Expenses
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Closing Balance
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Total Items
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Submissions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {(() => {
+                          // Group breakdowns by month
+                          const monthlyData = {};
+                          retirementBreakdowns.forEach((breakdown) => {
+                            const monthKey = breakdown.monthYear;
+                            if (!monthlyData[monthKey]) {
+                              monthlyData[monthKey] = {
+                                monthYear: monthKey,
+                                previousClosingBalance:
+                                  breakdown.previousClosingBalance || 0,
+                                totalInflow: 0,
+                                totalExpenses: 0,
+                                totalItems: 0,
+                                submissions: 0,
+                                latestBalance: 0,
+                              };
+                            }
+                            monthlyData[monthKey].totalInflow +=
+                              breakdown.inflowAmount || 0;
+                            monthlyData[monthKey].totalExpenses +=
+                              breakdown.totalExpenses || 0;
+                            monthlyData[monthKey].totalItems +=
+                              breakdown.lineItems?.length || 0;
+                            monthlyData[monthKey].submissions += 1;
+                            monthlyData[monthKey].latestBalance =
+                              breakdown.newOpeningBalance || 0;
+                          });
+
+                          // Convert to array and sort by month (most recent first)
+                          const monthlyArray = Object.values(monthlyData).sort(
+                            (a, b) => {
+                              return b.monthYear.localeCompare(a.monthYear);
+                            },
+                          );
+
+                          return monthlyArray.map((monthData, idx) => {
+                            const [year, month] = (
+                              monthData.monthYear || ""
+                            ).split("-");
+                            const monthName = month
+                              ? new Date(
+                                  year,
+                                  parseInt(month) - 1,
+                                  1,
+                                ).toLocaleString("en-US", {
+                                  month: "long",
+                                  year: "numeric",
+                                })
+                              : monthData.monthYear;
+
+                            return (
+                              <tr
+                                key={idx}
+                                className="hover:bg-gray-50 transition-colors"
+                              >
+                                <td
+                                  className="px-6 py-4 text-sm font-medium text-blue-600 cursor-pointer hover:underline"
+                                  onClick={() => {
+                                    setSelectedMonthYear(monthData.monthYear);
+                                    setShowMonthDetails(true);
+                                  }}
+                                >
+                                  {monthName}
+                                </td>
+                                <td className="px-6 py-4 text-sm font-semibold text-gray-600">
+                                  {formatCurrency(
+                                    monthData.previousClosingBalance || 0,
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 text-sm font-semibold text-green-600">
+                                  {formatCurrency(monthData.totalInflow || 0)}
+                                </td>
+                                <td className="px-6 py-4 text-sm font-semibold text-red-600">
+                                  {formatCurrency(monthData.totalExpenses || 0)}
+                                </td>
+                                <td className="px-6 py-4 text-sm font-semibold text-blue-600">
+                                  {formatCurrency(monthData.latestBalance || 0)}
+                                </td>
+                                <td className="px-6 py-4 text-sm text-[#617589]">
+                                  {monthData.totalItems} items
+                                </td>
+                                <td className="px-6 py-4 text-sm text-[#617589]">
+                                  {monthData.submissions} submission
+                                  {monthData.submissions > 1 ? "s" : ""}
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 flex-shrink-0">
+              <div className="px-6 py-4 bg-gray-50 rounded-b-xl flex justify-between items-center flex-shrink-0">
                 <button
-                  type="button"
-                  disabled={facilityFormLoading}
-                  onClick={() => setShowFacilityForm(false)}
-                  className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  onClick={() => setShowRetirementHistory(false)}
+                  className="px-4 py-2 bg-gray-200 text-[#111418] font-semibold rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    // Prepare monthly aggregated data for export
+                    const monthlyData = {};
+                    retirementBreakdowns.forEach((breakdown) => {
+                      const monthKey = breakdown.monthYear;
+                      if (!monthlyData[monthKey]) {
+                        monthlyData[monthKey] = {
+                          monthYear: monthKey,
+                          previousClosingBalance:
+                            breakdown.previousClosingBalance || 0,
+                          totalInflow: 0,
+                          totalExpenses: 0,
+                          totalItems: 0,
+                          submissions: 0,
+                          latestBalance: 0,
+                        };
+                      }
+                      monthlyData[monthKey].totalInflow +=
+                        breakdown.inflowAmount || 0;
+                      monthlyData[monthKey].totalExpenses +=
+                        breakdown.totalExpenses || 0;
+                      monthlyData[monthKey].totalItems +=
+                        breakdown.lineItems?.length || 0;
+                      monthlyData[monthKey].submissions += 1;
+                      monthlyData[monthKey].latestBalance =
+                        breakdown.newOpeningBalance || 0;
+                    });
+
+                    // Convert to CSV
+                    const monthlyArray = Object.values(monthlyData).sort(
+                      (a, b) => {
+                        return b.monthYear.localeCompare(a.monthYear);
+                      },
+                    );
+
+                    const headers = [
+                      "Month",
+                      "Previous Balance",
+                      "Total Inflow",
+                      "Total Expenses",
+                      "Closing Balance",
+                      "Total Items",
+                      "Submissions",
+                    ];
+
+                    const rows = monthlyArray.map((monthData) => {
+                      const [year, month] = (monthData.monthYear || "").split(
+                        "-",
+                      );
+                      const monthName = month
+                        ? new Date(year, parseInt(month) - 1, 1).toLocaleString(
+                            "en-US",
+                            {
+                              month: "long",
+                              year: "numeric",
+                            },
+                          )
+                        : monthData.monthYear;
+
+                      return [
+                        monthName,
+                        monthData.previousClosingBalance,
+                        monthData.totalInflow,
+                        monthData.totalExpenses,
+                        monthData.latestBalance,
+                        monthData.totalItems,
+                        monthData.submissions,
+                      ];
+                    });
+
+                    // Create CSV content
+                    const csvContent = [
+                      headers.join(","),
+                      ...rows.map((row) => row.join(",")),
+                    ].join("\n");
+
+                    // Download CSV
+                    const blob = new Blob([csvContent], {
+                      type: "text/csv;charset=utf-8;",
+                    });
+                    const link = document.createElement("a");
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute("href", url);
+                    link.setAttribute(
+                      "download",
+                      `retirement_history_${
+                        new Date().toISOString().split("T")[0]
+                      }.csv`,
+                    );
+                    link.style.visibility = "hidden";
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    toast.success("Data exported successfully");
+                  }}
+                  className="px-6 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center gap-2"
+                >
+                  <i className="fa-solid fa-download"></i>
+                  Export Data
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Month Details Modal */}
+        {showMonthDetails && selectedMonthYear && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="px-8 py-6 border-b border-gray-200 flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        setShowMonthDetails(false);
+                        setSelectedMonthYear(null);
+                      }}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <i className="fa-solid fa-arrow-left text-gray-600"></i>
+                    </button>
+                    <div>
+                      <h2 className="text-2xl font-bold text-[#111418]">
+                        {(() => {
+                          const [year, month] = (selectedMonthYear || "").split(
+                            "-",
+                          );
+                          const monthName = month
+                            ? new Date(
+                                year,
+                                parseInt(month) - 1,
+                                1,
+                              ).toLocaleString("en-US", {
+                                month: "long",
+                                year: "numeric",
+                              })
+                            : selectedMonthYear;
+                          return `${monthName} - Detailed Breakdown`;
+                        })()}
+                      </h2>
+                      <p className="text-sm text-gray-600 mt-1">
+                        All submissions and line items for this month
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const monthBreakdowns = retirementBreakdowns.filter(
+                        (breakdown) =>
+                          breakdown.monthYear === selectedMonthYear,
+                      );
+
+                      const openingBalance =
+                        monthBreakdowns[0]?.previousClosingBalance || 0;
+                      const closingBalance =
+                        monthBreakdowns[monthBreakdowns.length - 1]
+                          ?.newOpeningBalance || 0;
+                      const totalInflow = monthBreakdowns.reduce(
+                        (sum, breakdown) => sum + (breakdown.inflowAmount || 0),
+                        0,
+                      );
+                      const totalExpenses = monthBreakdowns.reduce(
+                        (sum, breakdown) =>
+                          sum + (breakdown.totalExpenses || 0),
+                        0,
+                      );
+
+                      const allLineItems = [];
+                      monthBreakdowns.forEach((breakdown) => {
+                        if (
+                          breakdown.lineItems &&
+                          breakdown.lineItems.length > 0
+                        ) {
+                          allLineItems.push(...breakdown.lineItems);
+                        }
+                      });
+
+                      const [year, month] = (selectedMonthYear || "").split(
+                        "-",
+                      );
+                      const monthName = month
+                        ? new Date(year, parseInt(month) - 1, 1).toLocaleString(
+                            "en-US",
+                            { month: "long", year: "numeric" },
+                          )
+                        : selectedMonthYear;
+
+                      // Create CSV content
+                      const headers = [
+                        "Date",
+                        "Description",
+                        "Quantity",
+                        "Amount",
+                      ];
+                      const rows = allLineItems.map((item) => [
+                        item.date || "N/A",
+                        item.description || "No description",
+                        item.quantity || 0,
+                        item.amount || 0,
+                      ]);
+
+                      const csvContent = [
+                        `Retirement Breakdown - ${monthName}`,
+                        "",
+                        "Financial Summary",
+                        `Opening Balance,${formatCurrency(openingBalance)}`,
+                        `Total Inflow,${formatCurrency(totalInflow)}`,
+                        `Total Expenses,${formatCurrency(totalExpenses)}`,
+                        `Closing Balance,${formatCurrency(closingBalance)}`,
+                        "",
+                        "Line Items",
+                        headers.join(","),
+                        ...rows.map((row) => row.join(",")),
+                        "",
+                        `Total,${formatCurrency(totalExpenses)}`,
+                      ].join("\n");
+
+                      const blob = new Blob([csvContent], {
+                        type: "text/csv;charset=utf-8;",
+                      });
+                      const link = document.createElement("a");
+                      const url = URL.createObjectURL(blob);
+                      link.setAttribute("href", url);
+                      link.setAttribute(
+                        "download",
+                        `retirement_${monthName.replace(/ /g, "_")}_${
+                          new Date().toISOString().split("T")[0]
+                        }.csv`,
+                      );
+                      link.style.visibility = "hidden";
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      toast.success("Data exported successfully");
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold rounded-lg hover:shadow-lg transition-all flex items-center gap-2"
+                  >
+                    <i className="fa-solid fa-download"></i>
+                    Export
+                  </button>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto px-8 py-6">
+                {(() => {
+                  const monthBreakdowns = retirementBreakdowns.filter(
+                    (breakdown) => breakdown.monthYear === selectedMonthYear,
+                  );
+
+                  if (monthBreakdowns.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center h-full">
+                        <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                          <i className="fa-solid fa-inbox text-4xl text-gray-400"></i>
+                        </div>
+                        <p className="text-lg font-semibold text-gray-600">
+                          No submissions found for this month
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  // Calculate aggregated financial data
+                  const openingBalance =
+                    monthBreakdowns[0]?.previousClosingBalance || 0;
+                  const closingBalance =
+                    monthBreakdowns[monthBreakdowns.length - 1]
+                      ?.newOpeningBalance || 0;
+                  const totalInflow = monthBreakdowns.reduce(
+                    (sum, breakdown) => sum + (breakdown.inflowAmount || 0),
+                    0,
+                  );
+                  const totalExpenses = monthBreakdowns.reduce(
+                    (sum, breakdown) => sum + (breakdown.totalExpenses || 0),
+                    0,
+                  );
+
+                  // Combine all line items from all submissions
+                  const allLineItems = [];
+                  monthBreakdowns.forEach((breakdown) => {
+                    if (breakdown.lineItems && breakdown.lineItems.length > 0) {
+                      allLineItems.push(...breakdown.lineItems);
+                    }
+                  });
+
+                  return (
+                    <div className="space-y-6">
+                      {/* Financial Summary Cards */}
+                      <div className="grid grid-cols-4 gap-4">
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
+                              <i className="fa-solid fa-wallet text-gray-600"></i>
+                            </div>
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                              Opening Balance
+                            </p>
+                          </div>
+                          <p className="text-2xl font-bold text-[#111418]">
+                            {formatCurrency(openingBalance)}
+                          </p>
+                        </div>
+
+                        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-10 h-10 bg-green-200 rounded-lg flex items-center justify-center">
+                              <i className="fa-solid fa-arrow-trend-up text-green-700"></i>
+                            </div>
+                            <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">
+                              Total Inflow
+                            </p>
+                          </div>
+                          <p className="text-2xl font-bold text-green-700">
+                            {formatCurrency(totalInflow)}
+                          </p>
+                        </div>
+
+                        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-6 border border-red-200">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-10 h-10 bg-red-200 rounded-lg flex items-center justify-center">
+                              <i className="fa-solid fa-arrow-trend-down text-red-700"></i>
+                            </div>
+                            <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">
+                              Total Expenses
+                            </p>
+                          </div>
+                          <p className="text-2xl font-bold text-red-700">
+                            {formatCurrency(totalExpenses)}
+                          </p>
+                        </div>
+
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center">
+                              <i className="fa-solid fa-coins text-blue-700"></i>
+                            </div>
+                            <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+                              Closing Balance
+                            </p>
+                          </div>
+                          <p className="text-2xl font-bold text-blue-700">
+                            {formatCurrency(closingBalance)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* All Line Items Table */}
+                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="px-6 py-4 bg-gradient-to-r from-purple-600 to-purple-700">
+                          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                            <i className="fa-solid fa-list-check"></i>
+                            All Expense Line Items ({allLineItems.length} total
+                            items)
+                          </h3>
+                        </div>
+
+                        {allLineItems.length > 0 ? (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                    #
+                                  </th>
+                                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                    Date
+                                  </th>
+                                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                    Description
+                                  </th>
+                                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                    Quantity
+                                  </th>
+                                  <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                    Amount
+                                  </th>
+                                  <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                    Total
+                                  </th>
+                                  <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                    Actions
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {allLineItems.map((item, itemIdx) => {
+                                  const itemKey = `${itemIdx}`;
+                                  const isEditing = editingLineItems[itemKey];
+                                  const editedItem =
+                                    editingLineItems[itemKey] || item;
+                                  const itemQuantity =
+                                    parseFloat(editedItem.quantity) || 0;
+                                  const itemAmount =
+                                    parseFloat(editedItem.amount) || 0;
+                                  const itemTotal = itemQuantity * itemAmount;
+
+                                  return (
+                                    <tr
+                                      key={itemIdx}
+                                      className="hover:bg-gray-50 transition-colors"
+                                    >
+                                      <td className="px-6 py-4 text-sm font-medium text-gray-500">
+                                        {itemIdx + 1}
+                                      </td>
+                                      <td className="px-6 py-4 text-sm text-[#111418] whitespace-nowrap">
+                                        {isEditing ? (
+                                          <input
+                                            type="date"
+                                            value={editedItem.date || ""}
+                                            onChange={(e) =>
+                                              setEditingLineItems({
+                                                ...editingLineItems,
+                                                [itemKey]: {
+                                                  ...editedItem,
+                                                  date: e.target.value,
+                                                },
+                                              })
+                                            }
+                                            className="w-full px-2 py-1 border border-gray-300 rounded bg-white text-[#111418] text-sm"
+                                          />
+                                        ) : (
+                                          item.date || "N/A"
+                                        )}
+                                      </td>
+                                      <td className="px-6 py-4 text-sm text-[#111418]">
+                                        {isEditing ? (
+                                          <input
+                                            type="text"
+                                            value={editedItem.description || ""}
+                                            onChange={(e) =>
+                                              setEditingLineItems({
+                                                ...editingLineItems,
+                                                [itemKey]: {
+                                                  ...editedItem,
+                                                  description: e.target.value,
+                                                },
+                                              })
+                                            }
+                                            className="w-full px-2 py-1 border border-gray-300 rounded bg-white text-[#111418] text-sm"
+                                          />
+                                        ) : (
+                                          editedItem.description ||
+                                          "No description"
+                                        )}
+                                      </td>
+                                      <td className="px-6 py-4 text-sm text-gray-600">
+                                        {isEditing ? (
+                                          <input
+                                            type="number"
+                                            value={editedItem.quantity || ""}
+                                            onChange={(e) =>
+                                              setEditingLineItems({
+                                                ...editingLineItems,
+                                                [itemKey]: {
+                                                  ...editedItem,
+                                                  quantity: e.target.value,
+                                                },
+                                              })
+                                            }
+                                            className="w-full px-2 py-1 border border-gray-300 rounded bg-white text-[#111418] text-sm"
+                                            step="0.01"
+                                            min="0"
+                                          />
+                                        ) : (
+                                          itemQuantity
+                                        )}
+                                      </td>
+                                      <td className="px-6 py-4 text-sm font-bold text-[#111418] text-right">
+                                        {isEditing ? (
+                                          <input
+                                            type="number"
+                                            value={editedItem.amount || ""}
+                                            onChange={(e) =>
+                                              setEditingLineItems({
+                                                ...editingLineItems,
+                                                [itemKey]: {
+                                                  ...editedItem,
+                                                  amount: e.target.value,
+                                                },
+                                              })
+                                            }
+                                            className="w-full px-2 py-1 border border-gray-300 rounded bg-white text-[#111418] text-sm text-right"
+                                            step="0.01"
+                                            min="0"
+                                          />
+                                        ) : (
+                                          formatCurrency(itemAmount)
+                                        )}
+                                      </td>
+                                      <td className="px-6 py-4 text-sm font-bold text-blue-600 text-right">
+                                        {formatCurrency(itemTotal)}
+                                      </td>
+                                      <td className="px-6 py-4 text-sm text-center">
+                                        {isEditing ? (
+                                          <div className="flex gap-2 justify-center">
+                                            <button
+                                              onClick={() => {
+                                                const updated = [
+                                                  ...allLineItems,
+                                                ];
+                                                updated[itemIdx] = editedItem;
+                                                setEditingLineItems({
+                                                  ...editingLineItems,
+                                                  [itemKey]: null,
+                                                });
+                                                toast.success("Item updated");
+                                              }}
+                                              className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
+                                            >
+                                              <i className="fa-solid fa-check"></i>
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                setEditingLineItems({
+                                                  ...editingLineItems,
+                                                  [itemKey]: null,
+                                                });
+                                              }}
+                                              className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-colors"
+                                            >
+                                              <i className="fa-solid fa-times"></i>
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            onClick={() => {
+                                              setEditingLineItems({
+                                                ...editingLineItems,
+                                                [itemKey]: { ...item },
+                                              });
+                                            }}
+                                            className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+                                          >
+                                            <i className="fa-solid fa-pen"></i>
+                                          </button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                                <tr className="bg-gray-100 font-bold">
+                                  <td
+                                    colSpan="5"
+                                    className="px-6 py-4 text-right text-sm text-gray-700 uppercase tracking-wide"
+                                  >
+                                    Grand Total:
+                                  </td>
+                                  <td className="px-6 py-4 text-right text-lg font-bold text-[#111418]">
+                                    $
+                                    {allLineItems
+                                      .reduce((sum, item) => {
+                                        const qty =
+                                          parseFloat(item.quantity) || 0;
+                                        const amt =
+                                          parseFloat(item.amount) || 0;
+                                        return sum + qty * amt;
+                                      }, 0)
+                                      .toLocaleString(undefined, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}
+                                  </td>
+                                  <td></td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="p-12 text-center">
+                            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <i className="fa-solid fa-receipt text-4xl text-gray-300"></i>
+                            </div>
+                            <p className="text-lg font-semibold text-gray-500">
+                              No line items found
+                            </p>
+                            <p className="text-sm text-gray-400 mt-1">
+                              There are no expense items recorded for this month
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Leave History Modal */}
+        {showLeaveHistory && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">
+            <div className="flex h-full max-h-[90vh] w-full max-w-2xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">
+                <h3 className="text-slate-900 text-xl font-bold">
+                  Leave Request History
+                </h3>
+                <button
+                  onClick={() => setShowLeaveHistory(false)}
+                  className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+                >
+                  <i className="fa-solid fa-times text-xl"></i>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                {leaveRequests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <i className="fa-solid fa-calendar text-4xl text-slate-300 mb-4 block"></i>
+                    <p className="text-slate-500">No leave requests found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {leaveRequests.map((leave) => (
+                      <div
+                        key={leave.id}
+                        className="border border-slate-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-semibold text-slate-900">
+                            {leave.type || "Leave"}
+                          </h4>
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              leave.status === "approved"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : leave.status === "rejected"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {leave.status || "pending"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-600 mb-1">
+                          {leave.range || "No dates"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {leave.reason || "No reason provided"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-slate-200 p-6 bg-slate-50 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowLeaveHistory(false)}
+                  className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Leave Request Form Modal */}
+        {showLeaveForm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">
+            <div className="flex h-full max-h-[90vh] w-full max-w-2xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">
+                <h3 className="text-slate-900 text-xl font-bold">
+                  Request Leave
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowLeaveForm(false);
+                    setCalculatedDays(0);
+                    setRemainingLeave(null);
+                  }}
+                  className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+                >
+                  <i className="fa-solid fa-times text-xl"></i>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                {/* Leave Balance Summary */}
+                {leaveAllocation && (
+                  <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-3">
+                      Your Leave Balance ({leaveAllocation.year})
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <p className="text-blue-600">Annual Leave</p>
+                        <p className="font-bold text-blue-900">
+                          {leaveAllocation.annualLeave -
+                            (leaveAllocation.annualLeaveUsed || 0)}{" "}
+                          days left
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-blue-600">Sick Leave</p>
+                        <p className="font-bold text-blue-900">
+                          {leaveAllocation.sickLeave -
+                            (leaveAllocation.sickLeaveUsed || 0)}{" "}
+                          days left
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-blue-600">Personal Leave</p>
+                        <p className="font-bold text-blue-900">
+                          {leaveAllocation.personalLeave -
+                            (leaveAllocation.personalLeaveUsed || 0)}{" "}
+                          days left
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-blue-600">Manager</p>
+                        <p className="font-bold text-blue-900">
+                          {leaveAllocation.managerName}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <form className="space-y-5" onSubmit={handleLeaveSubmit}>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Leave Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={leaveFormData.leaveType}
+                      onChange={(e) =>
+                        setLeaveFormData({
+                          ...leaveFormData,
+                          leaveType: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer"
+                    >
+                      <option value="">Select Type</option>
+                      <option value="annual">Annual Leave</option>
+                      <option value="sick">Sick Leave</option>
+                      <option value="personal">Personal Leave</option>
+                      <option value="unpaid">Unpaid Leave</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        From Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={leaveFormData.fromDate}
+                        onChange={(e) =>
+                          setLeaveFormData({
+                            ...leaveFormData,
+                            fromDate: e.target.value,
+                          })
+                        }
+                        min={new Date().toISOString().split("T")[0]}
+                        className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        To Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={leaveFormData.toDate}
+                        onChange={(e) =>
+                          setLeaveFormData({
+                            ...leaveFormData,
+                            toDate: e.target.value,
+                          })
+                        }
+                        min={
+                          leaveFormData.fromDate ||
+                          new Date().toISOString().split("T")[0]
+                        }
+                        className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Live Calculation Display */}
+                  {calculatedDays > 0 && remainingLeave && (
+                    <div
+                      className={`p-4 rounded-lg border ${
+                        remainingLeave.remaining >= 0
+                          ? "bg-green-50 border-green-200"
+                          : "bg-red-50 border-red-200"
+                      }`}
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-semibold text-slate-700">
+                          Days Requested:
+                        </span>
+                        <span className="text-lg font-bold text-slate-900">
+                          {calculatedDays} business days
+                        </span>
+                      </div>
+                      <div className="text-xs space-y-1 text-slate-600">
+                        <div className="flex justify-between">
+                          <span>Allocated:</span>
+                          <span className="font-semibold">
+                            {remainingLeave.allocated} days
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Already Used:</span>
+                          <span className="font-semibold">
+                            {remainingLeave.used} days
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-t border-slate-300 pt-1 mt-1">
+                          <span className="font-semibold">
+                            Remaining After Request:
+                          </span>
+                          <span
+                            className={`font-bold ${
+                              remainingLeave.remaining >= 0
+                                ? "text-green-700"
+                                : "text-red-700"
+                            }`}
+                          >
+                            {remainingLeave.remaining} days
+                          </span>
+                        </div>
+                      </div>
+                      {remainingLeave.remaining < 0 &&
+                        leaveFormData.leaveType !== "unpaid" && (
+                          <div className="mt-2 text-xs text-red-700 font-medium">
+                            ⚠️ Insufficient leave balance. Consider selecting
+                            "Unpaid Leave" instead.
+                          </div>
+                        )}
+                    </div>
+                  )}
+
+                  {/* Auto-Approval Routing Info */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
+                      <div>
+                        <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                          Auto-Approval Routing
+                        </h4>
+                        <p className="text-xs text-blue-700">
+                          This leave request will be automatically routed
+                          through the approval chain based on configured rules.
+                          Approvers will be assigned according to the leave
+                          duration and approval workflow settings.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "none" }}>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Manager <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={leaveFormData.managerName || "Not assigned"}
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-700 h-12 px-4 cursor-not-allowed"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      {leaveFormData.managerName
+                        ? `Your request will be sent to ${leaveFormData.managerName} for approval, then to HR.`
+                        : "Please contact HR to assign a manager before requesting leave."}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Reason
+                    </label>
+                    <textarea
+                      placeholder="Enter reason for leave"
+                      value={leaveFormData.reason}
+                      onChange={(e) =>
+                        setLeaveFormData({
+                          ...leaveFormData,
+                          reason: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 min-h-[100px] px-4 py-3 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                    ></textarea>
+                  </div>
+                </form>
+              </div>
+              <div className="border-t border-slate-200 p-6 bg-slate-50 flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    setShowLeaveForm(false);
+                    setCalculatedDays(0);
+                    setRemainingLeave(null);
+                  }}
+                  className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  disabled={facilityFormLoading}
-                  className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2 min-w-[120px]"
+                  onClick={handleLeaveSubmit}
+                  disabled={
+                    remainingLeave &&
+                    remainingLeave.remaining < 0 &&
+                    leaveFormData.leaveType !== "unpaid"
+                  }
+                  className="px-6 py-3 rounded-lg text-sm font-medium bg-primary text-white hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {facilityFormLoading ? (
+                  <i className="fa-solid fa-check text-lg"></i>
+                  Submit Request
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Travel History Modal */}
+        {showTravelHistory && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">
+            <div className="flex h-full max-h-[90vh] w-full max-w-2xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">
+                <h3 className="text-slate-900 text-xl font-bold">
+                  Travel Request History
+                </h3>
+                <button
+                  onClick={() => setShowTravelHistory(false)}
+                  className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+                >
+                  <i className="fa-solid fa-times text-xl"></i>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                {travelRequests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <i className="fa-solid fa-plane text-4xl text-slate-300 mb-4 block"></i>
+                    <p className="text-slate-500">No travel requests found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {travelRequests.map((travel) => (
+                      <div
+                        key={travel.id}
+                        className="border border-slate-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h4 className="font-semibold text-slate-900">
+                              {travel.destination || "Travel"}
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {travel.purpose || "Business travel"}
+                            </p>
+                          </div>
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              travel.status === "approved"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : travel.status === "rejected"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {travel.status || "pending"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-600">
+                          {travel.dates || "No dates"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-slate-200 p-6 bg-slate-50 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowTravelHistory(false)}
+                  className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Travel Request Form Modal */}
+        {showTravelForm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">
+            <div className="flex h-full max-h-[90vh] w-full max-w-3xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">
+                <h3 className="text-slate-900 text-xl font-bold">
+                  New Travel Request
+                </h3>
+                <button
+                  onClick={() => setShowTravelForm(false)}
+                  className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+                >
+                  <i className="fa-solid fa-times text-xl"></i>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                {/* Manager Info Display */}
+                {leaveAllocation && leaveAllocation.managerName && (
+                  <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-2">
+                      Approval Information
+                    </h4>
+                    <div className="text-xs text-blue-700">
+                      <p>
+                        <strong>Manager:</strong> {leaveAllocation.managerName}
+                      </p>
+                      <p className="mt-1">
+                        Your request will be sent to your manager for approval
+                        before ticket booking.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <form className="space-y-5" onSubmit={handleTravelSubmit}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Current Location <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Lagos, Nigeria"
+                        value={travelFormData.currentLocation}
+                        onChange={(e) =>
+                          setTravelFormData({
+                            ...travelFormData,
+                            currentLocation: e.target.value,
+                          })
+                        }
+                        className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Destination <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. New York, USA"
+                        value={travelFormData.destination}
+                        onChange={(e) =>
+                          setTravelFormData({
+                            ...travelFormData,
+                            destination: e.target.value,
+                          })
+                        }
+                        className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Purpose <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={travelFormData.purpose}
+                      onChange={(e) =>
+                        setTravelFormData({
+                          ...travelFormData,
+                          purpose: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer"
+                    >
+                      <option value="">Select Purpose</option>
+                      <option value="conference">Conference</option>
+                      <option value="client-meeting">Client Meeting</option>
+                      <option value="training">Training</option>
+                      <option value="audit">Audit</option>
+                      <option value="site-visit">Site Visit</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        From Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={travelFormData.fromDate}
+                        onChange={(e) =>
+                          setTravelFormData({
+                            ...travelFormData,
+                            fromDate: e.target.value,
+                          })
+                        }
+                        min={new Date().toISOString().split("T")[0]}
+                        className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        To Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={travelFormData.toDate}
+                        onChange={(e) =>
+                          setTravelFormData({
+                            ...travelFormData,
+                            toDate: e.target.value,
+                          })
+                        }
+                        min={
+                          travelFormData.fromDate ||
+                          new Date().toISOString().split("T")[0]
+                        }
+                        className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Auto-calculated Days and Nights */}
+                  {travelFormData.numberOfDays > 0 && (
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-slate-600">
+                            Number of Days:
+                          </span>
+                          <span className="ml-2 font-semibold text-slate-900">
+                            {travelFormData.numberOfDays} days
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600">
+                            Number of Nights:
+                          </span>
+                          <span className="ml-2 font-semibold text-slate-900">
+                            {travelFormData.numberOfNights} nights
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="flex items-center gap-3 cursor-pointer p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={travelFormData.accommodationRequired}
+                        onChange={(e) =>
+                          setTravelFormData({
+                            ...travelFormData,
+                            accommodationRequired: e.target.checked,
+                          })
+                        }
+                        className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-2 focus:ring-primary/50 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-slate-700">
+                          Accommodation Required
+                        </span>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Check if you need hotel or accommodation arrangements
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Estimated Budget <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="e.g. 5000"
+                      value={travelFormData.budget}
+                      onChange={(e) =>
+                        setTravelFormData({
+                          ...travelFormData,
+                          budget: e.target.value,
+                        })
+                      }
+                      min="0"
+                      step="0.01"
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Include estimated costs for flights, accommodation, meals,
+                      and other expenses
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Additional Details
+                    </label>
+                    <textarea
+                      placeholder="Enter travel details, special requirements, or additional information"
+                      value={travelFormData.description}
+                      onChange={(e) =>
+                        setTravelFormData({
+                          ...travelFormData,
+                          description: e.target.value,
+                        })
+                      }
+                      rows="4"
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 px-4 py-3 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                    ></textarea>
+                  </div>
+
+                  {/* Auto-Approval Routing Info */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
+                      <div>
+                        <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                          Auto-Approval Routing
+                        </h4>
+                        <p className="text-xs text-blue-700">
+                          This travel request will be automatically routed
+                          through the approval chain based on configured rules.
+                          Approvers will be assigned according to the travel
+                          duration, budget, and approval workflow settings.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "none" }}>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Manager Approver <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={travelFormData.managerName || "Not assigned"}
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-700 h-12 px-4 cursor-not-allowed"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      {travelFormData.managerName
+                        ? `${travelFormData.managerName} will review and approve this request before tickets can be booked.`
+                        : "Please contact HR to assign a manager before requesting travel."}
+                    </p>
+                  </div>
+                </form>
+              </div>
+              <div className="border-t border-slate-200 p-6 bg-slate-50 flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowTravelForm(false)}
+                  disabled={travelFormLoading}
+                  className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleTravelSubmit}
+                  disabled={travelFormLoading}
+                  className="px-6 py-3 rounded-lg text-sm font-medium bg-primary text-white hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {travelFormLoading ? (
                     <>
-                      <i className="fa-solid fa-spinner fa-spin text-sm" />
+                      <i className="fa-solid fa-spinner fa-spin text-lg"></i>
                       Submitting...
                     </>
                   ) : (
-                    "Submit Request"
+                    <>
+                      <i className="fa-solid fa-check text-lg"></i>
+                      Submit Request
+                    </>
                   )}
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Request Details Modal (Read-only) */}
-      {selectedMyRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 flex-shrink-0">
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <i className="fa-solid fa-circle-info text-blue-600" />
-                Request Details
-              </h3>
-              <button
-                onClick={() => setSelectedMyRequest(null)}
-                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
-              >
-                <i className="fa-solid fa-times" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4 overflow-y-auto flex-grow text-sm text-[#111418]">
-              {/* Type and Status Badge */}
-              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                <div>
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Request Type</span>
-                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold mt-1 ${
-                    selectedMyRequest.type === 'leave' ? 'bg-orange-100 text-orange-800' :
-                    selectedMyRequest.type === 'travel' ? 'bg-indigo-100 text-indigo-800' :
-                    selectedMyRequest.type === 'advance' ? 'bg-blue-100 text-blue-800' :
-                    selectedMyRequest.type === 'refund' ? 'bg-emerald-100 text-emerald-800' :
-                    'bg-purple-100 text-purple-800'
-                  }`}>
-                    {selectedMyRequest.type.toUpperCase()} REQUEST
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Status</span>
-                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold mt-1 ${getStatusClass(selectedMyRequest.status || 'pending')}`}>
-                    {selectedMyRequest.status || 'pending'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Date */}
-              <div>
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Date Requested</span>
-                <span className="font-medium">
-                  {selectedMyRequest.requestDate 
-                    ? formatDate(selectedMyRequest.requestDate) 
-                    : selectedMyRequest.createdAt 
-                    ? formatDate(selectedMyRequest.createdAt) 
-                    : "N/A"}
-                </span>
-              </div>
-
-              {/* Dynamic details per type */}
-              {selectedMyRequest.type === "advance" && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Amount</span>
-                      <span className="font-bold text-lg text-slate-900">
-                        {formatMoney(selectedMyRequest.amount, selectedMyRequest.currency)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Purpose</span>
-                      <span className="font-medium">{selectedMyRequest.purpose || "N/A"}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Reason / Details</span>
-                    <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1 whitespace-pre-wrap">
-                      {selectedMyRequest.reason || "No reason specified."}
-                    </p>
-                  </div>
-                  {selectedMyRequest.approver && (
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Approver / Handler</span>
-                      <span className="font-medium text-slate-700">{selectedMyRequest.approver}</span>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {selectedMyRequest.type === "refund" && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Amount</span>
-                      <span className="font-bold text-lg text-slate-900">
-                        {formatMoney(selectedMyRequest.amount, selectedMyRequest.currency)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Category</span>
-                      <span className="font-medium">{selectedMyRequest.category || "N/A"}</span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Receipt Number</span>
-                      <span className="font-medium text-slate-700">{selectedMyRequest.receiptNumber || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Transaction Date</span>
-                      <span className="font-medium text-slate-700">{formatDate(selectedMyRequest.transactionDate)}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Reason / Details</span>
-                    <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1 whitespace-pre-wrap">
-                      {selectedMyRequest.reason || "No reason specified."}
-                    </p>
-                  </div>
-                  {selectedMyRequest.approver && (
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Approver / Handler</span>
-                      <span className="font-medium text-slate-700">{selectedMyRequest.approver}</span>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {selectedMyRequest.type === "leave" && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Leave Type</span>
-                      <span className="font-semibold text-slate-900 capitalize">{selectedMyRequest.leaveType || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Duration</span>
-                      <span className="font-semibold text-slate-900">{selectedMyRequest.days || 0} Day(s)</span>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Dates</span>
-                    <span className="font-medium text-slate-700">
-                      {formatDate(selectedMyRequest.fromDate)} to {formatDate(selectedMyRequest.toDate)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Reason / Description</span>
-                    <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1 whitespace-pre-wrap">
-                      {selectedMyRequest.reason || "No reason specified."}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Assigned Manager</span>
-                      <span className="font-medium text-slate-700">{selectedMyRequest.managerName || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Manager Email</span>
-                      <span className="font-medium text-slate-600 truncate block" title={selectedMyRequest.managerEmail}>
-                        {selectedMyRequest.managerEmail || "N/A"}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {selectedMyRequest.type === "travel" && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Current Location</span>
-                      <span className="font-semibold text-slate-900">{selectedMyRequest.currentLocation || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Destination</span>
-                      <span className="font-semibold text-slate-900">{selectedMyRequest.destination || "N/A"}</span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Budget</span>
-                      <span className="font-bold text-slate-900">{selectedMyRequest.budget ? formatMoney(selectedMyRequest.budget) : "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Days</span>
-                      <span className="font-semibold text-slate-700">{selectedMyRequest.numberOfDays || 0}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Nights</span>
-                      <span className="font-semibold text-slate-700">{selectedMyRequest.numberOfNights || 0}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Dates</span>
-                    <span className="font-medium text-slate-700">
-                      {formatDate(selectedMyRequest.fromDate)} to {formatDate(selectedMyRequest.toDate)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Accommodation Required</span>
-                    <span className="font-semibold text-slate-800">
-                      {selectedMyRequest.accommodationRequired ? "Yes" : "No"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Description / Details</span>
-                    <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1 whitespace-pre-wrap">
-                      {selectedMyRequest.description || "No description provided."}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Assigned Manager</span>
-                      <span className="font-medium text-slate-700">{selectedMyRequest.managerName || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Manager Email</span>
-                      <span className="font-medium text-slate-600 truncate block" title={selectedMyRequest.managerEmail}>
-                        {selectedMyRequest.managerEmail || "N/A"}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {selectedMyRequest.type === "facility" && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Ticket Number</span>
-                      <span className="font-bold text-slate-900">{selectedMyRequest.ticketNumber || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Category / Type</span>
-                      <span className="font-semibold text-slate-700">{selectedMyRequest.category || "N/A"}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Request Summary</span>
-                    <span className="font-semibold text-slate-900 block mt-0.5">{selectedMyRequest.title || "N/A"}</span>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Description</span>
-                    <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1 whitespace-pre-wrap">
-                      {selectedMyRequest.description || "No details provided."}
-                    </p>
-                  </div>
-                  
-                  {/* Location Info */}
-                  <div>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Location Details</span>
-                    <span className="font-medium text-slate-800">
-                      Building: {selectedMyRequest.location?.building || "N/A"}
-                      {selectedMyRequest.location?.floor ? `, Floor: ${selectedMyRequest.location.floor}` : ""}
-                      {selectedMyRequest.location?.room ? `, Room/Area: ${selectedMyRequest.location.room}` : ""}
-                    </span>
-                  </div>
-
-                  {/* Item Movement Specific Info */}
-                  {selectedMyRequest.category === "Item Movement" && (
-                    <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 space-y-2 mt-2">
-                      <span className="text-xs font-bold text-indigo-900 block uppercase tracking-wider">Item Movement Info</span>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <span className="text-slate-500 block">Movement Type:</span>
-                          <span className="font-semibold text-slate-900">{selectedMyRequest.movementType || "N/A"}</span>
-                        </div>
-                        {selectedMyRequest.movementType === "Temporary" && (
-                          <div>
-                            <span className="text-slate-500 block">Return Time:</span>
-                            <span className="font-semibold text-slate-900">{selectedMyRequest.returnDate ? new Date(selectedMyRequest.returnDate).toLocaleString() : "N/A"}</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-xs">
-                        <span className="text-slate-500 block">Route:</span>
-                        <span className="font-semibold text-slate-900">{selectedMyRequest.fromLocation || "N/A"} ➔ {selectedMyRequest.toLocation || "N/A"}</span>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Attachment link */}
-              {selectedMyRequest.attachment && (
-                <div className="border-t border-slate-100 pt-4">
-                  <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                    Supporting Attachment
-                  </span>
-                  <a
-                    href={selectedMyRequest.attachment}
-                    download={selectedMyRequest.attachmentName || "attachment"}
-                    className="inline-flex w-full items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
-                  >
-                    <span className="flex items-center gap-2 truncate">
-                      <i className="fa-solid fa-paperclip text-xs" />
-                      <span className="truncate">{selectedMyRequest.attachmentName || "Download Attachment"}</span>
-                    </span>
-                    <i className="fa-solid fa-download text-xs" />
-                  </a>
-                </div>
-              )}
-
-              {/* Attachments array for facility request */}
-              {selectedMyRequest.attachments && selectedMyRequest.attachments.length > 0 && (
-                <div className="border-t border-slate-100 pt-4">
-                  <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                    Supporting Documents
-                  </span>
-                  <div className="space-y-2">
-                    {selectedMyRequest.attachments.map((att, idx) => (
-                      <a
-                        key={idx}
-                        href={att.url}
-                        download={att.filename || `document_${idx}`}
-                        className="inline-flex w-full items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
-                      >
-                        <span className="flex items-center gap-2 truncate">
-                          <i className="fa-solid fa-paperclip text-xs" />
-                          <span className="truncate">{att.filename || `document_${idx}`}</span>
-                        </span>
-                        <i className="fa-solid fa-download text-xs" />
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <div className="border-t border-slate-100 px-6 py-4 flex justify-end bg-slate-50 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setSelectedMyRequest(null)}
-                className="rounded-xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                Close
-              </button>
             </div>
           </div>
-        </div>
-      )}
-
+        )}
+      </div>
     </div>
   );
 };

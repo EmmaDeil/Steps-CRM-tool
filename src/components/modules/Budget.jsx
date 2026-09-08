@@ -3,7 +3,6 @@ import Breadcrumb from "../Breadcrumb";
 import toast from "react-hot-toast";
 import { apiService } from "../../services/api";
 import { getCurrencySymbol } from "../../services/currency";
-import ModuleLoader from "../common/ModuleLoader";
 
 // ─── Helpers ─────────────────────────────────────────────
 const fmt = (n) =>
@@ -599,7 +598,10 @@ const Budget = ({ onBack, parentModule }) => {
 
           {/* ── Category table / empty state ── */}
           {loading ? (
-            <ModuleLoader moduleName="Budget" />
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-10 text-center">
+              <i className="fa-solid fa-spinner fa-spin text-3xl text-gray-400 mb-3"></i>
+              <p className="text-gray-500 text-sm">Loading budget data…</p>
+            </div>
           ) : categories.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 text-center">
               <i className="fa-solid fa-wallet text-5xl text-gray-300 mb-4"></i>

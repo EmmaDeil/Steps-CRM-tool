@@ -5,7 +5,6 @@ import Pagination from "../Pagination";
 import { apiService } from "../../services/api";
 import { formatCurrency } from "../../services/currency";
 import { useCurrency } from "../../context/useCurrency";
-import ModuleLoader from "../common/ModuleLoader";
 import AccountsPayableDetail from "./AccountsPayableDetail";
 
 const AccountsPayable = ({ onBack }) => {
@@ -120,8 +119,7 @@ const AccountsPayable = ({ onBack }) => {
       }
     } catch (error) {
       console.error("Error paying invoices:", error);
-      const errMsg = error.serverData?.error || error.response?.data?.error || "Failed to process payment";
-      toast.error(errMsg);
+      toast.error("Failed to process payment");
     }
   };
 
@@ -151,7 +149,23 @@ const AccountsPayable = ({ onBack }) => {
   };
 
   if (loading) {
-    return <ModuleLoader moduleName="Accounts Payable" />;
+    return (
+      <div className="flex flex-col h-screen">
+        <Breadcrumb
+          items={[
+            { label: "Home", href: "/home", icon: "fa-house" },
+            { label: "Finance", icon: "fa-coins", onClick: onBack },
+            { label: "Accounts Payable", icon: "fa-receipt" },
+          ]}
+        />
+        <div className="flex-1 flex items-center justify-center bg-slate-50">
+          <div className="flex flex-col items-center gap-3">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <p className="text-slate-600 text-sm">Loading invoices...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (selectedInvoiceDetail) {

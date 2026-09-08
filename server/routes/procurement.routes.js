@@ -12,9 +12,9 @@ const InventoryItem = require('../models/InventoryItem');
 const InventoryIssue = require('../models/InventoryIssue');
 const StockTransfer = require('../models/StockTransfer');
 const StockMovement = require('../models/StockMovement');
+const NotificationModel = require('../models/Notification');
 const { transporter } = require('../utils/emailService');
 const { authMiddleware, requireRole } = require('../middleware/auth');
-const { requireModuleAction } = require('../middleware/moduleAccess');
 const { logMovement } = require('./inventory.routes');
 const {
   generateWaybillNumber,
@@ -22,6 +22,26 @@ const {
   getStockAtLocation,
 } = require('../utils/stockTransferHelpers');
 const { buildApprovalChain } = require('../utils/approvalRuleHelper');
+
+const createProcurementNotification = async ({ title, message, sourceKey, metadata = {} }) => {
+  try {
+    const existing = await NotificationModel.findOne({ sourceKey });
+    if (existing) return existing;
+
+    return NotificationModel.create({
+      title,
+      message,
+      type: 'info',
+      category: 'procurement',
+      source: 'procurement-module',
+      sourceKey,
+      metadata,
+    });
+  } catch (error) {
+    console.error('Error creating procurement notification:', error);
+    return null;
+  }
+};
 
 const REQUEST_TYPE_MAP = {
   'internal transfer': 'Internal Transfer',
@@ -41,78 +61,6 @@ const normalizeRequestType = (requestType) => {
   const rawValue = String(requestType || '').trim();
   const normalized = rawValue.toLowerCase();
   return REQUEST_TYPE_MAP[normalized] || rawValue || 'Purchase Request';
-};
-
-const normalizeRateToNgn = ({ currency, rateInput }) => {
-  const normalizedCurrency = String(currency || 'NGN').trim().toUpperCase();
-  if (normalizedCurrency === 'NGN') return 1;
-  const parsed = Number(rateInput);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
-};
-
-const normalizeMaterialRequestLineItems = ({ lineItems, exchangeRateToNgn }) => {
-  const rows = Array.isArray(lineItems) ? lineItems : [];
-  return rows.map((item) => {
-    const quantity = Number(item?.quantity) || 0;
-    const amount = Number(item?.amount) || 0;
-    const amountNgn = amount * exchangeRateToNgn;
-    return {
-      ...item,
-      quantity,
-      amount,
-      amountNgn,
-      lineTotalNgn: quantity * amountNgn,
-    };
-  });
-};
-
-const buildCurrencySnapshotFields = ({ payload, existingRequest }) => {
-  const currency = String(
-    payload?.currency || existingRequest?.currency || 'NGN',
-  )
-    .trim()
-    .toUpperCase();
-
-  const rateInput =
-    payload?.exchangeRateToNgn ??
-    payload?.exchangeRate ??
-    existingRequest?.exchangeRateToNgn ??
-    1;
-
-  const exchangeRateToNgn = normalizeRateToNgn({ currency, rateInput });
-
-  const sourceLineItems = Array.isArray(payload?.lineItems)
-    ? payload.lineItems
-    : existingRequest?.lineItems || [];
-
-  const normalizedLineItems = normalizeMaterialRequestLineItems({
-    lineItems: sourceLineItems,
-    exchangeRateToNgn,
-  });
-
-  const totalAmountNgn = normalizedLineItems.reduce(
-    (sum, item) => sum + (Number(item?.lineTotalNgn) || 0),
-    0,
-  );
-
-  const hasCapturedAtInPayload =
-    payload?.exchangeRateCapturedAt !== undefined &&
-    payload?.exchangeRateCapturedAt !== null;
-
-  const exchangeRateCapturedAt =
-    currency === 'NGN'
-      ? null
-      : hasCapturedAtInPayload
-        ? payload.exchangeRateCapturedAt
-        : existingRequest?.exchangeRateCapturedAt || new Date();
-
-  return {
-    currency,
-    exchangeRateToNgn,
-    exchangeRateCapturedAt,
-    lineItems: normalizedLineItems,
-    totalAmountNgn,
-  };
 };
 
 const DEFAULT_MATERIAL_REQUEST_TYPES = [
@@ -308,7 +256,7 @@ router.put('/material-request-types', authMiddleware, requireRole('Admin'), asyn
 });
 
 // GET all Material Requests (paginated, without attachments/comments)
-router.get('/material-requests', authMiddleware, requireModuleAction('Material Requests', 'view'), async (req, res) => {
+router.get('/material-requests', authMiddleware, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page || 1, 10));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || 20, 10)));
@@ -340,7 +288,7 @@ router.get('/material-requests', authMiddleware, requireModuleAction('Material R
 });
 
 // GET single Material Request
-router.get('/material-requests/:id', authMiddleware, requireModuleAction('Material Requests', 'view'), async (req, res) => {
+router.get('/material-requests/:id', async (req, res) => {
   try {
     const request = await MaterialRequest.findById(req.params.id);
     if (!request) return res.status(404).json({ success: false, message: 'Not found' });
@@ -351,7 +299,7 @@ router.get('/material-requests/:id', authMiddleware, requireModuleAction('Materi
 });
 
 // POST new Material Request
-router.post('/material-requests', authMiddleware, requireModuleAction('Material Requests', 'create'), async (req, res) => {
+router.post('/material-requests', async (req, res) => {
   try {
     // Generate request ID with format MR-MMDDYYYY-COUNT
     const count = await MaterialRequest.countDocuments();
@@ -366,7 +314,6 @@ router.post('/material-requests', authMiddleware, requireModuleAction('Material 
       requestId,
       requestType: normalizeRequestType(req.body?.requestType),
       date: req.body?.date || now.toISOString().split('T')[0],
-      ...buildCurrencySnapshotFields({ payload: req.body }),
     };
 
     const newRequest = new MaterialRequest(payload);
@@ -410,22 +357,13 @@ router.post('/material-requests', authMiddleware, requireModuleAction('Material 
 });
 
 // PUT update Material Request
-router.put('/material-requests/:id', authMiddleware, requireModuleAction('Material Requests', 'edit'), async (req, res) => {
+router.put('/material-requests/:id', async (req, res) => {
   try {
-    const existingRequest = await MaterialRequest.findById(req.params.id);
-    if (!existingRequest) {
-      return res.status(404).json({ success: false, message: 'Not found' });
-    }
-
     const updatePayload = {
       ...req.body,
       ...(req.body?.requestType
         ? { requestType: normalizeRequestType(req.body.requestType) }
         : {}),
-      ...buildCurrencySnapshotFields({
-        payload: req.body,
-        existingRequest,
-      }),
     };
 
     const updatedRequest = await MaterialRequest.findByIdAndUpdate(
@@ -433,6 +371,7 @@ router.put('/material-requests/:id', authMiddleware, requireModuleAction('Materi
       { $set: updatePayload },
       { new: true, runValidators: true }
     );
+    if (!updatedRequest) return res.status(404).json({ success: false, message: 'Not found' });
     res.json(updatedRequest);
   } catch (err) {
     console.error('Error updating material request:', err);
@@ -441,7 +380,7 @@ router.put('/material-requests/:id', authMiddleware, requireModuleAction('Materi
 });
 
 // POST Approve Material Request -> Auto Generate Purchase Order OR Fulfill from Inventory
-router.post('/material-requests/:id/approve', authMiddleware, requireModuleAction('Material Requests', 'approve'), async (req, res) => {
+router.post('/material-requests/:id/approve', async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: 'Invalid request id' });
@@ -686,7 +625,7 @@ router.post('/material-requests/:id/approve', authMiddleware, requireModuleActio
 });
 
 // POST Generate RFQ for approved request and send PDF to selected vendors
-router.post('/material-requests/:id/generate-rfq', authMiddleware, requireModuleAction('Material Requests', 'approve'), async (req, res) => {
+router.post('/material-requests/:id/generate-rfq', authMiddleware, async (req, res) => {
   const requestId = String(req.params.id || '').trim();
   if (rfqGenerationLocks.has(requestId)) {
     return res.status(409).json({
@@ -809,6 +748,20 @@ router.post('/material-requests/:id/generate-rfq', authMiddleware, requireModule
         id: rfq._id,
         number: rfq.rfqNumber,
       });
+      await MaterialRequest.findByIdAndUpdate(request._id, {
+        $set: { linkedRFQId: rfq._id },
+        $addToSet: { linkedRFQIds: rfq._id },
+      });
+      await createProcurementNotification({
+        title: `RFQ sent: ${rfq.rfqNumber}`,
+        message: `RFQ was created for material request ${request.requestId || request._id}.`,
+        sourceKey: `procurement-rfq-created-${rfq._id}`,
+        metadata: {
+          requestId: request._id,
+          rfqId: rfq._id,
+          rfqNumber: rfq.rfqNumber,
+        },
+      });
       existingVendorIdSet.add(vendorObjectId);
     }
 
@@ -883,7 +836,7 @@ router.post('/material-requests/:id/generate-rfq', authMiddleware, requireModule
 });
 
 // POST Create Purchase Order from approved request
-router.post('/material-requests/:id/create-po', authMiddleware, requireModuleAction('Material Requests', 'approve'), async (req, res) => {
+router.post('/material-requests/:id/create-po', authMiddleware, async (req, res) => {
   const requestId = String(req.params.id || '').trim();
   if (poGenerationLocks.has(requestId)) {
     return res.status(409).json({
@@ -939,7 +892,7 @@ router.post('/material-requests/:id/create-po', authMiddleware, requireModuleAct
 });
 
 // POST Reject Material Request
-router.post('/material-requests/:id/reject', authMiddleware, requireModuleAction('Material Requests', 'approve'), async (req, res) => {
+router.post('/material-requests/:id/reject', async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: 'Invalid request id' });
@@ -984,7 +937,7 @@ router.post('/material-requests/:id/reject', authMiddleware, requireModuleAction
 // ==========================================
 
 // GET Purchase Orders List (with filters and pagination)
-router.get('/purchase-orders', authMiddleware, requireModuleAction('Purchase Orders', 'view'), async (req, res) => {
+router.get('/purchase-orders', async (req, res) => {
   try {
     const { page = 1, limit = 10, search, vendor, status, dateRange } = req.query;
     const query = {};
@@ -1057,7 +1010,7 @@ router.get('/purchase-orders', authMiddleware, requireModuleAction('Purchase Ord
 });
 
 // GET POs pending payment (for Finance module) - MUST be before /:id route
-router.get('/purchase-orders/pending-payment', authMiddleware, requireModuleAction('Purchase Orders', 'view'), async (req, res) => {
+router.get('/purchase-orders/pending-payment', async (req, res) => {
   try {
     const orders = await PurchaseOrder.find({ 
       status: { $in: ['payment_pending', 'partly_paid'] },
@@ -1070,7 +1023,7 @@ router.get('/purchase-orders/pending-payment', authMiddleware, requireModuleActi
 });
 
 // GET Single Purchase Order
-router.get('/purchase-orders/:id', authMiddleware, requireModuleAction('Purchase Orders', 'view'), async (req, res) => {
+router.get('/purchase-orders/:id', async (req, res) => {
   try {
     const order = await PurchaseOrder.findById(req.params.id)
         .populate('linkedMaterialRequestId');
@@ -1082,7 +1035,7 @@ router.get('/purchase-orders/:id', authMiddleware, requireModuleAction('Purchase
 });
 
 // POST Create Purchase Order
-router.post('/purchase-orders', authMiddleware, requireModuleAction('Purchase Orders', 'create'), async (req, res) => {
+router.post('/purchase-orders', async (req, res) => {
   try {
     const newOrder = new PurchaseOrder(req.body);
     
@@ -1113,7 +1066,7 @@ router.post('/purchase-orders', authMiddleware, requireModuleAction('Purchase Or
 });
 
 // POST Review and approve PO (Finance workflow) - Specific action route before generic update
-router.post('/purchase-orders/:id/review', authMiddleware, requireModuleAction('Purchase Orders', 'approve'), async (req, res) => {
+router.post('/purchase-orders/:id/review', async (req, res) => {
   try {
     const po = await PurchaseOrder.findById(req.params.id);
     if (!po) {
@@ -1147,7 +1100,7 @@ router.post('/purchase-orders/:id/review', authMiddleware, requireModuleAction('
 });
 
 // POST Mark PO as paid - Specific action route
-router.post('/purchase-orders/:id/mark-paid', authMiddleware, requireModuleAction('Purchase Orders', 'edit'), async (req, res) => {
+router.post('/purchase-orders/:id/mark-paid', async (req, res) => {
   try {
     const po = await PurchaseOrder.findById(req.params.id)
       .populate('linkedMaterialRequestId', 'budgetCode');
@@ -1216,7 +1169,7 @@ router.post('/purchase-orders/:id/mark-paid', authMiddleware, requireModuleActio
 });
 
 // POST Lock/Unlock Purchase Order
-router.post('/purchase-orders/:id/lock', authMiddleware, requireModuleAction('Purchase Orders', 'edit'), async (req, res) => {
+router.post('/purchase-orders/:id/lock', async (req, res) => {
   try {
     const po = await PurchaseOrder.findById(req.params.id);
     if (!po) {
@@ -1293,7 +1246,7 @@ router.post('/purchase-orders/:id/lock', authMiddleware, requireModuleAction('Pu
 });
 
 // POST Approve/Reject Purchase Order step
-router.post('/purchase-orders/:id/approve', authMiddleware, requireModuleAction('Purchase Orders', 'approve'), async (req, res) => {
+router.post('/purchase-orders/:id/approve', async (req, res) => {
   try {
     const { approved = true, comment = '' } = req.body || {};
     const po = await PurchaseOrder.findById(req.params.id);
@@ -1388,7 +1341,7 @@ router.post('/purchase-orders/:id/approve', authMiddleware, requireModuleAction(
 });
 
 // PUT Update Purchase Order
-router.put('/purchase-orders/:id', authMiddleware, requireModuleAction('Purchase Orders', 'edit'), async (req, res) => {
+router.put('/purchase-orders/:id', async (req, res) => {
   try {
     // If updating line items, might need to recalculate total
     const updates = { ...req.body };
@@ -1452,7 +1405,7 @@ router.put('/purchase-orders/:id', authMiddleware, requireModuleAction('Purchase
 });
 
 // DELETE Purchase Order
-router.delete('/purchase-orders/:id', authMiddleware, requireModuleAction('Purchase Orders', 'delete'), async (req, res) => {
+router.delete('/purchase-orders/:id', async (req, res) => {
   try {
     const deletedOrder = await PurchaseOrder.findByIdAndDelete(req.params.id);
     if (!deletedOrder) return res.status(404).json({ success: false, message: 'Not found' });

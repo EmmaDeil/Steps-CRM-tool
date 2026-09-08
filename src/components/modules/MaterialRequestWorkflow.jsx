@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
-import ModuleLoader from "../common/ModuleLoader";
+import api from "../../services/api";
 import {
   FileText,
   ShoppingCart,
@@ -26,10 +25,10 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
 
   const fetchWorkflowProgress = useCallback(async () => {
     try {
-      const response = await axios.get(
+      const response = await api.get(
         `/api/workflow/material-requests/${materialRequestId}/progress`,
       );
-      setWorkflow(response.data.data);
+      setWorkflow(response.data);
       setError(null);
     } catch (err) {
       setError(
@@ -85,8 +84,22 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
     },
   ];
 
+  const requestType = String(workflow?.materialRequest?.requestType || '')
+    .toLowerCase()
+    .trim();
+  const canGenerateRfq =
+    requestType === 'purchase request' ||
+    requestType === 'store' ||
+    requestType === 'rfq';
+  const canReceiveItems =
+    selectedPO?.status === 'partly_paid' || selectedPO?.status === 'paid';
+
   if (loading) {
-    return <ModuleLoader moduleName="Material Request Workflow" />;
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
 
   return (
@@ -192,13 +205,21 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
                   </div>
                 ))}
                 {workflow.rfqs.length === 0 &&
-                  workflow?.materialRequest?.id && (
+                  workflow?.materialRequest?.id &&
+                  canGenerateRfq && (
                     <button
                       onClick={() => setShowQuotationModal(true)}
                       className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
                     >
                       <Plus size={18} /> Generate RFQ
                     </button>
+                  )}
+                {workflow.rfqs.length === 0 &&
+                  workflow?.materialRequest?.id &&
+                  !canGenerateRfq && (
+                    <p className="text-sm text-gray-500">
+                      RFQ generation is not available for {workflow?.materialRequest?.requestType || 'this request type'}.
+                    </p>
                   )}
               </div>
             </div>
@@ -277,15 +298,14 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
         </div>
 
         {/* Receiving Section */}
-        {selectedPO?.status !== "payment_pending" && (
+        {selectedPO && (
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Package className="text-purple-600" />
               Item Receiving
             </h2>
             <p className="text-gray-600 mb-4">
-              {selectedPO?.status === "partly_paid" ||
-              selectedPO?.status === "paid"
+              {canReceiveItems
                 ? "Ready to receive items into inventory"
                 : "Please make payment before receiving items"}
             </p>
@@ -311,9 +331,9 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
             ) : (
               <button
                 onClick={() => setShowReceivingModal(true)}
-                disabled={selectedPO?.status === "payment_pending"}
+                disabled={!canReceiveItems}
                 className={`w-full py-2 rounded-lg flex items-center justify-center gap-2 ${
-                  selectedPO?.status === "payment_pending"
+                  !canReceiveItems
                     ? "bg-gray-300 text-gray-600 cursor-not-allowed"
                     : "bg-purple-600 text-white hover:bg-purple-700"
                 }`}
@@ -409,7 +429,7 @@ const QuotationModal = ({ onClose, rfqId, onSuccess }) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post(`/api/workflow/rfqs/${rfqId}/add-quotation`, {
+      await api.post(`/api/workflow/rfqs/${rfqId}/add-quotation`, {
         quotedAmount: parseFloat(quotedAmount),
         quotedBy,
         notes,
@@ -494,7 +514,7 @@ const PaymentModal = ({ onClose, poId, remainingAmount, onSuccess }) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post(`/api/workflow/pos/${poId}/record-payment`, {
+      await api.post(`/api/workflow/pos/${poId}/record-payment`, {
         amount: parseFloat(amount),
         paymentMethod,
         paymentType: amount >= remainingAmount ? "full" : "partial",
@@ -592,7 +612,7 @@ const ReceivingModal = ({ onClose, poId, lineItems, onSuccess }) => {
 
     setLoading(true);
     try {
-      await axios.post(`/api/workflow/pos/${poId}/receive-items`, {
+      await api.post(`/api/workflow/pos/${poId}/receive-items`, {
         receivedItems,
         storeLocation,
       });

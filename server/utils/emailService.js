@@ -36,93 +36,72 @@ const transporter = nodemailer.createTransport({
 
 // Send material request approval email
 async function sendApprovalEmail(requestData) {
-  const recipientEmail = requestData.approverEmail || requestData.to;
-  if (!recipientEmail) {
-    throw new Error('Recipient email (approverEmail or to) is required to send approval email');
+  if (!requestData.approverEmail) {
+    throw new Error('approverEmail is required to send approval email');
   }
 
-  // Material requests have a custom page. Other requests go to approvals tab.
-  const isMaterialRequest = Array.isArray(requestData.lineItems) && requestData.lineItems.length > 0;
-  const approvalLink = isMaterialRequest
-    ? `${frontendUrl}/material-requests?action=approve&id=${requestData._id}`
-    : `${frontendUrl}/home/9`; // Approvals module tab index is usually 9 in sidebar
-
-  let detailsHTML = '';
-  if (isMaterialRequest) {
-    const lineItemsHTML = requestData.lineItems.map(item => `
-      <tr>
-        <td style="padding: 8px; border: 1px solid #ddd;">${item.itemName}</td>
-        <td style="padding: 8px; border: 1px solid #ddd;">${item.quantity} ${item.quantityType}</td>
-        <td style="padding: 8px; border: 1px solid #ddd;">$${item.amount || 0}</td>
-      </tr>
-    `).join('');
-
-    detailsHTML = `
-      <h3>Line Items</h3>
-      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-        <thead>
-          <tr style="background-color: #0d6efd; color: white;">
-            <th style="padding: 10px; text-align: left;">Item</th>
-            <th style="padding: 10px; text-align: left;">Quantity</th>
-            <th style="padding: 10px; text-align: left;">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${lineItemsHTML}
-        </tbody>
-      </table>
-    `;
-  } else if (requestData.additionalInfo) {
-    detailsHTML = `
-      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; white-space: pre-line;">
-        <strong>Additional Info:</strong><br/>
-        ${requestData.additionalInfo}
-      </div>
-    `;
-  }
-
-  const approverName = requestData.approver || requestData.managerName || 'Approver';
-  const requestId = requestData.requestId || requestData._id || 'N/A';
-  const requester = requestData.requestedBy || requestData.employeeName || 'An employee';
-  const requestType = requestData.requestType || 'Approval request';
+  const approvalLink = `${frontendUrl}/material-requests?action=approve&id=${requestData._id}`;
+  
+  const lineItemsHTML = requestData.lineItems.map(item => `
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd;">${item.itemName}</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">${item.quantity} ${item.quantityType}</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">$${item.amount || 0}</td>
+    </tr>
+  `).join('');
 
   const mailOptions = {
     from: emailUser,
-    to: recipientEmail,
-    subject: `Approval Required: ${requestType} - ${requestId}`,
+    to: requestData.approverEmail,
+    subject: `Material Request Approval Required - ${requestData.requestId}`,
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-        <h2 style="color: #0d6efd;">Approval Required</h2>
-        <p>Dear ${approverName},</p>
-        <p>A new ${requestType.toLowerCase()} has been submitted by ${requester} and requires your approval.</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0d6efd;">Material Request Approval Required</h2>
+        <p>Dear ${requestData.approver},</p>
+        <p>A new material request has been submitted and requires your approval.</p>
         
         <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #0d6efd;">Request Details</h3>
-          <p><strong>Requester:</strong> ${requester}</p>
-          <p><strong>Department:</strong> ${requestData.department || 'N/A'}</p>
-          <p><strong>Reason/Purpose:</strong> ${requestData.reason || requestData.purpose || 'N/A'}</p>
-          ${requestData.amount ? `<p><strong>Amount/Duration:</strong> ${requestData.amount}</p>` : ''}
+          <h3 style="margin-top: 0;">Request Details</h3>
+          <p><strong>Request ID:</strong> ${requestData.requestId}</p>
+          <p><strong>Requested By:</strong> ${requestData.requestedBy}</p>
+          <p><strong>Department:</strong> ${requestData.department}</p>
+          <p><strong>Date:</strong> ${requestData.date}</p>
+          <p><strong>Type:</strong> ${requestData.requestType}</p>
         </div>
 
-        ${detailsHTML}
+        <h3>Line Items</h3>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+          <thead>
+            <tr style="background-color: #0d6efd; color: white;">
+              <th style="padding: 10px; text-align: left;">Item</th>
+              <th style="padding: 10px; text-align: left;">Quantity</th>
+              <th style="padding: 10px; text-align: left;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lineItemsHTML}
+          </tbody>
+        </table>
+
+        ${requestData.message ? `<p><strong>Message:</strong> ${requestData.message}</p>` : ''}
 
         <div style="margin: 30px 0;">
-          <a href="${approvalLink}" style="background-color: #198754; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
-            Review & Action Request
+          <a href="${approvalLink}" style="background-color: #198754; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+            Review & Approve Request
           </a>
         </div>
 
         <p style="color: #666; font-size: 12px;">
-          This is an automated email notification from Steps CRM. Please do not reply directly.
+          This is an automated email. Please do not reply to this message.
         </p>
       </div>
     `,
   };
 
   try {
+    // In development, just log the email
     if (process.env.NODE_ENV !== 'production') {
       console.log('📧 Email would be sent to:', mailOptions.to);
-      console.log('Subject:', mailOptions.subject);
       console.log('Approval Link:', approvalLink);
       return { success: true, message: 'Email logged (dev mode)' };
     }
@@ -678,97 +657,6 @@ async function sendWelcomeVerificationEmail(email, name, verificationToken) {
     return { success: false, error: error.message };
   }
 }
-// Send temporary item return reminder email
-async function sendItemReturnReminderEmail(ticketData, recipientEmail, recipientName) {
-  if (!recipientEmail) {
-    throw new Error('recipientEmail is required to send return reminder email');
-  }
-
-  const mailOptions = {
-    from: emailUser,
-    to: recipientEmail,
-    subject: `REMINDER: Return of ${ticketData.title} is Due`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-        <div style="background-color: #d97706; padding: 24px; text-align: center; color: white;">
-          <h2 style="margin: 0; font-size: 20px;">⏰ Temporary Item Return Reminder</h2>
-        </div>
-        <div style="padding: 24px;">
-          <p>Dear ${recipientName},</p>
-          <p>This is a reminder that the item(s) you transferred temporarily under ticket <strong>${ticketData.ticketNumber}</strong> are scheduled to be returned in 1 hour.</p>
-          
-          <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <h3 style="margin-top: 0; color: #d97706;">Details</h3>
-            <p><strong>Item Name/Title:</strong> ${ticketData.title}</p>
-            <p><strong>Transfer Type:</strong> Temporary</p>
-            <p><strong>Source Location:</strong> ${ticketData.fromLocation || 'N/A'}</p>
-            <p><strong>Destination Location:</strong> ${ticketData.toLocation || 'N/A'}</p>
-            <p><strong>Scheduled Return Time:</strong> ${new Date(ticketData.returnDate).toLocaleString()}</p>
-          </div>
-          
-          <p>Please ensure the items are returned to their designated location and update the Facilities department or update the ticket status if complete.</p>
-          
-          <p style="color: #666; font-size: 12px; margin-top: 30px;">
-            This is an automated reminder from Steps CRM. Please do not reply to this message.
-          </p>
-        </div>
-      </div>
-    `
-  };
-
-  try {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('📧 Item return reminder email would be sent to:', recipientEmail);
-      console.log('   Ticket:', ticketData.ticketNumber);
-      return { success: true, message: 'Reminder email logged (dev mode)' };
-    }
-
-    await transporter.sendMail(mailOptions);
-    return { success: true, message: 'Reminder email sent successfully' };
-  } catch (error) {
-    console.error('Error sending return reminder email:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-// Send document signed notification email
-async function sendDocumentSignedEmail(documentData, signerName, recipientEmail) {
-  if (!recipientEmail) return;
-
-  const viewLink = `${frontendUrl}/docsign/view/${documentData._id}`;
-  
-  const mailOptions = {
-    from: emailUser,
-    to: recipientEmail,
-    subject: `📝 Document Signed: ${documentData.name}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #137fec;">📝 Document Signed</h2>
-        <p>Hello,</p>
-        <p><strong>${signerName}</strong> has signed the document: <strong>${documentData.name}</strong>.</p>
-        <p>Current Document Status: <strong>${documentData.status}</strong></p>
-        <div style="margin: 30px 0;">
-          <a href="${viewLink}" style="background-color: #137fec; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
-            View Document Status
-          </a>
-        </div>
-        <p style="color: #9ca3af; font-size: 12px;">This is an automated notification. Please do not reply.</p>
-      </div>
-    `
-  };
-
-  try {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`📧 Document signed email would be sent to: ${recipientEmail}`);
-      return { success: true };
-    }
-    await transporter.sendMail(mailOptions);
-    return { success: true };
-  } catch (error) {
-    console.error('Error sending document signed email:', error);
-    return { success: false, error: error.message };
-  }
-}
 
 module.exports = {
   sendApprovalEmail,
@@ -779,8 +667,6 @@ module.exports = {
   sendSecurityAlertEmail,
   sendNotificationRuleEmail,
   sendSignatureRequestEmail,
-  sendDocumentSignedEmail,
   sendInventoryExpiryAlertEmail,
-  sendItemReturnReminderEmail,
   transporter,
 };

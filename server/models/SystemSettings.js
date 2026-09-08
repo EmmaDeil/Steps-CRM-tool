@@ -25,12 +25,7 @@ const systemSettingsSchema = new mongoose.Schema({
   logoUrl: { type: String, default: '' },
   slackEnabled: { type: Boolean, default: false },
   emailSmtp: { type: String, default: 'smtp.mailtrap.io' },
-  appApiKey: { type: String, default: '' },
-  appApiKeyGeneratedAt: { type: Date, default: null },
-  appApiKeyLastUsedAt: { type: Date, default: null },
   attendanceApiKey: { type: String, default: '' },
-  attendanceApiKeyGeneratedAt: { type: Date, default: null },
-  attendanceApiKeyLastUsedAt: { type: Date, default: null },
   maintenanceMode: { type: Boolean, default: false }
 }, { timestamps: true });
 

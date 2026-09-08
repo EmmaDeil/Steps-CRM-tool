@@ -35,10 +35,9 @@ const auditLogSchema = new mongoose.Schema({
       'Backup',
       'Restore',
       'Import',
+      'Export',
       'Approval Flow',
       'Approval',
-      'Panic Logout',
-      'Data Archive',
     ],
   },
   actionColor: {

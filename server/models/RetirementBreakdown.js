@@ -13,24 +13,10 @@ const retirementBreakdownSchema = new mongoose.Schema({
     quantity: { type: Number },
     amount: { type: Number },
   }],
-  evidenceFiles: [{
-    fileName: { type: String },
-    fileType: { type: String },
-    fileData: { type: String },
-    uploadedAt: { type: String },
-    uploadedBy: { type: String },
-  }],
   totalExpenses: { type: Number, default: 0 },
   newOpeningBalance: { type: Number, default: 0 },
-  status: {
-    type: String,
-    enum: ['draft', 'submitted', 'reconciled'],
-    default: 'draft',
-  },
+  status: { type: String, enum: ['draft', 'submitted'], default: 'draft' },
   submittedDate: { type: String },
-  reconciledDate: { type: String },
-  reconciledById: { type: String },
-  reconciledByName: { type: String },
 }, { timestamps: true });
 
 module.exports = mongoose.model('RetirementBreakdown', retirementBreakdownSchema);

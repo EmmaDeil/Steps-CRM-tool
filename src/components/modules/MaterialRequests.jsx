@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { useAuth } from "../../context/useAuth";
 import { useLocation, useNavigate } from "react-router-dom";
-import { apiService, getBackendConnectionMessage } from "../../services/api";
+import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Breadcrumb from "../Breadcrumb";
 import Navbar from "../Navbar";
@@ -27,7 +27,7 @@ const MaterialRequests = () => {
   const [_error, setError] = useState(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("last30");
   const [sortBy, setSortBy] = useState("newest");
   const [showForm, setShowForm] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -451,14 +451,10 @@ const MaterialRequests = () => {
       usersFetchErrorLoggedRef.current = false;
     } catch (error) {
       if (!usersFetchErrorLoggedRef.current) {
-        const connectionMessage = await getBackendConnectionMessage(
-          error,
-          "Material Requests users",
-        );
-
-        if (connectionMessage) {
-          console.warn(connectionMessage);
-          toast.error(connectionMessage);
+        if (!error?.response) {
+          console.warn(
+            "MaterialRequests: could not fetch users while backend is unavailable.",
+          );
         } else {
           console.error(
             "MaterialRequests: failed to fetch users.",
@@ -605,8 +601,6 @@ const MaterialRequests = () => {
       reason: "",
       currency: appCurrency || "NGN",
       exchangeRate: "",
-      discountType: "",
-      discountValue: "",
     }),
     [appCurrency],
   );
@@ -620,38 +614,6 @@ const MaterialRequests = () => {
       description: "",
     },
   ];
-
-  const calculateRequestTotals = useCallback(
-    ({ items = [], discountType = "", discountValue = "", rateToNgn = 1 }) => {
-      const subtotal = items.reduce(
-        (sum, item) =>
-          sum + (Number(item.quantity) || 0) * (Number(item.amount) || 0),
-        0,
-      );
-      const parsedDiscountValue = Number(discountValue) || 0;
-      let discountAmount = 0;
-
-      if (discountType === "percentage" && parsedDiscountValue > 0) {
-        discountAmount = (subtotal * parsedDiscountValue) / 100;
-      } else if (discountType === "amount" && parsedDiscountValue > 0) {
-        discountAmount = parsedDiscountValue;
-      }
-
-      discountAmount = Math.min(Math.max(discountAmount, 0), subtotal);
-      const grandTotal = Math.max(subtotal - discountAmount, 0);
-      const effectiveRateToNgn = Number(rateToNgn) > 0 ? Number(rateToNgn) : 1;
-
-      return {
-        subtotal,
-        discountAmount,
-        grandTotal,
-        subtotalNgn: subtotal * effectiveRateToNgn,
-        discountAmountNgn: discountAmount * effectiveRateToNgn,
-        grandTotalNgn: grandTotal * effectiveRateToNgn,
-      };
-    },
-    [],
-  );
 
   const resetCreateForm = useCallback(() => {
     setIsEditMode(false);
@@ -1048,12 +1010,6 @@ const MaterialRequests = () => {
         lineTotalNgn: quantity * amount * effectiveRateToNgn,
       };
     });
-    const requestTotals = calculateRequestTotals({
-      items: normalizedLineItems,
-      discountType: formData.discountType,
-      discountValue: formData.discountValue,
-      rateToNgn: effectiveRateToNgn,
-    });
 
     setIsSubmitting(true);
     try {
@@ -1064,11 +1020,10 @@ const MaterialRequests = () => {
         exchangeRate: isForeignCurrency ? String(exchangeRateToNgn) : "",
         exchangeRateToNgn: effectiveRateToNgn,
         lineItems: normalizedLineItems,
-        discountType: formData.discountType || "",
-        discountValue: Number(formData.discountValue) || 0,
-        subtotalAmount: requestTotals.subtotal,
-        discountAmount: requestTotals.discountAmount,
-        totalAmountNgn: requestTotals.grandTotalNgn,
+        totalAmountNgn: normalizedLineItems.reduce(
+          (sum, item) => sum + item.lineTotalNgn,
+          0,
+        ),
         requestedBy:
           user?.fullName ||
           user?.primaryEmailAddress?.emailAddress ||
@@ -1160,11 +1115,6 @@ const MaterialRequests = () => {
       exchangeRate:
         request.currency && request.currency !== "NGN"
           ? String(request.exchangeRateToNgn || request.exchangeRate || "")
-          : "",
-      discountType: request.discountType || "",
-      discountValue:
-        request.discountValue !== undefined && request.discountValue !== null
-          ? String(request.discountValue)
           : "",
     });
     setLineItems(request.lineItems || []);
@@ -1730,17 +1680,9 @@ const MaterialRequests = () => {
       header: "Request ID",
       accessorKey: "requestId",
       cell: (req) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleViewRequest(req);
-          }}
-          className="text-sm font-semibold text-[#137fec] hover:text-[#0d6efd]"
-          title="Open request details"
-        >
+        <span className="text-sm font-semibold text-[#137fec]">
           {req.requestId}
-        </button>
+        </span>
       ),
     },
     {
@@ -1800,48 +1742,6 @@ const MaterialRequests = () => {
       ),
     },
     {
-      header: "Amount",
-      accessorKey: "amount",
-      cell: (req) => {
-        const subtotal = Array.isArray(req.lineItems)
-          ? req.lineItems.reduce(
-              (sum, item) =>
-                sum +
-                (Number(item?.quantity) || 0) * (Number(item?.amount) || 0),
-              0,
-            )
-          : 0;
-        const discountAmount =
-          Number(req.discountAmount) > 0
-            ? Number(req.discountAmount)
-            : calculateRequestTotals({
-                items: req.lineItems || [],
-                discountType: req.discountType,
-                discountValue: req.discountValue,
-                rateToNgn: 1,
-              }).discountAmount;
-        const requestTotal = Math.max(subtotal - discountAmount, 0);
-
-        return (
-          <div className="flex flex-col items-end">
-            <span className="text-sm font-semibold text-[#111418]">
-              {formatCurrency(requestTotal, {
-                currency: req.currency || "NGN",
-              })}
-            </span>
-            {(req.currency || "NGN") !== "NGN" &&
-              Number(req.totalAmountNgn) > 0 && (
-                <span className="text-xs text-[#617589]">
-                  {formatCurrency(Number(req.totalAmountNgn), {
-                    currency: "NGN",
-                  })}
-                </span>
-              )}
-          </div>
-        );
-      },
-    },
-    {
       header: "Approver",
       accessorKey: "approver",
       cell: (req) => (
@@ -1881,6 +1781,16 @@ const MaterialRequests = () => {
           className="flex items-center justify-end gap-2"
           onClick={(e) => e.stopPropagation()}
         >
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleViewRequest(req);
+            }}
+            className="p-1 text-[#617589] hover:text-[#137fec] transition-colors"
+            title="View details"
+          >
+            <i className="fa-solid fa-eye"></i>
+          </button>
           {canUserEdit(req) && (
             <button
               onClick={(e) => {
@@ -1937,24 +1847,37 @@ const MaterialRequests = () => {
 
   return (
     <>
-      <div className="w-full min-h-screen bg-gray-50 px-4 sm:px-6 lg:px-8">
-        <div className="-mx-4 sm:-mx-6 lg:-mx-8">
-          <Breadcrumb
-            items={[
-              { label: "Home", href: "/home", icon: "fa-house" },
-              {
-                label: "Material Requests",
-                icon: "fa-box",
-              },
-            ]}
-          />
-        </div>
+      <div className="w-full min-h-screen bg-gray-50 px-1">
+        <Breadcrumb
+          items={[
+            { label: "Home", href: "/home", icon: "fa-house" },
+            {
+              label: "Material Requests",
+              icon: "fa-box",
+              ...(showForm && {
+                onClick: (e) => {
+                  e.preventDefault();
+                  setShowForm(false);
+                  resetCreateForm();
+                },
+              }),
+            },
+            ...(showForm
+              ? [
+                  {
+                    label: isEditMode ? "Edit Request" : "Create New",
+                    icon: isEditMode ? "fa-pen-to-square" : "fa-plus",
+                  },
+                ]
+              : []),
+          ]}
+        />
 
         {!showForm && !showViewModal && (
-          <div className="w-full max-w-none py-6">
+          <div className="max-w-[1490px] mx-auto px-1 py-6">
             {/* Page Header */}
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
+            <div className="flex justify-between items-start mb-6">
+              <div>
                 <h1 className="text-2xl font-bold text-[#111418] mb-1">
                   Material Requests
                 </h1>
@@ -1967,7 +1890,7 @@ const MaterialRequests = () => {
                   resetCreateForm();
                   setShowForm(true);
                 }}
-                className="w-full sm:w-auto px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-[#0d6efd] transition-colors flex items-center justify-center gap-2 font-medium"
+                className="px-4 py-2 bg-[#137fec] text-white rounded-lg hover:bg-[#0d6efd] transition-colors flex items-center gap-2 font-medium"
               >
                 <i className="fa-solid fa-plus"></i>
                 Create Request
@@ -1976,9 +1899,9 @@ const MaterialRequests = () => {
 
             {/* Search & Filters Bar */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+              <div className="flex flex-wrap items-center gap-3">
                 {/* Search Input */}
-                <div className="lg:col-span-1 min-w-0">
+                <div className="flex-1 min-w-[200px]">
                   <div className="relative">
                     <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-[#617589]"></i>
                     <input
@@ -1992,11 +1915,11 @@ const MaterialRequests = () => {
                 </div>
 
                 {/* Status Filter */}
-                <div className="relative min-w-0">
+                <div className="relative">
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer"
+                    className="pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[140px]"
                   >
                     <option value="all">All Status</option>
                     <option value="pending">Pending</option>
@@ -2009,11 +1932,11 @@ const MaterialRequests = () => {
                 </div>
 
                 {/* Date Filter */}
-                <div className="relative min-w-0">
+                <div className="relative">
                   <select
                     value={dateFilter}
                     onChange={(e) => setDateFilter(e.target.value)}
-                    className="w-full pl-5 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer"
+                    className="pl-5 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[150px]"
                   >
                     <option value="all">All time</option>
                     <option value="last7">Last 7 days</option>
@@ -2024,11 +1947,11 @@ const MaterialRequests = () => {
                 </div>
 
                 {/* Sort By */}
-                <div className="relative min-w-0">
+                <div className="relative">
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer"
+                    className="pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#137fec] text-sm appearance-none bg-white cursor-pointer min-w-[150px]"
                   >
                     <option value="newest">Newest First</option>
                     <option value="oldest">Oldest First</option>
@@ -2050,7 +1973,7 @@ const MaterialRequests = () => {
                       setDateFilter("last30");
                       setSortBy("newest");
                     }}
-                    className="px-3 py-2 text-[#617589] hover:text-[#111418] hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm lg:justify-start"
+                    className="px-3 py-2 text-[#617589] hover:text-[#111418] hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2 text-sm"
                   >
                     <i className="fa-solid fa-filter-circle-xmark"></i>
                     {/* Clear filters */}
@@ -2063,7 +1986,6 @@ const MaterialRequests = () => {
               <DataTable
                 columns={materialRequestColumns}
                 data={filteredRequests}
-                onRowClick={(req) => handleViewRequest(req)}
                 isLoading={false}
                 emptyMessage={
                   searchQuery ||
@@ -2080,10 +2002,10 @@ const MaterialRequests = () => {
 
         {/* Request Form - New Consolidated Design */}
         {showForm && (
-          <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex-1 w-full max-w-[1400px] mx-auto px-2 sm:px-6 py-8">
             {/* Page Heading */}
-            <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div className="min-w-0">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+              <div>
                 <h1 className="text-3xl font-bold tracking-tight text-[#111418]">
                   {isEditMode
                     ? "Edit Material Request"
@@ -2429,265 +2351,241 @@ const MaterialRequests = () => {
                 <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                   <h3 className="text-base font-bold text-[#111418]">
                     <i className="fa-solid fa-boxes-stacked text-[#137fec] mr-2"></i>
-                    Requested Materials
+                    Material Request Breakdown
                   </h3>
-                  {/* <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3">
                     <span className="text-xs font-medium text-[#617589] bg-white px-2.5 py-1 rounded-full border border-gray-200">
                       {lineItems.length}{" "}
                       {lineItems.length === 1 ? "item" : "items"}
                     </span>
-                  </div> */}
-                </div>
-
-                <div className="p-4">
-                  <div className="overflow-x-auto">
-                    <div className="min-w-[980px]">
-                      <div className="grid grid-cols-12 gap-2 px-2 pb-2 border-b border-gray-200 text-[11px] font-semibold uppercase tracking-wider text-[#617589]">
-                        <span className="col-span-1">#</span>
-                        <span className="col-span-3">Item / SKU</span>
-                        <span className="col-span-4">Description</span>
-                        <span className="col-span-1">Qty</span>
-                        <span className="col-span-1">Unit</span>
-                        <span className="col-span-1">Unit Cost</span>
-                        <span className="col-span-1 text-center">Action</span>
-                      </div>
-
-                      <div className="space-y-2 pt-2">
-                        {lineItems.map((item, index) => (
-                          <div
-                            key={index}
-                            className="grid grid-cols-12 gap-2 items-start rounded-md border border-gray-100 px-2 py-2"
-                          >
-                            <div className="col-span-1 pt-1">
-                              <span className="inline-flex h-6 min-w-2 items-center justify-center text-xs font-bold text-white bg-[#137fec] px-2 rounded-full">
-                                {index + 1}
-                              </span>
-                            </div>
-
-                            <div className="col-span-3">
-                              <select
-                                className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-1.5 text-sm"
-                                value={item.itemName}
-                                onChange={(e) => {
-                                  const selected = itemOptions.find(
-                                    (o) => o.value === e.target.value,
-                                  );
-                                  handleLineItemChange(
-                                    index,
-                                    "itemName",
-                                    e.target.value,
-                                  );
-                                  if (selected) {
-                                    if (selected.unitPrice)
-                                      handleLineItemChange(
-                                        index,
-                                        "amount",
-                                        selected.unitPrice,
-                                      );
-                                    if (selected.unit)
-                                      handleLineItemChange(
-                                        index,
-                                        "quantityType",
-                                        selected.unit,
-                                      );
-                                  }
-                                }}
-                                required
-                                aria-label={`Item or SKU for row ${index + 1}`}
-                              >
-                                <option value="">Select item...</option>
-                                {itemOptions.map((option) => (
-                                  <option
-                                    key={option.value}
-                                    value={option.value}
-                                  >
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div className="col-span-4">
-                              <input
-                                type="text"
-                                className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-1.5 text-sm"
-                                placeholder="Brief description..."
-                                value={item.description}
-                                onChange={(e) =>
-                                  handleLineItemChange(
-                                    index,
-                                    "description",
-                                    e.target.value,
-                                  )
-                                }
-                                aria-label={`Description for row ${index + 1}`}
-                              />
-                            </div>
-
-                            <div className="col-span-1">
-                              <input
-                                type="number"
-                                className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-1.5 text-sm"
-                                min="0"
-                                placeholder="0"
-                                value={item.quantity}
-                                onChange={(e) =>
-                                  handleLineItemChange(
-                                    index,
-                                    "quantity",
-                                    e.target.value,
-                                  )
-                                }
-                                required
-                                aria-label={`Quantity for row ${index + 1}`}
-                              />
-                            </div>
-
-                            <div className="col-span-1">
-                              <select
-                                className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-1.5 text-sm"
-                                value={item.quantityType}
-                                onChange={(e) =>
-                                  handleLineItemChange(
-                                    index,
-                                    "quantityType",
-                                    e.target.value,
-                                  )
-                                }
-                                disabled={quantityTypeOptions.length === 0}
-                                required
-                                aria-label={`Unit for row ${index + 1}`}
-                              >
-                                <option value="">
-                                  {quantityTypeOptions.length === 0
-                                    ? "No units"
-                                    : "Select..."}
-                                </option>
-                                {Array.from(
-                                  new Set(
-                                    [
-                                      ...quantityTypeOptions,
-                                      item.quantityType,
-                                    ].filter(Boolean),
-                                  ),
-                                ).map((option) => (
-                                  <option key={option} value={option}>
-                                    {getQuantityTypeLabel(option)}
-                                  </option>
-                                ))}
-                              </select>
-                              {quantityTypeOptions.length === 0 && (
-                                <span className="text-[11px] text-amber-700">
-                                  Add units in Unit Setup.
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="col-span-1">
-                              <NumericFormat
-                                className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-1.5 text-sm"
-                                value={item.amount}
-                                thousandSeparator
-                                allowNegative={false}
-                                decimalScale={1}
-                                fixedDecimalScale
-                                placeholder="0.00"
-                                prefix={getCurrencySymbol(
-                                  formData.currency || appCurrency || "NGN",
-                                )}
-                                onValueChange={(values) => {
-                                  handleLineItemChange(
-                                    index,
-                                    "amount",
-                                    values.value,
-                                  );
-                                }}
-                              />
-                            </div>
-
-                            <div className="col-span-1 flex justify-center pt-1">
-                              {lineItems.length > 1 && (
-                                <button
-                                  type="button"
-                                  className="text-gray-400 hover:text-red-500 transition-colors p-1 rounded-lg hover:bg-red-50"
-                                  onClick={() => removeLineItem(index)}
-                                  aria-label={`Remove row ${index + 1}`}
-                                >
-                                  <i className="fa-solid fa-trash-can text-sm"></i>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
                   </div>
                 </div>
 
-                {/* Footer: Add Item + Grand Total */}
-                <div className="px-4 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
-                  {/* Add Line Item Button */}
-                  <button
-                    type="button"
-                    onClick={addLineItem}
-                    className="flex items-center gap-1.5 text-[#137fec] hover:text-[#0d6efd] font-semibold text-xs px-2 py-1.5 rounded-md hover:bg-[#137fec]/10 border border-dashed border-[#137fec]/40 transition-colors"
-                  >
-                    <i className="fa-solid fa-plus text-xs"></i>
-                    {/* Add Item */}
-                  </button>
+                <div className="p-4 space-y-3">
+                  {lineItems.map((item, index) => (
+                    <div
+                      key={index}
+                      className="border border-gray-200 rounded-lg p-4 hover:border-[#137fec]/30 hover:shadow-sm transition-all bg-white group relative"
+                    >
+                      {/* Item number badge & remove */}
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-bold text-white bg-[#137fec] px-2 py-0.5 rounded-full">
+                          Item {index + 1}
+                        </span>
+                        {lineItems.length > 1 && (
+                          <button
+                            type="button"
+                            className="text-gray-400 hover:text-red-500 transition-colors p-1 rounded-lg hover:bg-red-50"
+                            onClick={() => removeLineItem(index)}
+                          >
+                            <i className="fa-solid fa-trash-can text-sm"></i>
+                          </button>
+                        )}
+                      </div>
 
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white px-4 py-3 rounded-lg border border-gray-200 shadow-sm w-[300px] ml-auto">
-                      <label className="flex flex-col gap-1">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-[#617589]">
-                          Discount Type
-                        </span>
-                        <select
-                          value={formData.discountType || ""}
-                          onChange={(e) =>
-                            setFormData((prev) => ({
-                              ...prev,
-                              discountType: e.target.value,
-                            }))
-                          }
-                          className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-2 text-sm"
-                        >
-                          <option value="">No discount</option>
-                          <option value="percentage">Percentage</option>
-                          <option value="amount">Amount</option>
-                        </select>
-                      </label>
-                      <label className="flex flex-col gap-1">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-[#617589]">
-                          Discount Value
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.0"
-                          value={formData.discountValue || ""}
-                          onChange={(e) =>
-                            setFormData((prev) => ({
-                              ...prev,
-                              discountValue: e.target.value,
-                            }))
-                          }
-                          placeholder={
-                            formData.discountType === "percentage"
-                              ? "e.g. 10%"
-                              : "e.g. 5000"
-                          }
-                          className="w-full border-0 border-b border-gray-300 rounded-none bg-transparent text-[#111418] focus:ring-0 focus:border-[#137fec] px-1 py-2 text-sm"
-                          disabled={!formData.discountType}
-                        />
-                      </label>
+                      {/* Row 1: Item select + Description */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Item / SKU
+                          </span>
+                          <select
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            value={item.itemName}
+                            onChange={(e) => {
+                              const selected = itemOptions.find(
+                                (o) => o.value === e.target.value,
+                              );
+                              handleLineItemChange(
+                                index,
+                                "itemName",
+                                e.target.value,
+                              );
+                              if (selected) {
+                                if (selected.unitPrice)
+                                  handleLineItemChange(
+                                    index,
+                                    "amount",
+                                    selected.unitPrice,
+                                  );
+                                if (selected.unit)
+                                  handleLineItemChange(
+                                    index,
+                                    "quantityType",
+                                    selected.unit,
+                                  );
+                              }
+                            }}
+                            required
+                          >
+                            <option value="">Select item...</option>
+                            {itemOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Description
+                          </span>
+                          <input
+                            type="text"
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            placeholder="Brief description..."
+                            value={item.description}
+                            onChange={(e) =>
+                              handleLineItemChange(
+                                index,
+                                "description",
+                                e.target.value,
+                              )
+                            }
+                          />
+                        </label>
+                      </div>
+
+                      {/* Row 2: Qty, UoM, Unit Cost, Total */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Qty
+                          </span>
+                          <input
+                            type="number"
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            min="0"
+                            placeholder="0"
+                            value={item.quantity}
+                            onChange={(e) =>
+                              handleLineItemChange(
+                                index,
+                                "quantity",
+                                e.target.value,
+                              )
+                            }
+                            required
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Unit
+                          </span>
+                          <select
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            value={item.quantityType}
+                            onChange={(e) =>
+                              handleLineItemChange(
+                                index,
+                                "quantityType",
+                                e.target.value,
+                              )
+                            }
+                            disabled={quantityTypeOptions.length === 0}
+                            required
+                          >
+                            <option value="">
+                              {quantityTypeOptions.length === 0
+                                ? "No active units"
+                                : "Select..."}
+                            </option>
+                            {Array.from(
+                              new Set(
+                                [
+                                  ...quantityTypeOptions,
+                                  item.quantityType,
+                                ].filter(Boolean),
+                              ),
+                            ).map((option) => (
+                              <option key={option} value={option}>
+                                {getQuantityTypeLabel(option)}
+                              </option>
+                            ))}
+                          </select>
+                          {quantityTypeOptions.length === 0 && (
+                            <span className="text-[11px] text-amber-700">
+                              Ask admin to add units in Unit Setup.
+                            </span>
+                          )}
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Unit Cost
+                          </span>
+                          <NumericFormat
+                            className="w-full rounded-lg border border-gray-300 bg-white text-[#111418] focus:ring-2 focus:ring-[#137fec]/20 focus:border-[#137fec] px-3 py-2.5 text-sm"
+                            value={item.amount}
+                            thousandSeparator
+                            allowNegative={false}
+                            decimalScale={1}
+                            fixedDecimalScale
+                            placeholder="0.00"
+                            prefix={getCurrencySymbol(
+                              formData.currency || appCurrency || "NGN",
+                            )}
+                            onValueChange={(values) => {
+                              handleLineItemChange(
+                                index,
+                                "amount",
+                                values.value,
+                              );
+                            }}
+                          />
+                        </label>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-[#617589] uppercase tracking-wider">
+                            Total
+                          </span>
+                          <div className="flex items-center h-[42px] px-3 rounded-lg bg-gray-50 border border-gray-200">
+                            <div className="flex flex-col leading-tight">
+                              <span className="text-sm font-bold text-[#111418]">
+                                {formatCurrency(
+                                  (parseFloat(item.quantity) || 0) *
+                                    (parseFloat(item.amount) || 0),
+                                  {
+                                    currency: formData.currency || appCurrency,
+                                  },
+                                )}
+                              </span>
+                              {(formData.currency || appCurrency) !== "NGN" &&
+                                parseFloat(formData.exchangeRate) > 0 && (
+                                  <span className="text-[11px] text-[#617589]">
+                                    ≈{" "}
+                                    {formatCurrency(
+                                      (parseFloat(item.quantity) || 0) *
+                                        (parseFloat(item.amount) || 0) *
+                                        (parseFloat(formData.exchangeRate) ||
+                                          1),
+                                      { currency: "NGN" },
+                                    )}
+                                  </span>
+                                )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-lg border border-gray-200 shadow-sm justify-between w-[300px] ml-auto">
-                      <div className="flex flex-col items-start xl:items-end ml-auto">
+                  ))}
+                </div>
+
+                {/* Footer: Add Item + Grand Total */}
+                <div className="px-4 py-4 bg-gray-50 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={addLineItem}
+                      className="flex items-center gap-2 text-[#137fec] hover:text-[#0d6efd] font-semibold text-sm px-3 py-2 rounded-lg hover:bg-[#137fec]/10 border border-dashed border-[#137fec]/40 transition-colors"
+                    >
+                      <i className="fa-solid fa-plus text-sm"></i>
+                      {/* Add Another Item */}
+                    </button>
+                    <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-lg border border-gray-200 shadow-sm">
+                      <div className="flex flex-col">
                         <span className="text-sm text-[#617589] font-medium">
-                          Subtotal
+                          Grand Total
                         </span>
-                        <span className="text-base font-semibold text-[#111418]">
+                        <span className="text-xl font-bold text-[#111418]">
                           {formatCurrency(
                             lineItems.reduce(
                               (sum, item) =>
@@ -2699,52 +2597,18 @@ const MaterialRequests = () => {
                             { currency: formData.currency || appCurrency },
                           )}
                         </span>
-                        {calculateRequestTotals({
-                          items: lineItems,
-                          discountType: formData.discountType,
-                          discountValue: formData.discountValue,
-                          rateToNgn: parseFloat(formData.exchangeRate) || 1,
-                        }).discountAmount > 0 && (
-                          <span className="text-xs text-[#617589]">
-                            Discount:{" "}
-                            {formatCurrency(
-                              calculateRequestTotals({
-                                items: lineItems,
-                                discountType: formData.discountType,
-                                discountValue: formData.discountValue,
-                                rateToNgn:
-                                  parseFloat(formData.exchangeRate) || 1,
-                              }).discountAmount,
-                              { currency: formData.currency || appCurrency },
-                            )}
-                          </span>
-                        )}
-                        <span className="text-sm text-[#617589] font-medium mt-1">
-                          Grand Total
-                        </span>
-                        <span className="text-xl font-bold text-[#111418]">
-                          {formatCurrency(
-                            calculateRequestTotals({
-                              items: lineItems,
-                              discountType: formData.discountType,
-                              discountValue: formData.discountValue,
-                              rateToNgn: parseFloat(formData.exchangeRate) || 1,
-                            }).grandTotal,
-                            { currency: formData.currency || appCurrency },
-                          )}
-                        </span>
                         {(formData.currency || appCurrency) !== "NGN" &&
                           parseFloat(formData.exchangeRate) > 0 && (
                             <span className="text-xs text-[#617589]">
                               ≈{" "}
                               {formatCurrency(
-                                calculateRequestTotals({
-                                  items: lineItems,
-                                  discountType: formData.discountType,
-                                  discountValue: formData.discountValue,
-                                  rateToNgn:
-                                    parseFloat(formData.exchangeRate) || 1,
-                                }).grandTotalNgn,
+                                lineItems.reduce(
+                                  (sum, item) =>
+                                    sum +
+                                    (parseFloat(item.quantity) || 0) *
+                                      (parseFloat(item.amount) || 0),
+                                  0,
+                                ) * (parseFloat(formData.exchangeRate) || 1),
                                 { currency: "NGN" },
                               )}
                             </span>
@@ -2983,12 +2847,6 @@ const MaterialRequests = () => {
                             };
                           },
                         );
-                        const requestTotals = calculateRequestTotals({
-                          items: normalizedLineItems,
-                          discountType: formData.discountType,
-                          discountValue: formData.discountValue,
-                          rateToNgn: effectiveRateToNgn,
-                        });
 
                         const requestData = {
                           ...formData,
@@ -2998,11 +2856,10 @@ const MaterialRequests = () => {
                             : "",
                           exchangeRateToNgn: effectiveRateToNgn,
                           lineItems: normalizedLineItems,
-                          discountType: formData.discountType || "",
-                          discountValue: Number(formData.discountValue) || 0,
-                          subtotalAmount: requestTotals.subtotal,
-                          discountAmount: requestTotals.discountAmount,
-                          totalAmountNgn: requestTotals.grandTotalNgn,
+                          totalAmountNgn: normalizedLineItems.reduce(
+                            (sum, item) => sum + item.lineTotalNgn,
+                            0,
+                          ),
                           requestedBy:
                             user?.fullName ||
                             user?.primaryEmailAddress?.emailAddress ||
@@ -3048,8 +2905,6 @@ const MaterialRequests = () => {
                           reason: "",
                           currency: appCurrency,
                           exchangeRate: "",
-                          discountType: "",
-                          discountValue: "",
                         });
                         setLineItems([
                           {
@@ -3112,7 +2967,7 @@ const MaterialRequests = () => {
             <Navbar user={user} />
 
             {/* Breadcrumb */}
-            <div className="-mx-4 sm:-mx-6 lg:-mx-8">
+            <div className="w-full bg-gray-50 px-1">
               <Breadcrumb
                 items={[
                   { label: "Home", href: "/home", icon: "fa-house" },
@@ -3134,12 +2989,12 @@ const MaterialRequests = () => {
             </div>
 
             {/* Header Section */}
-            <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4">
-              <div className="w-full max-w-none">
-                <div className="flex flex-col gap-4">
+            <div className="bg-white border-b border-gray-200 px-6 py-4">
+              <div className="max-w-[1590px] mx-auto">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="flex flex-col gap-2">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-                      <h1 className="text-[#111418] text-2xl sm:text-3xl font-bold leading-tight tracking-tight break-words">
+                    <div className="flex items-center gap-3">
+                      <h1 className="text-[#111418] text-3xl font-bold leading-tight tracking-tight">
                         {/* Material Request # */}
                         {selectedRequest.requestId || selectedRequest._id}
                       </h1>
@@ -3289,9 +3144,7 @@ const MaterialRequests = () => {
                                       "</td></tr>",
                                   )
                                   .join("")}
-                                  <tr><td colspan="6" style="text-align:right">Subtotal</td><td>${(selectedRequest.lineItems || []).reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.amount) || 0), 0).toFixed(2)}</td></tr>
-                                  ${(Number(selectedRequest.discountAmount) || 0) > 0 ? `<tr><td colspan="6" style="text-align:right">Discount${selectedRequest.discountType === "percentage" && Number(selectedRequest.discountValue) > 0 ? ` (${Number(selectedRequest.discountValue)}%)` : ""}</td><td>-${Number(selectedRequest.discountAmount).toFixed(2)}</td></tr>` : ""}
-                                  <tr class="total-row"><td colspan="6" style="text-align:right">Grand Total</td><td>${(Number(selectedRequest.totalAmountNgn) > 0 ? ((selectedRequest.currency || "NGN") === "NGN" ? Number(selectedRequest.totalAmountNgn) : Number(selectedRequest.totalAmountNgn) / (Number(selectedRequest.exchangeRateToNgn) || 1)) : (selectedRequest.lineItems || []).reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.amount) || 0), 0) - (Number(selectedRequest.discountAmount) || 0)).toFixed(2)}</td></tr>
+                                <tr class="total-row"><td colspan="6" style="text-align:right">Grand Total</td><td>${(selectedRequest.lineItems || []).reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.amount) || 0), 0).toFixed(2)}</td></tr>
                               </tbody>
                             </table>
 
@@ -3358,7 +3211,7 @@ const MaterialRequests = () => {
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 w-full max-w-none px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex-1 w-full max-w-[1590px] mx-auto p-6">
               <div className="grid grid-cols-1 gap-6">
                 {/* Left Column - Main Details */}
                 <div className="flex flex-col gap-6">
@@ -3444,33 +3297,6 @@ const MaterialRequests = () => {
                           {selectedRequest.currency || "NGN"}
                         </p>
                       </div>
-                      {(selectedRequest.currency || "NGN") !== "NGN" && (
-                        <div className="flex flex-col gap-1">
-                          <p className="text-[#617589] text-sm">
-                            Exchange Rate to NGN
-                          </p>
-                          <p className="text-[#111418] text-base font-medium">
-                            1 {selectedRequest.currency || "NGN"} ={" "}
-                            {Number(selectedRequest.exchangeRateToNgn) > 0
-                              ? Number(
-                                  selectedRequest.exchangeRateToNgn,
-                                ).toLocaleString(undefined, {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 6,
-                                })
-                              : "1"}{" "}
-                            NGN
-                          </p>
-                          <p className="text-xs text-[#617589]">
-                            Captured:{" "}
-                            {new Date(
-                              selectedRequest.exchangeRateCapturedAt ||
-                                selectedRequest.createdAt ||
-                                Date.now(),
-                            ).toLocaleString()}
-                          </p>
-                        </div>
-                      )}
                     </div>
                   </div>
 
@@ -3484,6 +3310,12 @@ const MaterialRequests = () => {
                               Attachments
                             </h3>
                           </div>
+                          <span className="text-sm text-gray-500 font-medium">
+                            {selectedRequest.attachments.length} file
+                            {selectedRequest.attachments.length === 1
+                              ? ""
+                              : "s"}
+                          </span>
                         </div>
                         <div className="p-6 space-y-2">
                           {selectedRequest.attachments.map((file, idx) => {
@@ -3499,20 +3331,27 @@ const MaterialRequests = () => {
                             return (
                               <div
                                 key={`${fileName}-${idx}`}
-                                className="flex w-full max-w-full sm:max-w-[240px] items-center justify-between bg-white px-3 py-2"
+                                className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2"
                               >
                                 <div className="min-w-0 flex items-center gap-2">
                                   <i className="fa-solid fa-paperclip text-[#617589] text-sm"></i>
                                   <button
                                     type="button"
                                     onClick={() => openAttachmentInView(file)}
-                                    className="max-w-[200px] truncate text-left text-sm text-[#137fec] underline hover:text-[#0d6efd]"
+                                    className="truncate text-sm text-[#137fec] hover:text-[#0d6efd] underline text-left"
                                   >
                                     {fileName}
                                   </button>
                                 </div>
                                 {fileData ? (
-                                  <div className="flex items-center gap-0">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => openAttachmentInView(file)}
+                                      className="rounded-md px-2 py-1 text-xs font-semibold text-[#137fec] hover:bg-blue-50"
+                                    >
+                                      View
+                                    </button>
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -3521,11 +3360,9 @@ const MaterialRequests = () => {
                                         a.download = fileName;
                                         a.click();
                                       }}
-                                      className="rounded-md px-2 py-1 text-[#137fec] hover:bg-blue-50"
-                                      title="Download attachment"
-                                      aria-label={`Download ${fileName}`}
+                                      className="rounded-md px-2 py-1 text-xs font-semibold text-[#137fec] hover:bg-blue-50"
                                     >
-                                      <i className="fa-solid fa-download text-xs"></i>
+                                      Download
                                     </button>
                                   </div>
                                 ) : (
@@ -3602,20 +3439,6 @@ const MaterialRequests = () => {
                                   {formatCurrency(item.quantity * item.amount, {
                                     currency: selectedRequest.currency,
                                   })}
-                                  {(selectedRequest.currency || "NGN") !==
-                                    "NGN" && (
-                                    <div className="text-xs text-[#617589] mt-1">
-                                      {formatCurrency(
-                                        Number(item.lineTotalNgn) ||
-                                          (Number(item.quantity) || 0) *
-                                            (Number(item.amount) || 0) *
-                                            (Number(
-                                              selectedRequest.exchangeRateToNgn,
-                                            ) || 1),
-                                        { currency: "NGN" },
-                                      )}
-                                    </div>
-                                  )}
                                 </td>
                               </tr>
                             ),
@@ -3630,61 +3453,14 @@ const MaterialRequests = () => {
                               Total Cost
                             </td>
                             <td className="px-6 py-4 text-sm font-bold text-right text-[#137fec]">
-                              {(() => {
-                                const subtotal = (
-                                  selectedRequest.lineItems || []
-                                ).reduce(
+                              {formatCurrency(
+                                (selectedRequest.lineItems || []).reduce(
                                   (sum, item) =>
-                                    sum +
-                                    (Number(item.quantity) || 0) *
-                                      (Number(item.amount) || 0),
+                                    sum + item.quantity * item.amount,
                                   0,
-                                );
-                                const discountAmount =
-                                  Number(selectedRequest.discountAmount) > 0
-                                    ? Number(selectedRequest.discountAmount)
-                                    : 0;
-                                const requestTotal = Math.max(
-                                  subtotal - discountAmount,
-                                  0,
-                                );
-                                const requestTotalNgn =
-                                  Number(selectedRequest.totalAmountNgn) > 0
-                                    ? Number(selectedRequest.totalAmountNgn)
-                                    : requestTotal *
-                                      (Number(
-                                        selectedRequest.exchangeRateToNgn,
-                                      ) || 1);
-
-                                return (
-                                  <div className="flex flex-col items-end gap-1">
-                                    <span>
-                                      {formatCurrency(requestTotal, {
-                                        currency: selectedRequest.currency,
-                                      })}
-                                    </span>
-                                    {discountAmount > 0 && (
-                                      <span className="text-xs font-medium text-[#617589]">
-                                        Discount: -
-                                        {formatCurrency(discountAmount, {
-                                          currency: selectedRequest.currency,
-                                        })}
-                                      </span>
-                                    )}
-                                    {(selectedRequest.currency || "NGN") !==
-                                      "NGN" && (
-                                      <div className="text-xs text-[#617589] mt-1 font-medium">
-                                        {formatCurrency(requestTotalNgn, {
-                                          currency: "NGN",
-                                        })}
-                                        <span className="ml-1">
-                                          (at submitted rate)
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })()}
+                                ),
+                                { currency: selectedRequest.currency },
+                              )}
                             </td>
                           </tr>
                         </tfoot>

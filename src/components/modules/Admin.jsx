@@ -1,19 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { apiService, getBackendConnectionMessage } from "../../services/api";
+import { apiService } from "../../services/api";
 import toast from "react-hot-toast";
 import Footer from "../Footer";
 import Breadcrumb from "../Breadcrumb";
 import SecuritySettings from "./SecuritySettings";
 import ApprovalSettings from "./ApprovalSettings";
 import SystemSettings from "./SystemSettings";
-import ApiKeySettings from "./ApiKeySettings";
 import SkuItemManager from "./SkuItemManager";
 import StoreLocations from "./StoreLocations";
-import {
-  getRoleDefaultAccessLevel,
-  normalizeModulePermissionEntry,
-} from "../../utils/moduleAccess";
 
 const DEFAULT_ROLE_PERMISSIONS = {
   userManagement: {
@@ -58,14 +53,6 @@ const withDefaultPermissions = (permissions = {}) => ({
   },
 });
 
-const MODULE_ACTION_OPTIONS = [
-  { key: "create", label: "Create" },
-  { key: "edit", label: "Edit" },
-  { key: "delete", label: "Delete" },
-  { key: "approve", label: "Approve" },
-  { key: "export", label: "Export" },
-];
-
 const Admin = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -98,10 +85,6 @@ const Admin = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterRole, setFilterRole] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [usersPage, setUsersPage] = useState(1);
-  const [usersTotal, setUsersTotal] = useState(0);
-  const [usersTotalPages, setUsersTotalPages] = useState(1);
-  const USERS_PAGE_SIZE = 20;
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [isAddingUser, setIsAddingUser] = useState(false);
@@ -141,73 +124,37 @@ const Admin = () => {
     Editor: withDefaultPermissions(),
     Viewer: withDefaultPermissions(),
   });
-  const usersTableTopRef = useRef(null);
 
-  const scrollUsersTableToTop = useCallback(() => {
-    window.requestAnimationFrame(() => {
-      usersTableTopRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
-  }, []);
+  const fetchUsers = useCallback(async () => {
+    setUsersLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (filterRole) params.append("role", filterRole);
+      if (filterStatus) params.append("status", filterStatus);
+      if (searchQuery) params.append("search", searchQuery);
 
-  const fetchUsers = useCallback(
-    async (pageToLoad = 1) => {
-      setUsersLoading(true);
-      try {
-        const params = new URLSearchParams();
-        params.append("page", String(pageToLoad));
-        params.append("limit", String(USERS_PAGE_SIZE));
-        if (filterRole) params.append("role", filterRole);
-        if (filterStatus) params.append("status", filterStatus);
-        if (searchQuery) params.append("search", searchQuery);
-
-        const response = await apiService.get(
-          `/api/users?${params.toString()}`,
-        );
-        const responseUsers = Array.isArray(response)
-          ? response
-          : Array.isArray(response?.data)
-            ? response.data
-            : [];
-        const pagination = response?.pagination || {};
-
-        setUsers(responseUsers);
-        setUsersPage(pagination.page || pageToLoad);
-        setUsersTotal(pagination.total || responseUsers.length);
-        setUsersTotalPages(
-          pagination.pages ||
-            Math.max(
-              Math.ceil(
-                (pagination.total || responseUsers.length) / USERS_PAGE_SIZE,
-              ),
-              1,
-            ),
-        );
-        // Reset error flag on success
-        if (errorToastShownRef.current["users"]) {
-          errorToastShownRef.current["users"] = false;
-        }
-      } catch (error) {
-        console.error("Error fetching users:", error);
-        if (!errorToastShownRef.current["users"]) {
-          toast.error("Failed to load users");
-          errorToastShownRef.current["users"] = true;
-          // Reset after 3 seconds
-          if (resetToastTimerRef.current)
-            clearTimeout(resetToastTimerRef.current);
-          resetToastTimerRef.current = setTimeout(() => {
-            errorToastShownRef.current["users"] = false;
-          }, 3000);
-        }
-      } finally {
-        setUsersLoading(false);
-        scrollUsersTableToTop();
+      const response = await apiService.get(`/api/users?${params.toString()}`);
+      setUsers(Array.isArray(response) ? response : response?.data || []);
+      // Reset error flag on success
+      if (errorToastShownRef.current["users"]) {
+        errorToastShownRef.current["users"] = false;
       }
-    },
-    [filterRole, filterStatus, searchQuery, scrollUsersTableToTop],
-  );
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      if (!errorToastShownRef.current["users"]) {
+        toast.error("Failed to load users");
+        errorToastShownRef.current["users"] = true;
+        // Reset after 3 seconds
+        if (resetToastTimerRef.current)
+          clearTimeout(resetToastTimerRef.current);
+        resetToastTimerRef.current = setTimeout(() => {
+          errorToastShownRef.current["users"] = false;
+        }, 3000);
+      }
+    } finally {
+      setUsersLoading(false);
+    }
+  }, [filterRole, filterStatus, searchQuery]);
 
   const fetchModules = useCallback(async () => {
     setModulesLoading(true);
@@ -308,7 +255,7 @@ const Admin = () => {
     fetchModules();
     fetchRoles();
     if (activeView === "users") {
-      fetchUsers(1);
+      fetchUsers();
     }
     if (activeView === "logs") {
       fetchLogs();
@@ -319,32 +266,16 @@ const Admin = () => {
   const fetchAdminData = async () => {
     setStatsLoading(true);
     try {
-      const toArray = (payload) => {
-        if (Array.isArray(payload)) return payload;
-        if (Array.isArray(payload?.data)) return payload.data;
-        return [];
-      };
-
-      // Use allSettled so one slow endpoint does not block the entire dashboard.
+      // Fetch all data for dashboard
       const [advanceRes, refundRes, retirementRes, usersRes] =
-        await Promise.allSettled([
-          apiService.get("/api/advance-requests", { timeout: 12000 }),
-          apiService.get("/api/refund-requests", { timeout: 12000 }),
-          apiService.get("/api/retirement-breakdown", { timeout: 12000 }),
-          apiService.get("/api/users", { timeout: 12000 }),
+        await Promise.all([
+          apiService.get("/api/advance-requests"),
+          apiService.get("/api/refund-requests"),
+          apiService.get("/api/retirement-breakdown"),
+          apiService.get("/api/users"),
         ]);
 
-      const advances =
-        advanceRes.status === "fulfilled" ? toArray(advanceRes.value) : [];
-      const refunds =
-        refundRes.status === "fulfilled" ? toArray(refundRes.value) : [];
-      const retirements =
-        retirementRes.status === "fulfilled"
-          ? toArray(retirementRes.value)
-          : [];
-      const users =
-        usersRes.status === "fulfilled" ? toArray(usersRes.value) : [];
-
+      const users = usersRes.data || [];
       const activeUsersCount = users.filter(
         (u) => u.status === "Active",
       ).length;
@@ -354,23 +285,24 @@ const Admin = () => {
 
       // Calculate system stats from real data
       const pendingApprovals =
-        advances.filter((r) => r.status === "pending").length +
-        refunds.filter((r) => r.status === "pending").length +
+        (advanceRes.data?.filter((r) => r.status === "pending").length || 0) +
+        (refundRes.data?.filter((r) => r.status === "pending").length || 0) +
         pendingUsersCount;
 
       setSystemStats({
         activeUsers: activeUsersCount,
         usersGrowth: 0, // Would need historical data to calculate
         pendingApprovals,
-        totalRequests: advances.length + refunds.length,
+        totalRequests:
+          (advanceRes.data?.length || 0) + (refundRes.data?.length || 0),
         totalRevenue: 0, // Would need to be calculated from financial data
         revenueGrowth: 0, // Would need historical data
         systemLoad: 0,
         loadTrend: "stable",
         uptime: 0,
-        totalAdvanceRequests: advances.length,
-        totalRefundRequests: refunds.length,
-        totalRetirementBreakdowns: retirements.length,
+        totalAdvanceRequests: advanceRes.data?.length || 0,
+        totalRefundRequests: refundRes.data?.length || 0,
+        totalRetirementBreakdowns: retirementRes.data?.length || 0,
       });
 
       // Fetch system stats and service status
@@ -431,21 +363,13 @@ const Admin = () => {
       }
     } catch (error) {
       console.error("Error fetching system stats:", error);
-      const connectionMessage = await getBackendConnectionMessage(
-        error,
-        "System stats",
-      );
-      if (connectionMessage) {
-        toast.error(connectionMessage);
-      }
     }
   };
 
   useEffect(() => {
     if (activeView === "users") {
       const timer = setTimeout(() => {
-        setUsersPage(1);
-        fetchUsers(1);
+        fetchUsers();
       }, 500);
       return () => clearTimeout(timer);
     }
@@ -478,7 +402,7 @@ const Admin = () => {
       toast.success("User added successfully!");
       setShowAddUserModal(false);
       setNewUser({ fullName: "", email: "", password: "", role: "Editor" });
-      fetchUsers(usersPage);
+      fetchUsers();
     } catch (error) {
       console.error("Error adding user:", error);
       toast.error(error.response?.data?.message || "Failed to add user");
@@ -555,22 +479,10 @@ const Admin = () => {
   const handleEditUser = (userId) => {
     const user = users.find((u) => u._id === userId);
     if (user) {
-      const normalizedModules = Array.isArray(user.permissions?.modules)
-        ? user.permissions.modules
-            .map((entry) =>
-              normalizeModulePermissionEntry({
-                ...entry,
-                accessLevel:
-                  entry?.accessLevel || getRoleDefaultAccessLevel(user.role),
-              }),
-            )
-            .filter((entry) => entry.moduleId)
-        : [];
-
       setSelectedUser({
         ...user,
         permissions: user.permissions || {},
-        selectedModules: normalizedModules,
+        selectedModules: user.permissions?.modules || [],
       });
       setShowEditUserModal(true);
     }
@@ -595,7 +507,7 @@ const Admin = () => {
       toast.success("User updated successfully!");
       setShowEditUserModal(false);
       setSelectedUser(null);
-      fetchUsers(usersPage);
+      fetchUsers();
     } catch (error) {
       console.error("Error updating user:", error);
       toast.error("Failed to update user");
@@ -621,7 +533,7 @@ const Admin = () => {
       toast.success("User deleted successfully");
       setShowDeleteUserModal(false);
       setSelectedUser(null);
-      fetchUsers(Math.min(usersPage, Math.max(usersTotalPages - 1, 1)));
+      fetchUsers();
     } catch (error) {
       console.error("Error deleting user:", error);
       toast.error("Failed to delete user");
@@ -687,101 +599,18 @@ const Admin = () => {
       });
     } else {
       // Add module
-      const accessLevel = getRoleDefaultAccessLevel(selectedUser.role);
       setSelectedUser({
         ...selectedUser,
         selectedModules: [
           ...modules,
-          normalizeModulePermissionEntry({
+          {
             moduleId: moduleId,
             moduleName: module?.name || "",
             access: true,
-            accessLevel,
-          }),
+          },
         ],
       });
     }
-  };
-
-  const getSelectedModulePermission = (module) => {
-    if (!selectedUser || !module) return null;
-    return (
-      selectedUser.selectedModules?.find((m) => m.moduleId === module.id) ||
-      null
-    );
-  };
-
-  const setModuleAccessLevel = (module, accessLevel) => {
-    if (!selectedUser || !module) return;
-
-    const modules = selectedUser.selectedModules || [];
-    const nextEntry = normalizeModulePermissionEntry({
-      moduleId: module.id,
-      moduleName: module.name,
-      access: true,
-      accessLevel,
-    });
-
-    const existingIndex = modules.findIndex((m) => m.moduleId === module.id);
-    const nextModules = [...modules];
-
-    if (existingIndex >= 0) {
-      const existing = normalizeModulePermissionEntry(
-        nextModules[existingIndex],
-      );
-      nextModules[existingIndex] = {
-        ...nextEntry,
-        actions: {
-          ...nextEntry.actions,
-          ...(existing.actions || {}),
-          view: true,
-        },
-      };
-    } else {
-      nextModules.push(nextEntry);
-    }
-
-    setSelectedUser({
-      ...selectedUser,
-      selectedModules: nextModules,
-    });
-  };
-
-  const toggleModuleAction = (module, actionKey) => {
-    if (!selectedUser || !module || actionKey === "view") return;
-
-    const modules = selectedUser.selectedModules || [];
-    const existingIndex = modules.findIndex((m) => m.moduleId === module.id);
-    const base =
-      existingIndex >= 0
-        ? normalizeModulePermissionEntry(modules[existingIndex])
-        : normalizeModulePermissionEntry({
-            moduleId: module.id,
-            moduleName: module.name,
-            access: true,
-            accessLevel: getRoleDefaultAccessLevel(selectedUser.role),
-          });
-
-    const nextEntry = {
-      ...base,
-      actions: {
-        ...base.actions,
-        [actionKey]: !base.actions?.[actionKey],
-        view: true,
-      },
-    };
-
-    const nextModules = [...modules];
-    if (existingIndex >= 0) {
-      nextModules[existingIndex] = nextEntry;
-    } else {
-      nextModules.push(nextEntry);
-    }
-
-    setSelectedUser({
-      ...selectedUser,
-      selectedModules: nextModules,
-    });
   };
 
   const hasModuleAccess = (moduleId) => {
@@ -794,16 +623,14 @@ const Admin = () => {
 
   const applyFilters = () => {
     setShowFilterModal(false);
-    setUsersPage(1);
-    fetchUsers(1);
+    fetchUsers();
   };
 
   const clearFilters = () => {
     setFilterRole("");
     setFilterStatus("");
     setShowFilterModal(false);
-    setUsersPage(1);
-    fetchUsers(1);
+    fetchUsers();
   };
 
   const filteredUsers = users;
@@ -906,28 +733,6 @@ const Admin = () => {
         />
         <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1">
           <SystemSettings />
-        </div>
-        <Footer variant="admin" />
-      </div>
-    );
-  }
-
-  if (activeView === "api-key-settings") {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-        <Breadcrumb
-          items={[
-            { label: "Home", href: "/home", icon: "fa-house" },
-            {
-              label: "Admin Controls",
-              onClick: () => setSearchParams({ view: "dashboard" }),
-              icon: "fa-user-shield",
-            },
-            { label: "API Key Settings", icon: "fa-key" },
-          ]}
-        />
-        <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-4 py-8 flex-1">
-          <ApiKeySettings />
         </div>
         <Footer variant="admin" />
       </div>
@@ -1305,10 +1110,7 @@ const Admin = () => {
           </div>
 
           {/* Users Table */}
-          <div
-            ref={usersTableTopRef}
-            className="bg-white rounded-lg border border-gray-200 overflow-hidden"
-          >
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -1437,31 +1239,8 @@ const Admin = () => {
                 )}
               </tbody>
             </table>
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 text-sm text-gray-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <span>
-                Showing {filteredUsers.length} of {usersTotal} results
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => fetchUsers(Math.max(usersPage - 1, 1))}
-                  disabled={usersLoading || usersPage <= 1}
-                  className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <span className="px-2 text-xs sm:text-sm font-medium text-gray-500">
-                  Page {usersPage} of {usersTotalPages}
-                </span>
-                <button
-                  onClick={() =>
-                    fetchUsers(Math.min(usersPage + 1, usersTotalPages))
-                  }
-                  disabled={usersLoading || usersPage >= usersTotalPages}
-                  className="px-3 py-1.5 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </div>
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 text-sm text-gray-600">
+              Showing {filteredUsers.length} of {users.length} results
             </div>
           </div>
         </div>
@@ -1717,104 +1496,43 @@ const Admin = () => {
                     ) : (
                       <div className="divide-y divide-gray-200">
                         {availableModules.map((module) => (
-                          <div key={module.id} className="p-3 hover:bg-gray-50">
-                            <div className="flex items-center justify-between gap-4">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <i
-                                  className={`fa-solid ${
-                                    module.icon || "fa-cube"
-                                  } text-blue-600`}
-                                ></i>
-                                <span className="font-medium text-gray-900 truncate">
-                                  {module.name}
-                                </span>
-                              </div>
-                              <button
-                                onClick={() => toggleModuleAccess(module.id)}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                  hasModuleAccess(module.id)
-                                    ? "bg-blue-600"
-                                    : "bg-gray-200"
-                                }`}
-                              >
-                                <span
-                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                    hasModuleAccess(module.id)
-                                      ? "translate-x-6"
-                                      : "translate-x-1"
-                                  }`}
-                                />
-                              </button>
+                          <div
+                            key={module.id}
+                            className="flex items-center justify-between p-3 hover:bg-gray-50"
+                          >
+                            <div className="flex items-center gap-3">
+                              <i
+                                className={`fa-solid ${
+                                  module.icon || "fa-cube"
+                                } text-blue-600`}
+                              ></i>
+                              <span className="font-medium text-gray-900">
+                                {module.name}
+                              </span>
                             </div>
-
-                            {hasModuleAccess(module.id) && (
-                              <div className="mt-3 pl-8 space-y-3">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                                    Access Level
-                                  </label>
-                                  <select
-                                    value={
-                                      getSelectedModulePermission(module)
-                                        ?.accessLevel || "view"
-                                    }
-                                    onChange={(e) =>
-                                      setModuleAccessLevel(
-                                        module,
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="w-full sm:w-40 px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  >
-                                    <option value="view">View</option>
-                                    <option value="edit">Edit</option>
-                                    <option value="manage">Manage</option>
-                                  </select>
-                                </div>
-
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-2">
-                                    Allowed Actions
-                                  </label>
-                                  <div className="flex flex-wrap gap-2">
-                                    {MODULE_ACTION_OPTIONS.map((option) => {
-                                      const perm =
-                                        getSelectedModulePermission(module);
-                                      const isActive = Boolean(
-                                        perm?.actions?.[option.key],
-                                      );
-                                      return (
-                                        <button
-                                          key={`${module.id}-${option.key}`}
-                                          type="button"
-                                          onClick={() =>
-                                            toggleModuleAction(
-                                              module,
-                                              option.key,
-                                            )
-                                          }
-                                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                                            isActive
-                                              ? "bg-blue-100 border-blue-300 text-blue-700"
-                                              : "bg-white border-gray-300 text-gray-600"
-                                          }`}
-                                        >
-                                          {option.label}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              </div>
-                            )}
+                            <button
+                              onClick={() => toggleModuleAccess(module.id)}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                hasModuleAccess(module.id)
+                                  ? "bg-blue-600"
+                                  : "bg-gray-200"
+                              }`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                  hasModuleAccess(module.id)
+                                    ? "translate-x-6"
+                                    : "translate-x-1"
+                                }`}
+                              />
+                            </button>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Choose module access and action-level permissions for this
-                    user
+                    Select which modules this user can access
                   </p>
                 </div>
 
@@ -2422,13 +2140,6 @@ const Admin = () => {
           >
             <i className="fa-solid fa-gear"></i>
             System Settings
-          </button>
-          <button
-            onClick={() => setSearchParams({ view: "api-key-settings" })}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-[#111418] rounded-lg font-medium flex items-center gap-2 transition-colors"
-          >
-            <i className="fa-solid fa-key"></i>
-            API Key Settings
           </button>
           <button
             onClick={() => setSearchParams({ view: "sku-items" })}

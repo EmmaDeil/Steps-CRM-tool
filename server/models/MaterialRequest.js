@@ -70,6 +70,10 @@ const materialRequestSchema = new mongoose.Schema(
     destinationLocationName: { type: String, default: '' },
     /** Populated after approval of an Internal Transfer — links to the generated StockTransfer */
     linkedStockTransferId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockTransfer', default: null },
+    linkedRFQId: { type: mongoose.Schema.Types.ObjectId, ref: 'RFQ', default: null },
+    linkedRFQIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'RFQ' }],
+    linkedPurchaseOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', default: null },
+    linkedPurchaseOrderIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder' }],
     preferredVendor: { type: String },
     currency: {
       type: String,
@@ -78,27 +82,6 @@ const materialRequestSchema = new mongoose.Schema(
     exchangeRateToNgn: {
       type: Number,
       default: 1,
-    },
-    exchangeRateCapturedAt: {
-      type: Date,
-      default: null,
-    },
-    subtotalAmount: {
-      type: Number,
-      default: 0,
-    },
-    discountType: {
-      type: String,
-      enum: ['', 'percentage', 'amount'],
-      default: '',
-    },
-    discountValue: {
-      type: Number,
-      default: 0,
-    },
-    discountAmount: {
-      type: Number,
-      default: 0,
     },
     totalAmountNgn: {
       type: Number,

@@ -3,11 +3,31 @@ const express = require('express');
 const router  = express.Router();
 const Invoice  = require('../models/Invoice');
 const InventoryIssue = require('../models/InventoryIssue');
+const NotificationModel = require('../models/Notification');
 const { authMiddleware } = require('../middleware/auth');
-const { requireModuleAction } = require('../middleware/moduleAccess');
+
+const createInvoiceNotification = async ({ title, message, sourceKey, metadata = {} }) => {
+  try {
+    const existing = await NotificationModel.findOne({ sourceKey });
+    if (existing) return existing;
+
+    return NotificationModel.create({
+      title,
+      message,
+      type: 'success',
+      category: 'finance',
+      source: 'invoice-module',
+      sourceKey,
+      metadata,
+    });
+  } catch (error) {
+    console.error('Error creating invoice notification:', error);
+    return null;
+  }
+};
 
 // ── GET all invoices ────────────────────────────────────────────────────────
-router.get('/', authMiddleware, requireModuleAction('finance', 'view'), async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const { page = 1, limit = 20, status, search } = req.query;
     const pageNum  = Math.max(1, parseInt(page));
@@ -37,7 +57,7 @@ router.get('/', authMiddleware, requireModuleAction('finance', 'view'), async (r
 });
 
 // ── GET single invoice ──────────────────────────────────────────────────────
-router.get('/:id', authMiddleware, requireModuleAction('finance', 'view'), async (req, res) => {
+router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id)
       .populate('linkedIssueId', 'issueNumber issuedTo')
@@ -50,7 +70,7 @@ router.get('/:id', authMiddleware, requireModuleAction('finance', 'view'), async
 });
 
 // ── PATCH update invoice status ─────────────────────────────────────────────
-router.patch('/:id/status', authMiddleware, requireModuleAction('finance', 'edit'), async (req, res) => {
+router.patch('/:id/status', authMiddleware, async (req, res) => {
   try {
     const { status } = req.body;
     const valid = ['draft', 'sent', 'paid', 'cancelled'];
@@ -64,6 +84,20 @@ router.patch('/:id/status', authMiddleware, requireModuleAction('finance', 'edit
     if (status === 'paid') invoice.paidAt = new Date();
     await invoice.save();
 
+    if (status === 'paid') {
+      await createInvoiceNotification({
+        title: `Invoice paid: ${invoice.invoiceNumber}`,
+        message: `Invoice ${invoice.invoiceNumber} for ${invoice.billTo} has been marked as paid.`,
+        sourceKey: `invoice-paid-${invoice._id}`,
+        metadata: {
+          invoiceId: invoice._id,
+          invoiceNumber: invoice.invoiceNumber,
+          billTo: invoice.billTo,
+          totalAmount: invoice.totalAmount,
+        },
+      });
+    }
+
     res.json({ message: `Invoice marked as ${status}`, data: invoice });
   } catch (err) {
     res.status(500).json({ message: 'Failed to update invoice status' });
@@ -71,7 +105,7 @@ router.patch('/:id/status', authMiddleware, requireModuleAction('finance', 'edit
 });
 
 // ── GET printable invoice HTML ──────────────────────────────────────────────
-router.get('/:id/print', authMiddleware, requireModuleAction('finance', 'view'), async (req, res) => {
+router.get('/:id/print', authMiddleware, async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id);
     if (!invoice) return res.status(404).json({ message: 'Invoice not found' });

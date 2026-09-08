@@ -30,7 +30,6 @@ const maintenanceTicketSchema = new mongoose.Schema(
         "IT Equipment",
         "Safety & Security",
         "General Maintenance",
-        "Item Movement",
         "Other",
       ],
     },
@@ -147,59 +146,29 @@ const maintenanceTicketSchema = new mongoose.Schema(
     resolutionNotes: {
       type: String,
     },
-    movementType: {
-      type: String,
-      enum: ["Temporary", "Permanent"],
-    },
-    returnDate: {
-      type: Date,
-    },
-    fromLocation: {
-      type: String,
-    },
-    toLocation: {
-      type: String,
-    },
-    reminderSent: {
-      type: Boolean,
-      default: false,
-    },
   },
   {
     timestamps: true,
   }
 );
 
-// Generate unique ticket number before validation so required validation passes
-maintenanceTicketSchema.pre("validate", async function (next) {
-  if (!this.isNew || this.ticketNumber) return next();
-
-  try {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const prefix = `MT-${year}${month}-`;
-
-    // Find the latest ticket with this prefix (highest sequence number)
-    const latestTicket = await mongoose.model("MaintenanceTicket")
-      .findOne({ ticketNumber: new RegExp(`^${prefix}`) })
-      .sort({ ticketNumber: -1 })
-      .exec();
-
-    let sequence = 1;
-    if (latestTicket && latestTicket.ticketNumber) {
-      const parts = latestTicket.ticketNumber.split("-");
-      const lastSeq = parseInt(parts[parts.length - 1], 10);
-      if (!isNaN(lastSeq)) {
-        sequence = lastSeq + 1;
-      }
-    }
-
-    this.ticketNumber = `${prefix}${String(sequence).padStart(4, "0")}`;
-    next();
-  } catch (error) {
-    next(error);
+// Generate unique ticket number before saving
+maintenanceTicketSchema.pre("save", async function (next) {
+  if (this.isNew && !this.ticketNumber) {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    
+    // Count today's tickets to generate sequential number
+    const count = await mongoose.model("MaintenanceTicket").countDocuments({
+      createdAt: {
+        $gte: new Date(date.setHours(0, 0, 0, 0)),
+      },
+    });
+    
+    this.ticketNumber = `MT-${year}${month}-${String(count + 1).padStart(4, "0")}`;
   }
+  next();
 });
 
 // Add indexes for better query performance

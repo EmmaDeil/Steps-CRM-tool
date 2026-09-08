@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import apiService from "../../services/api";
-import ModuleLoader from "../common/ModuleLoader";
 
 const ApprovalSettings = () => {
   const formatApproverRole = (role) =>
@@ -198,7 +197,8 @@ const ApprovalSettings = () => {
                     colSpan="5"
                     className="px-6 py-8 text-center text-gray-500"
                   >
-                    <ModuleLoader moduleName="Approval Settings" />
+                    <i className="fa-solid fa-spinner fa-spin mr-2"></i> Loading
+                    rules...
                   </td>
                 </tr>
               ) : rules.length === 0 ? (
