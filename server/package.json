@@ -1,0 +1,38 @@
+{
+  "name": "netlink-backend",
+  "version": "0.1.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "seed": "node seed.js",
+    "seed:clear": "node seed.js --clear",
+    "seed:users": "node seed.js --users",
+    "test:connection": "node test-connection.js",
+    "migrate:manager-role": "node scripts/migrate-manager-role.js",
+    "vercel-build": "echo 'No build step required for Express API'"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^7.5.0",
+    "morgan": "^1.10.0",
+    "nodemailer": "^7.0.11",
+    "otplib": "^12.0.1",
+    "pdfkit": "^0.15.2",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.3",
+    "twilio": "^5.12.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}

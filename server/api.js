@@ -1,0 +1,329 @@
+// Server-side API helpers that encapsulate MongoDB operations.
+const ModuleModel = require('./models/Module');
+const AnalyticsModel = require('./models/Analytics');
+const AttendanceModel = require('./models/Attendance');
+const LeaveAllocation = require('./models/LeaveAllocation');
+const LeaveRequest = require('./models/LeaveRequest');
+const TravelRequest = require('./models/TravelRequest');
+const UserModel = require('./models/User');
+const EmployeeModel = require('./models/Employee');
+const mongoose = require('mongoose');
+const { buildApprovalChain } = require('./utils/approvalRuleHelper');
+
+async function getModules() {
+  return ModuleModel.find().sort({ id: 1 }).lean();
+}
+
+async function getModuleById(id) {
+  return ModuleModel.findOne({ id: Number(id) }).lean();
+}
+
+async function createModule(data) {
+  return ModuleModel.create(data);
+}
+
+async function updateModule(id, data) {
+  return ModuleModel.findOneAndUpdate({ id: Number(id) }, data, { new: true });
+}
+
+async function deleteModule(id) {
+  return ModuleModel.deleteOne({ id: Number(id) });
+}
+
+async function getAnalytics() {
+  return AnalyticsModel.findOne().lean();
+}
+
+async function updateAnalytics(data) {
+  const doc = await AnalyticsModel.findOne();
+  if (!doc) return AnalyticsModel.create(data);
+  Object.assign(doc, data);
+  return doc.save();
+}
+
+async function getAttendance() {
+  return AttendanceModel.find().lean();
+}
+
+async function getAttendanceById(id) {
+  return AttendanceModel.findOne({ id: Number(id) }).lean();
+}
+
+async function createAttendance(data) {
+  return AttendanceModel.create(data);
+}
+
+// Leave Allocation functions
+async function getLeaveAllocations(query = {}) {
+  return LeaveAllocation.find(query).lean();
+}
+
+async function createLeaveAllocation(data) {
+  const employeeId = String(data.employeeId || '').trim();
+  const managerId = String(data.managerId || '').trim();
+  const parsedYear = Number.parseInt(data.year, 10);
+  const year = Number.isNaN(parsedYear) ? new Date().getFullYear() : parsedYear;
+
+  if (!employeeId) throw new Error('employeeId is required');
+  if (!managerId) throw new Error('managerId is required');
+
+  const buildEmployeeLookupQuery = (id) => {
+    const query = [{ employeeId: id }];
+    if (mongoose.isValidObjectId(id)) {
+      query.unshift({ _id: id });
+    }
+    return { $or: query };
+  };
+
+  const [employee, manager] = await Promise.all([
+    EmployeeModel.findOne(buildEmployeeLookupQuery(employeeId)).lean(),
+    EmployeeModel.findOne(buildEmployeeLookupQuery(managerId)).lean(),
+  ]);
+
+  const payload = {
+    ...data,
+    employeeId,
+    managerId,
+    year,
+    employeeName:
+      String(data.employeeName || '').trim() ||
+      [employee?.firstName, employee?.lastName].filter(Boolean).join(' ').trim() ||
+      employee?.name ||
+      '',
+    managerName:
+      String(data.managerName || '').trim() ||
+      [manager?.firstName, manager?.lastName].filter(Boolean).join(' ').trim() ||
+      manager?.name ||
+      '',
+    managerEmail: String(data.managerEmail || '').trim() || manager?.email || '',
+    updatedAt: new Date(),
+  };
+
+  if (!payload.employeeName) throw new Error('employeeName is required');
+  if (!payload.managerName) throw new Error('managerName is required');
+
+  // Update existing if same employee and year, else create new
+  const existing = await LeaveAllocation.findOne({ 
+    employeeId: payload.employeeId,
+    year: payload.year,
+  });
+  
+  if (existing) {
+    Object.assign(existing, payload);
+    return existing.save();
+  }
+  
+  return LeaveAllocation.create(payload);
+}
+
+async function updateLeaveUsage(employeeId, year, leaveType, daysUsed) {
+  const allocation = await LeaveAllocation.findOne({ employeeId, year });
+  if (!allocation) throw new Error('Leave allocation not found');
+  
+  const field = `${leaveType}LeaveUsed`;
+  allocation[field] = (allocation[field] || 0) + daysUsed;
+  allocation.updatedAt = new Date();
+  return allocation.save();
+}
+
+// Leave Request functions
+async function getLeaveRequests(query = {}) {
+  return LeaveRequest.find(query).sort({ createdAt: -1 }).lean();
+}
+
+async function createLeaveRequest(data) {
+  const requestData = { ...data };
+  
+  // Calculate duration for rule matching
+  const duration = requestData.days || 1;
+  requestData.duration = duration;
+  
+  // Try to build approval chain from rules
+  const approvalInfo = await buildApprovalChain('Leave Requests', requestData);
+  
+  // If rule-based approval is available, use it
+  if (approvalInfo.usesRuleBasedApproval && approvalInfo.approvalChain.length > 0) {
+    requestData.usesRuleBasedApproval = true;
+    requestData.approvalRuleId = approvalInfo.rule._id;
+    requestData.approvalChain = approvalInfo.approvalChain;
+    requestData.currentApprovalLevel = 1;
+    requestData.status = 'pending_manager';
+    
+    // Get first approver from chain
+    const firstApprover = approvalInfo.approvalChain[0];
+    requestData.managerId = firstApprover.approverId;
+    requestData.managerName = firstApprover.approverName;
+    requestData.managerEmail = firstApprover.approverEmail;
+  }
+  
+  return LeaveRequest.create(requestData);
+}
+
+async function updateLeaveRequestStatus(id, status, comments, approverType) {
+  const request = await LeaveRequest.findById(id);
+  if (!request) throw new Error('Leave request not found');
+  
+  request.status = status;
+  request.updatedAt = new Date();
+  
+  if (approverType === 'manager') {
+    request.managerComments = comments;
+    if (status === 'approved_manager') {
+      request.managerApprovedAt = new Date();
+      request.status = 'pending_hr'; // Move to HR approval
+    } else if (status === 'rejected_manager') {
+      request.managerRejectedAt = new Date();
+      request.status = 'rejected';
+    }
+  } else if (approverType === 'hr') {
+    request.hrComments = comments;
+    if (status === 'approved') {
+      request.hrApprovedAt = new Date();
+    } else if (status === 'rejected') {
+      request.hrRejectedAt = new Date();
+    }
+  }
+  
+  return request.save();
+}
+
+// Travel Request functions
+async function getTravelRequests(query = {}) {
+  return TravelRequest.find(query).sort({ createdAt: -1 }).lean();
+}
+
+async function createTravelRequest(data) {
+  const requestData = { ...data };
+  
+  // Calculate duration for rule matching
+  const fromDate = new Date(requestData.fromDate);
+  const toDate = new Date(requestData.toDate);
+  const duration = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
+  requestData.duration = duration;
+  
+  // Try to build approval chain from rules
+  const approvalInfo = await buildApprovalChain('Travel Requests', requestData);
+  
+  // If rule-based approval is available, use it
+  if (approvalInfo.usesRuleBasedApproval && approvalInfo.approvalChain.length > 0) {
+    requestData.usesRuleBasedApproval = true;
+    requestData.approvalRuleId = approvalInfo.rule._id;
+    requestData.approvalChain = approvalInfo.approvalChain;
+    requestData.currentApprovalLevel = 1;
+    requestData.status = 'pending_manager';
+    
+    // Get first approver from chain
+    const firstApprover = approvalInfo.approvalChain[0];
+    requestData.managerId = firstApprover.approverId;
+    requestData.managerName = firstApprover.approverName;
+    requestData.managerEmail = firstApprover.approverEmail;
+  }
+  
+  return TravelRequest.create(requestData);
+}
+
+async function updateTravelRequestStatus(id, status, comments, approverType) {
+  const request = await TravelRequest.findById(id);
+  if (!request) throw new Error('Travel request not found');
+  
+  request.status = status;
+  request.updatedAt = new Date();
+  
+  if (approverType === 'manager') {
+    request.managerComments = comments;
+    if (status === 'approved_manager') {
+      request.managerApprovedAt = new Date();
+      request.status = 'pending_booking'; // Move to booking stage
+    } else if (status === 'rejected_manager') {
+      request.managerRejectedAt = new Date();
+      request.status = 'rejected_manager';
+    }
+  }
+  
+  return request.save();
+}
+
+async function updateTravelBooking(id, bookingData) {
+  const request = await TravelRequest.findById(id);
+  if (!request) throw new Error('Travel request not found');
+  
+  request.bookingDetails = {
+    ...request.bookingDetails,
+    ...bookingData,
+    bookedAt: new Date(),
+  };
+  request.status = 'booked';
+  request.updatedAt = new Date();
+  
+  return request.save();
+}
+
+// User Profile functions
+async function getUserById(id) {
+  return UserModel.findOne({ id }).lean();
+}
+
+async function createOrUpdateUserProfile(data) {
+  const { Id, email, fullName } = data;
+  
+  // Check if user exists
+  let user = await UserModel.findOne({ id: Id });
+  
+  if (user) {
+    // Update existing user
+    Object.assign(user, data, { updatedAt: new Date() });
+    return user.save();
+  } else {
+    // Create new user
+    return UserModel.create({
+      id: Id,
+      email,
+      fullName,
+      ...data,
+    });
+  }
+}
+
+async function updateUserProfile(id, data) {
+  const user = await UserModel.findOne({ id });
+  if (!user) throw new Error('User not found');
+  
+  Object.assign(user, data, { updatedAt: new Date() });
+  return user.save();
+}
+
+async function updateUserProfilePicture(id, pictureUrl) {
+  const user = await UserModel.findOne({ id });
+  if (!user) throw new Error('User not found');
+  
+  user.profilePicture = pictureUrl;
+  user.updatedAt = new Date();
+  return user.save();
+}
+
+module.exports = {
+  getModules,
+  getModuleById,
+  createModule,
+  updateModule,
+  deleteModule,
+  getAnalytics,
+  updateAnalytics,
+  getAttendance,
+  getAttendanceById,
+  createAttendance,
+  getLeaveAllocations,
+  createLeaveAllocation,
+  updateLeaveUsage,
+  getLeaveRequests,
+  createLeaveRequest,
+  updateLeaveRequestStatus,
+  getTravelRequests,
+  createTravelRequest,
+  updateTravelRequestStatus,
+  updateTravelBooking,
+  getUserById,
+  createOrUpdateUserProfile,
+  updateUserProfile,
+  updateUserProfilePicture,
+};
