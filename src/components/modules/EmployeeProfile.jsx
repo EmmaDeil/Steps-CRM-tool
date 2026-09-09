@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import Breadcrumb from "../Breadcrumb";
 import { formatCurrency } from "../../services/currency";
 import { apiService } from "../../services/api";
@@ -191,7 +191,14 @@ const EmployeeProfile = ({
     }
   }, [employee?._id]);
 
-  const departmentOptions = departments.map((dept) => dept.name || dept.code);
+  const departmentOptions = useMemo(() => {
+    const list = departments.map((dept) => dept.name || dept.code).filter(Boolean);
+    const current = editingEmployee?.department || employee?.department;
+    if (current && !list.includes(current)) {
+      list.unshift(current);
+    }
+    return list;
+  }, [departments, editingEmployee?.department, employee?.department]);
   const availableManagerOptions = managerOptions.filter(
     (option) => (option?._id || option?.id) !== (employee?._id || employee?.id),
   );
@@ -435,6 +442,11 @@ const EmployeeProfile = ({
         payload.lastName = editingEmployee.lastName;
       }
 
+      // Department can be updated by HR or employee in edit mode
+      if (editingEmployee.department !== undefined) {
+        payload.department = editingEmployee.department || "";
+      }
+
       // Only HR can update these fields
       if (isHR) {
         Object.assign(payload, {
@@ -639,13 +651,13 @@ const EmployeeProfile = ({
                   )}
                   <div className="flex items-center gap-2 mt-2">
                     <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 ring-1 ring-inset ring-emerald-600/20">
-                      {employee?.status || "Active"}
+                      {(isEditing ? editingEmployee?.status : employee?.status) || "Active"}
                     </span>
                     <span className="text-gray-500 dark:text-gray-500 text-sm">
                       •
                     </span>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">
-                      {employee?.department}
+                    <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">
+                      {(isEditing ? editingEmployee?.department : employee?.department) || "Not set"}
                     </p>
                   </div>
                 </div>
@@ -889,9 +901,9 @@ const EmployeeProfile = ({
                       <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
                         Department
                       </p>
-                      {isEditing && isHR ? (
-                        <input
-                          type="text"
+                      {isEditing && (isHR || isOwnProfile) ? (
+                        <select
+                          name="department"
                           value={editingEmployee?.department || ""}
                           onChange={(e) =>
                             setEditingEmployee({
@@ -899,8 +911,20 @@ const EmployeeProfile = ({
                               department: e.target.value,
                             })
                           }
-                          className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white"
-                        />
+                          className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          disabled={departmentsLoading}
+                        >
+                          <option value="">
+                            {departmentsLoading
+                              ? "Loading departments..."
+                              : "Select department"}
+                          </option>
+                          {departmentOptions.map((departmentName) => (
+                            <option key={departmentName} value={departmentName}>
+                              {departmentName}
+                            </option>
+                          ))}
+                        </select>
                       ) : (
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                           {employee?.department || "Not set"}
@@ -1810,7 +1834,7 @@ const EmployeeProfile = ({
                       <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
                         Department
                       </p>
-                      {isEditing && isHR ? (
+                      {isEditing && (isHR || isOwnProfile) ? (
                         <select
                           name="department"
                           value={editingEmployee?.department || ""}
@@ -1820,7 +1844,7 @@ const EmployeeProfile = ({
                               department: e.target.value,
                             })
                           }
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           disabled={departmentsLoading}
                         >
                           <option value="">
