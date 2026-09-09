@@ -160,6 +160,9 @@ app.use(cors({
   optionsSuccessStatus: 200,
 }));
 
+// Trust proxy (1 = trust first reverse proxy hop e.g. Vercel, Nginx, Cloudflare)
+app.set('trust proxy', 1);
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -167,6 +170,7 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
+  validate: { trustProxy: false, xForwardedForHeader: false },
 });
 
 // Apply rate limiter to all requests
@@ -175,13 +179,11 @@ app.use(limiter);
 // More strict rate limiter for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20, // increased for developement convenience
+  max: 30, // increased for development convenience
   skipSuccessfulRequests: true,
   message: 'Too many failed requests, please try again later.',
+  validate: { trustProxy: false, xForwardedForHeader: false },
 });
-
-// Trust proxy - enables correct client IP extraction when behind reverse proxy
-app.set('trust proxy', true);
 
 // Utility function to extract complete client IP address
 const getClientIP = (req) => {

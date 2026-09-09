@@ -290,24 +290,27 @@ async function seedJobTitles() {
 async function seedUsers() {
   console.log('\n👤 Seeding users...');
   try {
-    const count = await UserModel.countDocuments();
-    if (count === 0 || shouldClear) {
-      for (const userData of seedData.users) {
-        // Don't hash password here - the User model's pre-save hook will do it
-        const user = {
+    for (const userData of seedData.users) {
+      let user = await UserModel.findOne({ email: userData.email.toLowerCase() });
+      if (!user) {
+        user = new UserModel({
           ...userData,
           fullName: `${userData.firstName} ${userData.lastName}`,
-        };
-        await UserModel.create(user);
+        });
+        await user.save();
+        console.log(`   ✓ Created user: ${userData.email}`);
+      } else if (shouldClear) {
+        user.password = userData.password;
+        user.role = userData.role;
+        user.status = userData.status;
+        await user.save();
+        console.log(`   ✓ Updated user: ${userData.email}`);
       }
-      console.log(`   ✓ Seeded ${seedData.users.length} users`);
-      console.log('\n   Default credentials:');
-      console.log('   Admin: admin@netlink.com / Admin@123');
-      console.log('   Manager: eclefzy@gmail.com / Admin@123');
-      console.log('   User: john.doe@netlink.com / User@123');
-    } else {
-      console.log('   ⊘ Users already exist (use --clear to reset)');
     }
+    console.log('\n   Default credentials:');
+    console.log('   Admin: admin@netlink.com / Admin@123');
+    console.log('   Manager: eclefzy@gmail.com / Admin@123');
+    console.log('   User: john.doe@netlink.com / User@123');
   } catch (error) {
     console.error('   ✗ Error seeding users:', error.message);
   }
