@@ -12,12 +12,35 @@ const PaymentModel = require('../models/Payment');
 const POReceiptModel = require('../models/POReceipt');
 const VendorModel = require('../models/Vendor');
 const AuditLogModel = require('../models/AuditLog');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit
+
+const {
+  createPOPDFStream,
+  createRFQPDFStream,
+  createPaymentReceiptPDFStream,
+  createGRNPDFStream,
+} = require('../utils/pdfGenerator');
 const {
   generateRFQFromMaterialRequest,
   generatePOFromRFQ,
   recordPaymentForPO,
   receiveItemsFromPO,
 } = require('../utils/materialRequestWorkflow');
+const { buildApprovalChain: _buildApprovalChain, findMatchingApprovalRule: _findMatchingApprovalRule } = require('../utils/approvalRuleHelper');
+
+// Helper to emit Socket.IO events safely
+function emitWorkflowEvent(req, eventName, payload) {
+  try {
+    const io = req.app.get('io');
+    if (io) {
+      io.emit(eventName, payload);
+      io.emit('workflow:updated', payload);
+    }
+  } catch (err) {
+    console.error('Socket emit error:', err);
+  }
+}
 
 // ==================== RFQ ENDPOINTS ====================
 
@@ -525,4 +548,244 @@ router.get('/material-requests/:id/progress', async (req, res) => {
   }
 });
 
+// ==================== PHASE 2 ENHANCEMENT ENDPOINTS ====================
+
+/**
+ * Download PO PDF
+ * GET /api/workflow/pos/:id/pdf
+ */
+router.get('/pos/:id/pdf', async (req, res) => {
+  try {
+    const po = await PurchaseOrderModel.findById(req.params.id);
+    if (!po) {
+      return res.status(404).json({ success: false, error: 'Purchase Order not found' });
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=PO-${po.poNumber || po._id}.pdf`);
+    const doc = createPOPDFStream(po);
+    doc.pipe(res);
+    doc.end();
+  } catch (error) {
+    console.error('Error generating PO PDF:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Download RFQ PDF
+ * GET /api/workflow/rfqs/:id/pdf
+ */
+router.get('/rfqs/:id/pdf', async (req, res) => {
+  try {
+    const rfq = await RFQModel.findById(req.params.id);
+    if (!rfq) {
+      return res.status(404).json({ success: false, error: 'RFQ not found' });
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=RFQ-${rfq.rfqNumber || rfq._id}.pdf`);
+    const doc = createRFQPDFStream(rfq);
+    doc.pipe(res);
+    doc.end();
+  } catch (error) {
+    console.error('Error generating RFQ PDF:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Download Payment Receipt PDF
+ * GET /api/workflow/payments/:id/pdf
+ */
+router.get('/payments/:id/pdf', async (req, res) => {
+  try {
+    const payment = await PaymentModel.findById(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ success: false, error: 'Payment record not found' });
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=PAY-${payment.paymentNumber || payment._id}.pdf`);
+    const doc = createPaymentReceiptPDFStream(payment);
+    doc.pipe(res);
+    doc.end();
+  } catch (error) {
+    console.error('Error generating Payment PDF:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Download Goods Receipt Note (GRN) PDF
+ * GET /api/workflow/receipts/:id/pdf
+ */
+router.get('/receipts/:id/pdf', async (req, res) => {
+  try {
+    const receipt = await POReceiptModel.findById(req.params.id);
+    if (!receipt) {
+      return res.status(404).json({ success: false, error: 'GRN Receipt not found' });
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=GRN-${receipt.receiptNumber || receipt._id}.pdf`);
+    const doc = createGRNPDFStream(receipt);
+    doc.pipe(res);
+    doc.end();
+  } catch (error) {
+    console.error('Error generating GRN PDF:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * File Attachment Upload for RFQ / Payment / Receipt
+ * POST /api/workflow/:entityType/:id/attachment
+ */
+router.post('/:entityType/:id/attachment', upload.single('file'), async (req, res) => {
+  try {
+    const { entityType, id } = req.params;
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file provided' });
+    }
+
+    const attachmentObj = {
+      fileName: req.file.originalname,
+      description: req.body.description || 'Uploaded attachment',
+      fileData: req.file.buffer.toString('base64'),
+      fileType: req.file.mimetype,
+      fileSize: req.file.size,
+      uploadedAt: new Date(),
+    };
+
+    let item;
+    if (entityType === 'rfqs') {
+      item = await RFQModel.findByIdAndUpdate(id, { $push: { attachments: attachmentObj } }, { new: true });
+    } else if (entityType === 'payments') {
+      item = await PaymentModel.findByIdAndUpdate(id, { $push: { attachments: attachmentObj } }, { new: true });
+    } else if (entityType === 'receipts') {
+      item = await POReceiptModel.findByIdAndUpdate(id, { $push: { attachments: attachmentObj } }, { new: true });
+    } else {
+      return res.status(400).json({ success: false, error: 'Invalid entityType' });
+    }
+
+    if (!item) {
+      return res.status(404).json({ success: false, error: 'Entity not found' });
+    }
+
+    emitWorkflowEvent(req, 'workflow:attachment_added', { entityType, id, fileName: req.file.originalname });
+
+    res.json({ success: true, message: 'Attachment uploaded successfully', data: item.attachments });
+  } catch (error) {
+    console.error('Error uploading attachment:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Bulk Payment Processing
+ * POST /api/workflow/pos/bulk-payment
+ */
+router.post('/pos/bulk-payment', async (req, res) => {
+  try {
+    const { payments } = req.body; // Array of { poId, amount, paymentType, paymentMethod }
+    const user = req.user || { userId: 'system', userName: 'System', userEmail: 'system@company.com' };
+
+    if (!Array.isArray(payments) || payments.length === 0) {
+      return res.status(400).json({ success: false, error: 'payments array is required' });
+    }
+
+    const results = [];
+    const errors = [];
+
+    for (const p of payments) {
+      try {
+        const paymentRecord = await recordPaymentForPO(
+          p.poId,
+          p.amount,
+          p.paymentType || 'partial',
+          user,
+          p.paymentMethod || 'bank_transfer'
+        );
+        results.push(paymentRecord);
+      } catch (err) {
+        errors.push({ poId: p.poId, error: err.message });
+      }
+    }
+
+    emitWorkflowEvent(req, 'workflow:bulk_payment_completed', { count: results.length, errorsCount: errors.length });
+
+    res.json({
+      success: errors.length === 0,
+      message: `Processed ${results.length} payments with ${errors.length} errors`,
+      data: { processed: results, errors },
+    });
+  } catch (error) {
+    console.error('Error in bulk payment:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Vendor Performance Analytics
+ * GET /api/workflow/vendors/analytics
+ */
+router.get('/vendors/analytics', async (req, res) => {
+  try {
+    const rfqs = await RFQModel.find();
+    const pos = await PurchaseOrderModel.find();
+    const receipts = await POReceiptModel.find();
+
+    const vendorStatsMap = {};
+
+    // Process RFQs
+    rfqs.forEach((rfq) => {
+      const vName = rfq.vendor?.vendorName || 'Unknown Vendor';
+      if (!vendorStatsMap[vName]) {
+        vendorStatsMap[vName] = { vendorName: vName, totalRFQs: 0, totalQuotesReceived: 0, totalPOs: 0, totalSpend: 0, itemsReceived: 0, itemsDamaged: 0 };
+      }
+      vendorStatsMap[vName].totalRFQs += 1;
+      if (rfq.quotations && rfq.quotations.length > 0) {
+        vendorStatsMap[vName].totalQuotesReceived += rfq.quotations.length;
+      }
+    });
+
+    // Process POs
+    pos.forEach((po) => {
+      const vName = typeof po.vendor === 'string' ? po.vendor : (po.vendor?.vendorName || 'Unknown Vendor');
+      if (!vendorStatsMap[vName]) {
+        vendorStatsMap[vName] = { vendorName: vName, totalRFQs: 0, totalQuotesReceived: 0, totalPOs: 0, totalSpend: 0, itemsReceived: 0, itemsDamaged: 0 };
+      }
+      vendorStatsMap[vName].totalPOs += 1;
+      vendorStatsMap[vName].totalSpend += po.totalAmountNgn || po.totalAmount || 0;
+    });
+
+    // Process Receipts
+    receipts.forEach((rc) => {
+      const vName = rc.vendor?.vendorName || 'Unknown Vendor';
+      if (!vendorStatsMap[vName]) {
+        vendorStatsMap[vName] = { vendorName: vName, totalRFQs: 0, totalQuotesReceived: 0, totalPOs: 0, totalSpend: 0, itemsReceived: 0, itemsDamaged: 0 };
+      }
+      (rc.receivedItems || []).forEach((item) => {
+        vendorStatsMap[vName].itemsReceived += item.quantityReceived || 0;
+        if (item.condition === 'damaged') {
+          vendorStatsMap[vName].itemsDamaged += item.quantityReceived || 0;
+        }
+      });
+    });
+
+    const analyticsList = Object.values(vendorStatsMap).map((v) => {
+      const qualityScore = v.itemsReceived > 0 ? (((v.itemsReceived - v.itemsDamaged) / v.itemsReceived) * 100).toFixed(1) : 100;
+      const quoteResponseRate = v.totalRFQs > 0 ? ((v.totalQuotesReceived / v.totalRFQs) * 100).toFixed(1) : 0;
+      return {
+        ...v,
+        qualityScore: parseFloat(qualityScore),
+        quoteResponseRate: parseFloat(quoteResponseRate),
+      };
+    });
+
+    res.json({ success: true, data: analyticsList });
+  } catch (error) {
+    console.error('Error fetching vendor analytics:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
+

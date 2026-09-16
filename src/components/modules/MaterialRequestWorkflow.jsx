@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import api from "../../services/api";
+import webSocketService from "../../services/websocket";
+import VendorAnalyticsModal from "./VendorAnalyticsModal";
+import BulkPaymentModal from "./BulkPaymentModal";
+import AttachmentModal from "./AttachmentModal";
 import {
   FileText,
   ShoppingCart,
@@ -12,6 +16,9 @@ import {
   Plus,
   Edit2,
   Download,
+  Award,
+  Paperclip,
+  FileCheck,
 } from "lucide-react";
 
 const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
@@ -21,6 +28,9 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
   const [showQuotationModal, setShowQuotationModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showReceivingModal, setShowReceivingModal] = useState(false);
+  const [showVendorAnalytics, setShowVendorAnalytics] = useState(false);
+  const [showBulkPayment, setShowBulkPayment] = useState(false);
+  const [attachmentModalState, setAttachmentModalState] = useState({ isOpen: false, entityType: '', entityId: '', attachments: [] });
   const [selectedPO, setSelectedPO] = useState(null);
 
   const fetchWorkflowProgress = useCallback(async () => {
@@ -39,11 +49,21 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
     }
   }, [materialRequestId]);
 
-  // Load workflow progress
+  // Load workflow progress & setup Socket.IO real-time updates listener
   useEffect(() => {
     fetchWorkflowProgress();
-    const interval = setInterval(fetchWorkflowProgress, 5000); // Auto-refresh every 5 seconds
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchWorkflowProgress, 5000); // Auto-refresh fallback
+
+    // Socket.IO real-time updates
+    const listenerId = webSocketService.onWorkflowUpdated((data) => {
+      console.log('⚡ Real-time workflow event received:', data);
+      fetchWorkflowProgress();
+    });
+
+    return () => {
+      clearInterval(interval);
+      webSocketService.removeListener(listenerId);
+    };
   }, [fetchWorkflowProgress]);
 
   const steps = [
@@ -94,6 +114,21 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
   const canReceiveItems =
     selectedPO?.status === 'partly_paid' || selectedPO?.status === 'paid';
 
+  const handleDownloadPDF = async (endpoint, filename) => {
+    try {
+      const response = await api.get(endpoint, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (_err) {
+      alert('Failed to download PDF report');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -107,7 +142,7 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
                 Material Request Workflow
@@ -117,12 +152,30 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
                 {workflow?.materialRequest?.status}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl"
-            >
-              ×
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowVendorAnalytics(true)}
+                className="px-4 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg hover:bg-indigo-100 font-semibold text-sm flex items-center gap-2"
+              >
+                <Award size={16} /> Vendor Analytics
+              </button>
+
+              {workflow?.pos?.some((p) => p.status !== 'paid') && (
+                <button
+                  onClick={() => setShowBulkPayment(true)}
+                  className="px-4 py-2 bg-green-50 border border-green-200 text-green-700 rounded-lg hover:bg-green-100 font-semibold text-sm flex items-center gap-2"
+                >
+                  <CreditCard size={16} /> Bulk Payment
+                </button>
+              )}
+
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600 text-2xl ml-2"
+              >
+                ×
+              </button>
+            </div>
           </div>
         </div>
 
@@ -189,19 +242,35 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
                 {workflow.rfqs.map((rfq) => (
                   <div
                     key={rfq.id}
-                    className="p-3 bg-blue-50 border border-blue-200 rounded-lg"
-                    role="button"
-                    tabIndex={0}
+                    className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex justify-between items-center"
                   >
-                    <p className="font-semibold text-gray-900">
-                      {rfq.rfqNumber}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Vendor: {rfq.vendor}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Status: {rfq.status}
-                    </p>
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {rfq.rfqNumber}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Vendor: {rfq.vendor}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Status: {rfq.status}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleDownloadPDF(`/api/workflow/rfqs/${rfq.id}/pdf`, `${rfq.rfqNumber}.pdf`)}
+                        className="p-1.5 text-blue-600 hover:bg-blue-100 rounded"
+                        title="Download RFQ PDF"
+                      >
+                        <Download size={16} />
+                      </button>
+                      <button
+                        onClick={() => setAttachmentModalState({ isOpen: true, entityType: 'rfqs', entityId: rfq.id, attachments: rfq.attachments || [] })}
+                        className="p-1.5 text-gray-600 hover:bg-blue-100 rounded"
+                        title="Attachments"
+                      >
+                        <Paperclip size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))}
                 {workflow.rfqs.length === 0 &&
@@ -236,17 +305,31 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
                 {workflow.pos.map((po) => (
                   <div
                     key={po.id}
-                    className="p-3 bg-orange-50 border border-orange-200 rounded-lg"
+                    className={`p-3 border rounded-lg flex justify-between items-center cursor-pointer transition-all ${
+                      selectedPO?.id === po.id ? "bg-orange-100 border-orange-400 ring-2 ring-orange-300" : "bg-orange-50 border-orange-200 hover:bg-orange-100"
+                    }`}
                     onClick={() => setSelectedPO(po)}
-                    role="button"
-                    tabIndex={0}
                   >
-                    <p className="font-semibold text-gray-900">{po.poNumber}</p>
-                    <p className="text-sm text-gray-600">Vendor: {po.vendor}</p>
-                    <p className="text-xs text-gray-500">
-                      Amount: ₦{po.totalAmount?.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-gray-500">Status: {po.status}</p>
+                    <div>
+                      <p className="font-semibold text-gray-900">{po.poNumber}</p>
+                      <p className="text-sm text-gray-600">Vendor: {po.vendor}</p>
+                      <p className="text-xs text-gray-500">
+                        Amount: ₦{po.totalAmount?.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-gray-500">Status: {po.status}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownloadPDF(`/api/workflow/pos/${po.id}/pdf`, `${po.poNumber}.pdf`);
+                        }}
+                        className="p-1.5 text-orange-700 hover:bg-orange-200 rounded"
+                        title="Download PO PDF"
+                      >
+                        <Download size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -407,6 +490,33 @@ const MaterialRequestWorkflow = ({ materialRequestId, onClose, onSuccess }) => {
           }}
         />
       )}
+
+      {/* Phase 2 Enhancements Modals */}
+      <VendorAnalyticsModal
+        isOpen={showVendorAnalytics}
+        onClose={() => setShowVendorAnalytics(false)}
+      />
+
+      <BulkPaymentModal
+        isOpen={showBulkPayment}
+        onClose={() => setShowBulkPayment(false)}
+        pos={workflow?.pos || []}
+        onSuccess={() => {
+          fetchWorkflowProgress();
+          onSuccess?.();
+        }}
+      />
+
+      <AttachmentModal
+        isOpen={attachmentModalState.isOpen}
+        onClose={() => setAttachmentModalState({ ...attachmentModalState, isOpen: false })}
+        entityType={attachmentModalState.entityType}
+        entityId={attachmentModalState.entityId}
+        attachments={attachmentModalState.attachments}
+        onUploadSuccess={() => {
+          fetchWorkflowProgress();
+        }}
+      />
 
       {error && (
         <div className="fixed bottom-4 right-4 bg-red-500 text-white p-4 rounded-lg flex items-center gap-2">

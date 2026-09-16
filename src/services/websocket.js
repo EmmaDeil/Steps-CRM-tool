@@ -131,6 +131,25 @@ class WebSocketService {
   }
 
   /**
+   * Listen for workflow updates
+   * @param {Function} callback
+   * @returns {string} listenerId
+   */
+  onWorkflowUpdated(callback) {
+    if (!this.socket) {
+      this.connect();
+    }
+    const listenerId = `workflow-update-${Date.now()}`;
+    const wrappedCallback = (data) => {
+      console.log('⚡ Workflow update received:', data);
+      callback(data);
+    };
+    this.socket.on('workflow:updated', wrappedCallback);
+    this.listeners.set(listenerId, { event: 'workflow:updated', callback: wrappedCallback });
+    return listenerId;
+  }
+
+  /**
    * Check if WebSocket is connected
    * @returns {boolean}
    */

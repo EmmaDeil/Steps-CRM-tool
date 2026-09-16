@@ -374,6 +374,10 @@ router.post('/orders/:id/fulfill', authMiddleware, async (req, res) => {
     if (order.status === 'cancelled') {
       return res.status(400).json({ message: 'Cannot fulfill a cancelled order' });
     }
+    // Issue #2 fix: Only confirmed orders may be fulfilled
+    if (order.status === 'draft') {
+      return res.status(400).json({ message: 'Order must be confirmed before it can be fulfilled' });
+    }
 
     // Step 1: Pre-validation - Ensure all inventory-linked items have sufficient stock
     for (const li of order.lineItems) {
@@ -503,7 +507,9 @@ router.post('/orders/:id/generate-invoice', authMiddleware, async (req, res) => 
     await invoice.save();
 
     order.linkedInvoiceId = invoice._id;
-    if (order.status !== 'fulfilled') {
+    // Issue #1 fix: Only mark as 'invoiced' if the order is currently 'fulfilled';
+    // otherwise leave the existing status intact (e.g. 'confirmed').
+    if (order.status === 'fulfilled') {
       order.status = 'invoiced';
     }
     await order.save();

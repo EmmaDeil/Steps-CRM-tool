@@ -105,7 +105,7 @@ export default function Sales() {
 
   // Customer Form state
   const [customerForm, setCustomerForm] = useState({
-    id: null,
+    _id: null,
     name: "",
     type: "business",
     email: "",
@@ -442,8 +442,8 @@ export default function Sales() {
 
     try {
       setLoading(true);
-      if (customerForm.id) {
-        await apiService.sales.updateCustomer(customerForm.id, customerForm);
+      if (customerForm._id) {
+        await apiService.sales.updateCustomer(customerForm._id, customerForm);
         toast.success("Customer updated!");
       } else {
         await apiService.sales.createCustomer(customerForm);
@@ -451,7 +451,7 @@ export default function Sales() {
       }
       setIsCustomerModalOpen(false);
       setCustomerForm({
-        id: null,
+        _id: null,
         name: "",
         type: "business",
         email: "",
@@ -569,7 +569,7 @@ export default function Sales() {
                 <button
                   onClick={() => {
                     setCustomerForm({
-                      id: null,
+                      _id: null,
                       name: "",
                       type: "business",
                       email: "",
@@ -588,7 +588,20 @@ export default function Sales() {
                 </button>
                 <button
                   onClick={() => {
-                    handleAddLineItem();
+                    // Issue #3 fix: Reset form cleanly (no pre-added items)
+                    setOrderForm({
+                      customerId: "",
+                      customerName: "",
+                      customerEmail: "",
+                      customerPhone: "",
+                      lineItems: [],
+                      taxRate: 0,
+                      discount: 0,
+                      notes: "",
+                      dueDate: "",
+                      paymentMethod: "Bank Transfer",
+                      confirmImmediately: false,
+                    });
                     setIsOrderModalOpen(true);
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm shadow-emerald-600/20"
@@ -1063,7 +1076,7 @@ export default function Sales() {
                       <button
                         onClick={() => {
                           setCustomerForm({
-                            id: cust._id,
+                            _id: cust._id,
                             name: cust.name,
                             type: cust.type || "business",
                             email: cust.email || "",

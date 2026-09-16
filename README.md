@@ -10,24 +10,125 @@ Current implementation highlights:
 
 - Multi-module workspace with role-based access
 - Approval workflow engine with configurable multi-level routing
-- Material request to purchase order lifecycle support
+- End-to-end Material Request to RFQ, Purchase Order, Payment Gate, and Stock Receiving workflow
+- Payment Gate Security enforcing minimum payment before inventory item receiving
+- Phase 2 Workflow Enhancements: File Attachments, PDF Report Generation, Vendor Analytics, WebSocket Real-Time Sync, and Bulk Payment Processing
 - Direct purchase order creation and approval controls
 - Accounts payable tracking including partial and full payment flow
 - Centralized unit of measure setup used across Inventory, Material Requests, and Purchase Orders
 - Notification center and activity timelines
 - Audit-oriented admin capabilities
 
-## Core Modules
+## Core Modules & Functional Scope
 
-- HRM: employees, departments, job titles, leave allocations, leave and travel requests
-- Finance: invoicing, accounts payable, advance and refund requests
-- Procurement: material requests, purchase orders, vendor management, stock-linked fulfillment
-- Inventory: item management, unit setup, stock movements, internal transfers, issues
-- Payroll: payroll run management and related workflows
-- Attendance: attendance records and external attendance integration fallback
-- Security: physical security logs, visitor sign-in, security settings
-- Admin: module setup, users, roles, approval settings, backups, system settings
-- Analytics and Reporting: consolidated operational dashboards and generated reports
+The Netlink CRM platform encompasses 15 integrated operational suites:
+
+1. **Procurement & Material Request Workflow**
+   - 5-stage material request lifecycle: Material Request -> RFQ -> Vendor Quotes -> Purchase Order -> Payment Gate -> Goods Receipt (GRN) -> Stock Restock
+   - Payment Gate Security: Strict validation requiring PO payment (`partly_paid` or `paid`) prior to receiving store items into inventory
+   - Document PDF Generator: Built-in `pdfkit` report engine for RFQs, POs, Payment Receipts, and GRN notes
+   - Vendor Performance Analytics: Scorecards tracking quote response rates, quality scores (good vs damaged ratio), and spend
+   - Multi-file Attachment Uploader: Drag-and-drop document upload and base64 preview for RFQs, Payments, and Receipts
+   - Bulk Payment Processing: Batch payment execution for multiple pending POs in a single transaction
+
+2. **Sales & Customer Management**
+   - Quotation and Sales Order lifecycle management
+   - Customer CRM contacts, payment tracking, and status progression
+   - Real-time sales pipeline analytics and revenue reporting
+
+3. **Finance, Accounts Payable & Receivables**
+   - Invoicing and Accounts Receivable (AR) management with payment state tracking
+   - Accounts Payable (AP) vendor invoice matching with partial/full payment workflows
+   - Bank Statement CSV/Excel Import & automated transaction reconciliation
+   - Journal Entries & Journal Audit History tracking
+   - Advance requests, expense retirement, and refund workflows
+
+4. **Inventory & Warehouse Management**
+   - Centralized Unit of Measure (UOM) setup with conversion context (e.g., `Carton of 24`)
+   - Inventory item catalog, SKU manager, and low-stock reorder thresholds
+   - Multi-warehouse Store Location management
+   - Stock Movements audit log and internal warehouse-to-warehouse Stock Transfers
+   - Camera-based barcode scanner integration (`html5-qrcode` & `bwip-js`)
+
+5. **HRM & Employee Management**
+   - Comprehensive Employee Profiles with department, job title, and manager hierarchy
+   - Leave Request management with automated leave balances and accrual rules
+   - Official Travel Request workflow with expense estimation and approval integration
+
+6. **Attendance & Time Tracking**
+   - Daily attendance logging, clock-in/clock-out tracking, and external device integration fallbacks
+
+7. **Payroll Processing**
+   - Payroll runs, salary structure definitions, allowances, deductions, and automated payslip generation
+
+8. **Budget Management**
+   - Departmental and project budget allocation
+   - Real-time budget vs actual expenditure tracking and variance alerts
+
+9. **DocSign (Digital Signature Engine)**
+   - Digital document signature request workflow
+   - Interactive document template creation, field positioning, and signature verification
+
+10. **Facilities & Maintenance (FM)**
+    - Work order management for equipment and facility maintenance
+    - Scheduled preventive maintenance tasks and asset downtime tracking
+
+11. **Physical Security & Incident Reporting**
+    - Visitor sign-in logs and badge management
+    - Physical security duty rosters and checkpoint logs
+    - Incident Reporting system with severity classification, investigation notes, and status tracking
+
+12. **Approval Rule & Workflow Engine**
+    - Multi-level configurable approval chains by module type (Material Requests, Leave, Advances, POs)
+    - Condition evaluator supporting amount thresholds, roles, and policy rules
+    - Approver role resolution (Manager, HR Director, Finance Manager, Admin)
+
+13. **CRM Contacts & Vendors**
+    - Vendor registry with performance scoring, bank details, and contact person tracking
+    - Customer and business client contact directories
+
+14. **System Security & Audit Controls**
+    - JWT-based authentication, password strength validation, and email OTP verification
+    - Role-Based Access Control (RBAC) across all system modules
+    - Real-time WebSocket security logs and system activity audit trail (`AuditLog`)
+
+15. **Admin Controls & System Settings**
+    - System setup, database backup & restore tools, API Key configurations, and system parameter controls
+
+## Material Request Workflow & Phase 2 Enhancements (September 2026)
+
+The platform includes a 5-stage procurement workflow system bridging Material Requests, RFQs, Purchase Orders, Payment Gateways, Goods Receipts, and Stock Inventory.
+
+```text
+Step 1: MATERIAL REQUEST (Status: "approved")
+   ↓
+Step 2: RFQ GENERATION (Multi-vendor quotation request)
+   ↓
+Step 3: QUOTATION MANAGEMENT (Receive & compare vendor quotes)
+   ↓
+Step 4: PO CREATION (Accept winning quote → Auto-generate PO)
+   ↓
+Step 5: PAYMENT PROCESSING ⚠️ PAYMENT GATE SECURITY
+   ├── Must be "partly_paid" or "paid"
+   └── Cannot receive goods into inventory without payment!
+   ↓
+Step 6: ITEM RECEIVING (GRN generated → Stock added to store location)
+   ↓
+Step 7: WORKFLOW COMPLETE ✅
+```
+
+### Key Business Rules & Enhancements:
+
+1. **Payment Gate Security**: Items cannot be received into warehouse inventory unless the Purchase Order has a valid payment record (`partly_paid` or `paid`).
+2. **File Attachment Support**: Attach documents, quote PDFs, and proof-of-payment receipts directly to RFQs, Payments, and Receipts via `AttachmentModal`.
+3. **PDF Report Engine**: Download PDF documents generated via `pdfkit` for:
+   - Purchase Orders (`/api/workflow/pos/:id/pdf`)
+   - Request for Quotations (`/api/workflow/rfqs/:id/pdf`)
+   - Payment Receipts (`/api/workflow/payments/:id/pdf`)
+   - Goods Receipt Notes / GRN (`/api/workflow/receipts/:id/pdf`)
+4. **Vendor Performance Analytics**: Scorecard calculating vendor quote response rates, quality scores (good vs damaged items ratio), and total spend (`VendorAnalyticsModal`).
+5. **WebSocket Real-Time Updates**: Socket.IO integration (`workflow:updated`) pushing live workflow stage updates to connected clients without page reloads.
+6. **Bulk Payment Processing**: Process payments for multiple pending Purchase Orders simultaneously in a single transaction (`BulkPaymentModal`).
 
 ## Unit of Measure Standardization (March 2026)
 
@@ -1271,4 +1372,4 @@ MIT. See LICENSE.
 
 Emmanuel Clef (EmmaDeil)
 
-Last updated: March 22, 2026
+Last updated: September 16, 2026

@@ -90,6 +90,16 @@ const rfqSchema = new mongoose.Schema(
     expiryDate: Date,
     requiredByDate: Date,
     notes: { type: String },
+    attachments: [
+      {
+        fileName: String,
+        description: String,
+        fileData: String,
+        fileType: String,
+        fileSize: Number,
+        uploadedAt: { type: Date, default: Date.now },
+      },
+    ],
     activities: [
       {
         type: {
