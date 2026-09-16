@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
 import toast from "react-hot-toast";
 
-const ForgotPassword = () => {
+const ForgotPassword = ({ onSwitchMode, isEmbedded = false }) => {
   const { resetPassword } = useAuth();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -27,6 +27,92 @@ const ForgotPassword = () => {
       setIsLoading(false);
     }
   };
+
+  if (isEmbedded) {
+    return (
+      <div className="w-full">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Reset Password</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            {emailSent
+              ? "Temporary password dispatched"
+              : "Enter your registered email to receive a temporary login password"}
+          </p>
+        </div>
+
+        {emailSent ? (
+          <div className="text-center space-y-4 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+            <div className="w-12 h-12 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto shadow-sm">
+              <i className="fa-solid fa-check text-xl"></i>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Temporary Password Dispatched</h3>
+              <p className="text-xs text-slate-600 mt-1">
+                We sent a temporary password to <span className="font-semibold text-indigo-600">{email}</span>
+              </p>
+            </div>
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailSent(false);
+                  setEmail("");
+                }}
+                className="w-full py-2 bg-white border border-slate-300 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-50"
+              >
+                Try Another Email
+              </button>
+              <button
+                type="button"
+                onClick={() => onSwitchMode ? onSwitchMode('login') : null}
+                className="w-full py-2 text-indigo-600 hover:text-indigo-700 text-xs font-bold"
+              >
+                Return to Sign In
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Registered Email Address
+              </label>
+              <div className="relative">
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@company.com"
+                  className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 transition-all"
+                />
+                <i className="fa-solid fa-envelope absolute left-3.5 top-3.5 text-xs text-slate-400"></i>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading || !email}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+            >
+              {isLoading ? "Sending Instructions..." : "Send Temporary Password"}
+            </button>
+
+            <div className="text-center pt-3 text-xs text-slate-500">
+              Remember your password?{" "}
+              <button
+                type="button"
+                onClick={() => onSwitchMode ? onSwitchMode('login') : null}
+                className="text-indigo-600 hover:text-indigo-700 font-bold"
+              >
+                Return to Sign In
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 px-4">

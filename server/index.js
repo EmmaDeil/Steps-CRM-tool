@@ -122,7 +122,7 @@ const DEFAULT_JOB_TITLES = [
 ];
 const VendorModel = require('./models/Vendor');
 const approvalRuleRoutes = require('./routes/approvalRule.routes');
-const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP, sendInventoryExpiryAlertEmail, sendWelcomeVerificationEmail } = require('./utils/emailService');
+const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendTemporaryPasswordEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP, sendInventoryExpiryAlertEmail, sendWelcomeVerificationEmail } = require('./utils/emailService');
 const { sendSMSOTP } = require('./utils/smsService');
 const { buildApprovalChain } = require('./utils/approvalRuleHelper');
 const { Server } = require('socket.io');
@@ -709,6 +709,7 @@ async function start() {
         department: user.department,
         jobTitle: user.jobTitle,
         mfaEnabled: !!userWithMfa.mfaEnabled,
+        mustChangePassword: user.mustChangePassword || false,
         permissions: user.permissions || {},
         isEmailVerified: user.isEmailVerified || false,
       };
@@ -716,6 +717,7 @@ async function start() {
       res.json({
         success: true,
         message: 'Login successful',
+        mustChangePassword: user.mustChangePassword || false,
         data: {
           user: userData,
           token,
@@ -848,7 +850,7 @@ async function start() {
     }
   });
 
-  // Forgot password
+  // Forgot password - Generates Temporary Password & Flags user for Forced Change on Login
   app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
     try {
       const { email } = req.body;
@@ -862,26 +864,30 @@ async function start() {
 
       const user = await UserModel.findOne({ email: email.toLowerCase() });
       if (!user) {
-        // Don't reveal that user doesn't exist
+        // Don't reveal user existence
         return res.json({
           success: true,
-          message: 'If an account exists with this email, a password reset link has been sent',
+          message: 'If an account exists with this email, a temporary password has been dispatched.',
         });
       }
 
-      // Generate reset token
-      const resetToken = user.generateResetToken();
+      // Generate random temporary password
+      const tempPassword = 'Temp#' + Math.floor(10000 + Math.random() * 90000) + '!x';
+      user.password = tempPassword;
+      user.mustChangePassword = true;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
       await user.save();
 
-      // Send reset email
-      const emailResult = await sendPasswordResetEmail(user, resetToken);
+      // Send temporary password email
+      const emailResult = await sendTemporaryPasswordEmail(user, tempPassword);
       if (!emailResult?.success) {
-        throw new Error(emailResult?.error || 'Failed to send password reset email');
+        console.warn('Temporary password email log:', emailResult?.message || emailResult?.error);
       }
 
       res.json({
         success: true,
-        message: 'Password reset email sent',
+        message: 'Temporary password emailed to user. Change password required upon login.',
       });
     } catch (error) {
       console.error('Forgot password error:', error);
@@ -889,6 +895,47 @@ async function start() {
         success: false,
         error: 'Failed to process request',
       });
+    }
+  });
+
+  // Change Password Endpoint (Mandatory after Temporary Password Login)
+  app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+
+      if (!newPassword) {
+        return res.status(400).json({ success: false, error: 'New password is required' });
+      }
+
+      const user = await UserModel.findById(req.user._id).select('+password');
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+
+      if (currentPassword) {
+        const isMatch = await user.comparePassword(currentPassword);
+        if (!isMatch) {
+          return res.status(400).json({ success: false, error: 'Current password is incorrect' });
+        }
+      }
+
+      // Validate new password against policy
+      const pwCheck = await validatePassword(newPassword);
+      if (!pwCheck.valid) {
+        return res.status(400).json({ success: false, error: pwCheck.error });
+      }
+
+      user.password = newPassword;
+      user.mustChangePassword = false;
+      await user.save();
+
+      res.json({
+        success: true,
+        message: 'Password updated successfully',
+      });
+    } catch (error) {
+      console.error('Change password error:', error);
+      res.status(500).json({ success: false, error: 'Failed to change password' });
     }
   });
 

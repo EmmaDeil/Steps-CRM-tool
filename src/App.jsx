@@ -1,8 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/useAuth";
-import Login from "./components/auth/Login";
-import Signup from "./components/auth/Signup";
-import ForgotPassword from "./components/auth/ForgotPassword";
+import AuthPortal from "./components/auth/AuthPortal";
 import VerifyEmail from "./components/auth/VerifyEmail";
 import Home from "./home/Home";
 import Profile from "./components/Profile";
@@ -30,9 +28,10 @@ function App() {
     <>
       <Toaster position="top-right" />
       <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/" element={<AuthPortal />} />
+        <Route path="/login" element={<AuthPortal />} />
+        <Route path="/signup" element={<AuthPortal />} />
+        <Route path="/forgot-password" element={<AuthPortal />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/visitor/:token" element={<VisitorSignIn />} />
 

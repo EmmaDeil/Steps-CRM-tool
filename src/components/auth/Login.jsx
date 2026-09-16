@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
 import toast from "react-hot-toast";
 
-const Login = () => {
+const Login = ({ onSwitchMode, isEmbedded = false }) => {
   const navigate = useNavigate();
   const { login, verifyMfa } = useAuth();
   const [formData, setFormData] = useState({
@@ -157,6 +157,149 @@ const Login = () => {
       setIsLoading(false);
     }
   };
+
+  // If embedded in AuthPortal
+  if (isEmbedded) {
+    return (
+      <div className="w-full">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Welcome Back</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Sign in to access your enterprise dashboard
+          </p>
+        </div>
+
+        {mfaStep ? (
+          <form onSubmit={handleMfaSubmit} className="space-y-5">
+            <div className="text-center p-4 bg-indigo-50 border border-indigo-200 rounded-2xl">
+              <div className="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center mx-auto mb-2 shadow-sm">
+                <i className="fa-solid fa-shield-halved text-xl"></i>
+              </div>
+              <h3 className="text-sm font-bold text-slate-900">Two-Factor Authentication</h3>
+              <p className="text-xs text-slate-600 mt-1">
+                Enter 6-digit code from your authenticator app
+              </p>
+            </div>
+
+            <div className="flex justify-center gap-2" onPaste={handleMfaPaste}>
+              {mfaCode.map((digit, idx) => (
+                <input
+                  key={idx}
+                  ref={(el) => (mfaInputRefs.current[idx] = el)}
+                  type="text"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleMfaCodeChange(idx, e.target.value)}
+                  onKeyDown={(e) => handleMfaKeyDown(idx, e)}
+                  className="w-10 h-12 text-center text-lg font-bold bg-white border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600"
+                />
+              ))}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50"
+            >
+              {isLoading ? "Verifying..." : "Verify & Log In"}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Email Address
+              </label>
+              <div className="relative">
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="name@company.com"
+                  className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 transition-all"
+                />
+                <i className="fa-solid fa-envelope absolute left-3.5 top-3.5 text-xs text-slate-400"></i>
+              </div>
+              {errors.email && (
+                <p className="text-[11px] text-red-500 mt-1">{errors.email}</p>
+              )}
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => onSwitchMode ? onSwitchMode('forgot-password') : navigate('/forgot-password')}
+                  className="text-[11px] text-indigo-600 hover:text-indigo-700 font-semibold"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="••••••••"
+                  className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 transition-all"
+                />
+                <i className="fa-solid fa-lock absolute left-3.5 top-3.5 text-xs text-slate-400"></i>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-3 text-xs text-slate-400 hover:text-slate-600"
+                >
+                  <i className={`fa-solid ${showPassword ? "fa-eye-slash" : "fa-eye"}`}></i>
+                </button>
+              </div>
+              {errors.password && (
+                <p className="text-[11px] text-red-500 mt-1">{errors.password}</p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between text-xs pt-1">
+              <label className="flex items-center gap-2 cursor-pointer text-slate-600 hover:text-slate-800">
+                <input
+                  type="checkbox"
+                  name="rememberMe"
+                  checked={formData.rememberMe}
+                  onChange={(e) => setFormData({ ...formData, rememberMe: e.target.checked })}
+                  className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>Remember this session</span>
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading || !isLoginComplete()}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+            >
+              {isLoading ? "Signing in..." : "Sign In to Dashboard"}
+            </button>
+
+            <div className="text-center pt-3 text-xs text-slate-500">
+              Don't have an enterprise account?{" "}
+              <button
+                type="button"
+                onClick={() => onSwitchMode ? onSwitchMode('signup') : navigate('/signup')}
+                className="text-indigo-600 hover:text-indigo-700 font-bold"
+              >
+                Create Account
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex overflow-hidden bg-white">

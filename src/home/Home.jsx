@@ -14,6 +14,7 @@ import Breadcrumb from "../components/Breadcrumb";
 import { apiService } from "../services/api";
 import Footer from "../components/Footer";
 import ModuleLoader from "../components/common/ModuleLoader";
+import ChangePasswordModal from "../components/auth/ChangePasswordModal";
 
 const ModuleLoadingState = ({ moduleName = "Module", subtitle }) => {
   return <ModuleLoader moduleName={moduleName} subtitle={subtitle} />;
@@ -488,6 +489,12 @@ export default function Home() {
       </main>
 
       <Footer variant="default" company="Ladeil Innovataion Ltd" />
+
+      {/* Mandatory Password Change Modal for Temporary Password Logins */}
+      <ChangePasswordModal
+        isOpen={!!user?.mustChangePassword}
+        onSuccess={() => window.location.reload()}
+      />
     </div>
   );
 }

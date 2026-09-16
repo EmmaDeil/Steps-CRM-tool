@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
 import toast from "react-hot-toast";
 
-const Signup = () => {
+const Signup = ({ onSwitchMode, isEmbedded = false }) => {
   const navigate = useNavigate();
   const { signup } = useAuth();
   const [formData, setFormData] = useState({
@@ -244,6 +244,183 @@ const Signup = () => {
     if (passwordStrength < 70) return "Medium";
     return "Strong";
   };
+
+  // If embedded inside AuthPortal
+  if (isEmbedded) {
+    return (
+      <div className="w-full">
+        <div className="mb-4">
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Create Account</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Join your organization's CRM & ERP portal
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">First Name</label>
+              <input
+                name="firstName"
+                type="text"
+                required
+                value={formData.firstName}
+                onChange={handleChange}
+                placeholder="John"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600"
+              />
+              {errors.firstName && <p className="text-[10px] text-red-500 mt-0.5">{errors.firstName}</p>}
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Last Name</label>
+              <input
+                name="lastName"
+                type="text"
+                required
+                value={formData.lastName}
+                onChange={handleChange}
+                placeholder="Doe"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600"
+              />
+              {errors.lastName && <p className="text-[10px] text-red-500 mt-0.5">{errors.lastName}</p>}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-700 mb-1">Work Email</label>
+            <input
+              name="email"
+              type="email"
+              required
+              value={formData.email}
+              onChange={handleChange}
+              placeholder="john.doe@company.com"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600"
+            />
+            {errors.email && <p className="text-[10px] text-red-500 mt-0.5">{errors.email}</p>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Department</label>
+              <select
+                name="department"
+                required
+                value={formData.department}
+                onChange={handleChange}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600"
+              >
+                <option value="">Select Dept</option>
+                {departments.map((dept) => (
+                  <option key={dept._id || dept.code} value={dept.name}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
+              {errors.department && <p className="text-[10px] text-red-500 mt-0.5">{errors.department}</p>}
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Job Title</label>
+              <select
+                name="jobTitle"
+                required
+                value={formData.jobTitle}
+                onChange={handleChange}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600"
+              >
+                <option value="">Select Title</option>
+                {jobTitles.map((title) => (
+                  <option key={title} value={title}>
+                    {title}
+                  </option>
+                ))}
+              </select>
+              {errors.jobTitle && <p className="text-[10px] text-red-500 mt-0.5">{errors.jobTitle}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Password</label>
+              <input
+                name="password"
+                type={showPassword ? "text" : "password"}
+                required
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="••••••••"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600"
+              />
+              {errors.password && <p className="text-[10px] text-red-500 mt-0.5">{errors.password}</p>}
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Confirm Password</label>
+              <input
+                name="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                required
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                placeholder="••••••••"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600"
+              />
+              {errors.confirmPassword && <p className="text-[10px] text-red-500 mt-0.5">{errors.confirmPassword}</p>}
+            </div>
+          </div>
+
+          {/* Strength Bar */}
+          {formData.password && (
+            <div className="space-y-1 pt-1">
+              <div className="flex justify-between text-[10px] text-slate-600">
+                <span>Strength</span>
+                <span className="font-semibold text-slate-800">{getPasswordStrengthText()}</span>
+              </div>
+              <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                <div className={`h-full transition-all duration-300 ${getPasswordStrengthColor()}`} style={{ width: `${passwordStrength}%` }}></div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 pt-1 text-[11px]">
+            <input
+              type="checkbox"
+              name="terms"
+              id="terms"
+              checked={formData.terms}
+              onChange={handleChange}
+              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <label htmlFor="terms" className="text-slate-600">
+              I agree to the <span className="text-indigo-600 underline font-semibold">Terms</span> & <span className="text-indigo-600 underline font-semibold">Privacy Policy</span>
+            </label>
+          </div>
+          {errors.terms && <p className="text-[10px] text-red-500">{errors.terms}</p>}
+
+          <button
+            type="submit"
+            disabled={isLoading || !isFormComplete()}
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+          >
+            {isLoading ? "Creating Account..." : "Complete Registration"}
+          </button>
+
+          <div className="text-center pt-2 text-xs text-slate-500">
+            Already have an account?{" "}
+            <button
+              type="button"
+              onClick={() => onSwitchMode ? onSwitchMode('login') : navigate('/')}
+              className="text-indigo-600 hover:text-indigo-700 font-bold"
+            >
+              Sign In
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex overflow-hidden bg-white">

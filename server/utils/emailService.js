@@ -168,6 +168,70 @@ async function sendPOReviewEmail(poData) {
   }
 }
 
+// Send temporary password email
+async function sendTemporaryPasswordEmail(userData, tempPassword) {
+  if (!userData.email) {
+    throw new Error('Email is required to send temporary password email');
+  }
+
+  const loginLink = `${frontendUrl}/login`;
+  
+  const mailOptions = {
+    from: emailUser,
+    to: userData.email,
+    subject: 'Your Temporary Password for Steps CRM',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+        <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 32px 24px; text-align: center;">
+          <h2 style="color: white; margin: 0; font-size: 22px; font-weight: 700;">Temporary Password Dispatched</h2>
+        </div>
+        <div style="padding: 32px 24px;">
+          <p style="color: #374151; font-size: 16px;">Dear ${userData.fullName || userData.firstName || 'User'},</p>
+          <p style="color: #4b5563; line-height: 1.6;">
+            We received a request to reset your password. A temporary password has been generated for your account.
+          </p>
+          
+          <div style="background: #f8fafc; border: 2px dashed #3b82f6; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+            <p style="color: #64748b; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Your Temporary Password</p>
+            <span style="font-size: 28px; font-weight: 800; letter-spacing: 4px; color: #1e40af; font-family: 'Courier New', monospace;">${tempPassword}</span>
+          </div>
+
+          <p style="color: #ef4444; font-size: 14px; font-weight: 600;">
+            ⚠️ Note: Upon logging in with this temporary password, you will be required to change your password immediately.
+          </p>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${loginLink}" style="background-color: #0d6efd; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+              Log In Now
+            </a>
+          </div>
+
+          <p style="color: #6b7280; font-size: 13px;">
+            If you didn't request a password reset, please notify your system administrator immediately.
+          </p>
+        </div>
+        <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 16px 24px; text-align: center;">
+          <p style="color: #9ca3af; font-size: 12px; margin: 0;">This is an automated email — do not reply.</p>
+        </div>
+      </div>
+    `,
+  };
+
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📧 Temporary password email would be sent to:', mailOptions.to);
+      console.log('Temporary Password:', tempPassword);
+      return { success: true, message: 'Email logged (dev mode)', tempPassword };
+    }
+    
+    await transporter.sendMail(mailOptions);
+    return { success: true, message: 'Email sent successfully' };
+  } catch (error) {
+    console.error('Error sending temporary password email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 // Send password reset email
 async function sendPasswordResetEmail(userData, resetToken) {
   if (!userData.email) {
@@ -662,6 +726,7 @@ module.exports = {
   sendApprovalEmail,
   sendPOReviewEmail,
   sendPasswordResetEmail,
+  sendTemporaryPasswordEmail,
   sendEmailOTP,
   sendWelcomeVerificationEmail,
   sendSecurityAlertEmail,
