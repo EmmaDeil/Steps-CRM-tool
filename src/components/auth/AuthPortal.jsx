@@ -74,7 +74,7 @@ const AuthPortal = () => {
               </div>
               <div>
                 <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-                  STEPS <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 border border-white/30 text-white font-semibold">CRM & ERP</span>
+                  Intranet <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 border border-white/30 text-white font-semibold">Possibilty</span>
                 </h1>
                 <p className="text-xs text-indigo-100">Enterprise Operating Platform</p>
               </div>
@@ -130,7 +130,7 @@ const AuthPortal = () => {
             </div>
             <div>
               <h1 className="text-base font-black tracking-tight text-slate-900">
-                STEPS <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 font-semibold align-middle">CRM & ERP</span>
+                Intranet <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 font-semibold align-middle">Possibility</span>
               </h1>
               <p className="text-[11px] text-slate-500">Enterprise Operating Platform</p>
             </div>
@@ -190,7 +190,7 @@ const AuthPortal = () => {
 
           {/* Footer note */}
           <div className="pt-4 border-t border-slate-100 mt-6 text-center text-xs text-slate-400">
-            © {new Date().getFullYear()} STEPS CRM Enterprise. All rights reserved.
+            © {new Date().getFullYear()} Intranet Enterprise. All rights reserved.
           </div>
         </div>
 
