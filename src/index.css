@@ -12,3 +12,140 @@ body {
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
     Cantarell, Noto Sans, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
 }
+
+/* ===== Auth Portal Animations ===== */
+@keyframes authFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes authScaleIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes authFloat {
+
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+
+  50% {
+    transform: translateY(-18px) translateX(10px);
+  }
+}
+
+@keyframes authGradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.auth-fade-up {
+  animation: authFadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.auth-scale-in {
+  animation: authScaleIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.auth-float {
+  animation: authFloat 7s ease-in-out infinite;
+}
+
+.auth-float-delayed {
+  animation: authFloat 9s ease-in-out 1.2s infinite;
+}
+
+.auth-gradient-shift {
+  background-size: 200% 200%;
+  animation: authGradientShift 12s ease infinite;
+}
+
+/* Staggered slide-in for direct children (form fields, feature cards) */
+.auth-stagger>* {
+  animation: authFadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.auth-stagger>*:nth-child(1) {
+  animation-delay: 0.04s;
+}
+
+.auth-stagger>*:nth-child(2) {
+  animation-delay: 0.09s;
+}
+
+.auth-stagger>*:nth-child(3) {
+  animation-delay: 0.14s;
+}
+
+.auth-stagger>*:nth-child(4) {
+  animation-delay: 0.19s;
+}
+
+.auth-stagger>*:nth-child(5) {
+  animation-delay: 0.24s;
+}
+
+.auth-stagger>*:nth-child(6) {
+  animation-delay: 0.29s;
+}
+
+.auth-stagger>*:nth-child(7) {
+  animation-delay: 0.34s;
+}
+
+.auth-stagger>*:nth-child(8) {
+  animation-delay: 0.39s;
+}
+
+.auth-stagger>*:nth-child(9) {
+  animation-delay: 0.44s;
+}
+
+.auth-stagger>*:nth-child(10) {
+  animation-delay: 0.49s;
+}
+
+.auth-stagger>*:nth-child(11) {
+  animation-delay: 0.54s;
+}
+
+.auth-stagger>*:nth-child(12) {
+  animation-delay: 0.59s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .auth-fade-up,
+  .auth-scale-in,
+  .auth-float,
+  .auth-float-delayed,
+  .auth-gradient-shift,
+  .auth-stagger>* {
+    animation: none !important;
+  }
+}

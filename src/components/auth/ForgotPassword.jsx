@@ -31,7 +31,7 @@ const ForgotPassword = ({ onSwitchMode, isEmbedded = false }) => {
   if (isEmbedded) {
     return (
       <div className="w-full">
-        <div className="mb-6">
+        <div className="mb-6 auth-fade-up">
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Reset Password</h2>
           <p className="text-xs text-slate-500 mt-1">
             {emailSent
@@ -41,7 +41,7 @@ const ForgotPassword = ({ onSwitchMode, isEmbedded = false }) => {
         </div>
 
         {emailSent ? (
-          <div className="text-center space-y-4 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+          <div className="text-center space-y-4 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl auth-stagger">
             <div className="w-12 h-12 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto shadow-sm">
               <i className="fa-solid fa-check text-xl"></i>
             </div>
@@ -72,7 +72,7 @@ const ForgotPassword = ({ onSwitchMode, isEmbedded = false }) => {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 auth-stagger">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Registered Email Address

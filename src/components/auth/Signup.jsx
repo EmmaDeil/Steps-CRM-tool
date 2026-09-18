@@ -249,14 +249,14 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
   if (isEmbedded) {
     return (
       <div className="w-full">
-        <div className="mb-4">
+        <div className="mb-4 auth-fade-up">
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Create Account</h2>
           <p className="text-xs text-slate-500 mt-0.5">
             Join your organization's CRM & ERP portal
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-3 auth-stagger">
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">First Name</label>
@@ -752,9 +752,8 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
                     className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                   >
                     <i
-                      className={`fa-solid text-sm ${
-                        showPassword ? "fa-eye-slash" : "fa-eye"
-                      }`}
+                      className={`fa-solid text-sm ${showPassword ? "fa-eye-slash" : "fa-eye"
+                        }`}
                     ></i>
                   </button>
                 </div>
@@ -763,13 +762,12 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
                     <div className="flex items-center justify-between text-xs mb-1">
                       <span className="text-gray-600">Password strength</span>
                       <span
-                        className={`font-medium ${
-                          passwordStrength < 40
+                        className={`font-medium ${passwordStrength < 40
                             ? "text-red-600"
                             : passwordStrength < 70
                               ? "text-yellow-600"
                               : "text-green-600"
-                        }`}
+                          }`}
                       >
                         {getPasswordStrengthText()}
                       </span>
@@ -818,9 +816,8 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
                     className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                   >
                     <i
-                      className={`fa-solid text-sm ${
-                        showConfirmPassword ? "fa-eye-slash" : "fa-eye"
-                      }`}
+                      className={`fa-solid text-sm ${showConfirmPassword ? "fa-eye-slash" : "fa-eye"
+                        }`}
                     ></i>
                   </button>
                 </div>

@@ -162,7 +162,7 @@ const Login = ({ onSwitchMode, isEmbedded = false }) => {
   if (isEmbedded) {
     return (
       <div className="w-full">
-        <div className="mb-6">
+        <div className="mb-6 auth-fade-up">
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Welcome Back</h2>
           <p className="text-xs text-slate-500 mt-1">
             Sign in to access your enterprise dashboard
@@ -170,7 +170,7 @@ const Login = ({ onSwitchMode, isEmbedded = false }) => {
         </div>
 
         {mfaStep ? (
-          <form onSubmit={handleMfaSubmit} className="space-y-5">
+          <form onSubmit={handleMfaSubmit} className="space-y-5 auth-stagger">
             <div className="text-center p-4 bg-indigo-50 border border-indigo-200 rounded-2xl">
               <div className="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center mx-auto mb-2 shadow-sm">
                 <i className="fa-solid fa-shield-halved text-xl"></i>
@@ -205,7 +205,7 @@ const Login = ({ onSwitchMode, isEmbedded = false }) => {
             </button>
           </form>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 auth-stagger">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Email Address
@@ -565,9 +565,8 @@ const Login = ({ onSwitchMode, isEmbedded = false }) => {
                         className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                       >
                         <i
-                          className={`fa-solid text-sm ${
-                            showPassword ? "fa-eye-slash" : "fa-eye"
-                          }`}
+                          className={`fa-solid text-sm ${showPassword ? "fa-eye-slash" : "fa-eye"
+                            }`}
                         ></i>
                       </button>
                     </div>
