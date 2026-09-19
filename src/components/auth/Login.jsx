@@ -14,6 +14,7 @@ const Login = ({ onSwitchMode, isEmbedded = false }) => {
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [loginFailed, setLoginFailed] = useState(false);
 
   // MFA state
   const [mfaStep, setMfaStep] = useState(false);
@@ -78,6 +79,7 @@ const Login = ({ onSwitchMode, isEmbedded = false }) => {
         toast.success("Welcome back!");
         navigate("/home");
       } else {
+        setLoginFailed(true);
         toast.error(result.error || "Invalid email or password");
       }
     } catch (_error) {
@@ -232,13 +234,15 @@ const Login = ({ onSwitchMode, isEmbedded = false }) => {
                 <label className="block text-xs font-semibold text-slate-700">
                   Password
                 </label>
-                <button
-                  type="button"
-                  onClick={() => onSwitchMode ? onSwitchMode('forgot-password') : navigate('/forgot-password')}
-                  className="text-[11px] text-indigo-600 hover:text-indigo-700 font-semibold"
-                >
-                  Forgot Password?
-                </button>
+                {!loginFailed && (
+                  <button
+                    type="button"
+                    onClick={() => onSwitchMode ? onSwitchMode('forgot-password') : navigate('/forgot-password')}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-700 font-semibold"
+                  >
+                    Forgot Password?
+                  </button>
+                )}
               </div>
               <div className="relative">
                 <input
@@ -285,16 +289,31 @@ const Login = ({ onSwitchMode, isEmbedded = false }) => {
               {isLoading ? "Signing in..." : "Sign In to Dashboard"}
             </button>
 
-            <div className="text-center pt-3 text-xs text-slate-500">
-              Don't have an enterprise account?{" "}
-              <button
-                type="button"
-                onClick={() => onSwitchMode ? onSwitchMode('signup') : navigate('/signup')}
-                className="text-indigo-600 hover:text-indigo-700 font-bold"
-              >
-                Create Account
-              </button>
-            </div>
+            {loginFailed ? (
+              <div className="text-center pt-3 text-xs auth-fade-up">
+                <span className="text-red-600 font-medium">
+                  Sign-in failed. Incorrect email or password?
+                </span>{" "}
+                <button
+                  type="button"
+                  onClick={() => onSwitchMode ? onSwitchMode('forgot-password') : navigate('/forgot-password')}
+                  className="text-red-600 hover:text-red-700 font-bold underline"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+            ) : (
+              <div className="text-center pt-3 text-xs text-slate-500">
+                Don't have an enterprise account?{" "}
+                <button
+                  type="button"
+                  onClick={() => onSwitchMode ? onSwitchMode('signup') : navigate('/signup')}
+                  className="text-indigo-600 hover:text-indigo-700 font-bold"
+                >
+                  Create Account
+                </button>
+              </div>
+            )}
           </form>
         )}
       </div>
@@ -324,7 +343,7 @@ const Login = ({ onSwitchMode, isEmbedded = false }) => {
                 <i className="fa-solid fa-building text-2xl text-white"></i>
               </div>
               <div>
-                <h2 className="text-2xl font-bold">Netlink</h2>
+                <h2 className="text-2xl font-bold">Ping</h2>
                 <p className="text-sm text-blue-200">
                   Enterprise Management System
                 </p>
@@ -391,7 +410,7 @@ const Login = ({ onSwitchMode, isEmbedded = false }) => {
           {/* Footer */}
           <div className="text-sm text-blue-200">
             <p>
-              © {new Date().getFullYear()} Netlink App. All rights reserved.
+              © {new Date().getFullYear()} Ping. All rights reserved.
             </p>
             <p className="mt-2">Secure • Reliable • Scalable</p>
           </div>
@@ -406,7 +425,7 @@ const Login = ({ onSwitchMode, isEmbedded = false }) => {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-900 to-blue-900 shadow-lg mb-4">
               <i className="fa-solid fa-building text-2xl text-white"></i>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900">Netlink</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Ping</h2>
           </div>
 
           {mfaStep ? (

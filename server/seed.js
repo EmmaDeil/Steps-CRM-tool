@@ -83,7 +83,7 @@ const seedData = {
     {
       firstName: "Admin",
       lastName: "User",
-      email: "admin@netlink.com",
+      email: "admin@ping.com",
       password: "Admin@123", // Will be hashed
       role: "Admin",
       status: "Active",
@@ -103,7 +103,7 @@ const seedData = {
     {
       firstName: "John",
       lastName: "Doe",
-      email: "john.doe@netlink.com",
+      email: "john.doe@ping.com",
       password: "User@123",
       role: "user",
       status: "Active",
@@ -113,7 +113,7 @@ const seedData = {
     {
       firstName: "Jane",
       lastName: "Smith",
-      email: "jane.smith@netlink.com",
+      email: "jane.smith@ping.com",
       password: "User@123",
       role: "Editor",
       status: "Active",
@@ -213,7 +213,7 @@ const seedData = {
 
 async function clearCollections() {
   console.log('\n🗑️  Clearing existing data...');
-  
+
   const models = [
     UserModel,
     ModuleModel,
@@ -308,9 +308,9 @@ async function seedUsers() {
       }
     }
     console.log('\n   Default credentials:');
-    console.log('   Admin: admin@netlink.com / Admin@123');
+    console.log('   Admin: admin@ping.com / Admin@123');
     console.log('   Manager: eclefzy@gmail.com / Admin@123');
-    console.log('   User: john.doe@netlink.com / User@123');
+    console.log('   User: john.doe@ping.com / User@123');
   } catch (error) {
     console.error('   ✗ Error seeding users:', error.message);
   }
@@ -382,7 +382,7 @@ async function main() {
     console.log('📍 MongoDB URI:', process.env.MONGODB_URI || 'Not set');
 
     // Connect to MongoDB
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/netlink', {
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ping', {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });

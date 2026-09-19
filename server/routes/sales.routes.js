@@ -83,12 +83,26 @@ router.post('/customers', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Customer name is required' });
     }
 
+    // Validate email format if provided
+    const cleanEmail = email ? email.trim().toLowerCase() : '';
+    if (cleanEmail && !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
+      return res.status(400).json({ message: 'Invalid email address' });
+    }
+
+    // Prevent duplicate emails across active customers
+    if (cleanEmail) {
+      const duplicate = await Customer.findOne({ email: cleanEmail, isDeleted: false });
+      if (duplicate) {
+        return res.status(400).json({ message: `A customer with email "${cleanEmail}" already exists` });
+      }
+    }
+
     const customerId = await generateCustomerId();
     const customer = new Customer({
       customerId,
       name: name.trim(),
       type: type === 'individual' ? 'individual' : 'business',
-      email: email ? email.trim().toLowerCase() : '',
+      email: cleanEmail,
       phone: phone ? phone.trim() : '',
       address: address ? address.trim() : '',
       contactPerson: contactPerson ? contactPerson.trim() : '',
@@ -254,6 +268,20 @@ router.post('/orders', authMiddleware, async (req, res) => {
       });
     }
 
+    // Pre-validate stock for inventory-linked items before creating the order
+    for (const li of resolvedLines) {
+      if (!li.inventoryItemId) continue;
+      const inv = await InventoryItem.findOne({ _id: li.inventoryItemId, isDeleted: false });
+      if (!inv) {
+        return res.status(404).json({ message: `Inventory item "${li.itemName}" not found` });
+      }
+      if (inv.quantity < li.quantity) {
+        return res.status(400).json({
+          message: `Insufficient stock for "${inv.name}". Required: ${li.quantity}, Available: ${inv.quantity}`,
+        });
+      }
+    }
+
     const order = new SalesOrder({
       customerId: customerId && mongoose.isValidObjectId(customerId) ? customerId : null,
       customerName: customerName.trim(),
@@ -349,6 +377,20 @@ router.post('/orders/:id/confirm', authMiddleware, async (req, res) => {
     if (!order) return res.status(404).json({ message: 'Sales order not found' });
     if (order.status !== 'draft') {
       return res.status(400).json({ message: `Order cannot be confirmed from status "${order.status}"` });
+    }
+
+    // Verify stock is still available before confirming (it may have changed since creation)
+    for (const li of order.lineItems) {
+      if (!li.inventoryItemId) continue;
+      const item = await InventoryItem.findOne({ _id: li.inventoryItemId, isDeleted: false });
+      if (!item) {
+        return res.status(404).json({ message: `Inventory item "${li.itemName}" not found` });
+      }
+      if (item.quantity < li.quantity) {
+        return res.status(400).json({
+          message: `Insufficient stock for "${item.name}". Required: ${li.quantity}, Available: ${item.quantity}`,
+        });
+      }
     }
 
     order.status = 'confirmed';

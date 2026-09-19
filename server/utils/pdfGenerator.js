@@ -8,7 +8,7 @@ function drawHeader(doc, title, subtitle) {
     .fillColor('#0d6efd')
     .fontSize(20)
     .font('Helvetica-Bold')
-    .text('STEPS CRM & ERP', 50, 40)
+    .text('PING', 50, 40)
     .fillColor('#333333')
     .fontSize(14)
     .text(title, 50, 65, { align: 'right' })
@@ -30,7 +30,7 @@ function drawHeader(doc, title, subtitle) {
  */
 function createPOPDFStream(poData) {
   const doc = new PDFDocument({ margin: 50 });
-  
+
   drawHeader(doc, 'PURCHASE ORDER', `PO #: ${poData.poNumber || poData._id}`);
 
   doc.fontSize(10).fillColor('#333333').font('Helvetica');
@@ -51,7 +51,7 @@ function createPOPDFStream(poData) {
 
   y += 25;
   doc.fillColor('#333333').font('Helvetica').fontSize(9);
-  
+
   const items = poData.items || [];
   items.forEach((item) => {
     doc.text(item.itemName || 'Item', 60, y);
@@ -76,7 +76,7 @@ function createPOPDFStream(poData) {
  */
 function createRFQPDFStream(rfqData) {
   const doc = new PDFDocument({ margin: 50 });
-  
+
   drawHeader(doc, 'REQUEST FOR QUOTATION', `RFQ #: ${rfqData.rfqNumber || rfqData._id}`);
 
   doc.fontSize(10).fillColor('#333333').font('Helvetica');
@@ -111,7 +111,7 @@ function createRFQPDFStream(rfqData) {
  */
 function createPaymentReceiptPDFStream(paymentData) {
   const doc = new PDFDocument({ margin: 50 });
-  
+
   drawHeader(doc, 'PAYMENT RECEIPT', `Receipt #: ${paymentData.receiptNumber || paymentData._id}`);
 
   doc.fontSize(10).fillColor('#333333').font('Helvetica');
@@ -132,7 +132,7 @@ function createPaymentReceiptPDFStream(paymentData) {
  */
 function createGRNPDFStream(receiptData) {
   const doc = new PDFDocument({ margin: 50 });
-  
+
   drawHeader(doc, 'GOODS RECEIPT NOTE (GRN)', `GRN #: ${receiptData.receiptNumber || receiptData.grnNumber || receiptData._id}`);
 
   doc.fontSize(10).fillColor('#333333').font('Helvetica');

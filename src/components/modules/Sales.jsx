@@ -24,22 +24,20 @@ const OrderStatusBadge = ({ status }) => {
   };
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-        map[status] || "bg-gray-100 text-gray-600 border-gray-200"
-      }`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${map[status] || "bg-gray-100 text-gray-600 border-gray-200"
+        }`}
     >
       <span
-        className={`size-1.5 rounded-full ${
-          status === "fulfilled"
-            ? "bg-emerald-500"
-            : status === "confirmed"
+        className={`size-1.5 rounded-full ${status === "fulfilled"
+          ? "bg-emerald-500"
+          : status === "confirmed"
             ? "bg-blue-500"
             : status === "invoiced"
-            ? "bg-purple-500"
-            : status === "cancelled"
-            ? "bg-rose-500"
-            : "bg-gray-400"
-        }`}
+              ? "bg-purple-500"
+              : status === "cancelled"
+                ? "bg-rose-500"
+                : "bg-gray-400"
+          }`}
       />
       {status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown"}
     </span>
@@ -54,9 +52,8 @@ const PaymentStatusBadge = ({ status }) => {
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
-        map[status] || "bg-gray-100 text-gray-600 border-gray-200"
-      }`}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${map[status] || "bg-gray-100 text-gray-600 border-gray-200"
+        }`}
     >
       {status ? status.toUpperCase() : "UNPAID"}
     </span>
@@ -64,7 +61,7 @@ const PaymentStatusBadge = ({ status }) => {
 };
 
 export default function Sales() {
-  const [activeTab, setActiveTab] = useState("dashboard"); // dashboard, orders, customers, reports
+  const [activeTab, setActiveTab] = useState("dashboard"); // dashboard, orders, customers
   const [loading, setLoading] = useState(false);
 
   // Data states
@@ -158,7 +155,7 @@ export default function Sales() {
   // Fetch inventory items for live item picker and stock linking
   const fetchInventoryItems = useCallback(async () => {
     try {
-      const res = await apiService.get("/api/inventory/items?limit=200");
+      const res = await apiService.get("/api/inventory?limit=200");
       setInventoryItems(res.items || res.data || []);
     } catch (err) {
       console.error("Failed to load inventory items:", err);
@@ -274,6 +271,17 @@ export default function Sales() {
     }
     if (orderForm.lineItems.length === 0) {
       toast.error("Please add at least one line item");
+      return;
+    }
+
+    // Block submission if any inventory-linked item exceeds available stock
+    const overStock = orderForm.lineItems.find(
+      (li) => li.inventoryItemId && Number(li.quantity) > Number(li.availableStock)
+    );
+    if (overStock) {
+      toast.error(
+        `Insufficient stock for "${overStock.itemName}". Available: ${overStock.availableStock}, requested: ${overStock.quantity}`
+      );
       return;
     }
 
@@ -539,10 +547,8 @@ export default function Sales() {
           ...(activeTab === "orders"
             ? [{ label: "Sales Orders", icon: "fa-cart-shopping" }]
             : activeTab === "customers"
-            ? [{ label: "Customers", icon: "fa-users" }]
-            : activeTab === "reports"
-            ? [{ label: "Reports & Analytics", icon: "fa-file-invoice-dollar" }]
-            : []),
+              ? [{ label: "Customers", icon: "fa-users" }]
+              : []),
         ]}
       />
 
@@ -550,22 +556,9 @@ export default function Sales() {
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="pt-5 pb-0">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="size-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
-                  <i className="fa-solid fa-handshake text-lg"></i>
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-                    Sales Management
-                  </h1>
-                  <p className="text-xs sm:text-sm text-slate-500">
-                    Process sales orders, manage customers, and synchronize inventory fulfillment
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
+            {/* Action Buttons + Dashboard Tab in one row */}
+            <div className="flex items-end justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-2 pb-2">
                 <button
                   onClick={() => {
                     setCustomerForm({
@@ -610,29 +603,25 @@ export default function Sales() {
                   New Sales Order
                 </button>
               </div>
-            </div>
 
-            {/* Navigation Tabs */}
-            <div className="flex border-b border-slate-200 mt-6 gap-8 overflow-x-auto scrollbar-none">
-              {[
-                { id: "dashboard", label: "Dashboard", icon: "fa-chart-pie" },
-                { id: "orders", label: `Sales Orders (${ordersTotal})`, icon: "fa-cart-shopping" },
-                { id: "customers", label: `Customers (${customers.length})`, icon: "fa-users" },
-                { id: "reports", label: "Reports & Analytics", icon: "fa-file-invoice-dollar" },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 pb-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                    activeTab === tab.id
+              {/* Navigation Tabs — only Dashboard remains */}
+              <div className="flex gap-8 overflow-x-auto scrollbar-none">
+                {[
+                  { id: "dashboard", label: "Dashboard", icon: "fa-chart-pie" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 pb-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.id
                       ? "border-emerald-600 text-emerald-600"
                       : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
-                  }`}
-                >
-                  <i className={`fa-solid ${tab.icon} text-xs`}></i>
-                  {tab.label}
-                </button>
-              ))}
+                      }`}
+                  >
+                    <i className={`fa-solid ${tab.icon} text-xs`}></i>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -723,30 +712,6 @@ export default function Sales() {
                     Unpaid & partial orders
                   </p>
                 </div>
-              </div>
-            </div>
-
-            {/* Inventory Integration Status Banner */}
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="size-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-boxes-stacked"></i>
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-emerald-950">
-                    Inventory Module Linked & Synchronized
-                  </h4>
-                  <p className="text-xs text-emerald-700">
-                    Fulfilling sales orders automatically issues stock from the central Inventory FIFO
-                    batches and writes to the stock movement ledger.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-600 text-white">
-                  <i className="fa-solid fa-circle-check text-[10px]"></i>
-                  Live Sync Active
-                </span>
               </div>
             </div>
 
@@ -1014,11 +979,10 @@ export default function Sales() {
                         <h4 className="text-base font-bold text-slate-900 mt-0.5">{cust.name}</h4>
                       </div>
                       <span
-                        className={`text-xs px-2 py-0.5 rounded font-medium capitalize ${
-                          cust.type === "business"
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-emerald-50 text-emerald-700"
-                        }`}
+                        className={`text-xs px-2 py-0.5 rounded font-medium capitalize ${cust.type === "business"
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-emerald-50 text-emerald-700"
+                          }`}
                       >
                         {cust.type}
                       </span>
@@ -1109,66 +1073,6 @@ export default function Sales() {
                   No customers registered yet
                 </div>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════════════════════════════
-            TAB 4: REPORTS & ANALYTICS
-        ════════════════════════════════════════════════════════════════════════ */}
-        {activeTab === "reports" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                <h3 className="text-base font-bold text-slate-900 mb-4">
-                  Financial Summary
-                </h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between py-2 border-b border-slate-100 text-sm">
-                    <span className="text-slate-500">Gross Sales</span>
-                    <span className="font-bold text-slate-900">
-                      {formatCurrency(stats?.stats?.totalRevenue || 0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-slate-100 text-sm">
-                    <span className="text-slate-500">Payments Received</span>
-                    <span className="font-bold text-emerald-600">
-                      {formatCurrency(stats?.stats?.totalPaid || 0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-slate-100 text-sm">
-                    <span className="text-slate-500">Outstanding Receivables</span>
-                    <span className="font-bold text-amber-600">
-                      {formatCurrency(stats?.stats?.unpaidAmount || 0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-slate-100 text-sm">
-                    <span className="text-slate-500">Completed Orders</span>
-                    <span className="font-bold text-slate-900">
-                      {stats?.stats?.fulfilledOrders || 0}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 mb-2">
-                    Export Orders Data
-                  </h3>
-                  <p className="text-xs text-slate-500 mb-4">
-                    Download full reports of all transactions, customers, and order fulfillments
-                    for bookkeeping or external auditing.
-                  </p>
-                </div>
-                <button
-                  onClick={handleExportCSV}
-                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-sm transition shadow-sm"
-                >
-                  <i className="fa-solid fa-file-arrow-down"></i>
-                  Download Sales Ledger (CSV)
-                </button>
-              </div>
             </div>
           </div>
         )}
@@ -1327,11 +1231,10 @@ export default function Sales() {
                           <td className="py-2 px-2 text-center font-semibold">
                             {li.inventoryItemId ? (
                               <span
-                                className={`px-2 py-0.5 rounded text-[11px] ${
-                                  li.quantity > li.availableStock
-                                    ? "bg-rose-100 text-rose-700"
-                                    : "bg-slate-100 text-slate-700"
-                                }`}
+                                className={`px-2 py-0.5 rounded text-[11px] ${li.quantity > li.availableStock
+                                  ? "bg-rose-100 text-rose-700"
+                                  : "bg-slate-100 text-slate-700"
+                                  }`}
                               >
                                 {li.availableStock} {li.unit}
                               </span>
@@ -1347,11 +1250,10 @@ export default function Sales() {
                               onChange={(e) =>
                                 handleUpdateLineItem(idx, "quantity", e.target.value)
                               }
-                              className={`w-full px-2 py-1.5 text-xs rounded border text-center ${
-                                li.inventoryItemId && li.quantity > li.availableStock
-                                  ? "border-rose-400 bg-rose-50"
-                                  : "border-slate-300"
-                              }`}
+                              className={`w-full px-2 py-1.5 text-xs rounded border text-center ${li.inventoryItemId && li.quantity > li.availableStock
+                                ? "border-rose-400 bg-rose-50"
+                                : "border-slate-300"
+                                }`}
                             />
                           </td>
                           <td className="py-2 px-2">
@@ -1492,6 +1394,19 @@ export default function Sales() {
                   </label>
                 </div>
               </div>
+
+              {/* Over-stock warning banner */}
+              {orderForm.lineItems.some(
+                (li) => li.inventoryItemId && Number(li.quantity) > Number(li.availableStock)
+              ) && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
+                    <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
+                    <span>
+                      One or more items exceed available stock. Adjust the quantities before saving —
+                      highlighted in red above.
+                    </span>
+                  </div>
+                )}
 
               {/* Modal Actions */}
               <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
@@ -1787,7 +1702,7 @@ export default function Sales() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Customer / Company Name *
+                    {customerForm.type === "individual" ? "Full Name" : "Corporate Name"} *
                   </label>
                   <input
                     type="text"
@@ -1816,7 +1731,7 @@ export default function Sales() {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Contact Person
+                    {customerForm.type === "individual" ? "Alternate Contact" : "Contact Person"}
                   </label>
                   <input
                     type="text"

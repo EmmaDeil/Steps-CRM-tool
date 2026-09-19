@@ -61,7 +61,7 @@ async function generateWaybillNumber() {
 }
 
 /** Build and return printable waybill HTML string */
-function buildWaybillHTML(transfer, companyName = 'Steps CRM') {
+function buildWaybillHTML(transfer, companyName = 'Ping') {
   const rows = transfer.lineItems
     .map(
       (li) => `

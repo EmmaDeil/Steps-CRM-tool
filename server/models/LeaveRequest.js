@@ -5,8 +5,8 @@ const leaveRequestSchema = new mongoose.Schema({
   employeeName: { type: String, required: true },
   userId: { type: String, required: true },
   department: { type: String },
-  leaveType: { 
-    type: String, 
+  leaveType: {
+    type: String,
     required: true,
     enum: ['annual', 'sick', 'personal', 'unpaid']
   },
@@ -17,6 +17,16 @@ const leaveRequestSchema = new mongoose.Schema({
   managerId: { type: String, required: false }, // Made optional for rule-based approval
   managerName: { type: String, required: false },
   managerEmail: { type: String },
+  // Reliever covers the employee's responsibilities while on leave
+  relieverId: { type: String },
+  relieverName: { type: String },
+  relieverEmail: { type: String },
+  attachments: [{
+    fileName: String,
+    fileData: String,
+    fileType: String,
+    fileSize: Number,
+  }],
   // Multi-level approval fields
   usesRuleBasedApproval: { type: Boolean, default: false },
   approvalRuleId: { type: mongoose.Schema.Types.ObjectId, ref: 'ApprovalRule' },
@@ -31,8 +41,8 @@ const leaveRequestSchema = new mongoose.Schema({
     approvedAt: Date,
     comments: String
   }],
-  status: { 
-    type: String, 
+  status: {
+    type: String,
     default: 'pending_manager',
     enum: ['pending_manager', 'approved_manager', 'rejected_manager', 'pending_hr', 'approved', 'rejected']
   },

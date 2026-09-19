@@ -445,7 +445,7 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
                 <i className="fa-solid fa-building text-2xl text-white"></i>
               </div>
               <div>
-                <h2 className="text-2xl font-bold">Netlink</h2>
+                <h2 className="text-2xl font-bold">Ping</h2>
                 <p className="text-sm text-purple-200">
                   Enterprise Management System
                 </p>
@@ -510,7 +510,7 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
           {/* Footer */}
           <div className="text-sm text-purple-200">
             <p>
-              © {new Date().getFullYear()} Netlink App. All rights reserved.
+              © {new Date().getFullYear()} Ping. All rights reserved.
             </p>
             <p className="mt-2">Trusted by organizations worldwide</p>
           </div>
@@ -525,7 +525,7 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-900 to-purple-900 shadow-lg mb-4">
               <i className="fa-solid fa-building text-2xl text-white"></i>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900">Netlink</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Ping</h2>
           </div>
 
           {/* Form Header */}
@@ -534,7 +534,7 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
               Create your account
             </h1>
             <p className="text-gray-600">
-              Fill in your information to get started with Netlink
+              Fill in your information to get started with Ping
             </p>
           </div>
 
@@ -763,10 +763,10 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
                       <span className="text-gray-600">Password strength</span>
                       <span
                         className={`font-medium ${passwordStrength < 40
-                            ? "text-red-600"
-                            : passwordStrength < 70
-                              ? "text-yellow-600"
-                              : "text-green-600"
+                          ? "text-red-600"
+                          : passwordStrength < 70
+                            ? "text-yellow-600"
+                            : "text-green-600"
                           }`}
                       >
                         {getPasswordStrengthText()}

@@ -190,7 +190,7 @@ const InvoiceDetail = ({ invoice }) => {
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
               From (Our Company)
             </h3>
-            <p className="font-semibold text-gray-800 text-lg">Netlink CRM</p>
+            <p className="font-semibold text-gray-800 text-lg">Ping</p>
             <p className="text-sm text-gray-500 mt-1">Finance Department</p>
           </div>
           <div>

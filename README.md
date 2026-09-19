@@ -1,10 +1,10 @@
-# Netlink CRM
+# Ping
 
 Enterprise resource management platform built with React, Express, and MongoDB.
 
 ## Overview
 
-Netlink CRM combines operations across HR, procurement, finance, payroll, inventory, maintenance, security, analytics, and admin controls in one system.
+Ping combines operations across HR, procurement, finance, payroll, inventory, maintenance, security, analytics, and admin controls in one system.
 
 Current implementation highlights:
 
@@ -21,7 +21,7 @@ Current implementation highlights:
 
 ## Core Modules & Functional Scope
 
-The Netlink CRM platform encompasses 15 integrated operational suites:
+The Ping platform encompasses 15 integrated operational suites:
 
 1. **Procurement & Material Request Workflow**
    - 5-stage material request lifecycle: Material Request -> RFQ -> Vendor Quotes -> Purchase Order -> Payment Gate -> Goods Receipt (GRN) -> Stock Restock
@@ -738,7 +738,7 @@ StepsProject/
 
 ```text
                            ┌──────────────────────┐
-                           │      NetlinkProject    │
+                           │        Ping Project    │
                            └──────────┬───────────┘
                                       │
           ┌───────────────────────────┼────────────────────────────┐
@@ -789,7 +789,7 @@ VITE_API_BASE_URL=http://localhost:4000
 3. Create server/.env:
 
 ```env
-MONGODB_URI=mongodb://localhost:27017/steps-crm
+MONGODB_URI=mongodb://localhost:27017/ping
 JWT_SECRET=change_me
 JWT_REFRESH_SECRET=change_me_refresh
 PORT=4000
@@ -1286,7 +1286,7 @@ Use this when bootstrapping a new local environment or restoring baseline module
 Option A: drop entire local database.
 
 ```bash
-mongosh "mongodb://localhost:27017/steps-crm" --eval "db.dropDatabase()"
+mongosh "mongodb://localhost:27017/ping" --eval "db.dropDatabase()"
 ```
 
 Then reseed:
@@ -1299,7 +1299,7 @@ node seed.js
 Option B: clear specific collections only (safer for partial resets).
 
 ```bash
-mongosh "mongodb://localhost:27017/steps-crm" --eval "db.materialrequests.deleteMany({}); db.purchaseorders.deleteMany({}); db.approvalrules.deleteMany({});"
+mongosh "mongodb://localhost:27017/ping" --eval "db.materialrequests.deleteMany({}); db.purchaseorders.deleteMany({}); db.approvalrules.deleteMany({});"
 ```
 
 ### 3) Dev Run Checklist

@@ -3,13 +3,13 @@ const mongoose = require('mongoose');
 const SalesLineItemSchema = new mongoose.Schema(
   {
     inventoryItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'InventoryItem', default: null },
-    itemId:    { type: String, default: '' }, // Human-readable INV-xxxxx
-    itemName:  { type: String, required: true, trim: true },
-    quantity:  { type: Number, required: true, min: 1 },
+    itemId: { type: String, default: '' }, // Human-readable INV-xxxxx
+    itemName: { type: String, required: true, trim: true },
+    quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true, min: 0 },
     totalPrice: { type: Number, required: true, min: 0 },
-    unit:      { type: String, default: 'pcs' },
-    locationId:   { type: mongoose.Schema.Types.ObjectId, ref: 'StoreLocation', default: null },
+    unit: { type: String, default: 'pcs' },
+    locationId: { type: mongoose.Schema.Types.ObjectId, ref: 'StoreLocation', default: null },
     locationName: { type: String, default: '' },
   },
   { _id: false }
@@ -20,20 +20,20 @@ const SalesOrderSchema = new mongoose.Schema(
     orderNumber: { type: String, unique: true },
 
     // Customer
-    customerId:   { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', default: null },
+    customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', default: null },
     customerName: { type: String, required: true, trim: true },
-    customerEmail:{ type: String, default: '' },
-    customerPhone:{ type: String, default: '' },
+    customerEmail: { type: String, default: '' },
+    customerPhone: { type: String, default: '' },
 
     // Line items
     lineItems: { type: [SalesLineItemSchema], default: [] },
 
     // Financials
-    subtotal:    { type: Number, default: 0, min: 0 },
-    taxRate:     { type: Number, default: 0, min: 0 },   // percentage, e.g. 7.5
-    taxAmount:   { type: Number, default: 0, min: 0 },
+    subtotal: { type: Number, default: 0, min: 0 },
+    taxRate: { type: Number, default: 0, min: 0 },   // percentage, e.g. 7.5
+    taxAmount: { type: Number, default: 0, min: 0 },
     totalAmount: { type: Number, default: 0, min: 0 },
-    discount:    { type: Number, default: 0, min: 0 },   // flat discount in currency
+    discount: { type: Number, default: 0, min: 0 },   // flat discount in currency
 
     // Order lifecycle
     status: {
@@ -51,17 +51,17 @@ const SalesOrderSchema = new mongoose.Schema(
       index: true,
     },
     paymentMethod: { type: String, default: '' },
-    paidAmount:    { type: Number, default: 0, min: 0 },
-    paidAt:        { type: Date, default: null },
+    paidAmount: { type: Number, default: 0, min: 0 },
+    paidAt: { type: Date, default: null },
 
     // Dates
-    dueDate:     { type: Date, default: null },
+    dueDate: { type: Date, default: null },
     confirmedAt: { type: Date, default: null },
     fulfilledAt: { type: Date, default: null },
     cancelledAt: { type: Date, default: null },
 
     // Staff
-    createdBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     createdByName: { type: String, default: '' },
     fulfilledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     fulfilledByName: { type: String, default: '' },
@@ -69,23 +69,48 @@ const SalesOrderSchema = new mongoose.Schema(
     // Linked invoice (set after generate-invoice)
     linkedInvoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
 
-    notes:         { type: String, default: '' },
+    notes: { type: String, default: '' },
     cancellationReason: { type: String, default: '' },
   },
   { timestamps: true }
 );
 
-// Auto-generate order number and compute totals before save
+// Auto-generate order number and compute totals before save.
+// Order number uses the latest existing number + 1 (retrying on unique-index
+// collision) so concurrent creates can never produce the same number.
 SalesOrderSchema.pre('save', async function (next) {
   if (!this.orderNumber) {
     const yearMonth = new Date().toISOString().slice(2, 7).replace('-', '');
-    const count = await mongoose.model('SalesOrder').countDocuments();
-    this.orderNumber = `SO-${yearMonth}-${String(count + 1).padStart(5, '0')}`;
+    const Order = mongoose.model('SalesOrder');
+    let attempts = 0;
+    let assigned = false;
+    while (!assigned && attempts < 10) {
+      attempts += 1;
+      // Find the highest order number for this month
+      const last = await Order.findOne({ orderNumber: new RegExp(`^SO-${yearMonth}-`) })
+        .sort({ orderNumber: -1 })
+        .select('orderNumber')
+        .lean();
+      const nextSeq = last
+        ? parseInt(last.orderNumber.split('-').pop(), 10) + 1
+        : 1;
+      const candidate = `SO-${yearMonth}-${String(nextSeq).padStart(5, '0')}`;
+      // Only assign if not already taken (avoids race with another in-flight save)
+      const exists = await Order.exists({ orderNumber: candidate });
+      if (!exists) {
+        this.orderNumber = candidate;
+        assigned = true;
+      }
+    }
+    if (!assigned) {
+      // Extremely unlikely fallback — append a random suffix to guarantee uniqueness
+      this.orderNumber = `SO-${yearMonth}-${Date.now().toString(36).toUpperCase()}`;
+    }
   }
-  this.subtotal    = this.lineItems.reduce((s, li) => s + (li.totalPrice || 0), 0);
-  this.subtotal    = Math.round(this.subtotal * 100) / 100;
+  this.subtotal = this.lineItems.reduce((s, li) => s + (li.totalPrice || 0), 0);
+  this.subtotal = Math.round(this.subtotal * 100) / 100;
   const discounted = Math.max(0, this.subtotal - (this.discount || 0));
-  this.taxAmount   = Math.round(discounted * (this.taxRate / 100) * 100) / 100;
+  this.taxAmount = Math.round(discounted * (this.taxRate / 100) * 100) / 100;
   this.totalAmount = Math.round((discounted + this.taxAmount) * 100) / 100;
   next();
 });

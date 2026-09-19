@@ -61,8 +61,8 @@ const Navbar = ({ user }) => {
           className="flex items-center gap-3 cursor-pointer"
           onClick={() => navigate("/home")}
         >
-          <img src={stepsLogo} alt="Netlink ERP Logo" className="w-8 h-8" />
-          <h1 className="text-lg font-bold text-[#111418]">INTRANET</h1>
+          <img src={stepsLogo} alt="Ping Logo" className="w-8 h-8" />
+          <h1 className="text-lg font-bold text-[#111418]">Ping</h1>
         </div>
 
         {/* Right: Notification & User */}

@@ -41,7 +41,7 @@ async function sendApprovalEmail(requestData) {
   }
 
   const approvalLink = `${frontendUrl}/material-requests?action=approve&id=${requestData._id}`;
-  
+
   const lineItemsHTML = requestData.lineItems.map(item => `
     <tr>
       <td style="padding: 8px; border: 1px solid #ddd;">${item.itemName}</td>
@@ -105,7 +105,7 @@ async function sendApprovalEmail(requestData) {
       console.log('Approval Link:', approvalLink);
       return { success: true, message: 'Email logged (dev mode)' };
     }
-    
+
     await transporter.sendMail(mailOptions);
     return { success: true, message: 'Email sent successfully' };
   } catch (error) {
@@ -121,7 +121,7 @@ async function sendPOReviewEmail(poData) {
   }
 
   const reviewLink = `${frontendUrl}/purchase-orders?action=review&id=${poData._id}`;
-  
+
   const mailOptions = {
     from: emailUser,
     to: poData.requesterEmail,
@@ -159,7 +159,7 @@ async function sendPOReviewEmail(poData) {
       console.log('Review Link:', reviewLink);
       return { success: true, message: 'Email logged (dev mode)' };
     }
-    
+
     await transporter.sendMail(mailOptions);
     return { success: true, message: 'Email sent successfully' };
   } catch (error) {
@@ -175,11 +175,11 @@ async function sendTemporaryPasswordEmail(userData, tempPassword) {
   }
 
   const loginLink = `${frontendUrl}/login`;
-  
+
   const mailOptions = {
     from: emailUser,
     to: userData.email,
-    subject: 'Your Temporary Password for Steps CRM',
+    subject: 'Your Temporary Password for Ping',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
         <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 32px 24px; text-align: center;">
@@ -223,7 +223,7 @@ async function sendTemporaryPasswordEmail(userData, tempPassword) {
       console.log('Temporary Password:', tempPassword);
       return { success: true, message: 'Email logged (dev mode)', tempPassword };
     }
-    
+
     await transporter.sendMail(mailOptions);
     return { success: true, message: 'Email sent successfully' };
   } catch (error) {
@@ -239,7 +239,7 @@ async function sendPasswordResetEmail(userData, resetToken) {
   }
 
   const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
-  
+
   const mailOptions = {
     from: emailUser,
     to: userData.email,
@@ -272,7 +272,7 @@ async function sendPasswordResetEmail(userData, resetToken) {
       console.log('Reset Link:', resetLink);
       return { success: true, message: 'Email logged (dev mode)', resetLink };
     }
-    
+
     await transporter.sendMail(mailOptions);
     return { success: true, message: 'Email sent successfully' };
   } catch (error) {
@@ -404,7 +404,7 @@ async function sendSecurityAlertEmail(recipientEmails, alertData) {
       console.log('Alert:', alertData.title, '- Severity:', alertData.severity);
       return { success: true, message: 'Email logged (dev mode)' };
     }
-    
+
     await transporter.sendMail(mailOptions);
     return { success: true, message: 'Security alert email sent successfully' };
   } catch (error) {
@@ -472,7 +472,7 @@ async function sendNotificationRuleEmail(rule, logData, recipientEmails) {
       console.log('Rule:', rule.name, '- Action:', logData.action);
       return { success: true, message: 'Email logged (dev mode)' };
     }
-    
+
     await transporter.sendMail(mailOptions);
     return { success: true, message: 'Notification email sent successfully' };
   } catch (error) {
@@ -488,12 +488,12 @@ async function sendSignatureRequestEmail(documentData, recipientEmail, recipient
   }
 
   const signLink = `${frontendUrl}/docsign/sign/${documentData._id}`;
-  
+
   // Fetch company branding if customBranding is enabled
   let companyName = '';
   let companyLogo = '';
   let primaryColor = '#137fec';
-  
+
   if (documentData.customBranding) {
     try {
       const SystemSettings = require('../models/SystemSettings');
@@ -507,7 +507,7 @@ async function sendSignatureRequestEmail(documentData, recipientEmail, recipient
       console.warn('Could not fetch system settings for branding:', error);
     }
   }
-  
+
   const mailOptions = {
     from: emailUser,
     to: recipientEmail,
@@ -573,7 +573,7 @@ async function sendSignatureRequestEmail(documentData, recipientEmail, recipient
       console.log('Document:', documentData.name);
       return { success: true, message: 'Email logged (dev mode)' };
     }
-    
+
     await transporter.sendMail(mailOptions);
     return { success: true, message: 'Signature request email sent successfully' };
   } catch (error) {
@@ -672,11 +672,11 @@ async function sendWelcomeVerificationEmail(email, name, verificationToken) {
   const mailOptions = {
     from: emailUser,
     to: email,
-    subject: 'Welcome to Steps CRM - Please Verify Your Email',
+    subject: 'Welcome to Ping - Please Verify Your Email',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
         <div style="background-color: #0d6efd; padding: 24px; text-align: center;">
-          <h2 style="color: white; margin: 0; font-size: 24px;">Welcome to Steps CRM! 🚀</h2>
+          <h2 style="color: white; margin: 0; font-size: 24px;">Welcome to Ping! 🚀</h2>
         </div>
         
         <div style="padding: 32px 24px;">
@@ -713,11 +713,85 @@ async function sendWelcomeVerificationEmail(email, name, verificationToken) {
       console.log('   Verification Link:', verifyLink);
       return { success: true, message: 'Verification email logged (dev mode)' };
     }
-    
+
     await transporter.sendMail(mailOptions);
     return { success: true, message: 'Verification email sent successfully' };
   } catch (error) {
     console.error('Error sending verification email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Notify the assigned reliever to review a leave request's coverage before approval
+async function sendLeaveRelieverEmail(data) {
+  if (!data.relieverEmail) {
+    throw new Error('relieverEmail is required to send reliever notification email');
+  }
+
+  const reviewDeadline = new Date(Date.now() + 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  // Decode base64 data-URL attachments into nodemailer's expected format
+  const attachmentsList = Array.isArray(data.attachments) ? data.attachments : [];
+  const mailAttachments = attachmentsList
+    .filter((a) => a && a.fileData && typeof a.fileData === 'string')
+    .map((a) => {
+      const match = a.fileData.match(/^data:(.*);base64,(.*)$/);
+      return {
+        filename: a.fileName || 'attachment',
+        content: match ? match[2] : a.fileData,
+        encoding: 'base64',
+      };
+    });
+
+  const mailOptions = {
+    from: emailUser,
+    to: data.relieverEmail,
+    subject: `Action Required: Cover for ${data.employeeName || 'a colleague'}'s Leave`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+        <div style="background: linear-gradient(135deg, #0d6efd 0%, #3b82f6 100%); padding: 28px 24px; text-align: center;">
+          <h2 style="color: white; margin: 0; font-size: 22px;">Leave Coverage Notice</h2>
+        </div>
+        <div style="padding: 28px 24px;">
+          <p style="color: #374151; font-size: 16px;">Hello ${data.relieverName || 'there'},</p>
+          <p style="color: #4b5563; line-height: 1.6;">
+            The above request is going on leave. Kindly look through the request before it is being approved.
+          </p>
+          <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px 20px; margin: 20px 0;">
+            <p style="margin: 4px 0; color: #374151;"><strong>Employee:</strong> ${data.employeeName || 'N/A'}</p>
+            <p style="margin: 4px 0; color: #374151;"><strong>Leave Type:</strong> ${data.leaveType || 'N/A'}</p>
+            <p style="margin: 4px 0; color: #374151;"><strong>From:</strong> ${data.fromDate || 'N/A'}</p>
+            <p style="margin: 4px 0; color: #374151;"><strong>To:</strong> ${data.toDate || 'N/A'}</p>
+            <p style="margin: 4px 0; color: #374151;"><strong>Days:</strong> ${data.days || 'N/A'}</p>
+            ${data.reason ? `<p style="margin: 4px 0; color: #374151;"><strong>Reason:</strong> ${data.reason}</p>` : ''}
+          </div>
+          <p style="color: #ef4444; font-size: 14px; font-weight: 600;">
+            ⏳ Please review this request within 1 day (by ${reviewDeadline}) before it proceeds for approval.
+          </p>
+          ${mailAttachments.length > 0 ? `<p style="color: #4b5563; font-size: 14px;">📎 ${mailAttachments.length} attachment(s) included for your review.</p>` : ''}
+        </div>
+        <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 16px 24px; text-align: center;">
+          <p style="color: #9ca3af; font-size: 12px; margin: 0;">This is an automated email — do not reply.</p>
+        </div>
+      </div>
+    `,
+    ...(mailAttachments.length > 0 ? { attachments: mailAttachments } : {}),
+  };
+
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📧 Reliever notification email would be sent to:', mailOptions.to);
+      return { success: true, message: 'Email logged (dev mode)' };
+    }
+
+    await transporter.sendMail(mailOptions);
+    return { success: true, message: 'Email sent successfully' };
+  } catch (error) {
+    console.error('Error sending reliever notification email:', error);
     return { success: false, error: error.message };
   }
 }
@@ -733,5 +807,6 @@ module.exports = {
   sendNotificationRuleEmail,
   sendSignatureRequestEmail,
   sendInventoryExpiryAlertEmail,
+  sendLeaveRelieverEmail,
   transporter,
 };

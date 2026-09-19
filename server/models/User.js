@@ -76,6 +76,21 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  tempPasswordExpires: {
+    type: Date,
+    default: null,
+    select: false,
+  },
+  failedLoginAttempts: {
+    type: Number,
+    default: 0,
+    select: false,
+  },
+  lockUntil: {
+    type: Date,
+    default: null,
+    select: false,
+  },
   isEmailVerified: {
     type: Boolean,
     default: false,
@@ -188,7 +203,7 @@ userSchema.index({ email: 1, status: 1 });
 userSchema.index({ role: 1 });
 
 // Pre-save middleware to hash password and set fullName
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', async function (next) {
   // Set fullName from firstName and lastName
   if (this.firstName && this.lastName) {
     this.fullName = `${this.firstName} ${this.lastName}`;
@@ -198,17 +213,17 @@ userSchema.pre('save', async function(next) {
   if (this.isModified('password')) {
     this.password = await bcrypt.hash(this.password, 10);
   }
-  
+
   next();
 });
 
 // Method to compare password
-userSchema.methods.comparePassword = async function(candidatePassword) {
+userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
 // Method to generate password reset token
-userSchema.methods.generateResetToken = function() {
+userSchema.methods.generateResetToken = function () {
   const token = crypto.randomBytes(32).toString('hex');
   this.resetPasswordToken = crypto.createHash('sha256').update(token).digest('hex');
   this.resetPasswordExpires = Date.now() + 3600000; // 1 hour

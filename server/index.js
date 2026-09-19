@@ -7,6 +7,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const path = require('path');
 const dotenv = require('dotenv');
 // Ensure .env is loaded even when the server is started from the repo root
@@ -122,7 +124,7 @@ const DEFAULT_JOB_TITLES = [
 ];
 const VendorModel = require('./models/Vendor');
 const approvalRuleRoutes = require('./routes/approvalRule.routes');
-const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendTemporaryPasswordEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP, sendInventoryExpiryAlertEmail, sendWelcomeVerificationEmail } = require('./utils/emailService');
+const { sendApprovalEmail, sendPOReviewEmail, sendPasswordResetEmail, sendTemporaryPasswordEmail, sendSecurityAlertEmail, sendNotificationRuleEmail, sendEmailOTP, sendInventoryExpiryAlertEmail, sendWelcomeVerificationEmail, sendLeaveRelieverEmail } = require('./utils/emailService');
 const { sendSMSOTP } = require('./utils/smsService');
 const { buildApprovalChain } = require('./utils/approvalRuleHelper');
 const { Server } = require('socket.io');
@@ -192,31 +194,31 @@ const getClientIP = (req) => {
     // x-forwarded-for can be a comma-separated list, take the first one (original client)
     return req.headers['x-forwarded-for'].split(',')[0].trim();
   }
-  
+
   // Check CF-Connecting-IP (Cloudflare)
   if (req.headers['cf-connecting-ip']) {
     return req.headers['cf-connecting-ip'];
   }
-  
+
   // Check X-Real-IP (common proxy header)
   if (req.headers['x-real-ip']) {
     return req.headers['x-real-ip'];
   }
-  
+
   // Use Express req.ip (works with app.set('trust proxy', true))
   if (req.ip) {
     return req.ip;
   }
-  
+
   // Fallback to direct connection
   if (req.socket?.remoteAddress) {
     return req.socket.remoteAddress;
   }
-  
+
   if (req.connection?.remoteAddress) {
     return req.connection.remoteAddress;
   }
-  
+
   return 'Unknown';
 };
 
@@ -246,7 +248,7 @@ const validateBase64File = (base64String, maxSizeMB, allowedTypes) => {
   if (!mimeMatch) {
     throw new Error('Invalid file format.');
   }
-  
+
   const mimeType = mimeMatch[1];
   if (allowedTypes && !allowedTypes.test(mimeType)) {
     throw new Error(`File type ${mimeType} not allowed.`);
@@ -258,7 +260,7 @@ const validateBase64File = (base64String, maxSizeMB, allowedTypes) => {
     const base64Data = sizeMatch[1];
     const sizeInBytes = (base64Data.length * 3) / 4;
     const sizeInMB = sizeInBytes / (1024 * 1024);
-    
+
     if (sizeInMB > maxSizeMB) {
       throw new Error(`File size exceeds ${maxSizeMB}MB limit.`);
     }
@@ -376,7 +378,7 @@ async function start() {
       const dbStatus = mongoose.connection.readyState === 1;
       const uptime = process.uptime();
       const memoryUsage = process.memoryUsage();
-      
+
       const health = {
         status: dbStatus ? 'healthy' : 'unhealthy',
         timestamp: new Date().toISOString(),
@@ -611,22 +613,83 @@ async function start() {
         return res.status(400).json({ success: false, error: 'Invalid email address' });
       }
 
-      // Find user with password field
-      const user = await UserModel.findOne({ email: email.toLowerCase() }).select('+password');
+      // Find user with password + lockout/temp-password state
+      const user = await UserModel.findOne({ email: email.toLowerCase() })
+        .select('+password +failedLoginAttempts +lockUntil +tempPasswordExpires');
       if (!user) {
+        // Run a dummy bcrypt compare so response time doesn't reveal whether the email exists
+        await bcrypt.compare(password, '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy');
+        await AuditLogModel.create({
+          actor: { userId: 'unknown', userName: 'Unknown', userEmail: email, initials: '??' },
+          action: 'Failed Login',
+          actionColor: 'red',
+          ipAddress: getClientIP(req),
+          userAgent: req.headers['user-agent'] || '',
+          description: `Failed login attempt for unregistered email: ${email}`,
+          status: 'Failed',
+        });
         return res.status(401).json({
           success: false,
           error: 'Invalid email or password',
         });
       }
 
+      // Check account lockout
+      if (user.lockUntil && user.lockUntil > Date.now()) {
+        const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
+        await AuditLogModel.create({
+          actor: { userId: user._id.toString(), userName: user.fullName || email, userEmail: email, initials: (user.firstName?.[0] || '') + (user.lastName?.[0] || '') },
+          action: 'Failed Login',
+          actionColor: 'red',
+          ipAddress: getClientIP(req),
+          userAgent: req.headers['user-agent'] || '',
+          description: `Login attempt on locked account (${minutesLeft} min remaining)`,
+          status: 'Failed',
+        });
+        return res.status(423).json({
+          success: false,
+          error: `Account temporarily locked due to repeated failed attempts. Try again in ${minutesLeft} minute(s).`,
+        });
+      }
+
       // Check password
       const isMatch = await user.comparePassword(password);
-      if (!isMatch) {
-        return res.status(401).json({
-          success: false,
-          error: 'Invalid email or password',
+
+      // If the credential in use is a temporary password, enforce its 1-hour expiry
+      const tempExpired = user.mustChangePassword && user.tempPasswordExpires && user.tempPasswordExpires < Date.now();
+
+      if (!isMatch || tempExpired) {
+        user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+        let lockMessage = null;
+        if (user.failedLoginAttempts >= 5) {
+          user.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // lock 15 minutes
+          user.failedLoginAttempts = 0;
+          lockMessage = 'Account locked for 15 minutes after 5 failed attempts';
+        }
+        await user.save();
+        await AuditLogModel.create({
+          actor: { userId: user._id.toString(), userName: user.fullName || email, userEmail: email, initials: (user.firstName?.[0] || '') + (user.lastName?.[0] || '') },
+          action: 'Failed Login',
+          actionColor: 'red',
+          ipAddress: getClientIP(req),
+          userAgent: req.headers['user-agent'] || '',
+          description: tempExpired
+            ? 'Login rejected: temporary password expired'
+            : (lockMessage || `Failed login attempt ${user.failedLoginAttempts}/5 — invalid password`),
+          status: 'Failed',
         });
+        return res.status(tempExpired ? 403 : 401).json({
+          success: false,
+          error: tempExpired
+            ? 'Your temporary password has expired. Please request a new one.'
+            : (lockMessage || 'Invalid email or password'),
+        });
+      }
+
+      // Successful credential check — reset lockout counters
+      if (user.failedLoginAttempts > 0 || user.lockUntil) {
+        user.failedLoginAttempts = 0;
+        user.lockUntil = null;
       }
 
       // Check if account is active
@@ -692,6 +755,17 @@ async function start() {
       user.lastLogin = new Date();
       user.lastLoginIP = getClientIP(req);
       await user.save();
+
+      // Audit successful login
+      await AuditLogModel.create({
+        actor: { userId: user._id.toString(), userName: user.fullName || user.email, userEmail: user.email, initials: (user.firstName?.[0] || '') + (user.lastName?.[0] || '') },
+        action: 'Login',
+        actionColor: 'green',
+        ipAddress: getClientIP(req),
+        userAgent: req.headers['user-agent'] || '',
+        description: `Successful login (${user.role})`,
+        status: 'Success',
+      });
 
       // Generate token with role for enhanced security
       const token = generateToken(user._id, user.role);
@@ -805,7 +879,7 @@ async function start() {
   app.post('/api/auth/resend-verification', authMiddleware, async (req, res) => {
     try {
       const user = await UserModel.findById(req.user._id);
-      
+
       if (!user) {
         return res.status(404).json({ success: false, error: 'User not found' });
       }
@@ -871,13 +945,28 @@ async function start() {
         });
       }
 
-      // Generate random temporary password
-      const tempPassword = 'Temp#' + Math.floor(10000 + Math.random() * 90000) + '!x';
+      // Generate cryptographically secure temporary password, e.g. "Tmp!kQ9zX4wB2e#7"
+      const randomPart = crypto.randomBytes(9).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
+      const tempPassword = `Tmp!${randomPart}#${crypto.randomInt(10, 99)}`;
       user.password = tempPassword;
       user.mustChangePassword = true;
+      user.tempPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // valid for 1 hour
+      user.failedLoginAttempts = 0; // clear any lockout so the legitimate user can get in
+      user.lockUntil = null;
       user.resetPasswordToken = undefined;
       user.resetPasswordExpires = undefined;
       await user.save();
+
+      // Audit the reset
+      await AuditLogModel.create({
+        actor: { userId: user._id.toString(), userName: user.fullName || user.email, userEmail: user.email, initials: (user.firstName?.[0] || '') + (user.lastName?.[0] || '') },
+        action: 'Password Reset',
+        actionColor: 'orange',
+        ipAddress: getClientIP(req),
+        userAgent: req.headers['user-agent'] || '',
+        description: 'Temporary password generated (expires in 1 hour)',
+        status: 'Success',
+      });
 
       // Send temporary password email
       const emailResult = await sendTemporaryPasswordEmail(user, tempPassword);
@@ -927,6 +1016,7 @@ async function start() {
 
       user.password = newPassword;
       user.mustChangePassword = false;
+      user.tempPasswordExpires = null;
       await user.save();
 
       res.json({
@@ -1379,7 +1469,7 @@ async function start() {
       let attendanceRecords = [];
       try {
         attendanceRecords = await AttendanceModel.find().lean();
-      } catch(e) {}
+      } catch (e) { }
 
       // Group attendance by week
       const attendanceData = [];
@@ -1403,7 +1493,7 @@ async function start() {
         leaves = await LeaveRequestModel.find().lean();
         travels = await TravelRequestModel.find().lean();
         purchases = await PurchaseOrderModel.find().lean();
-      } catch(e) {}
+      } catch (e) { }
 
       const allRequests = [...leaves, ...travels, ...purchases];
       let approvedCount = 0;
@@ -1477,7 +1567,7 @@ async function start() {
             }
           });
         }
-      } catch(e) {}
+      } catch (e) { }
 
       // 5. Custom Report - Combined overview from all modules
       // Calculate attendance counts (needed by customData and stats)
@@ -1620,7 +1710,7 @@ async function start() {
             rateLabel: 'Fulfillment Rate'
           };
         }
-      } catch(e) {}
+      } catch (e) { }
 
       // Calculate Stats from real data
       const avgAttendance = totalAttendanceRecords > 0 ? ((presentCount / totalAttendanceRecords) * 100).toFixed(1) + '%' : '0%';
@@ -1630,7 +1720,7 @@ async function start() {
       try {
         const EmployeeModel = require('./models/Employee');
         totalEmployees = await EmployeeModel.countDocuments({ status: 'Active' });
-      } catch(e) {}
+      } catch (e) { }
 
       // Calculate financial metrics from real data
       let totalExpenses = 0;
@@ -1646,7 +1736,7 @@ async function start() {
       try {
         const ReportModel = require('./models/Report');
         reportCount = await ReportModel.countDocuments();
-      } catch(e) {}
+      } catch (e) { }
 
       // Calculate facility usage from material requests
       let facilityUsagePercent = "0%";
@@ -1659,7 +1749,7 @@ async function start() {
           facilityUsagePercent = ((approvedRequests / materialRequests.length) * 100).toFixed(0) + '%';
           facilityChange = `${materialRequests.length} total requests`;
         }
-      } catch(e) {}
+      } catch (e) { }
 
       const totalApprovals = allRequests.length;
       const rejectionRate = totalApprovals > 0 ? ((rejectedCount / totalApprovals) * 100).toFixed(1) + '%' : '0%';
@@ -1715,30 +1805,30 @@ async function start() {
   app.get('/api/reports', async (req, res) => {
     try {
       const { reportType, status, department, startDate, endDate, search, includeDrafts } = req.query;
-      
+
       let query = {};
-      
+
       if (status && status !== 'All') {
         query.status = status;
       } else if (!includeDrafts || includeDrafts === 'false') {
         // Exclude Processing (draft) reports unless checkbox is checked
         query.status = { $ne: 'Processing' };
       }
-      
+
       if (reportType && reportType !== 'All') {
         query.reportType = reportType;
       }
-      
+
       if (department && department !== 'All Departments') {
         query.department = department;
       }
-      
+
       if (startDate || endDate) {
         query.createdAt = {};
         if (startDate) query.createdAt.$gte = new Date(startDate);
         if (endDate) query.createdAt.$lte = new Date(endDate);
       }
-      
+
       if (search) {
         query.$or = [
           { name: { $regex: search, $options: 'i' } },
@@ -1746,11 +1836,11 @@ async function start() {
           { module: { $regex: search, $options: 'i' } }
         ];
       }
-      
+
       const reports = await ReportModel.find(query)
         .sort({ createdAt: -1 })
         .lean();
-      
+
       res.json({ success: true, reports });
     } catch (error) {
       console.error('Error fetching reports:', error);
@@ -1762,11 +1852,11 @@ async function start() {
   app.get('/api/reports/:id', async (req, res) => {
     try {
       const report = await ReportModel.findById(req.params.id).lean();
-      
+
       if (!report) {
         return res.status(404).json({ success: false, error: 'Report not found' });
       }
-      
+
       res.json({ success: true, report });
     } catch (error) {
       console.error('Error fetching report:', error);
@@ -1778,7 +1868,7 @@ async function start() {
   app.post('/api/reports', async (req, res) => {
     try {
       const { name, reportType, department, startDate, endDate, includeDrafts, generatedBy } = req.body;
-      
+
       // Report type metadata mapping
       const reportTypeMetadata = {
         'Facility Usage Report': {
@@ -1840,9 +1930,14 @@ async function start() {
           module: 'Physical Security',
           icon: 'fa-shield-halved',
           iconColor: 'bg-red-100 text-red-700'
+        },
+        'Sales Report': {
+          module: 'Sales',
+          icon: 'fa-handshake',
+          iconColor: 'bg-teal-100 text-teal-700'
         }
       };
-      
+
       // Get metadata for the report type or use defaults
       const metadata = reportTypeMetadata[reportType] || {
         module: 'General',
@@ -1932,13 +2027,35 @@ async function start() {
               ? `${materialRequests.length} material requests, ${approvedMR} approved.`
               : 'No facility usage records found for the selected period.'
           };
-        } catch(e) {
+        } catch (e) {
           reportData = { summary: 'No facility usage data available.' };
         }
+      } else if (reportType === 'Sales Report') {
+        const SalesOrderModel = require('./models/SalesOrder');
+        const query = hasDateFilter ? { createdAt: dateFilter } : {};
+        const orders = await SalesOrderModel.find(query).lean();
+        const fulfilled = orders.filter(o => o.status === 'fulfilled').length;
+        const cancelled = orders.filter(o => o.status === 'cancelled').length;
+        let totalRevenue = 0, totalPaid = 0;
+        orders.forEach(o => {
+          totalRevenue += Number(o.totalAmount || 0);
+          totalPaid += Number(o.paidAmount || 0);
+        });
+        reportData = {
+          totalOrders: orders.length,
+          fulfilledOrders: fulfilled,
+          cancelledOrders: cancelled,
+          totalRevenue,
+          totalPaid,
+          outstandingBalance: totalRevenue - totalPaid,
+          summary: orders.length > 0
+            ? `${orders.length} sales orders totaling $${totalRevenue.toLocaleString()}, ${fulfilled} fulfilled.`
+            : 'No sales records found for the selected period.'
+        };
       } else {
         reportData = { summary: 'Custom report generated. No specific data aggregation configured.' };
       }
-      
+
       const report = await ReportModel.create({
         name: name || `${reportType} - ${new Date().toLocaleDateString()}`,
         reportType,
@@ -1953,7 +2070,7 @@ async function start() {
         iconColor: metadata.iconColor,
         data: reportData
       });
-      
+
       // Mark as Ready after processing
       setTimeout(async () => {
         try {
@@ -1962,7 +2079,7 @@ async function start() {
           console.error('Error updating report status:', err);
         }
       }, 2000);
-      
+
       res.status(201).json({ success: true, report });
     } catch (error) {
       console.error('Error creating report:', error);
@@ -1974,11 +2091,11 @@ async function start() {
   app.delete('/api/reports/:id', async (req, res) => {
     try {
       const report = await ReportModel.findByIdAndDelete(req.params.id);
-      
+
       if (!report) {
         return res.status(404).json({ success: false, error: 'Report not found' });
       }
-      
+
       res.json({ success: true, message: 'Report deleted successfully' });
     } catch (error) {
       console.error('Error deleting report:', error);
@@ -1994,11 +2111,11 @@ async function start() {
         { status: 'Archived' },
         { new: true }
       );
-      
+
       if (!report) {
         return res.status(404).json({ success: false, error: 'Report not found' });
       }
-      
+
       res.json({ success: true, report });
     } catch (error) {
       console.error('Error archiving report:', error);
@@ -2105,9 +2222,17 @@ async function start() {
           icon: 'fa-shield-halved',
           iconColor: 'bg-red-100 text-red-700',
           description: 'Summarize incident logs, access anomalies, and response timelines for security teams.'
+        },
+        {
+          value: 'Sales Report',
+          label: 'Sales Report',
+          module: 'Sales',
+          icon: 'fa-handshake',
+          iconColor: 'bg-teal-100 text-teal-700',
+          description: 'Review sales order volume, revenue, fulfillment rates, and outstanding receivables.'
         }
       ];
-      
+
       res.json({ success: true, reportTypes });
     } catch (error) {
       console.error('Error fetching report types:', error);
@@ -2117,7 +2242,7 @@ async function start() {
 
   const SystemSettingsModel = require('./models/SystemSettings');
   const axios = require('axios');
-  
+
   let localAttendanceRecords = [];
 
   const normalizeAttendanceRecord = (record) => ({
@@ -2285,10 +2410,10 @@ async function start() {
       const month = String(today.getMonth() + 1).padStart(2, '0');
       const day = String(today.getDate()).padStart(2, '0');
       const requestId = `MR-${year}-${month}-${day}-${String(count + 1).padStart(3, '0')}`;
-      
+
       // Calculate total amount from line items for rule matching
       const totalAmount = req.body.lineItems?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
-      
+
       // Prepare request data for approval rule matching
       const requestData = {
         ...req.body,
@@ -2296,10 +2421,10 @@ async function start() {
         amount: totalAmount,
         employeeId: req.body.requestedBy, // For manager lookup
       };
-      
+
       // Try to build approval chain from rules
       const approvalInfo = await buildApprovalChain('Material Requests', requestData);
-      
+
       // If rule-based approval is available, use it
       if (approvalInfo.usesRuleBasedApproval && approvalInfo.approvalChain.length > 0) {
         requestData.usesRuleBasedApproval = true;
@@ -2308,9 +2433,9 @@ async function start() {
         requestData.currentApprovalLevel = 1;
         requestData.status = 'pending';
       }
-      
+
       const newRequest = await MaterialRequestModel.create(requestData);
-      
+
       // Add initial activity for request creation
       const initialActivity = {
         type: 'created',
@@ -2319,7 +2444,7 @@ async function start() {
         timestamp: new Date(),
       };
       newRequest.activities.push(initialActivity);
-      
+
       // If there's a message/comment, add it as the first comment and activity
       if (req.body.message && req.body.message.trim()) {
         const mentions = (req.body.message.match(/@(\w+\s?\w*)/g) || []).map(m => m.substring(1).trim());
@@ -2337,9 +2462,9 @@ async function start() {
           timestamp: new Date(),
         });
       }
-      
+
       await newRequest.save();
-      
+
       // Send approval email to current approver
       if (newRequest.usesRuleBasedApproval && newRequest.approvalChain.length > 0) {
         const currentApprover = newRequest.approvalChain.find(a => a.status === 'pending');
@@ -2353,7 +2478,7 @@ async function start() {
       } else if (newRequest.approver) {
         await sendApprovalEmail(newRequest);
       }
-      
+
       res.status(201).json({ message: 'Request created and email sent', data: newRequest });
     } catch (err) {
       console.error('Error creating material request:', err);
@@ -2541,10 +2666,10 @@ async function start() {
 
       // PO created for procurement team review (no email sent)
 
-      res.json({ 
+      res.json({
         message: 'Request approved and PO created',
         materialRequest,
-        purchaseOrder 
+        purchaseOrder
       });
     } catch (err) {
       console.error('Error approving material request:', err);
@@ -2710,7 +2835,7 @@ async function start() {
       if (transporter) {
         await transporter.sendMail(mailOptions);
       }
-      
+
       res.json({ success: true, message: 'Approval email sent successfully' });
     } catch (err) {
       console.error('Error sending approval email:', err);
@@ -2734,10 +2859,10 @@ async function start() {
   app.post('/api/advance-requests', async (req, res) => {
     try {
       const requestData = { ...req.body };
-      
+
       // Try to build approval chain from rules
       const approvalInfo = await buildApprovalChain('Advance Requests', requestData);
-      
+
       // If rule-based approval is available, use it
       if (approvalInfo.usesRuleBasedApproval && approvalInfo.approvalChain.length > 0) {
         requestData.usesRuleBasedApproval = true;
@@ -2745,13 +2870,13 @@ async function start() {
         requestData.approvalChain = approvalInfo.approvalChain;
         requestData.currentApprovalLevel = 1;
         requestData.status = 'pending';
-        
+
         // Get first approver from chain
         const firstApprover = approvalInfo.approvalChain[0];
         requestData.approver = firstApprover.approverName;
         requestData.approverEmail = firstApprover.approverEmail;
       }
-      
+
       const newRequest = await AdvanceRequestModel.create(requestData);
       res.status(201).json({ message: 'Request created successfully', data: newRequest });
     } catch (err) {
@@ -2791,10 +2916,10 @@ async function start() {
   app.post('/api/refund-requests', async (req, res) => {
     try {
       const requestData = { ...req.body };
-      
+
       // Try to build approval chain from rules
       const approvalInfo = await buildApprovalChain('Refund Requests', requestData);
-      
+
       // If rule-based approval is available, use it
       if (approvalInfo.usesRuleBasedApproval && approvalInfo.approvalChain.length > 0) {
         requestData.usesRuleBasedApproval = true;
@@ -2802,13 +2927,13 @@ async function start() {
         requestData.approvalChain = approvalInfo.approvalChain;
         requestData.currentApprovalLevel = 1;
         requestData.status = 'pending';
-        
+
         // Get first approver from chain
         const firstApprover = approvalInfo.approvalChain[0];
         requestData.approver = firstApprover.approverName;
         requestData.approverEmail = firstApprover.approverEmail;
       }
-      
+
       const newRequest = await RefundRequestModel.create(requestData);
       res.status(201).json({ message: 'Request created successfully', data: newRequest });
     } catch (err) {
@@ -2905,14 +3030,14 @@ async function start() {
     const uploader = String(document?.uploadedBy || '').trim().toLowerCase();
     const isRecipient = Array.isArray(document?.recipients)
       ? document.recipients.some((rec) =>
-          [String(rec?.email || '').trim().toLowerCase(), String(rec?.id || '').trim()].includes(actorEmail) ||
-          [String(rec?.email || '').trim().toLowerCase(), String(rec?.id || '').trim()].includes(actorId),
-        )
+        [String(rec?.email || '').trim().toLowerCase(), String(rec?.id || '').trim()].includes(actorEmail) ||
+        [String(rec?.email || '').trim().toLowerCase(), String(rec?.id || '').trim()].includes(actorId),
+      )
       : false;
 
     return hasAdminPrivileges(user) || uploader === actorId.toLowerCase() || uploader === actorEmail || isRecipient;
   };
-  
+
   // Get all documents for a user
   app.get('/api/documents', authMiddleware, async (req, res) => {
     try {
@@ -2923,7 +3048,7 @@ async function start() {
       const target = hasAdminPrivileges(req.user) && userId
         ? String(userId).trim().toLowerCase()
         : actorId.toLowerCase();
-      
+
       const documents = await DocumentModel.find({
         $or: [
           { uploadedBy: target },
@@ -2932,7 +3057,7 @@ async function start() {
           { 'recipients.email': actorEmail },
         ],
       }).sort({ createdAt: -1 });
-      
+
       res.json(documents);
     } catch (err) {
       console.error('Error fetching documents:', err);
@@ -2970,11 +3095,11 @@ async function start() {
 
       const document = new DocumentModel(payload);
       const saved = await document.save();
-      
+
       // Send email to all recipients
       if (saved.recipients && saved.recipients.length > 0) {
         const { sendSignatureRequestEmail } = require('./utils/emailService');
-        
+
         for (const recipient of saved.recipients) {
           if (recipient.email) {
             try {
@@ -2999,7 +3124,7 @@ async function start() {
           }
         }
       }
-      
+
       res.status(201).json(saved);
     } catch (err) {
       console.error('Error creating document:', err);
@@ -3038,7 +3163,7 @@ async function start() {
   app.post('/api/documents/:id/sign', authMiddleware, async (req, res) => {
     try {
       const { signatures } = req.body;
-      
+
       const document = await DocumentModel.findById(req.params.id);
       if (!document) {
         return res.status(404).json({ message: 'Document not found' });
@@ -3134,7 +3259,7 @@ async function start() {
   app.get('/api/users', authMiddleware, async (req, res) => {
     try {
       const { role, status, search } = req.query;
-      
+
       let userQuery = {};
       if (role) userQuery.role = role;
       if (status) userQuery.status = status;
@@ -3319,7 +3444,7 @@ async function start() {
   app.patch('/api/users/:id', authMiddleware, requireRole('Admin', 'Security Admin'), async (req, res) => {
     try {
       const { fullName, email, role, status, permissions } = req.body;
-      
+
       const updateData = {};
       if (fullName !== undefined) {
         updateData.fullName = fullName;
@@ -3409,9 +3534,9 @@ async function start() {
 
       // Send email
       const emailResult = await sendPasswordResetEmail(user, resetToken);
-      
+
       if (emailResult.success) {
-        res.json({ 
+        res.json({
           message: 'Password reset email sent successfully',
           ...(process.env.NODE_ENV !== 'production' && { resetLink: emailResult.resetLink })
         });
@@ -3456,7 +3581,7 @@ async function start() {
   app.get('/api/security/settings', checkSecurityPermission('viewLogs'), async (req, res) => {
     try {
       let settings = await SecuritySettingsModel.findOne({ singleton: true });
-      
+
       // Create default settings if none exist
       if (!settings) {
         settings = new SecuritySettingsModel({
@@ -3498,7 +3623,7 @@ async function start() {
       const { passwordPolicy, mfaSettings, sessionControl } = req.body;
 
       let settings = await SecuritySettingsModel.findOne({ singleton: true });
-      
+
       if (!settings) {
         settings = new SecuritySettingsModel({ singleton: true });
       }
@@ -3704,7 +3829,7 @@ async function start() {
   app.delete('/api/security/sessions/:sessionId', checkSecurityPermission('manageSessions'), async (req, res) => {
     try {
       const { sessionId } = req.params;
-      
+
       // Log the session termination
       await AuditLogModel.create({
         action: 'Session Terminated',
@@ -3738,7 +3863,7 @@ async function start() {
 
       // Total logs count
       const totalLogs = await AuditLogModel.countDocuments();
-      
+
       // Logs in last 30 days
       const recentLogs = await AuditLogModel.countDocuments({
         timestamp: { $gte: last30Days }
@@ -3819,14 +3944,14 @@ async function start() {
   // Get audit logs with filtering and pagination
   app.get('/api/audit-logs', checkSecurityPermission('viewLogs'), async (req, res) => {
     try {
-      const { 
-        page = 1, 
-        limit = 10, 
-        action, 
-        status, 
+      const {
+        page = 1,
+        limit = 10,
+        action,
+        status,
         search,
         startDate,
-        endDate 
+        endDate
       } = req.query;
 
       const query = {};
@@ -3854,7 +3979,7 @@ async function start() {
       }
 
       const skip = (parseInt(page) - 1) * parseInt(limit);
-      
+
       const [logs, total] = await Promise.all([
         AuditLogModel.find(query)
           .sort({ timestamp: -1 })
@@ -3953,7 +4078,7 @@ async function start() {
   app.get('/api/audit-logs/export', checkSecurityPermission('exportLogs'), async (req, res) => {
     try {
       const { action, status, startDate, endDate } = req.query;
-      
+
       const query = {};
       if (action && action !== 'All Actions') query.action = action;
       if (status && status !== 'All Statuses') query.status = status;
@@ -3996,7 +4121,7 @@ async function start() {
   app.post('/api/audit-logs/export', checkSecurityPermission('exportLogs'), async (req, res) => {
     try {
       const { logIds } = req.body;
-      
+
       if (!logIds || !Array.isArray(logIds) || logIds.length === 0) {
         return res.status(400).json({ message: 'No logs selected for export' });
       }
@@ -4041,7 +4166,7 @@ async function start() {
       if (dateRange && dateRange !== 'all') {
         const now = new Date();
         let startDate;
-        
+
         switch (dateRange) {
           case 'today':
             startDate = new Date(now.setHours(0, 0, 0, 0));
@@ -4059,7 +4184,7 @@ async function start() {
             startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
             break;
         }
-        
+
         if (startDate) {
           query.timestamp = { $gte: startDate };
         }
@@ -4070,16 +4195,16 @@ async function start() {
       if (format === 'json') {
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Content-Disposition', 'attachment; filename=audit-logs.json');
-        
-        const data = noMetadata === 'true' 
+
+        const data = noMetadata === 'true'
           ? logs.map(l => ({ timestamp: l.timestamp, actor: l.actor.userName, action: l.action, status: l.status }))
           : logs;
-        
+
         res.json(data);
       } else if (format === 'xml') {
         res.setHeader('Content-Type', 'application/xml');
         res.setHeader('Content-Disposition', 'attachment; filename=audit-logs.xml');
-        
+
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\\n<auditLogs>\\n';
         logs.forEach(log => {
           xml += '  <log>\\n';
@@ -4094,18 +4219,18 @@ async function start() {
           xml += '  </log>\\n';
         });
         xml += '</auditLogs>';
-        
+
         res.send(xml);
       } else if (format === 'pdf') {
         // Simple PDF generation - in production, use a library like pdfkit
         res.setHeader('Content-Type', 'text/plain');
         res.setHeader('Content-Disposition', 'attachment; filename=audit-logs.txt');
-        
+
         let content = 'AUDIT LOGS REPORT\\n';
         content += '='.repeat(80) + '\\n\\n';
         content += `Generated: ${new Date().toISOString()}\\n`;
         content += `Total Records: ${logs.length}\\n\\n`;
-        
+
         logs.forEach((log, idx) => {
           content += `----- Log ${idx + 1} -----\\n`;
           content += `Timestamp: ${log.timestamp}\\n`;
@@ -4118,34 +4243,34 @@ async function start() {
           }
           content += '\\n';
         });
-        
+
         res.send(content);
       } else {
         // Default to CSV
-        const headers = noMetadata === 'true' 
+        const headers = noMetadata === 'true'
           ? ['Timestamp', 'Actor', 'Action', 'Status']
           : ['Timestamp', 'Actor', 'Action', 'IP Address', 'Description', 'Status'];
-        
+
         const csvRows = [headers.join(',')];
         logs.forEach(log => {
           const row = noMetadata === 'true'
             ? [
-                new Date(log.timestamp).toISOString(),
-                `"${log.actor.userName || 'Unknown'}"`,
-                log.action,
-                log.status
-              ]
+              new Date(log.timestamp).toISOString(),
+              `"${log.actor.userName || 'Unknown'}"`,
+              log.action,
+              log.status
+            ]
             : [
-                new Date(log.timestamp).toISOString(),
-                `"${log.actor.userName || 'Unknown'}"`,
-                log.action,
-                log.ipAddress,
-                `"${log.description}"`,
-                log.status
-              ];
+              new Date(log.timestamp).toISOString(),
+              `"${log.actor.userName || 'Unknown'}"`,
+              log.action,
+              log.ipAddress,
+              `"${log.description}"`,
+              log.status
+            ];
           csvRows.push(row.join(','));
         });
-        
+
         const csv = csvRows.join('\\n');
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename=audit-logs.csv');
@@ -4161,7 +4286,7 @@ async function start() {
   app.post('/api/security/compliance-report', checkSecurityPermission('generateReports'), async (req, res) => {
     try {
       const { type } = req.body;
-      
+
       const now = new Date();
       const last90Days = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
@@ -4234,7 +4359,7 @@ async function start() {
             severity: failedLogins > 100 ? 'HIGH' : failedLogins > 50 ? 'MEDIUM' : 'LOW',
             title: 'Failed Login Attempts',
             description: `${failedLogins} failed login attempts detected in the last 90 days`,
-            recommendation: failedLogins > 50 
+            recommendation: failedLogins > 50
               ? 'Implement account lockout policy and review failed login patterns'
               : 'Continue monitoring login attempts'
           },
@@ -4242,7 +4367,7 @@ async function start() {
             id: 2,
             severity: !settings?.mfaSettings?.enabled ? 'HIGH' : 'LOW',
             title: 'Multi-Factor Authentication',
-            description: settings?.mfaSettings?.enabled 
+            description: settings?.mfaSettings?.enabled
               ? 'MFA is enabled and properly configured'
               : 'MFA is not enabled',
             recommendation: !settings?.mfaSettings?.enabled
@@ -4267,7 +4392,7 @@ async function start() {
           'Perform periodic security assessments'
         ],
         complianceStatus: {
-          overall: settings?.passwordPolicy?.enabled && settings?.mfaSettings?.enabled 
+          overall: settings?.passwordPolicy?.enabled && settings?.mfaSettings?.enabled
             ? 'COMPLIANT' : 'PARTIAL',
           score: 85,
           lastAssessment: new Date().toISOString()
@@ -4369,7 +4494,7 @@ async function start() {
       const secret = authenticator.generateSecret();
 
       // Create otpauth URI for authenticator apps
-      const appName = 'Netlink EMS';
+      const appName = 'Ping';
       const otpauthUrl = authenticator.keyuri(user.email, appName, secret);
 
       // Generate QR code as data URL
@@ -4546,7 +4671,7 @@ async function start() {
   app.post('/api/security/notification-rules', checkSecurityPermission('manageNotifications'), async (req, res) => {
     try {
       const { name, event, condition, recipient, enabled } = req.body;
-      
+
       if (!name || !event || !condition || !recipient) {
         return res.status(400).json({ message: 'Missing required fields' });
       }
@@ -4580,7 +4705,7 @@ async function start() {
   app.delete('/api/security/notification-rules/:ruleId', checkSecurityPermission('manageNotifications'), async (req, res) => {
     try {
       const { ruleId } = req.params;
-      
+
       const settings = await SecuritySettingsModel.findOne();
       if (!settings) {
         return res.status(404).json({ message: 'Settings not found' });
@@ -4624,7 +4749,7 @@ async function start() {
       // 2. Force logout all users
       // 3. Notify administrators
       // For now, we'll just log the action
-      
+
       // Create audit log
       await AuditLogModel.create({
         action: 'Panic Logout',
@@ -4649,7 +4774,7 @@ async function start() {
   });
 
   // ============ LOG RETENTION POLICY ENDPOINTS (Phase 2 Enhancement) ============
-  
+
   // Get log retention policy settings
   app.get('/api/security/retention-policy', checkSecurityPermission('viewLogs'), async (req, res) => {
     try {
@@ -4725,7 +4850,7 @@ async function start() {
     try {
       const settings = await SecuritySettingsModel.findOne();
       const retentionPeriod = settings?.logRetentionPolicy?.retentionPeriod || 90;
-      
+
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - retentionPeriod);
 
@@ -4785,8 +4910,8 @@ async function start() {
         metadata: { count: logsToArchive.length, batchId, cutoffDate },
       });
 
-      res.json({ 
-        message: 'Logs archived successfully', 
+      res.json({
+        message: 'Logs archived successfully',
         count: logsToArchive.length,
         batchId,
         cutoffDate
@@ -4800,11 +4925,11 @@ async function start() {
   // Get archived logs with pagination
   app.get('/api/security/archived-logs', checkSecurityPermission('viewLogs'), async (req, res) => {
     try {
-      const { 
-        page = 1, 
-        limit = 10, 
-        action, 
-        startDate, 
+      const {
+        page = 1,
+        limit = 10,
+        action,
+        startDate,
         endDate,
         archiveBatch
       } = req.query;
@@ -4826,7 +4951,7 @@ async function start() {
       }
 
       const skip = (parseInt(page) - 1) * parseInt(limit);
-      
+
       const [logs, total] = await Promise.all([
         ArchivedLogModel.find(query)
           .sort({ timestamp: -1 })
@@ -5117,7 +5242,7 @@ async function start() {
       });
 
       await newPolicy.save();
-      
+
       res.status(201).json(newPolicy);
     } catch (err) {
       console.error('Error creating policy:', err);
@@ -5148,7 +5273,7 @@ async function start() {
       if (title) policy.title = title;
       if (description) policy.description = description;
       if (status) policy.status = status;
-      
+
       // If new document is uploaded, increment version
       if (documentData && documentName) {
         // Archive current version
@@ -5159,12 +5284,12 @@ async function start() {
         // Increment version
         const currentVersionNum = parseFloat(policy.version.replace('v', ''));
         const newVersion = `v${(currentVersionNum + 0.1).toFixed(1)}`;
-        
+
         policy.version = newVersion;
         policy.documentUrl = documentData;
         policy.documentName = documentName;
         policy.documentType = documentType;
-        
+
         // Add to version history
         policy.versionHistory.push({
           version: newVersion,
@@ -5205,7 +5330,7 @@ async function start() {
   app.patch('/api/policies/:id/approve', async (req, res) => {
     try {
       const { approvedBy } = req.body;
-      
+
       const policy = await PolicyModel.findById(req.params.id);
       if (!policy) {
         return res.status(404).json({ message: 'Policy not found' });
@@ -5218,7 +5343,7 @@ async function start() {
         approvedDate: new Date()
       };
       policy.lastUpdated = new Date();
-      
+
       await policy.save();
       res.json(policy);
     } catch (err) {
@@ -5237,7 +5362,7 @@ async function start() {
 
       policy.status = 'Draft';
       policy.lastUpdated = new Date();
-      
+
       await policy.save();
       res.json(policy);
     } catch (err) {
@@ -5256,7 +5381,7 @@ async function start() {
 
       policy.status = 'Pending Approval';
       policy.lastUpdated = new Date();
-      
+
       await policy.save();
       res.json(policy);
     } catch (err) {
@@ -5269,7 +5394,7 @@ async function start() {
   app.patch('/api/policies/:id/restore-version', async (req, res) => {
     try {
       const { versionToRestore, author } = req.body;
-      
+
       const policy = await PolicyModel.findById(req.params.id);
       if (!policy) {
         return res.status(404).json({ message: 'Policy not found' });
@@ -5288,11 +5413,11 @@ async function start() {
       // Increment version
       const currentVersionNum = parseFloat(policy.version.replace('v', ''));
       const newVersion = `v${(currentVersionNum + 0.1).toFixed(1)}`;
-      
+
       policy.version = newVersion;
       policy.documentUrl = historyVersion.documentUrl;
       policy.documentName = historyVersion.documentName;
-      
+
       // Add restored version to history
       policy.versionHistory.push({
         version: newVersion,
@@ -5408,7 +5533,7 @@ async function start() {
       if (!search && page === 1) {
         syncUsersIntoEmployees();
       }
-      
+
       if (search) {
         const searchRegex = new RegExp(search, 'i');
         query = {
@@ -5426,7 +5551,7 @@ async function start() {
       const total = search
         ? await EmployeeModel.countDocuments(query)
         : await EmployeeModel.estimatedDocumentCount();
-      
+
       const employees = await EmployeeModel.find(query)
         .select('name firstName lastName email phone dateOfBirth department role jobTitle startDate status avatar employeeId managerId managerName')
         .sort({ _id: -1 })
@@ -5473,7 +5598,7 @@ async function start() {
   app.post('/api/hr/employees', async (req, res) => {
     try {
       const { name, email, phone, dateOfBirth, department, jobTitle, startDate } = req.body;
-      
+
       if (!name || !email) {
         return res.status(400).json({ message: 'Name and email are required' });
       }
@@ -5564,7 +5689,7 @@ async function start() {
     try {
       const { id } = req.params;
       const ObjectId = require('mongoose').Types.ObjectId;
-      
+
       // Check if ID is valid MongoDB ObjectId
       if (!ObjectId.isValid(id)) {
         return res.status(400).json({ success: false, message: 'Invalid employee ID' });
@@ -5668,7 +5793,7 @@ async function start() {
     try {
       const { employeeIds, updates, updatedBy } = req.body;
       const ObjectId = require('mongoose').Types.ObjectId;
-      
+
       if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
         return res.status(400).json({ success: false, message: 'Employee IDs array is required' });
       }
@@ -5692,7 +5817,7 @@ async function start() {
       // Update multiple employees
       const objectIds = validIds.filter(id => ObjectId.isValid(id));
       const result = await EmployeeModel.updateMany(
-        { 
+        {
           $or: [
             { _id: { $in: objectIds } },
             { employeeId: { $in: validIds } }
@@ -5719,10 +5844,10 @@ async function start() {
         userAgent: req.get('user-agent') || 'system',
       });
 
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: `${result.modifiedCount} employees updated successfully`,
-        modifiedCount: result.modifiedCount 
+        modifiedCount: result.modifiedCount
       });
     } catch (err) {
       console.error('Error bulk updating employees:', err);
@@ -5761,7 +5886,7 @@ async function start() {
         workArrangement,
       } = req.body;
       const ObjectId = require('mongoose').Types.ObjectId;
-      
+
       // Check if ID is valid MongoDB ObjectId
       if (!ObjectId.isValid(id)) {
         return res.status(400).json({ success: false, message: 'Invalid employee ID' });
@@ -5870,7 +5995,7 @@ async function start() {
       // Find and update employee
       const updateData = {};
       const changes = [];
-      
+
       // Always allow these fields to be updated
       if (authoritativeNameSource?.firstName || authoritativeNameSource?.lastName) {
         const authoritativeFirstName = authoritativeNameSource.firstName || oldEmployee.firstName || '';
@@ -5922,13 +6047,13 @@ async function start() {
           // Validate base64 avatar (2MB limit, image types only)
           const allowedTypes = /^image\/(jpeg|jpg|png|gif|webp)$/;
           validateBase64File(avatar, 2, allowedTypes);
-          
+
           updateData.avatar = avatar; // Store base64 data URL directly
           changes.push({ field: 'avatar', oldValue: 'hidden', newValue: 'updated' });
         } catch (validationError) {
-          return res.status(400).json({ 
-            success: false, 
-            message: `Avatar validation failed: ${validationError.message}` 
+          return res.status(400).json({
+            success: false,
+            message: `Avatar validation failed: ${validationError.message}`
           });
         }
       }
@@ -5999,16 +6124,16 @@ async function start() {
       if (documents !== undefined) {
         const normalizedDocuments = Array.isArray(documents)
           ? documents
-              .filter((doc) => doc && (doc.name || doc.title))
-              .map((doc) => ({
-                name: String(doc.name || doc.title || '').trim(),
-                type: String(doc.type || doc.category || 'File').trim(),
-                fileData: doc.fileData || doc.url || '',
-                url: doc.url || doc.fileData || '',
-                fileSize: Number(doc.fileSize || 0),
-                uploadedAt: doc.uploadedAt ? new Date(doc.uploadedAt) : new Date(),
-                uploadedBy: String(doc.uploadedBy || updatedBy || 'system'),
-              }))
+            .filter((doc) => doc && (doc.name || doc.title))
+            .map((doc) => ({
+              name: String(doc.name || doc.title || '').trim(),
+              type: String(doc.type || doc.category || 'File').trim(),
+              fileData: doc.fileData || doc.url || '',
+              url: doc.url || doc.fileData || '',
+              fileSize: Number(doc.fileSize || 0),
+              uploadedAt: doc.uploadedAt ? new Date(doc.uploadedAt) : new Date(),
+              uploadedBy: String(doc.uploadedBy || updatedBy || 'system'),
+            }))
           : [];
 
         updateData.documents = normalizedDocuments;
@@ -6214,7 +6339,7 @@ async function start() {
   app.post('/api/hr/requisitions', async (req, res) => {
     try {
       const { title, department, status, experienceLevel, description } = req.body;
-      
+
       if (!title || !department) {
         return res.status(400).json({ message: 'Title and department are required' });
       }
@@ -6411,7 +6536,7 @@ async function start() {
 
         return false;
       };
-      
+
       const formatted = requests.slice(0, 10).map(req => ({
         id: req._id.toString(),
         name: req.employeeName,
@@ -6546,12 +6671,12 @@ async function start() {
     try {
       // TODO: Implement actual performance tracking
       // For now, return default structure
-      res.json({ 
-        q3CompletedPct: 85, 
-        pending: { 
-          selfReviews: 12, 
-          managerReviews: 4 
-        } 
+      res.json({
+        q3CompletedPct: 85,
+        pending: {
+          selfReviews: 12,
+          managerReviews: 4
+        }
       });
     } catch (err) {
       console.error('Error fetching performance:', err);
@@ -6577,7 +6702,7 @@ async function start() {
           const diffTime = due - now;
           dueInDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         }
-        
+
         return {
           id: t._id.toString(),
           _id: t._id,
@@ -6606,10 +6731,10 @@ async function start() {
       // For now, return default structure
       const nextPayrollDate = new Date();
       nextPayrollDate.setDate(nextPayrollDate.getDate() + (31 - nextPayrollDate.getDate()));
-      
-      res.json({ 
-        date: nextPayrollDate.toISOString().split('T')[0], 
-        runApproved: true 
+
+      res.json({
+        date: nextPayrollDate.toISOString().split('T')[0],
+        runApproved: true
       });
     } catch (err) {
       console.error('Error fetching payroll info:', err);
@@ -6620,14 +6745,14 @@ async function start() {
   // ===========================
   // Leave Allocation Routes
   // ===========================
-  
+
   // Get leave allocations (with optional filters)
   app.get('/api/hr/leave-allocations', async (req, res) => {
     try {
       const query = {};
       if (req.query.employeeId) query.employeeId = req.query.employeeId;
       if (req.query.year) query.year = parseInt(req.query.year);
-      
+
       const allocations = await api.getLeaveAllocations(query);
       res.json({ success: true, data: allocations });
     } catch (error) {
@@ -6651,7 +6776,7 @@ async function start() {
   // ===========================
   // Leave Request Routes
   // ===========================
-  
+
   // Get leave requests (with optional filters)
   app.get('/api/approval/leave-requests', async (req, res) => {
     try {
@@ -6659,7 +6784,7 @@ async function start() {
       if (req.query.employeeId) query.employeeId = req.query.employeeId;
       if (req.query.managerId) query.managerId = req.query.managerId;
       if (req.query.status) query.status = req.query.status;
-      
+
       const requests = await api.getLeaveRequests(query);
       res.json({ success: true, data: requests });
     } catch (error) {
@@ -6689,10 +6814,10 @@ async function start() {
         comments,
         'manager'
       );
-      
+
       // Send email to HR for final approval
       // You can add email logic here
-      
+
       res.json({ success: true, data: request });
     } catch (error) {
       console.error('Error approving leave request:', error);
@@ -6710,7 +6835,7 @@ async function start() {
         comments,
         'manager'
       );
-      
+
       res.json({ success: true, data: request });
     } catch (error) {
       console.error('Error rejecting leave request:', error);
@@ -6728,13 +6853,13 @@ async function start() {
         comments,
         'hr'
       );
-      
+
       // Update leave allocation usage
       const allocation = await api.getLeaveAllocations({
         employeeId: request.employeeId,
         year: new Date(request.fromDate).getFullYear()
       });
-      
+
       if (allocation && allocation.length > 0 && request.leaveType !== 'unpaid') {
         await api.updateLeaveUsage(
           request.employeeId,
@@ -6743,7 +6868,7 @@ async function start() {
           request.days
         );
       }
-      
+
       res.json({ success: true, data: request });
     } catch (error) {
       console.error('Error approving leave request:', error);
@@ -6761,7 +6886,7 @@ async function start() {
         comments,
         'hr'
       );
-      
+
       res.json({ success: true, data: request });
     } catch (error) {
       console.error('Error rejecting leave request:', error);
@@ -6803,10 +6928,44 @@ async function start() {
     }
   });
 
+  // Send leave coverage notification to the selected reliever
+  app.post('/api/send-leave-reliever-email', async (req, res) => {
+    try {
+      const {
+        relieverEmail,
+        relieverName,
+        employeeName,
+        leaveType,
+        fromDate,
+        toDate,
+        days,
+        reason,
+        attachments,
+      } = req.body;
+
+      await sendLeaveRelieverEmail({
+        relieverEmail,
+        relieverName,
+        employeeName,
+        leaveType,
+        fromDate,
+        toDate,
+        days,
+        reason,
+        attachments,
+      });
+
+      res.json({ success: true, message: 'Reliever notification email sent successfully' });
+    } catch (error) {
+      console.error('Error sending reliever notification email:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ===========================
   // Travel Request Routes
   // ===========================
-  
+
   // Get travel requests (with optional filters)
   app.get('/api/approval/travel-requests', async (req, res) => {
     try {
@@ -6814,7 +6973,7 @@ async function start() {
       if (req.query.employeeId) query.employeeId = req.query.employeeId;
       if (req.query.managerId) query.managerId = req.query.managerId;
       if (req.query.status) query.status = req.query.status;
-      
+
       const requests = await api.getTravelRequests(query);
       res.json({ success: true, data: requests });
     } catch (error) {
@@ -6844,7 +7003,7 @@ async function start() {
         comments,
         'manager'
       );
-      
+
       res.json({ success: true, data: request });
     } catch (error) {
       console.error('Error approving travel request:', error);
@@ -6862,7 +7021,7 @@ async function start() {
         comments,
         'manager'
       );
-      
+
       res.json({ success: true, data: request });
     } catch (error) {
       console.error('Error rejecting travel request:', error);
@@ -6880,7 +7039,7 @@ async function start() {
         hotelBooked: req.body.hotelBooked || false,
         hotelDetails: req.body.hotelDetails,
       };
-      
+
       const request = await api.updateTravelBooking(req.params.id, bookingData);
       res.json({ success: true, data: request });
     } catch (error) {
@@ -6930,17 +7089,17 @@ async function start() {
   // =====================================================
   // USER PROFILE ENDPOINTS
   // =====================================================
-  
+
   // Get user profile by clerk ID
   app.get('/api/user/profile/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const user = await api.getUserById(id);
-      
+
       if (!user) {
         return res.status(404).json({ success: false, error: 'User not found' });
       }
-      
+
       res.json({ success: true, data: user });
     } catch (error) {
       console.error('Error fetching user profile:', error);
@@ -6952,14 +7111,14 @@ async function start() {
   app.post('/api/user/profile', async (req, res) => {
     try {
       const { id, email, fullName, phoneNumber, department, jobTitle, bio } = req.body;
-      
+
       if (!id || !email || !fullName) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Missing required fields: id, email, fullName' 
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required fields: id, email, fullName'
         });
       }
-      
+
       const user = await api.createOrUpdateUserProfile({
         id,
         email,
@@ -6969,7 +7128,7 @@ async function start() {
         jobTitle,
         bio,
       });
-      
+
       res.json({ success: true, data: user });
     } catch (error) {
       console.error('Error creating/updating user profile:', error);
@@ -6982,7 +7141,7 @@ async function start() {
     try {
       const { id } = req.params;
       const { phoneNumber, department, jobTitle, bio, fullName, email } = req.body;
-      
+
       const user = await api.updateUserProfile(id, {
         phoneNumber,
         department,
@@ -6991,7 +7150,7 @@ async function start() {
         fullName,
         email,
       });
-      
+
       res.json({ success: true, data: user });
     } catch (error) {
       console.error('Error updating user profile:', error);
@@ -7007,16 +7166,16 @@ async function start() {
     try {
       const { id } = req.params;
       const { pictureUrl } = req.body;
-      
+
       if (!pictureUrl) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Missing pictureUrl' 
+        return res.status(400).json({
+          success: false,
+          error: 'Missing pictureUrl'
         });
       }
-      
+
       const user = await api.updateUserProfilePicture(id, pictureUrl);
-      
+
       res.json({ success: true, data: user });
     } catch (error) {
       console.error('Error uploading profile picture:', error);
@@ -7126,10 +7285,10 @@ async function start() {
   app.post('/api/finance/reconciliation/match', async (req, res) => {
     try {
       const { bankTransactions, ledgerTransactions } = req.body;
-      
+
       // TODO: Implement actual matching logic with database
       // For now, just return success
-      
+
       res.json({
         success: true,
         message: `Matched ${bankTransactions.length} bank transaction(s) with ${ledgerTransactions.length} ledger transaction(s)`,
@@ -7144,9 +7303,9 @@ async function start() {
   app.post('/api/finance/reconciliation/complete', async (req, res) => {
     try {
       const { account, period, statementEnd, clearedBalance } = req.body;
-      
+
       // TODO: Save reconciliation record to database
-      
+
       res.json({
         success: true,
         message: 'Reconciliation completed successfully',
@@ -7168,9 +7327,9 @@ async function start() {
   app.post('/api/finance/reconciliation/draft', async (req, res) => {
     try {
       const { account, period, bankTransactions, ledgerTransactions } = req.body;
-      
+
       // TODO: Save draft to database
-      
+
       res.json({
         success: true,
         message: 'Draft saved successfully',
@@ -7190,10 +7349,10 @@ async function start() {
   app.post('/api/finance/reconciliation/import', async (req, res) => {
     try {
       const { mapping, ignoreFirstRow } = req.body;
-      
+
       // TODO: Process uploaded CSV file and parse transactions
       // For now, return success with sample data
-      
+
       res.json({
         success: true,
         message: 'Bank statement imported successfully',
@@ -7355,50 +7514,50 @@ async function start() {
 
       const invoices = rows
         .map((po) => {
-        const baseAmount = Number(po.totalAmount || 0);
-        const taxRate = Number(po.apTaxRate ?? 0);
-        const taxAmount = Number(po.apTaxAmount ?? ((baseAmount * taxRate) / 100)) || 0;
-        const totalAmount = Number((baseAmount + taxAmount).toFixed(2));
-        const rawPaidAmount = Number(po.paidAmount || 0);
-        const paidAmount =
-          po.status === 'paid' && rawPaidAmount <= 0
-            ? totalAmount
-            : Math.min(rawPaidAmount, totalAmount);
-        const balanceDue = Math.max(0, totalAmount - paidAmount);
-        const paidPercentage = totalAmount > 0 ? Number(((paidAmount / totalAmount) * 100).toFixed(2)) : 0;
+          const baseAmount = Number(po.totalAmount || 0);
+          const taxRate = Number(po.apTaxRate ?? 0);
+          const taxAmount = Number(po.apTaxAmount ?? ((baseAmount * taxRate) / 100)) || 0;
+          const totalAmount = Number((baseAmount + taxAmount).toFixed(2));
+          const rawPaidAmount = Number(po.paidAmount || 0);
+          const paidAmount =
+            po.status === 'paid' && rawPaidAmount <= 0
+              ? totalAmount
+              : Math.min(rawPaidAmount, totalAmount);
+          const balanceDue = Math.max(0, totalAmount - paidAmount);
+          const paidPercentage = totalAmount > 0 ? Number(((paidAmount / totalAmount) * 100).toFixed(2)) : 0;
 
-        let uiStatus = 'Pending';
-        if (balanceDue <= 0 || po.status === 'paid') uiStatus = 'Paid';
-        else if (po.status === 'partly_paid' || paidAmount > 0) uiStatus = 'Partly Paid';
+          let uiStatus = 'Pending';
+          if (balanceDue <= 0 || po.status === 'paid') uiStatus = 'Paid';
+          else if (po.status === 'partly_paid' || paidAmount > 0) uiStatus = 'Partly Paid';
 
-        return {
-        _id: po._id,
-        vendor: po.vendor,
-        billTo: po.billTo || '',
-        requestTitle:
-          po?.linkedMaterialRequestId?.requestTitle ||
-          po?.linkedMaterialRequestId?.requestId ||
-          '',
-        invoiceNumber: po.apInvoiceNumber || po.poNumber,
-        poNumber: po.poNumber,
-        issueDate: po.orderDate || po.createdAt,
-        dueDate: po.expectedDelivery || po.orderDate || po.createdAt,
-        preTaxAmount: baseAmount,
-        taxRate,
-        taxAmount,
-        amount: totalAmount,
-        paidAmount,
-        balanceDue,
-        paidPercentage,
-        paidDate: po.paidDate || null,
-        firstPartiallyPaidAt: po.firstPartiallyPaidAt || null,
-        fullyPaidAt: po.fullyPaidAt || null,
-        paymentHistory: Array.isArray(po.paymentHistory) ? po.paymentHistory : [],
-        status: uiStatus,
-        department: po?.linkedMaterialRequestId?.department || 'General',
-      };
+          return {
+            _id: po._id,
+            vendor: po.vendor,
+            billTo: po.billTo || '',
+            requestTitle:
+              po?.linkedMaterialRequestId?.requestTitle ||
+              po?.linkedMaterialRequestId?.requestId ||
+              '',
+            invoiceNumber: po.apInvoiceNumber || po.poNumber,
+            poNumber: po.poNumber,
+            issueDate: po.orderDate || po.createdAt,
+            dueDate: po.expectedDelivery || po.orderDate || po.createdAt,
+            preTaxAmount: baseAmount,
+            taxRate,
+            taxAmount,
+            amount: totalAmount,
+            paidAmount,
+            balanceDue,
+            paidPercentage,
+            paidDate: po.paidDate || null,
+            firstPartiallyPaidAt: po.firstPartiallyPaidAt || null,
+            fullyPaidAt: po.fullyPaidAt || null,
+            paymentHistory: Array.isArray(po.paymentHistory) ? po.paymentHistory : [],
+            status: uiStatus,
+            department: po?.linkedMaterialRequestId?.department || 'General',
+          };
 
-      })
+        })
         .filter((invoice) => {
           const min = Number(minAmount);
           const max = Number(maxAmount);
@@ -7435,11 +7594,11 @@ async function start() {
   app.post('/api/finance/accounts-payable/pay', async (req, res) => {
     try {
       const { invoiceIds } = req.body;
-      
+
       if (!invoiceIds || invoiceIds.length === 0) {
         return res.status(400).json({ success: false, error: 'No invoices selected' });
       }
-      
+
       const pendingPurchaseOrders = await PurchaseOrderModel.find({
         _id: { $in: invoiceIds },
         status: { $in: ['payment_pending', 'partly_paid'] },
@@ -7573,7 +7732,7 @@ async function start() {
           updated: Boolean(updatedBudget),
         });
       }
-      
+
       res.json({
         success: true,
         message: `Successfully processed payment for ${payableIds.length} invoice(s)`,
@@ -7775,10 +7934,10 @@ async function start() {
   app.get('/api/finance/journal-entries', async (req, res) => {
     try {
       const { status, journalType, page = 1 } = req.query;
-      
+
       // TODO: Fetch actual data from database
       const entries = [];
-      
+
       res.json({
         success: true,
         data: {
@@ -7797,25 +7956,25 @@ async function start() {
   app.post('/api/finance/journal-entries', async (req, res) => {
     try {
       const { date, referenceNumber, currency, memo, lineItems, totalDebit, totalCredit } = req.body;
-      
+
       if (!referenceNumber || !lineItems || lineItems.length < 2) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Invalid journal entry data. At least two line items are required.' 
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid journal entry data. At least two line items are required.'
         });
       }
-      
+
       const difference = Math.abs(totalDebit - totalCredit);
       if (difference > 0.01) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Journal entry is not balanced. Total debits must equal total credits.' 
+        return res.status(400).json({
+          success: false,
+          error: 'Journal entry is not balanced. Total debits must equal total credits.'
         });
       }
-      
+
       // TODO: Save journal entry to database
       // For now, return success
-      
+
       res.json({
         success: true,
         message: 'Journal entry saved successfully',
@@ -7844,7 +8003,7 @@ async function start() {
   app.get('/api/vendors', authMiddleware, async (req, res) => {
     try {
       const { status, serviceType, search, page = 1, limit = 12 } = req.query;
-      
+
       // Build query
       const query = {};
       if (status) query.status = status;
@@ -7856,16 +8015,16 @@ async function start() {
           { vendorId: { $regex: search, $options: 'i' } },
         ];
       }
-      
+
       const skip = (page - 1) * limit;
       const vendors = await VendorModel.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit));
-      
+
       const total = await VendorModel.countDocuments(query);
       const totalPages = Math.ceil(total / limit);
-      
+
       res.json({
         success: true,
         data: {
@@ -7890,17 +8049,17 @@ async function start() {
 
       const vendorData = req.body;
       const { documents: base64Documents } = req.body;
-      
+
       // Process base64 documents if provided
       const documents = [];
       if (base64Documents && Array.isArray(base64Documents)) {
         const allowedTypes = /^(application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document)|image\/(jpeg|jpg|png))$/;
-        
+
         for (const doc of base64Documents) {
           try {
             // Validate base64 document (5MB limit)
             const validation = validateBase64File(doc.data, 5, allowedTypes);
-            
+
             documents.push({
               name: doc.name || 'document',
               data: doc.data, // Store full base64 data URL
@@ -7909,17 +8068,17 @@ async function start() {
               uploadedAt: new Date(),
             });
           } catch (validationError) {
-            return res.status(400).json({ 
-              success: false, 
-              error: `Document validation failed: ${validationError.message}` 
+            return res.status(400).json({
+              success: false,
+              error: `Document validation failed: ${validationError.message}`
             });
           }
         }
       }
-      
+
       // Remove base64Documents from vendorData as we've processed it
       delete vendorData.documents;
-      
+
       // Create new vendor
       const vendor = new VendorModel({
         ...vendorData,
@@ -7927,9 +8086,9 @@ async function start() {
         status: 'Active',
         createdAt: new Date(),
       });
-      
+
       await vendor.save();
-      
+
       res.json({
         success: true,
         message: 'Vendor created successfully',
@@ -7970,22 +8129,22 @@ async function start() {
       const { id } = req.params;
       const updates = req.body;
       const { documents: base64Documents } = req.body;
-      
+
       const vendor = await VendorModel.findById(id);
       if (!vendor) {
         return res.status(404).json({ success: false, error: 'Vendor not found' });
       }
-      
+
       // Process new base64 documents if provided
       if (base64Documents && Array.isArray(base64Documents)) {
         const allowedTypes = /^(application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document)|image\/(jpeg|jpg|png))$/;
         const newDocuments = [];
-        
+
         for (const doc of base64Documents) {
           try {
             // Validate base64 document (5MB limit)
             const validation = validateBase64File(doc.data, 5, allowedTypes);
-            
+
             newDocuments.push({
               name: doc.name || 'document',
               data: doc.data,
@@ -7994,21 +8153,21 @@ async function start() {
               uploadedAt: new Date(),
             });
           } catch (validationError) {
-            return res.status(400).json({ 
-              success: false, 
-              error: `Document validation failed: ${validationError.message}` 
+            return res.status(400).json({
+              success: false,
+              error: `Document validation failed: ${validationError.message}`
             });
           }
         }
-        
+
         // Append new documents to existing ones
         updates.documents = [...(vendor.documents || []), ...newDocuments];
       }
-      
+
       Object.assign(vendor, updates);
       vendor.updatedAt = new Date();
       await vendor.save();
-      
+
       res.json({
         success: true,
         message: 'Vendor updated successfully',
@@ -8028,15 +8187,15 @@ async function start() {
       }
 
       const { id } = req.params;
-      
+
       const vendor = await VendorModel.findById(id);
       if (!vendor) {
         return res.status(404).json({ success: false, error: 'Vendor not found' });
       }
-      
+
       // No need to delete files from filesystem anymore - documents stored in MongoDB
       await VendorModel.findByIdAndDelete(id);
-      
+
       res.json({
         success: true,
         message: 'Vendor deleted successfully',
@@ -8051,19 +8210,19 @@ async function start() {
   app.get('/api/vendors/:id/documents/:docIndex', authMiddleware, async (req, res) => {
     try {
       const { id, docIndex } = req.params;
-      
+
       const vendor = await VendorModel.findById(id);
       if (!vendor) {
         return res.status(404).json({ success: false, error: 'Vendor not found' });
       }
-      
+
       const index = parseInt(docIndex);
       if (isNaN(index) || index < 0 || index >= vendor.documents.length) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
-      
+
       const document = vendor.documents[index];
-      
+
       // Return the base64 data URL directly - client can use it in download or display
       res.json({
         success: true,
@@ -8089,22 +8248,22 @@ async function start() {
       }
 
       const { id, docIndex } = req.params;
-      
+
       const vendor = await VendorModel.findById(id);
       if (!vendor) {
         return res.status(404).json({ success: false, error: 'Vendor not found' });
       }
-      
+
       const index = parseInt(docIndex);
       if (isNaN(index) || index < 0 || index >= vendor.documents.length) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
-      
+
       // Remove document from array
       vendor.documents.splice(index, 1);
       vendor.updatedAt = new Date();
       await vendor.save();
-      
+
       res.json({
         success: true,
         message: 'Document deleted successfully',
@@ -8132,10 +8291,10 @@ async function start() {
       const recentActivity = await AuditLogModel.countDocuments({
         timestamp: { $gte: new Date(Date.now() - 60 * 60 * 1000) } // Last hour
       });
-      
+
       // System load as percentage (scale based on activity)
       const systemLoad = Math.min(Math.round((recentActivity / 100) * 100), 100);
-      
+
       // Calculate uptime (mock for now - would need actual server start time)
       const uptime = 99.9;
 
@@ -8264,18 +8423,18 @@ async function start() {
   let server = null;
   if (!isServerlessRuntime) {
     server = httpServer.listen(port, () => {
-      console.log(`Netlink backend listening on http://localhost:${port}`);
+      console.log(`Ping backend listening on http://localhost:${port}`);
       console.log('WebSocket server ready for real-time updates');
     });
   }
 
   // ============ AUTOMATED LOG ARCHIVAL SCHEDULER ============
-  
+
   // Function to archive old logs automatically
   const autoArchiveLogs = async () => {
     try {
       const settings = await SecuritySettingsModel.findOne();
-      
+
       // Check if auto-archive is enabled
       if (!settings || !settings.logRetentionPolicy || !settings.logRetentionPolicy.autoArchive) {
         return;
@@ -8351,20 +8510,20 @@ async function start() {
     const now = new Date();
     const nextRun = new Date();
     nextRun.setHours(2, 0, 0, 0);
-    
+
     // If it's past 2 AM today, schedule for tomorrow
     if (now > nextRun) {
       nextRun.setDate(nextRun.getDate() + 1);
     }
-    
+
     const timeUntilNextRun = nextRun - now;
-    
+
     setTimeout(() => {
       autoArchiveLogs();
       // After first run, repeat every 24 hours
       setInterval(autoArchiveLogs, 24 * 60 * 60 * 1000);
     }, timeUntilNextRun);
-    
+
     console.log(`📅 Auto-archive scheduled to run daily at 2:00 AM (next run: ${nextRun.toLocaleString()})`);
   };
 

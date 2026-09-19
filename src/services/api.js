@@ -1,4 +1,4 @@
-// Centralized API service for Steps CRM
+// Centralized API service for Ping
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 
@@ -39,9 +39,9 @@ api.interceptors.response.use(
   (error) => {
     // Handle different error types
     if (error.response?.status === 401) {
-      const isLoginOrSignup = error.config?.url?.includes('/auth/login') || 
-                              error.config?.url?.includes('/auth/signup');
-      
+      const isLoginOrSignup = error.config?.url?.includes('/auth/login') ||
+        error.config?.url?.includes('/auth/signup');
+
       if (!isLoginOrSignup) {
         // Only show session error for authenticated routes
         toast.error('Your session has expired or is invalid. Please login again.', {
@@ -107,10 +107,10 @@ export const apiService = {
   },
 
   inventory: {
-    getItems: (params) => api.get('/api/inventory/items', { params }),
-    createItem: (data) => api.post('/api/inventory/items', data),
-    updateItem: (id, data) => api.put(`/api/inventory/items/${id}`, data),
-    getStats: () => api.get('/api/inventory/stats'),
+    getItems: (params) => api.get('/api/inventory', { params }),
+    createItem: (data) => api.post('/api/inventory', data),
+    updateItem: (id, data) => api.put(`/api/inventory/${id}`, data),
+    getStats: () => api.get('/api/inventory/summary'),
   },
 
   hr: {

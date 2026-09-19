@@ -2,7 +2,7 @@ import React from "react";
 
 const Footer = ({
   variant = "default",
-  company = "Netlink Project",
+  company = "Ping",
 }) => {
   const currentYear = new Date().getFullYear();
 

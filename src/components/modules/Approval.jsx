@@ -36,7 +36,11 @@ const Approval = () => {
     managerId: "",
     managerName: "",
     managerEmail: "",
+    relieverId: "",
+    relieverName: "",
+    relieverEmail: "",
   });
+  const [leaveAttachments, setLeaveAttachments] = useState([]);
   const [leaveAllocation, setLeaveAllocation] = useState(null);
   const [calculatedDays, setCalculatedDays] = useState(0);
   const [remainingLeave, setRemainingLeave] = useState(null);
@@ -59,7 +63,7 @@ const Approval = () => {
   });
   const [travelFormLoading, setTravelFormLoading] = useState(false);
 
-  const [_staffList, _setStaffList] = useState([]);
+  const [staffList, setStaffList] = useState([]);
   const [approverSuggestions, _setApproverSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [advanceFormData, setAdvanceFormData] = useState({
@@ -95,6 +99,42 @@ const Approval = () => {
     return [];
   };
 
+  const normalizeLeaveAttachments = (files) =>
+    files.map((f) => ({
+      fileName: f.name,
+      fileType: f.type,
+      fileSize: f.size,
+      rawFile: f,
+    }));
+
+  const serializeLeaveAttachments = async (items) =>
+    Promise.all(
+      items.map(async (f) => {
+        if (f.fileData) {
+          return {
+            fileName: f.fileName || f.name,
+            fileData: f.fileData,
+            fileType: f.fileType || f.type || "",
+            fileSize: f.fileSize || f.size || 0,
+          };
+        }
+
+        const source = f.rawFile || f;
+        const base64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(source);
+        });
+
+        return {
+          fileName: f.fileName || source.name,
+          fileData: base64,
+          fileType: f.fileType || source.type || "",
+          fileSize: f.fileSize || source.size || 0,
+        };
+      }),
+    );
+
   // Fetch staff list for approver selection
   useEffect(() => {
     const fetchStaffList = async () => {
@@ -104,7 +144,7 @@ const Approval = () => {
         });
         const employees = extractList(response);
         if (employees.length > 0) {
-          _setStaffList(
+          setStaffList(
             employees.map((emp) => ({
               id: emp._id || emp.id,
               name: emp.fullName || emp.name,
@@ -456,6 +496,11 @@ const Approval = () => {
       return;
     }
 
+    if (!leaveFormData.relieverId) {
+      toast.error("Please select a reliever to cover your responsibilities");
+      return;
+    }
+
     // Manager will be auto-assigned by backend based on approval rules
 
     // Check if enough leave balance
@@ -467,6 +512,8 @@ const Approval = () => {
       toast.error(`Insufficient ${leaveFormData.leaveType} leave balance`);
       return;
     }
+
+    const serializedAttachments = await serializeLeaveAttachments(leaveAttachments);
 
     const newRequest = {
       employeeName: currentUserName,
@@ -481,6 +528,10 @@ const Approval = () => {
       managerId: leaveFormData.managerId,
       managerName: leaveFormData.managerName,
       managerEmail: leaveFormData.managerEmail,
+      relieverId: leaveFormData.relieverId,
+      relieverName: leaveFormData.relieverName,
+      relieverEmail: leaveFormData.relieverEmail,
+      attachments: serializedAttachments,
       status: "pending_manager",
       requestDate: new Date().toISOString().split("T")[0],
     };
@@ -514,6 +565,23 @@ const Approval = () => {
         console.warn("Email notification failed:", emailError);
       }
 
+      // Notify the reliever to review the request before it's approved
+      try {
+        await apiService.post("/api/send-leave-reliever-email", {
+          relieverEmail: leaveFormData.relieverEmail,
+          relieverName: leaveFormData.relieverName,
+          employeeName: currentUserName,
+          leaveType: leaveFormData.leaveType,
+          fromDate: leaveFormData.fromDate,
+          toDate: leaveFormData.toDate,
+          days: calculatedDays,
+          reason: leaveFormData.reason,
+          attachments: serializedAttachments,
+        });
+      } catch (emailError) {
+        console.warn("Reliever email notification failed:", emailError);
+      }
+
       setShowLeaveForm(false);
       setLeaveFormData({
         leaveType: "",
@@ -523,7 +591,11 @@ const Approval = () => {
         managerId: leaveAllocation?.managerId || "",
         managerName: leaveAllocation?.managerName || "",
         managerEmail: leaveAllocation?.managerEmail || "",
+        relieverId: "",
+        relieverName: "",
+        relieverEmail: "",
       });
+      setLeaveAttachments([]);
       setCalculatedDays(0);
       setRemainingLeave(null);
       toast.success("Leave request submitted to manager for approval");
@@ -920,18 +992,16 @@ const Approval = () => {
                           >
                             <td className="px-6 py-4">
                               <span
-                                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
-                                  record.purpose
-                                    ? "bg-blue-100 text-blue-800"
-                                    : "bg-green-100 text-green-800"
-                                }`}
+                                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${record.purpose
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-green-100 text-green-800"
+                                  }`}
                               >
                                 <i
-                                  className={`fa-solid ${
-                                    record.purpose
-                                      ? "fa-wallet"
-                                      : "fa-money-bill-transfer"
-                                  }`}
+                                  className={`fa-solid ${record.purpose
+                                    ? "fa-wallet"
+                                    : "fa-money-bill-transfer"
+                                    }`}
                                 ></i>
                                 {record.purpose ? "Advance" : "Refund"}
                               </span>
@@ -950,13 +1020,12 @@ const Approval = () => {
                             </td>
                             <td className="px-6 py-4">
                               <span
-                                className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
-                                  record.status === "approved"
-                                    ? "bg-green-100 text-green-800"
-                                    : record.status === "rejected"
-                                      ? "bg-red-100 text-red-800"
-                                      : "bg-yellow-100 text-yellow-800"
-                                }`}
+                                className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${record.status === "approved"
+                                  ? "bg-green-100 text-green-800"
+                                  : record.status === "rejected"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                                  }`}
                               >
                                 {record.status.charAt(0).toUpperCase() +
                                   record.status.slice(1)}
@@ -1085,24 +1154,6 @@ const Approval = () => {
                       <option value="Travel">Travel</option>
                       <option value="Other">Other</option>
                     </select>
-                  </div>
-                </div>
-
-                {/* Auto-Approval Routing Info */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
-                    <div>
-                      <h4 className="text-sm font-semibold text-blue-900 mb-1">
-                        Auto-Approval Routing
-                      </h4>
-                      <p className="text-xs text-blue-700">
-                        This request will be automatically routed through the
-                        approval chain based on configured rules. Approvers will
-                        be assigned according to the request amount and approval
-                        workflow settings.
-                      </p>
-                    </div>
                   </div>
                 </div>
 
@@ -1313,24 +1364,6 @@ const Approval = () => {
                   />
                 </div>
 
-                {/* Auto-Approval Routing Info */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
-                    <div>
-                      <h4 className="text-sm font-semibold text-blue-900 mb-1">
-                        Auto-Approval Routing
-                      </h4>
-                      <p className="text-xs text-blue-700">
-                        This request will be automatically routed through the
-                        approval chain based on configured rules. Approvers will
-                        be assigned according to the request amount and approval
-                        workflow settings.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
                 <div style={{ display: "none" }}>
                   <div className="relative">
                     <input
@@ -1499,13 +1532,13 @@ const Approval = () => {
                             ).split("-");
                             const monthName = month
                               ? new Date(
-                                  year,
-                                  parseInt(month) - 1,
-                                  1,
-                                ).toLocaleString("en-US", {
-                                  month: "long",
-                                  year: "numeric",
-                                })
+                                year,
+                                parseInt(month) - 1,
+                                1,
+                              ).toLocaleString("en-US", {
+                                month: "long",
+                                year: "numeric",
+                              })
                               : monthData.monthYear;
 
                             return (
@@ -1612,12 +1645,12 @@ const Approval = () => {
                       );
                       const monthName = month
                         ? new Date(year, parseInt(month) - 1, 1).toLocaleString(
-                            "en-US",
-                            {
-                              month: "long",
-                              year: "numeric",
-                            },
-                          )
+                          "en-US",
+                          {
+                            month: "long",
+                            year: "numeric",
+                          },
+                        )
                         : monthData.monthYear;
 
                       return [
@@ -1646,8 +1679,7 @@ const Approval = () => {
                     link.setAttribute("href", url);
                     link.setAttribute(
                       "download",
-                      `retirement_history_${
-                        new Date().toISOString().split("T")[0]
+                      `retirement_history_${new Date().toISOString().split("T")[0]
                       }.csv`,
                     );
                     link.style.visibility = "hidden";
@@ -1691,13 +1723,13 @@ const Approval = () => {
                           );
                           const monthName = month
                             ? new Date(
-                                year,
-                                parseInt(month) - 1,
-                                1,
-                              ).toLocaleString("en-US", {
-                                month: "long",
-                                year: "numeric",
-                              })
+                              year,
+                              parseInt(month) - 1,
+                              1,
+                            ).toLocaleString("en-US", {
+                              month: "long",
+                              year: "numeric",
+                            })
                             : selectedMonthYear;
                           return `${monthName} - Detailed Breakdown`;
                         })()}
@@ -1744,9 +1776,9 @@ const Approval = () => {
                       );
                       const monthName = month
                         ? new Date(year, parseInt(month) - 1, 1).toLocaleString(
-                            "en-US",
-                            { month: "long", year: "numeric" },
-                          )
+                          "en-US",
+                          { month: "long", year: "numeric" },
+                        )
                         : selectedMonthYear;
 
                       // Create CSV content
@@ -1787,8 +1819,7 @@ const Approval = () => {
                       link.setAttribute("href", url);
                       link.setAttribute(
                         "download",
-                        `retirement_${monthName.replace(/ /g, "_")}_${
-                          new Date().toISOString().split("T")[0]
+                        `retirement_${monthName.replace(/ /g, "_")}_${new Date().toISOString().split("T")[0]
                         }.csv`,
                       );
                       link.style.visibility = "hidden";
@@ -2185,13 +2216,12 @@ const Approval = () => {
                             {leave.type || "Leave"}
                           </h4>
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              leave.status === "approved"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : leave.status === "rejected"
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-amber-100 text-amber-700"
-                            }`}
+                            className={`px-3 py-1 rounded-full text-xs font-medium ${leave.status === "approved"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : leave.status === "rejected"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                              }`}
                           >
                             {leave.status || "pending"}
                           </span>
@@ -2348,11 +2378,10 @@ const Approval = () => {
                   {/* Live Calculation Display */}
                   {calculatedDays > 0 && remainingLeave && (
                     <div
-                      className={`p-4 rounded-lg border ${
-                        remainingLeave.remaining >= 0
-                          ? "bg-green-50 border-green-200"
-                          : "bg-red-50 border-red-200"
-                      }`}
+                      className={`p-4 rounded-lg border ${remainingLeave.remaining >= 0
+                        ? "bg-green-50 border-green-200"
+                        : "bg-red-50 border-red-200"
+                        }`}
                     >
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-sm font-semibold text-slate-700">
@@ -2380,11 +2409,10 @@ const Approval = () => {
                             Remaining After Request:
                           </span>
                           <span
-                            className={`font-bold ${
-                              remainingLeave.remaining >= 0
-                                ? "text-green-700"
-                                : "text-red-700"
-                            }`}
+                            className={`font-bold ${remainingLeave.remaining >= 0
+                              ? "text-green-700"
+                              : "text-red-700"
+                              }`}
                           >
                             {remainingLeave.remaining} days
                           </span>
@@ -2399,24 +2427,6 @@ const Approval = () => {
                         )}
                     </div>
                   )}
-
-                  {/* Auto-Approval Routing Info */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
-                      <div>
-                        <h4 className="text-sm font-semibold text-blue-900 mb-1">
-                          Auto-Approval Routing
-                        </h4>
-                        <p className="text-xs text-blue-700">
-                          This leave request will be automatically routed
-                          through the approval chain based on configured rules.
-                          Approvers will be assigned according to the leave
-                          duration and approval workflow settings.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
 
                   <div style={{ display: "none" }}>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -2451,6 +2461,98 @@ const Approval = () => {
                       className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 min-h-[100px] px-4 py-3 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
                     ></textarea>
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Reliever <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={leaveFormData.relieverId}
+                      onChange={(e) => {
+                        const selected = staffList.find(
+                          (s) => String(s.id) === e.target.value,
+                        );
+                        setLeaveFormData({
+                          ...leaveFormData,
+                          relieverId: selected?.id || "",
+                          relieverName: selected?.name || "",
+                          relieverEmail: selected?.email || "",
+                        });
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer"
+                    >
+                      <option value="">Select Reliever</option>
+                      {staffList.map((staff) => (
+                        <option key={staff.id} value={staff.id}>
+                          {staff.name} {staff.role ? `(${staff.role})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">
+                      The reliever will receive an email to review this request
+                      before it is approved.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Attachment
+                    </label>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.xls,.csv"
+                      className="hidden"
+                      id="leave-attachment-input"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files);
+                        setLeaveAttachments((prev) => [
+                          ...prev,
+                          ...normalizeLeaveAttachments(files),
+                        ]);
+                        e.target.value = null;
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        document
+                          .getElementById("leave-attachment-input")
+                          ?.click()
+                      }
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:text-primary hover:bg-slate-50 transition-colors"
+                    >
+                      <i className="fa-solid fa-paperclip"></i>
+                      <span>Attach File</span>
+                    </button>
+                    {leaveAttachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {leaveAttachments.map((file, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm"
+                          >
+                            <i className="fa-solid fa-file text-slate-500 text-xs"></i>
+                            <span className="text-slate-800 text-xs">
+                              {file.fileName}
+                            </span>
+                            <button
+                              type="button"
+                              className="text-red-400 hover:text-red-600 ml-1"
+                              onClick={() =>
+                                setLeaveAttachments((prev) =>
+                                  prev.filter((_, i) => i !== index),
+                                )
+                              }
+                            >
+                              <i className="fa-solid fa-times text-xs"></i>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </form>
               </div>
               <div className="border-t border-slate-200 p-6 bg-slate-50 flex gap-3 justify-end">
@@ -2459,6 +2561,7 @@ const Approval = () => {
                     setShowLeaveForm(false);
                     setCalculatedDays(0);
                     setRemainingLeave(null);
+                    setLeaveAttachments([]);
                   }}
                   className="px-6 py-3 rounded-lg text-sm font-medium border border-slate-300 text-slate-700 hover:bg-white transition-all"
                 >
@@ -2519,13 +2622,12 @@ const Approval = () => {
                             </p>
                           </div>
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              travel.status === "approved"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : travel.status === "rejected"
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-amber-100 text-amber-700"
-                            }`}
+                            className={`px-3 py-1 rounded-full text-xs font-medium ${travel.status === "approved"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : travel.status === "rejected"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                              }`}
                           >
                             {travel.status || "pending"}
                           </span>
@@ -2780,24 +2882,6 @@ const Approval = () => {
                       rows="4"
                       className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 px-4 py-3 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
                     ></textarea>
-                  </div>
-
-                  {/* Auto-Approval Routing Info */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <i className="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
-                      <div>
-                        <h4 className="text-sm font-semibold text-blue-900 mb-1">
-                          Auto-Approval Routing
-                        </h4>
-                        <p className="text-xs text-blue-700">
-                          This travel request will be automatically routed
-                          through the approval chain based on configured rules.
-                          Approvers will be assigned according to the travel
-                          duration, budget, and approval workflow settings.
-                        </p>
-                      </div>
-                    </div>
                   </div>
 
                   <div style={{ display: "none" }}>

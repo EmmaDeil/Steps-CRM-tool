@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Login from "./Login";
 import Signup from "./Signup";
 import ForgotPassword from "./ForgotPassword";
-import { ShieldCheck, CheckCircle, Lock, Building2 } from "lucide-react";
+import { ShieldCheck, CheckCircle, Building2 } from "lucide-react";
 
 const MODES = ["login", "signup", "forgot-password"];
 
@@ -74,7 +74,7 @@ const AuthPortal = () => {
               </div>
               <div>
                 <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-                  Intranet <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 border border-white/30 text-white font-semibold">Possibilty</span>
+                  Ping
                 </h1>
                 <p className="text-xs text-indigo-100">Enterprise Operating Platform</p>
               </div>
@@ -130,36 +130,9 @@ const AuthPortal = () => {
             </div>
             <div>
               <h1 className="text-base font-black tracking-tight text-slate-900">
-                Intranet <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 font-semibold align-middle">Possibility</span>
+                Ping
               </h1>
               <p className="text-[11px] text-slate-500">Enterprise Operating Platform</p>
-            </div>
-          </div>
-
-          {/* Top Mode Navigation Tabs with Sliding Indicator */}
-          <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-4 mb-6">
-            <div className="relative grid grid-cols-3 p-1 bg-slate-100 rounded-xl border border-slate-200 w-full max-w-[360px]">
-              <span
-                aria-hidden="true"
-                className="absolute top-1 bottom-1 left-1 w-[calc((100%-0.5rem)/3)] bg-indigo-600 rounded-lg shadow-sm transition-transform duration-300 ease-out"
-                style={{ transform: `translateX(${activeIndex * 100}%)` }}
-              ></span>
-              {["Sign In", "Create Account", "Reset Password"].map((label, idx) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => switchMode(MODES[idx])}
-                  className={`relative z-10 px-2 py-2 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap transition-colors duration-300 ${activeIndex === idx ? "text-white" : "text-slate-600 hover:text-slate-900"
-                    }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 shrink-0">
-              <Lock className="w-3.5 h-3.5 text-indigo-600" />
-              <span>256-bit Encrypted</span>
             </div>
           </div>
 
@@ -190,7 +163,7 @@ const AuthPortal = () => {
 
           {/* Footer note */}
           <div className="pt-4 border-t border-slate-100 mt-6 text-center text-xs text-slate-400">
-            © {new Date().getFullYear()} Intranet Enterprise. All rights reserved.
+            © {new Date().getFullYear()} Ping. All rights reserved.
           </div>
         </div>
 

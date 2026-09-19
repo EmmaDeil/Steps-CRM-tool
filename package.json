@@ -1,5 +1,5 @@
 {
-  "name": "netlink",
+  "name": "ping",
   "private": true,
   "version": "0.0.1",
   "type": "module",

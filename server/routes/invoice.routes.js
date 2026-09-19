@@ -1,7 +1,7 @@
 /* eslint-disable */
 const express = require('express');
-const router  = express.Router();
-const Invoice  = require('../models/Invoice');
+const router = express.Router();
+const Invoice = require('../models/Invoice');
 const InventoryIssue = require('../models/InventoryIssue');
 const NotificationModel = require('../models/Notification');
 const { authMiddleware } = require('../middleware/auth');
@@ -30,7 +30,7 @@ const createInvoiceNotification = async ({ title, message, sourceKey, metadata =
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const { page = 1, limit = 20, status, search } = req.query;
-    const pageNum  = Math.max(1, parseInt(page));
+    const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const skip = (pageNum - 1) * limitNum;
 
@@ -39,7 +39,7 @@ router.get('/', authMiddleware, async (req, res) => {
     if (search) {
       query.$or = [
         { invoiceNumber: { $regex: search, $options: 'i' } },
-        { billTo:        { $regex: search, $options: 'i' } },
+        { billTo: { $regex: search, $options: 'i' } },
       ];
     }
 
@@ -110,7 +110,7 @@ router.get('/:id/print', authMiddleware, async (req, res) => {
     const invoice = await Invoice.findById(req.params.id);
     if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
 
-    const companyName = 'Steps CRM';
+    const companyName = 'Ping';
     const rows = invoice.lineItems.map(li => `
       <tr>
         <td>${li.description}</td>
@@ -122,7 +122,7 @@ router.get('/:id/print', authMiddleware, async (req, res) => {
     const statusColor = { draft: '#6b7280', sent: '#1d4ed8', paid: '#16a34a', cancelled: '#dc2626' };
 
     const qrData = encodeURIComponent(`${invoice.invoiceNumber} | ${invoice.billTo} | Total: ${invoice.totalAmount}`);
-    const qrUrl  = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${qrData}&margin=4&format=svg`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${qrData}&margin=4&format=svg`;
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -171,8 +171,8 @@ router.get('/:id/print', authMiddleware, async (req, res) => {
       <div class="doc-info-text">
         <h2>Invoice</h2>
         <p><strong>${invoice.invoiceNumber}</strong></p>
-        <p>Date: ${new Date(invoice.createdAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</p>
-        ${invoice.dueDate ? `<p>Due: ${new Date(invoice.dueDate).toLocaleDateString('en-GB', { day:'2-digit',month:'short',year:'numeric' })}</p>` : ''}
+        <p>Date: ${new Date(invoice.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+        ${invoice.dueDate ? `<p>Due: ${new Date(invoice.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>` : ''}
         <span class="status-badge">${invoice.status}</span>
       </div>
       <div class="qr-box">
