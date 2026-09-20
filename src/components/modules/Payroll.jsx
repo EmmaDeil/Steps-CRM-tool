@@ -34,6 +34,8 @@ const Payroll = ({ onBack }) => {
   const [deductions, setDeductions] = useState({
     taxRate: 10,
     pensionRate: 8,
+    employerPensionRate: 10,
+    usePayeBrackets: false,
     healthInsurance: 0,
     otherDeductions: 0,
   });
@@ -206,6 +208,7 @@ const Payroll = ({ onBack }) => {
       tempAllowances: employee.allowances,
       tempOvertime: employee.overtime,
       tempCommission: employee.commission,
+      tempPersonalDeductions: employee.personalDeductions || 0,
     });
     setShowEditModal(true);
   };
@@ -221,6 +224,8 @@ const Payroll = ({ onBack }) => {
         const allowances = parseFloat(editingEmployee.tempAllowances) || 0;
         const overtime = parseFloat(editingEmployee.tempOvertime) || 0;
         const commission = parseFloat(editingEmployee.tempCommission) || 0;
+        const personalDeductions =
+          parseFloat(editingEmployee.tempPersonalDeductions) || 0;
 
         // Salary-based gross pay: base + bonus + allowances + overtime adjustment
         const overtimePay = overtime * payRates.overtimeRate;
@@ -234,6 +239,7 @@ const Payroll = ({ onBack }) => {
           allowances,
           overtime,
           commission,
+          personalDeductions,
           grossPay,
           status: isReady ? "Ready" : "Incomplete",
           statusColor: isReady ? "green" : "amber",
@@ -294,6 +300,16 @@ const Payroll = ({ onBack }) => {
   };
 
   const handleSubmitPayroll = async () => {
+    // Block submission while any employee is missing salary information
+    const incomplete = employees.filter((e) => e.status === "Incomplete" || e.warning);
+    if (incomplete.length > 0) {
+      toast.error(
+        `${incomplete.length} employee(s) have no base salary set — fix them in Review Earnings before submitting`,
+      );
+      setCurrentStep(2);
+      return;
+    }
+
     try {
       setLoading(true);
       await apiService.post("/api/payroll/submit", {
@@ -306,7 +322,11 @@ const Payroll = ({ onBack }) => {
       setCurrentStep(5);
     } catch (error) {
       console.error("Error submitting payroll:", error);
-      toast.error("Failed to submit payroll via server");
+      toast.error(
+        error?.response?.data?.message ||
+          error?.serverData?.message ||
+          "Failed to submit payroll via server",
+      );
     } finally {
       setLoading(false);
     }
@@ -390,6 +410,37 @@ const Payroll = ({ onBack }) => {
     "November",
     "December",
   ];
+
+  // Shared deduction math (flat-rate preview — server recomputes authoritatively on save,
+  // including PAYE brackets when enabled)
+  const periodMonths =
+    selectedPeriod.paymentSchedule === "Weekly"
+      ? 12 / 52
+      : selectedPeriod.paymentSchedule === "Bi-weekly"
+        ? 12 / 26
+        : selectedPeriod.paymentSchedule === "Semi-monthly"
+          ? 0.5
+          : 1;
+
+  const calcEmployeeDeductions = (emp) => {
+    const gross = emp.grossPay || 0;
+    const tax = (gross * (deductions.taxRate || 0)) / 100;
+    const pension = (gross * (deductions.pensionRate || 0)) / 100;
+    return (
+      tax +
+      pension +
+      (deductions.healthInsurance || 0) +
+      (deductions.otherDeductions || 0) +
+      (emp.personalDeductions || 0) +
+      (emp.advanceDeduction || 0)
+    );
+  };
+
+  const totalDeductionsPreview = employees.reduce(
+    (sum, emp) => sum + calcEmployeeDeductions(emp),
+    0,
+  );
+  const netPayablePreview = totalGrossPay - totalDeductionsPreview;
 
   const years = Array.from(
     { length: 5 },
@@ -958,25 +1009,54 @@ const Payroll = ({ onBack }) => {
                 Configure Deductions
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
+                <div className="md:col-span-2 flex items-center justify-between p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
+                  <div>
+                    <p className="text-sm font-bold text-indigo-900 dark:text-indigo-200">
+                      Use Nigerian PAYE Brackets
+                    </p>
+                    <p className="text-xs text-indigo-700 dark:text-indigo-300">
+                      Graduated tax (7%–24%) with Consolidated Relief Allowance, instead of the flat rate below
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDeductions({
+                        ...deductions,
+                        usePayeBrackets: !deductions.usePayeBrackets,
+                      })
+                    }
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      deductions.usePayeBrackets ? "bg-indigo-600" : "bg-gray-300"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        deductions.usePayeBrackets ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Tax Rate (%)
+                    Tax Rate (%) {deductions.usePayeBrackets && <span className="text-xs text-indigo-500">(ignored — PAYE brackets active)</span>}
                   </label>
                   <input
                     type="number"
                     value={deductions.taxRate}
+                    disabled={deductions.usePayeBrackets}
                     onChange={(e) =>
                       setDeductions({
                         ...deductions,
                         taxRate: parseFloat(e.target.value),
                       })
                     }
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Pension Rate (%)
+                    Pension Rate (%, employee)
                   </label>
                   <input
                     type="number"
@@ -992,7 +1072,23 @@ const Payroll = ({ onBack }) => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Health Insurance ({formatCurrency(0)})
+                    Employer Pension (%, company expense)
+                  </label>
+                  <input
+                    type="number"
+                    value={deductions.employerPensionRate}
+                    onChange={(e) =>
+                      setDeductions({
+                        ...deductions,
+                        employerPensionRate: parseFloat(e.target.value),
+                      })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Health Insurance (flat, per employee)
                   </label>
                   <input
                     type="number"
@@ -1008,7 +1104,7 @@ const Payroll = ({ onBack }) => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Other Deductions ({formatCurrency(0)})
+                    Other Deductions (flat, per employee)
                   </label>
                   <input
                     type="number"
@@ -1025,13 +1121,17 @@ const Payroll = ({ onBack }) => {
               </div>
               <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <p className="text-xs text-gray-500 mb-1">Total Tax</p>
+                  <p className="text-xs text-gray-500 mb-1">
+                    Total Tax {deductions.usePayeBrackets && "(PAYE — computed on submit)"}
+                  </p>
                   <p className="text-lg font-bold text-slate-900 dark:text-white">
-                    {formatCurrency((totalGrossPay * deductions.taxRate) / 100)}
+                    {deductions.usePayeBrackets
+                      ? "Auto"
+                      : formatCurrency((totalGrossPay * deductions.taxRate) / 100)}
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <p className="text-xs text-gray-500 mb-1">Total Pension</p>
+                  <p className="text-xs text-gray-500 mb-1">Total Pension (employee)</p>
                   <p className="text-lg font-bold text-slate-900 dark:text-white">
                     {formatCurrency(
                       (totalGrossPay * deductions.pensionRate) / 100,
@@ -1041,14 +1141,7 @@ const Payroll = ({ onBack }) => {
                 <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <p className="text-xs text-gray-500 mb-1">Net Payable</p>
                   <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                    {formatCurrency(
-                      totalGrossPay -
-                        (totalGrossPay *
-                          (deductions.taxRate + deductions.pensionRate)) /
-                          100 -
-                        deductions.healthInsurance -
-                        deductions.otherDeductions,
-                    )}
+                    {formatCurrency(netPayablePreview)}
                   </p>
                 </div>
               </div>
@@ -1076,13 +1169,7 @@ const Payroll = ({ onBack }) => {
                       Total Deductions
                     </p>
                     <p className="text-2xl font-bold text-red-900 dark:text-red-200">
-                      {formatCurrency(
-                        (totalGrossPay *
-                          (deductions.taxRate + deductions.pensionRate)) /
-                          100 +
-                          deductions.healthInsurance +
-                          deductions.otherDeductions,
-                      )}
+                      {formatCurrency(totalDeductionsPreview)}
                     </p>
                   </div>
                   <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
@@ -1090,14 +1177,7 @@ const Payroll = ({ onBack }) => {
                       Net Payable
                     </p>
                     <p className="text-2xl font-bold text-green-900 dark:text-green-200">
-                      {formatCurrency(
-                        totalGrossPay -
-                          (totalGrossPay *
-                            (deductions.taxRate + deductions.pensionRate)) /
-                            100 -
-                          deductions.healthInsurance -
-                          deductions.otherDeductions,
-                      )}
+                      {formatCurrency(netPayablePreview)}
                     </p>
                   </div>
                 </div>
@@ -1426,6 +1506,39 @@ const Payroll = ({ onBack }) => {
                       />
                     </div>
                   </div>
+
+                  {/* Personal Deductions */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Personal Deductions
+                      <span className="text-gray-400 font-normal ml-1 text-xs">(loans, union dues, etc.)</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₦</span>
+                      <input
+                        type="number"
+                        step="500"
+                        min="0"
+                        value={editingEmployee.tempPersonalDeductions}
+                        onChange={(e) =>
+                          setEditingEmployee({ ...editingEmployee, tempPersonalDeductions: e.target.value })
+                        }
+                        className="w-full pl-7 pr-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Advance Deduction (auto) */}
+                  {(editingEmployee.advanceDeduction || 0) > 0 && (
+                    <div className="md:col-span-2 flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-200">
+                      <i className="fa-solid fa-hand-holding-dollar"></i>
+                      <span>
+                        Salary advance repayment of{" "}
+                        <strong>{formatCurrency(editingEmployee.advanceDeduction)}</strong>{" "}
+                        will be automatically deducted from this employee's net pay.
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -144,6 +144,7 @@ const allowedOrigins = [
   process.env.FRONTEND_URL,
   process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
   'http://localhost:5173',
+  'http://localhost:5174',
   'http://localhost:3000',
 ].filter(Boolean);
 

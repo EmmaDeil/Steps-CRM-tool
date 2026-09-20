@@ -796,6 +796,80 @@ async function sendLeaveRelieverEmail(data) {
   }
 }
 
+// Send payslip email after a payroll run is marked paid
+async function sendPayslipEmail(employeeDoc, run, empRow) {
+  const fmt = (n) => `₦${Number(n || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+  const periodLabel = `${run.period?.paymentSchedule || ''} ${run.period?.year}-${String((run.period?.month ?? 0) + 1).padStart(2, '0')}`;
+  const d = run.deductions || {};
+
+  const row = (label, value, bold = false) => `
+    <tr>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #eee; ${bold ? 'font-weight: bold;' : ''}">${label}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #eee; text-align: right; ${bold ? 'font-weight: bold;' : ''}">${value}</td>
+    </tr>`;
+
+  const mailOptions = {
+    from: emailUser,
+    to: employeeDoc.email,
+    subject: `Payslip — ${periodLabel}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0d6efd; margin-bottom: 4px;">Payslip</h2>
+        <p style="color: #666; margin-top: 0;">${periodLabel}</p>
+        <p>Dear ${employeeDoc.firstName || empRow.name},</p>
+        <p>Your salary for this period has been paid. Here is your breakdown:</p>
+
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+          <tr style="background-color: #0d6efd; color: white;">
+            <th style="padding: 10px 12px; text-align: left;">Earnings</th>
+            <th style="padding: 10px 12px; text-align: right;">Amount</th>
+          </tr>
+          ${row('Base Salary', fmt(empRow.baseSalary))}
+          ${(empRow.bonus || 0) > 0 ? row('Bonus', fmt(empRow.bonus)) : ''}
+          ${(empRow.allowances || 0) > 0 ? row('Allowances', fmt(empRow.allowances)) : ''}
+          ${(empRow.overtime || 0) > 0 ? row(`Overtime (${empRow.overtime} hrs)`, fmt((empRow.overtime || 0) * (run.payRates?.overtimeRate || 0))) : ''}
+          ${(empRow.commission || 0) > 0 ? row('Commission', fmt(empRow.commission)) : ''}
+          ${row('Gross Pay', fmt(empRow.grossPay), true)}
+        </table>
+
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+          <tr style="background-color: #dc3545; color: white;">
+            <th style="padding: 10px 12px; text-align: left;">Deductions</th>
+            <th style="padding: 10px 12px; text-align: right;">Amount</th>
+          </tr>
+          ${row(d.usePayeBrackets ? 'PAYE Tax (graduated)' : `Tax (${d.taxRate || 0}%)`, fmt(empRow.taxAmount))}
+          ${row(`Pension (${d.pensionRate || 0}%)`, fmt(empRow.pensionAmount))}
+          ${(d.healthInsurance || 0) > 0 ? row('Health Insurance', fmt(d.healthInsurance)) : ''}
+          ${(d.otherDeductions || 0) > 0 ? row('Other Deductions', fmt(d.otherDeductions)) : ''}
+          ${(empRow.advanceDeduction || 0) > 0 ? row('Salary Advance Repayment', fmt(empRow.advanceDeduction)) : ''}
+          ${(empRow.personalDeductions || 0) > 0 ? row('Personal Deductions', fmt(empRow.personalDeductions)) : ''}
+        </table>
+
+        <div style="background-color: #d4edda; border: 1px solid #28a745; border-radius: 8px; padding: 16px; text-align: center;">
+          <span style="font-size: 13px; color: #155724;">NET PAY</span><br/>
+          <span style="font-size: 28px; font-weight: bold; color: #155724;">${fmt(empRow.netPay)}</span>
+        </div>
+
+        <p style="color: #666; font-size: 12px; margin-top: 24px;">
+          This is an automated payslip from the payroll system. Please contact HR with any questions.
+        </p>
+      </div>
+    `,
+  };
+
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📧 Payslip email would be sent to:', mailOptions.to);
+      return { success: true, message: 'Email logged (dev mode)' };
+    }
+    await transporter.sendMail(mailOptions);
+    return { success: true, message: 'Payslip email sent' };
+  } catch (error) {
+    console.error('Error sending payslip email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendApprovalEmail,
   sendPOReviewEmail,
@@ -808,5 +882,6 @@ module.exports = {
   sendSignatureRequestEmail,
   sendInventoryExpiryAlertEmail,
   sendLeaveRelieverEmail,
+  sendPayslipEmail,
   transporter,
 };

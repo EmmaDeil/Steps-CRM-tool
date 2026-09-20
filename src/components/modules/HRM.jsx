@@ -14,11 +14,10 @@ const StatCard = ({ label, icon, value, trend, trendType }) => (
     <div className="flex justify-between items-start">
       <p className="text-slate-500 text-sm font-medium">{label}</p>
       <div
-        className={`p-1.5 rounded ${
-          trendType === "rose"
-            ? "bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400"
-            : "bg-blue-50 dark:bg-blue-900/30 text-primary"
-        }`}
+        className={`p-1.5 rounded ${trendType === "rose"
+          ? "bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400"
+          : "bg-blue-50 dark:bg-blue-900/30 text-primary"
+          }`}
       >
         <i className={`fa-solid fa-${icon} text-[20px]`}></i>
       </div>
@@ -29,16 +28,14 @@ const StatCard = ({ label, icon, value, trend, trendType }) => (
       </p>
       {trend !== undefined && (
         <span
-          className={`text-xs font-bold mb-1 flex items-center px-1.5 py-0.5 rounded ${
-            trend >= 0
-              ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30"
-              : "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30"
-          }`}
+          className={`text-xs font-bold mb-1 flex items-center px-1.5 py-0.5 rounded ${trend >= 0
+            ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30"
+            : "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30"
+            }`}
         >
           <i
-            className={`fa-solid ${
-              trend >= 0 ? "fa-arrow-trend-up" : "fa-arrow-trend-down"
-            } text-[14px]`}
+            className={`fa-solid ${trend >= 0 ? "fa-arrow-trend-up" : "fa-arrow-trend-down"
+              } text-[14px]`}
           ></i>{" "}
           {Math.abs(trend)}%
         </span>
@@ -131,6 +128,7 @@ const HRM = () => {
     lastName: "",
     email: "",
     phone: "",
+    cug: "",
     dateOfBirth: "",
     department: "",
     jobTitle: "",
@@ -248,12 +246,12 @@ const HRM = () => {
       setEmployeeTotal(pagination.total || employeeList.length);
       setEmployeeTotalPages(
         pagination.totalPages ||
-          Math.max(
-            Math.ceil(
-              (pagination.total || employeeList.length) / EMPLOYEES_PAGE_SIZE,
-            ),
-            1,
+        Math.max(
+          Math.ceil(
+            (pagination.total || employeeList.length) / EMPLOYEES_PAGE_SIZE,
           ),
+          1,
+        ),
       );
       setSelectedEmployees([]);
       networkToastShownRef.current = false;
@@ -314,11 +312,11 @@ const HRM = () => {
       setAnalytics(
         anaRes.status === "fulfilled"
           ? {
-              turnoverRates: [],
-              months: [],
-              newHires: 0,
-              ...toObjectPayload(anaRes.value, {}),
-            }
+            turnoverRates: [],
+            months: [],
+            newHires: 0,
+            ...toObjectPayload(anaRes.value, {}),
+          }
           : { turnoverRates: [], months: [], newHires: 0 },
       );
       setLeaveRequests(
@@ -330,14 +328,14 @@ const HRM = () => {
       setPerformance(
         perfRes.status === "fulfilled"
           ? {
-              q3CompletedPct: 0,
-              pending: { selfReviews: 0, managerReviews: 0 },
-              ...toObjectPayload(perfRes.value, {}),
-            }
+            q3CompletedPct: 0,
+            pending: { selfReviews: 0, managerReviews: 0 },
+            ...toObjectPayload(perfRes.value, {}),
+          }
           : {
-              q3CompletedPct: 0,
-              pending: { selfReviews: 0, managerReviews: 0 },
-            },
+            q3CompletedPct: 0,
+            pending: { selfReviews: 0, managerReviews: 0 },
+          },
       );
       setTraining(
         trainRes.status === "fulfilled" ? toArrayPayload(trainRes.value) : [],
@@ -345,10 +343,10 @@ const HRM = () => {
       setPayrollNext(
         payRes.status === "fulfilled"
           ? {
-              date: "",
-              runApproved: false,
-              ...toObjectPayload(payRes.value, {}),
-            }
+            date: "",
+            runApproved: false,
+            ...toObjectPayload(payRes.value, {}),
+          }
           : { date: "", runApproved: false },
       );
 
@@ -683,9 +681,8 @@ const HRM = () => {
             }}
           >
             <div
-              className={`size-10 rounded-full border border-slate-200 dark:border-slate-700 bg-center bg-cover flex items-center justify-center text-xs font-semibold text-slate-700 dark:text-slate-200 ${
-                e.avatar ? "" : "bg-slate-100 dark:bg-slate-700"
-              }`}
+              className={`size-10 rounded-full border border-slate-200 dark:border-slate-700 bg-center bg-cover flex items-center justify-center text-xs font-semibold text-slate-700 dark:text-slate-200 ${e.avatar ? "" : "bg-slate-100 dark:bg-slate-700"
+                }`}
               style={{
                 backgroundImage: e.avatar ? `url('${e.avatar}')` : "none",
               }}
@@ -722,16 +719,14 @@ const HRM = () => {
         cellClassName: "px-5 py-3",
         cell: (e) => (
           <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-              e.status === "Active"
-                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
-                : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-            }`}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${e.status === "Active"
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+              : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+              }`}
           >
             <span
-              className={`size-1.5 rounded-full ${
-                e.status === "Active" ? "bg-emerald-500" : "bg-amber-500"
-              }`}
+              className={`size-1.5 rounded-full ${e.status === "Active" ? "bg-emerald-500" : "bg-amber-500"
+                }`}
             ></span>{" "}
             {e.status}
           </span>
@@ -816,8 +811,8 @@ const HRM = () => {
     } catch (err) {
       toast.error(
         err?.response?.data?.message ||
-          err?.serverData?.message ||
-          `Failed to ${deptModalMode === "add" ? "create" : "update"} department`,
+        err?.serverData?.message ||
+        `Failed to ${deptModalMode === "add" ? "create" : "update"} department`,
       );
     } finally {
       setDeptSubmitting(false);
@@ -1129,11 +1124,11 @@ const HRM = () => {
                     const selectedDepartmentHead = departmentBucket.department
                       ?._id
                       ? departmentHeadDrafts[departmentBucket.department._id] ||
-                        ""
+                      ""
                       : "";
                     const selectedDepartmentManager =
                       departmentManagerDrafts[
-                        getDepartmentKey(departmentBucket.name)
+                      getDepartmentKey(departmentBucket.name)
                       ] || "";
                     const selectedDepartmentManagerName =
                       organogramEmployees.find(
@@ -1493,11 +1488,9 @@ const HRM = () => {
                       {analytics.turnoverRates.map((v, idx) => (
                         <div
                           key={idx}
-                          className={`w-1/${
-                            analytics.turnoverRates.length
-                          } bg-blue-${
-                            100 + idx * 100
-                          } dark:bg-blue-900/40 rounded-t relative group`}
+                          className={`w-1/${analytics.turnoverRates.length
+                            } bg-blue-${100 + idx * 100
+                            } dark:bg-blue-900/40 rounded-t relative group`}
                           style={{
                             height: `${Math.max(10, Math.min(100, v * 20))}%`,
                           }}
@@ -1666,11 +1659,10 @@ const HRM = () => {
                   </p>
                   <div className="mt-2 inline-flex items-center gap-2 text-xs text-emerald-400 font-medium z-10">
                     <i
-                      className={`fa-solid ${
-                        payrollNext.runApproved
-                          ? "fa-check-circle"
-                          : "fa-exclamation-circle"
-                      } text-[16px]`}
+                      className={`fa-solid ${payrollNext.runApproved
+                        ? "fa-check-circle"
+                        : "fa-exclamation-circle"
+                        } text-[16px]`}
                     ></i>
                     {payrollNext.runApproved
                       ? "Run Approved"
@@ -1846,11 +1838,10 @@ const HRM = () => {
                             key={icon}
                             type="button"
                             onClick={() => setDeptForm({ ...deptForm, icon })}
-                            className={`w-9 h-9 rounded-lg flex items-center justify-center border transition-all ${
-                              deptForm.icon === icon
-                                ? "border-blue-500 bg-blue-50 text-blue-600 ring-2 ring-blue-500/30"
-                                : "border-slate-200 text-slate-500 hover:border-blue-300 hover:bg-blue-50"
-                            }`}
+                            className={`w-9 h-9 rounded-lg flex items-center justify-center border transition-all ${deptForm.icon === icon
+                              ? "border-blue-500 bg-blue-50 text-blue-600 ring-2 ring-blue-500/30"
+                              : "border-slate-200 text-slate-500 hover:border-blue-300 hover:bg-blue-50"
+                              }`}
                           >
                             <i className={`fa-solid ${icon} text-sm`}></i>
                           </button>
@@ -1928,6 +1919,7 @@ const HRM = () => {
                               name: fullName,
                               email: employeeForm.email,
                               phone: employeeForm.phone,
+                              cug: employeeForm.cug,
                               dateOfBirth: employeeForm.dateOfBirth,
                               department: employeeForm.department,
                               jobTitle: employeeForm.jobTitle,
@@ -1944,6 +1936,7 @@ const HRM = () => {
                             lastName: "",
                             email: "",
                             phone: "",
+                            cug: "",
                             dateOfBirth: "",
                             department: "",
                             jobTitle: "",
@@ -1956,8 +1949,8 @@ const HRM = () => {
                           console.error("Error adding employee:", error);
                           toast.error(
                             error.response?.data?.message ||
-                              error.message ||
-                              "Failed to add employee",
+                            error.message ||
+                            "Failed to add employee",
                           );
                         } finally {
                           setEmployeeFormLoading(false);
@@ -2037,6 +2030,23 @@ const HRM = () => {
                                 setEmployeeForm({
                                   ...employeeForm,
                                   phone: e.target.value,
+                                })
+                              }
+                              className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
+                            />
+                          </label>
+                          <label className="flex flex-col w-full">
+                            <p className="text-slate-700 text-sm font-medium pb-2">
+                              CUG Number
+                            </p>
+                            <input
+                              type="tel"
+                              placeholder="Closed User Group number"
+                              value={employeeForm.cug}
+                              onChange={(e) =>
+                                setEmployeeForm({
+                                  ...employeeForm,
+                                  cug: e.target.value,
                                 })
                               }
                               className="w-full rounded-lg border border-slate-200 bg-white text-slate-900 h-12 px-4 placeholder:text-slate-400 focus:outline-0 focus:ring-2 focus:ring-primary/50 transition-all"
@@ -2407,8 +2417,8 @@ const HRM = () => {
                             error?.response?.data?.message;
                           toast.error(
                             serverMessage ||
-                              error.message ||
-                              "Failed to allocate leave",
+                            error.message ||
+                            "Failed to allocate leave",
                           );
                         } finally {
                           setLeaveAllocationLoading(false);

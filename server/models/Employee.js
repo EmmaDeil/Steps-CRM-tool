@@ -5,6 +5,7 @@ const EmployeeSchema = new mongoose.Schema({
   lastName: { type: String, required: true },
   email: { type: String, required: true },
   phone: { type: String },
+  cug: { type: String, default: '' }, // Closed User Group number
   dateOfBirth: { type: Date },
   department: { type: String },
   jobTitle: { type: String },
@@ -57,7 +58,7 @@ const EmployeeSchema = new mongoose.Schema({
 });
 
 // Virtual for full name since UI expects `e.name`
-EmployeeSchema.virtual('name').get(function() {
+EmployeeSchema.virtual('name').get(function () {
   return `${this.firstName} ${this.lastName}`;
 });
 

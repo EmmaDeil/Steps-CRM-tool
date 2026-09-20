@@ -218,18 +218,18 @@ const EmployeeProfile = ({
   // Different breadcrumb configurations based on context
   const breadcrumbItems = fromProfile
     ? [
-        {
-          label: "Home",
-          icon: "fa-home",
-          href: "/home",
-        },
-        { label: "My Profile", icon: "fa-user-circle" },
-      ]
+      {
+        label: "Home",
+        icon: "fa-home",
+        href: "/home",
+      },
+      { label: "My Profile", icon: "fa-user-circle" },
+    ]
     : [
-        { label: "Home", icon: "fa-home", onClick: onBack },
-        { label: "HR Management", icon: "fa-users-gear", onClick: onBack },
-        { label: employee?.name || "Employee", icon: "fa-id-card" },
-      ];
+      { label: "Home", icon: "fa-home", onClick: onBack },
+      { label: "HR Management", icon: "fa-users-gear", onClick: onBack },
+      { label: employee?.name || "Employee", icon: "fa-id-card" },
+    ];
 
   const handleEditClick = () => {
     setEditingEmployee({
@@ -452,6 +452,7 @@ const EmployeeProfile = ({
         Object.assign(payload, {
           department: editingEmployee.department || "",
           jobTitle: editingEmployee.jobTitle || "",
+          cug: editingEmployee.cug || "",
           role: editingEmployee.role || "Employee",
           status: editingEmployee.status || "Active",
           salary: editingEmployee.salary || 0,
@@ -483,8 +484,8 @@ const EmployeeProfile = ({
         setEmployee(updatedEmployee);
         setPreviewUrl(
           updatedEmployee.avatar ||
-            updatedEmployee.profilePicture ||
-            previewUrl,
+          updatedEmployee.profilePicture ||
+          previewUrl,
         );
         setIsEditing(false);
         setEditingEmployee(null);
@@ -512,9 +513,9 @@ const EmployeeProfile = ({
           : null;
       toast.error(
         timeoutMessage ||
-          error.serverData?.message ||
-          error.response?.data?.message ||
-          "Failed to save employee profile",
+        error.serverData?.message ||
+        error.response?.data?.message ||
+        "Failed to save employee profile",
         {
           icon: "❌",
           duration: 4000,
@@ -534,8 +535,8 @@ const EmployeeProfile = ({
     } catch (error) {
       toast.error(
         error.serverData?.error ||
-          error.response?.data?.error ||
-          "Failed to resend verification email",
+        error.response?.data?.error ||
+        "Failed to resend verification email",
       );
     } finally {
       setIsResendingEmail(false);
@@ -715,11 +716,10 @@ const EmployeeProfile = ({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`pb-3 pt-4 whitespace-nowrap border-b-2 transition-colors ${
-                    activeTab === tab.id
-                      ? "border-blue-600 text-gray-900 dark:text-white font-semibold"
-                      : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-                  }`}
+                  className={`pb-3 pt-4 whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id
+                    ? "border-blue-600 text-gray-900 dark:text-white font-semibold"
+                    : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                    }`}
                 >
                   {tab.label}
                 </button>
@@ -755,11 +755,10 @@ const EmployeeProfile = ({
                                 email: e.target.value,
                               })
                             }
-                            className={`w-full px-2 py-1 border ${
-                              validationErrors.email
-                                ? "border-red-500 validation-error"
-                                : "border-gray-300 dark:border-gray-600"
-                            } rounded text-sm dark:bg-gray-700 dark:text-white input-focus`}
+                            className={`w-full px-2 py-1 border ${validationErrors.email
+                              ? "border-red-500 validation-error"
+                              : "border-gray-300 dark:border-gray-600"
+                              } rounded text-sm dark:bg-gray-700 dark:text-white input-focus`}
                           />
                           {validationErrors.email && (
                             <p className="text-red-500 text-xs mt-1 animate-fade-in">
@@ -824,6 +823,29 @@ const EmployeeProfile = ({
                     </div>
                     <div>
                       <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
+                        CUG Number
+                      </p>
+                      {isEditing ? (
+                        <input
+                          type="tel"
+                          value={editingEmployee?.cug || ""}
+                          onChange={(e) =>
+                            setEditingEmployee({
+                              ...editingEmployee,
+                              cug: e.target.value,
+                            })
+                          }
+                          placeholder="Closed User Group number"
+                          className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white"
+                        />
+                      ) : (
+                        <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
+                          {employee?.cug || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
                         Address
                       </p>
                       {isEditing ? (
@@ -853,8 +875,8 @@ const EmployeeProfile = ({
                           value={
                             editingEmployee?.dateOfBirth
                               ? new Date(editingEmployee.dateOfBirth)
-                                  .toISOString()
-                                  .split("T")[0]
+                                .toISOString()
+                                .split("T")[0]
                               : ""
                           }
                           onChange={(e) =>
@@ -869,8 +891,8 @@ const EmployeeProfile = ({
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                           {employee?.dateOfBirth
                             ? new Date(
-                                employee.dateOfBirth,
-                              ).toLocaleDateString()
+                              employee.dateOfBirth,
+                            ).toLocaleDateString()
                             : "Not provided"}
                         </p>
                       )}
@@ -966,6 +988,29 @@ const EmployeeProfile = ({
                           ? new Date(employee.startDate).toLocaleDateString()
                           : "Not set"}
                       </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
+                        CUG Number
+                      </p>
+                      {isEditing && isHR ? (
+                        <input
+                          type="tel"
+                          value={editingEmployee?.cug || ""}
+                          onChange={(e) =>
+                            setEditingEmployee({
+                              ...editingEmployee,
+                              cug: e.target.value,
+                            })
+                          }
+                          placeholder="Closed User Group number"
+                          className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white"
+                        />
+                      ) : (
+                        <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
+                          {employee?.cug || "Not set"}
+                        </p>
+                      )}
                     </div>
                     {isHR && (
                       <div>
@@ -1164,8 +1209,8 @@ const EmployeeProfile = ({
                       <span className="text-gray-900 dark:text-gray-200 font-semibold">
                         {employee?.lastReviewDate
                           ? new Date(
-                              employee.lastReviewDate,
-                            ).toLocaleDateString()
+                            employee.lastReviewDate,
+                          ).toLocaleDateString()
                           : "Not recorded"}
                       </span>
                     </div>
@@ -1334,8 +1379,8 @@ const EmployeeProfile = ({
                                   ? new Date(doc.updatedAt).toLocaleDateString()
                                   : doc.createdAt
                                     ? new Date(
-                                        doc.createdAt,
-                                      ).toLocaleDateString()
+                                      doc.createdAt,
+                                    ).toLocaleDateString()
                                     : "Unknown date"}
                             </span>
                             <div className="flex items-center gap-2">
@@ -1483,11 +1528,10 @@ const EmployeeProfile = ({
                               name: e.target.value,
                             })
                           }
-                          className={`w-full px-3 py-2 border ${
-                            validationErrors.name
-                              ? "border-red-500 validation-error"
-                              : "border-gray-300 dark:border-gray-600"
-                          } rounded text-sm dark:bg-gray-700 dark:text-white`}
+                          className={`w-full px-3 py-2 border ${validationErrors.name
+                            ? "border-red-500 validation-error"
+                            : "border-gray-300 dark:border-gray-600"
+                            } rounded text-sm dark:bg-gray-700 dark:text-white`}
                         />
                       ) : (
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
@@ -1516,11 +1560,10 @@ const EmployeeProfile = ({
                               email: e.target.value,
                             })
                           }
-                          className={`w-full px-3 py-2 border ${
-                            validationErrors.email
-                              ? "border-red-500 validation-error"
-                              : "border-gray-300 dark:border-gray-600"
-                          } rounded text-sm dark:bg-gray-700 dark:text-white`}
+                          className={`w-full px-3 py-2 border ${validationErrors.email
+                            ? "border-red-500 validation-error"
+                            : "border-gray-300 dark:border-gray-600"
+                            } rounded text-sm dark:bg-gray-700 dark:text-white`}
                         />
                       ) : (
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
@@ -1549,11 +1592,10 @@ const EmployeeProfile = ({
                               phone: e.target.value,
                             })
                           }
-                          className={`w-full px-3 py-2 border ${
-                            validationErrors.phone
-                              ? "border-red-500 validation-error"
-                              : "border-gray-300 dark:border-gray-600"
-                          } rounded text-sm dark:bg-gray-700 dark:text-white`}
+                          className={`w-full px-3 py-2 border ${validationErrors.phone
+                            ? "border-red-500 validation-error"
+                            : "border-gray-300 dark:border-gray-600"
+                            } rounded text-sm dark:bg-gray-700 dark:text-white`}
                         />
                       ) : (
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
@@ -1563,6 +1605,31 @@ const EmployeeProfile = ({
                       {validationErrors.phone && (
                         <p className="text-red-500 text-xs mt-1 animate-fade-in">
                           {validationErrors.phone}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
+                        CUG Number
+                      </p>
+                      {isEditing ? (
+                        <input
+                          type="tel"
+                          name="cug"
+                          value={editingEmployee?.cug || ""}
+                          onChange={(e) =>
+                            setEditingEmployee({
+                              ...editingEmployee,
+                              cug: e.target.value,
+                            })
+                          }
+                          placeholder="Closed User Group number"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm dark:bg-gray-700 dark:text-white"
+                        />
+                      ) : (
+                        <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
+                          {employee?.cug || "Not provided"}
                         </p>
                       )}
                     </div>
@@ -1594,8 +1661,8 @@ const EmployeeProfile = ({
                           value={
                             editingEmployee?.dateOfBirth
                               ? new Date(editingEmployee.dateOfBirth)
-                                  .toISOString()
-                                  .split("T")[0]
+                                .toISOString()
+                                .split("T")[0]
                               : ""
                           }
                           onChange={(e) =>
@@ -1604,18 +1671,17 @@ const EmployeeProfile = ({
                               dateOfBirth: e.target.value,
                             })
                           }
-                          className={`w-full px-3 py-2 border ${
-                            validationErrors.dateOfBirth
-                              ? "border-red-500 validation-error"
-                              : "border-gray-300 dark:border-gray-600"
-                          } rounded text-sm dark:bg-gray-700 dark:text-white`}
+                          className={`w-full px-3 py-2 border ${validationErrors.dateOfBirth
+                            ? "border-red-500 validation-error"
+                            : "border-gray-300 dark:border-gray-600"
+                            } rounded text-sm dark:bg-gray-700 dark:text-white`}
                         />
                       ) : (
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                           {employee?.dateOfBirth
                             ? new Date(
-                                employee.dateOfBirth,
-                              ).toLocaleDateString()
+                              employee.dateOfBirth,
+                            ).toLocaleDateString()
                             : "Not provided"}
                         </p>
                       )}
@@ -1739,11 +1805,10 @@ const EmployeeProfile = ({
                               },
                             })
                           }
-                          className={`w-full px-3 py-2 border ${
-                            validationErrors.emergencyContactPhone
-                              ? "border-red-500 validation-error"
-                              : "border-gray-300 dark:border-gray-600"
-                          } rounded text-sm dark:bg-gray-700 dark:text-white`}
+                          className={`w-full px-3 py-2 border ${validationErrors.emergencyContactPhone
+                            ? "border-red-500 validation-error"
+                            : "border-gray-300 dark:border-gray-600"
+                            } rounded text-sm dark:bg-gray-700 dark:text-white`}
                         />
                       ) : (
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
@@ -1884,11 +1949,10 @@ const EmployeeProfile = ({
                               status: e.target.value,
                             })
                           }
-                          className={`w-full px-3 py-2 border ${
-                            validationErrors.status
-                              ? "border-red-500 validation-error"
-                              : "border-gray-300 dark:border-gray-600"
-                          } rounded text-sm dark:bg-gray-700 dark:text-white`}
+                          className={`w-full px-3 py-2 border ${validationErrors.status
+                            ? "border-red-500 validation-error"
+                            : "border-gray-300 dark:border-gray-600"
+                            } rounded text-sm dark:bg-gray-700 dark:text-white`}
                         >
                           <option value="Active">Active</option>
                           <option value="On Leave">On Leave</option>
@@ -1919,8 +1983,8 @@ const EmployeeProfile = ({
                             value={
                               editingEmployee?.startDate
                                 ? new Date(editingEmployee.startDate)
-                                    .toISOString()
-                                    .split("T")[0]
+                                  .toISOString()
+                                  .split("T")[0]
                                 : ""
                             }
                             onChange={(e) =>
@@ -1935,8 +1999,8 @@ const EmployeeProfile = ({
                           <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                             {employee?.startDate
                               ? new Date(
-                                  employee.startDate,
-                                ).toLocaleDateString()
+                                employee.startDate,
+                              ).toLocaleDateString()
                               : "Not set"}
                           </p>
                         )}
@@ -2056,9 +2120,9 @@ const EmployeeProfile = ({
                               </option>
                             ))}
                             {editingEmployee?.location &&
-                            !availableLocationOptions.includes(
-                              editingEmployee.location,
-                            ) ? (
+                              !availableLocationOptions.includes(
+                                editingEmployee.location,
+                              ) ? (
                               <option value={editingEmployee.location}>
                                 {editingEmployee.location}
                               </option>
@@ -2147,11 +2211,10 @@ const EmployeeProfile = ({
                               salary: e.target.value,
                             })
                           }
-                          className={`w-full px-3 py-2 border ${
-                            validationErrors.salary
-                              ? "border-red-500 validation-error"
-                              : "border-gray-300 dark:border-gray-600"
-                          } rounded text-sm dark:bg-gray-700 dark:text-white`}
+                          className={`w-full px-3 py-2 border ${validationErrors.salary
+                            ? "border-red-500 validation-error"
+                            : "border-gray-300 dark:border-gray-600"
+                            } rounded text-sm dark:bg-gray-700 dark:text-white`}
                         />
                       ) : (
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
@@ -2195,8 +2258,8 @@ const EmployeeProfile = ({
                         <p className="text-gray-900 dark:text-gray-200 text-sm font-medium">
                           {isHR
                             ? editingEmployee?.paySchedule ||
-                              employee?.paySchedule ||
-                              "Not set"
+                            employee?.paySchedule ||
+                            "Not set"
                             : "Restricted"}
                         </p>
                       )}
@@ -2510,7 +2573,7 @@ const EmployeeProfile = ({
                               } catch (err) {
                                 toast.error(
                                   err.serverData?.error ||
-                                    "Failed to disable MFA",
+                                  "Failed to disable MFA",
                                 );
                               } finally {
                                 setMfaLoading(false);

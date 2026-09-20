@@ -30,6 +30,7 @@ const approvalRuleSchema = new mongoose.Schema(
         "Refund Requests",
         "Purchase Orders",
         "Material Requests",
+        "Travel Requests",
       ],
     },
     condition: {

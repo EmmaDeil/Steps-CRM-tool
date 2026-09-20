@@ -21,6 +21,9 @@ const leaveRequestSchema = new mongoose.Schema({
   relieverId: { type: String },
   relieverName: { type: String },
   relieverEmail: { type: String },
+  relieverStatus: { type: String, enum: ['pending', 'reviewed'], default: 'pending' },
+  relieverReviewedAt: { type: Date },
+  relieverComments: { type: String },
   attachments: [{
     fileName: String,
     fileData: String,
