@@ -92,7 +92,7 @@ const AuthPortal = () => {
             {[
               { title: "Material Request & Payment Gate", desc: "5-stage procurement workflow with GRN inventory sync" },
               { title: "Multi-level Approval Engine", desc: "Configurable approval chains and role routing" },
-              { title: "Real-Time WebSocket Sync", desc: "Live operational updates and security activity tracking" },
+              { title: "Real-Time Ping", desc: "Never miss updates with instant notifications and live data sync" },
             ].map((feat, idx) => (
               <div
                 key={idx}

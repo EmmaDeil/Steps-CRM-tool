@@ -130,10 +130,9 @@ const FM = () => {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
+            className="items-center px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
           >
-            <i className="fa-solid fa-plus mr-2"></i>
-            Create New Ticket
+            <i className="fa-solid fa-plus"></i>
           </button>
         </div>
 
@@ -241,36 +240,23 @@ const FM = () => {
             <nav className="flex space-x-8 px-6" aria-label="Tabs">
               <button
                 onClick={() => setActiveTab("overview")}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === "overview"
-                    ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                }`}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "overview"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  }`}
               >
                 <i className="fa-solid fa-list mr-2"></i>
                 All Tickets
               </button>
               <button
                 onClick={() => setActiveTab("my-tickets")}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === "my-tickets"
-                    ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                }`}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "my-tickets"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  }`}
               >
                 <i className="fa-solid fa-user mr-2"></i>
                 My Tickets
-              </button>
-              <button
-                onClick={() => setActiveTab("analytics")}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === "analytics"
-                    ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                }`}
-              >
-                <i className="fa-solid fa-chart-bar mr-2"></i>
-                Analytics
               </button>
             </nav>
           </div>
@@ -531,7 +517,7 @@ const FM = () => {
 };
 
 // Create Ticket Modal Component
-const CreateTicketModal = ({ onClose, onSuccess }) => {
+export const CreateTicketModal = ({ onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     title: "",
     description: "",

@@ -252,7 +252,7 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
         <div className="mb-4 auth-fade-up">
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Create Account</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Join your organization's CRM & ERP portal
+            Join your organization's portal
           </p>
         </div>
 
@@ -288,7 +288,7 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-slate-700 mb-1">Work Email</label>
+            <label className="block text-[11px] font-semibold text-slate-700 mb-1">Corporate Email</label>
             <input
               name="email"
               type="email"
@@ -612,7 +612,7 @@ const Signup = ({ onSwitchMode, isEmbedded = false }) => {
                   htmlFor="email"
                   className="block text-sm font-medium text-gray-700 mb-2"
                 >
-                  Work Email <span className="text-red-500">*</span>
+                  Corporate Email <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">

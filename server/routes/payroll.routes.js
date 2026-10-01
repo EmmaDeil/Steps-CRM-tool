@@ -44,7 +44,7 @@ const auditPayroll = async (req, action, description, status = 'Success') => {
 
 const normalizePayrollSchedule = (value) => {
   const normalized = String(value || '').trim();
-  if (!normalized) return null;
+  if (!normalized) return undefined;
   const match = {
     monthly: 'Monthly',
     'semi-monthly': 'Semi-monthly',
@@ -108,13 +108,13 @@ const hydratePayrollEmployees = async (employees = []) => {
   for (const row of rows) {
     const employeeId = String(row?.id || row?._id || '').trim();
     if (!employeeId) {
-      hydrated.push({ ...row });
+      hydrated.push({ ...row, paySchedule: normalizePayrollSchedule(row?.paySchedule) });
       continue;
     }
 
     const employee = await Employee.findById(employeeId).lean();
     if (!employee) {
-      hydrated.push({ ...row });
+      hydrated.push({ ...row, paySchedule: normalizePayrollSchedule(row?.paySchedule) });
       continue;
     }
 

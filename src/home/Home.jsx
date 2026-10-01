@@ -15,6 +15,7 @@ import { apiService } from "../services/api";
 import Footer from "../components/Footer";
 import ModuleLoader from "../components/common/ModuleLoader";
 import ChangePasswordModal from "../components/auth/ChangePasswordModal";
+import { CreateTicketModal } from "../components/modules/FM";
 
 const ModuleLoadingState = ({ moduleName = "Module", subtitle }) => {
   return <ModuleLoader moduleName={moduleName} subtitle={subtitle} />;
@@ -166,6 +167,7 @@ export default function Home() {
   const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showCreateTicketModal, setShowCreateTicketModal] = useState(false);
   // Removed unused statCards state
 
   useEffect(() => {
@@ -450,11 +452,10 @@ export default function Home() {
                   key={getModuleRouteId(m) || m.name}
                   onClick={() => handleOpenModule(getModuleRouteId(m))}
                   aria-label={`Open ${m.name} module`}
-                  className={`group relative flex flex-col items-center p-2 bg-transparent rounded-2xl border border-[#dbe0e6] shadow-sm h-[200px] transition-shadow ${
-                    canAccess
+                  className={`group relative flex flex-col items-center p-2 bg-transparent rounded-2xl border border-[#dbe0e6] shadow-sm h-[200px] transition-shadow ${canAccess
                       ? "hover:shadow-xl"
                       : "opacity-50 cursor-not-allowed grayscale"
-                  }`}
+                    }`}
                 >
                   {/* Lock badge for denied modules */}
                   {!canAccess && (
@@ -474,11 +475,10 @@ export default function Home() {
                     {/* Click to access this module */}
                   </p>
                   <div
-                    className={`mt-4 py-1 px-3 text-xs font-semibold rounded-full ${
-                      canAccess
+                    className={`mt-4 py-1 px-3 text-xs font-semibold rounded-full ${canAccess
                         ? "bg-blue-50 text-blue-700"
                         : "bg-gray-100 text-gray-400"
-                    }`}
+                      }`}
                   >
                     {canAccess ? "Explore" : "No Access"}
                   </div>
@@ -489,6 +489,23 @@ export default function Home() {
       </main>
 
       <Footer variant="default" company="Ladeil Innovataion Ltd" />
+
+      <button
+        type="button"
+        onClick={() => setShowCreateTicketModal(true)}
+        aria-label="Create maintenance ticket"
+        title="Create maintenance ticket"
+        className="fixed bottom-6 right-6 z-40 flex size-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-900/25 transition hover:scale-105 hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
+      >
+        <i className="fa-solid fa-plus text-xl" aria-hidden="true"></i>
+      </button>
+
+      {showCreateTicketModal && (
+        <CreateTicketModal
+          onClose={() => setShowCreateTicketModal(false)}
+          onSuccess={() => setShowCreateTicketModal(false)}
+        />
+      )}
 
       {/* Mandatory Password Change Modal for Temporary Password Logins */}
       <ChangePasswordModal
