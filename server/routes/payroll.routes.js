@@ -164,7 +164,7 @@ router.get('/prepare', async (req, res) => {
 
 
 // GET all historical payroll runs
-router.get('/runs', async (req, res) => {
+router.get('/runs', checkSecurityRole(PAYROLL_ADMIN_ROLES), async (req, res) => {
   try {
     const runs = await PayrollRun.find().sort({ createdAt: -1 });
     res.json(runs);
@@ -189,7 +189,7 @@ router.get('/draft', async (req, res) => {
 });
 
 // GET single payroll run by ID
-router.get('/runs/:id', async (req, res) => {
+router.get('/runs/:id', checkSecurityRole(PAYROLL_ADMIN_ROLES), async (req, res) => {
   try {
     const run = await PayrollRun.findById(req.params.id);
     if (!run) return res.status(404).json({ success: false, message: 'Not found' });
@@ -342,10 +342,10 @@ router.put('/runs/:id/status', checkSecurityRole(PAYROLL_ADMIN_ROLES), async (re
       if (!run.journalEntryId) {
         const ref = `PAY-${run.period?.year}-${String((run.period?.month ?? 0) + 1).padStart(2, '0')}-${run._id.toString().slice(-6).toUpperCase()}`;
         const gross = run.totals?.totalGrossPay || 0;
-        const deductions = run.totals?.totalDeductions || 0;
         const net = run.totals?.totalNetPay || 0;
         const employerPension = run.totals?.totalEmployerPension || 0;
         const expenseTotal = Math.round((gross + employerPension) * 100) / 100;
+        const employeeDeductionsPayable = Math.round((gross - net) * 100) / 100;
 
         const journal = await JournalEntry.create({
           date: new Date(),
@@ -356,11 +356,14 @@ router.put('/runs/:id/status', checkSecurityRole(PAYROLL_ADMIN_ROLES), async (re
             ...(employerPension > 0
               ? [{ account: 'Pension Expense (Employer)', debit: employerPension, credit: 0, description: 'Employer pension contribution' }]
               : []),
-            { account: 'Payroll Taxes Payable', debit: 0, credit: deductions, description: 'PAYE, pension & statutory deductions' },
+            { account: 'Payroll Deductions Payable', debit: 0, credit: employeeDeductionsPayable, description: 'PAYE, employee pension & statutory deductions' },
             { account: 'Cash / Bank', debit: 0, credit: net, description: 'Net salaries disbursed' },
+            ...(employerPension > 0
+              ? [{ account: 'Employer Pension Payable', debit: 0, credit: employerPension, description: 'Employer pension contribution payable' }]
+              : []),
           ],
           totalDebit: expenseTotal,
-          totalCredit: Math.round((deductions + net) * 100) / 100,
+          totalCredit: expenseTotal,
           status: 'posted',
         });
         run.journalEntryId = journal._id;

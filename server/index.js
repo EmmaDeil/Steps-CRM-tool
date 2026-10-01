@@ -279,81 +279,116 @@ if (!MONGODB_URI) {
   }
 }
 
+const MONGODB_CONNECT_OPTIONS = {
+  serverSelectionTimeoutMS: 30000,
+  socketTimeoutMS: 45000,
+  family: 4,
+  maxPoolSize: 10,
+  minPoolSize: 2,
+  tls: true,
+  tlsAllowInvalidCertificates: false,
+  retryWrites: true,
+  w: 'majority',
+};
+const MONGODB_MAX_RETRY_DELAY_MS = 60000;
+let mongodbRetryDelayMs = 5000;
+let mongodbReconnectTimer = null;
+let mongodbEventsBound = false;
+
+function scheduleMongoReconnect() {
+  if (isServerlessRuntime || mongodbReconnectTimer || mongoose.connection.readyState === 1) {
+    return;
+  }
+
+  const delay = mongodbRetryDelayMs;
+  mongodbRetryDelayMs = Math.min(mongodbRetryDelayMs * 2, MONGODB_MAX_RETRY_DELAY_MS);
+  console.warn(`MongoDB unavailable. Retrying in ${Math.round(delay / 1000)} seconds...`);
+
+  mongodbReconnectTimer = setTimeout(async () => {
+    mongodbReconnectTimer = null;
+    await connectMongoDB();
+  }, delay);
+}
+
+function bindMongoConnectionEvents() {
+  if (mongodbEventsBound) return;
+  mongodbEventsBound = true;
+
+  mongoose.connection.on('error', (err) => {
+    console.error('MongoDB connection error:', err.message);
+  });
+
+  mongoose.connection.on('disconnected', () => {
+    console.warn('MongoDB disconnected. Waiting to reconnect...');
+    scheduleMongoReconnect();
+  });
+
+  mongoose.connection.on('reconnected', () => {
+    mongodbRetryDelayMs = 5000;
+    console.log('✓ MongoDB reconnected');
+  });
+}
+
+async function connectMongoDB() {
+  if (!MONGODB_URI || mongoose.connection.readyState === 1 || mongoose.connection.readyState === 2) {
+    return mongoose.connection;
+  }
+
+  try {
+    await mongoose.connect(MONGODB_URI, MONGODB_CONNECT_OPTIONS);
+    mongodbRetryDelayMs = 5000;
+    console.log('✓ Connected to MongoDB');
+    return mongoose.connection;
+  } catch (err) {
+    console.error('✗ Failed to connect to MongoDB:', err.message);
+    scheduleMongoReconnect();
+    return null;
+  }
+}
+
 async function start() {
-  if (mongoose.connection.readyState !== 1) {
-    try {
-      await mongoose.connect(MONGODB_URI, {
-        serverSelectionTimeoutMS: 30000, // Increased to 30 seconds
-        socketTimeoutMS: 45000,
-        family: 4, // Use IPv4, skip trying IPv6
-        maxPoolSize: 10,
-        minPoolSize: 2,
-        tls: true, // Enable TLS/SSL
-        tlsAllowInvalidCertificates: false,
-        retryWrites: true,
-        w: 'majority',
-      });
-      console.log('✓ Connected to MongoDB');
+  bindMongoConnectionEvents();
+  const mongoConnection = await connectMongoDB();
 
-      // Handle MongoDB connection events
-      mongoose.connection.on('error', (err) => {
-        console.error('MongoDB connection error:', err);
-      });
+  if (mongoConnection) {
 
-      mongoose.connection.on('disconnected', () => {
-        console.warn('MongoDB disconnected. Attempting to reconnect...');
-      });
+    // Basic seed data for modules (minimal auto-seeding)
+    const seedModules = [
+      { id: 1, name: "Approval", componentName: "Approval" },
+      { id: 2, name: "Inventory", componentName: "Inventory" },
+      { id: 3, name: "HRM", componentName: "HRM" },
+      { id: 4, name: "FM", componentName: "FM" },
+      { id: 5, name: "Finance", componentName: "Finance" },
+      { id: 6, name: "Security", componentName: "Security" },
+      { id: 7, name: "Admin", componentName: "Admin" },
+      { id: 8, name: "Attendance", componentName: "Attendance" },
+      { id: 9, name: "DocSign", componentName: "DocSign" },
+      { id: 10, name: "Material Requests", componentName: "MaterialRequests" },
+      { id: 11, name: "Purchase Orders", componentName: "PurchaseOrders" },
+      { id: 12, name: "Analytics", componentName: "Analytics" },
+      { id: 13, name: "Policy", componentName: "Policy" },
+      { id: 14, name: "Incident Reporting", componentName: "IncidentReporting" },
+      { id: 15, name: "Sales", componentName: "Sales" },
+    ];
 
-      mongoose.connection.on('reconnected', () => {
-        console.log('✓ MongoDB reconnected');
-      });
-
-      // Basic seed data for modules (minimal auto-seeding)
-      const seedModules = [
-        { id: 1, name: "Approval", componentName: "Approval" },
-        { id: 2, name: "Inventory", componentName: "Inventory" },
-        { id: 3, name: "HRM", componentName: "HRM" },
-        { id: 4, name: "FM", componentName: "FM" },
-        { id: 5, name: "Finance", componentName: "Finance" },
-        { id: 6, name: "Security", componentName: "Security" },
-        { id: 7, name: "Admin", componentName: "Admin" },
-        { id: 8, name: "Attendance", componentName: "Attendance" },
-        { id: 9, name: "DocSign", componentName: "DocSign" },
-        { id: 10, name: "Material Requests", componentName: "MaterialRequests" },
-        { id: 11, name: "Purchase Orders", componentName: "PurchaseOrders" },
-        { id: 12, name: "Analytics", componentName: "Analytics" },
-        { id: 13, name: "Policy", componentName: "Policy" },
-        { id: 14, name: "Incident Reporting", componentName: "IncidentReporting" },
-        { id: 15, name: "Sales", componentName: "Sales" },
-      ];
-
-      // Seed modules if empty or update with new modules
-      const moduleCount = await ModuleModel.countDocuments();
-      if (moduleCount === 0) {
-        await ModuleModel.insertMany(seedModules);
-        console.log('Seeded modules');
-      } else {
-        // Upsert modules: update existing ones and add new ones
-        for (const module of seedModules) {
-          await ModuleModel.findOneAndUpdate(
-            { id: module.id },
-            module,
-            { upsert: true, new: true }
-          );
-        }
-        // Remove any stale modules not in the current seed list
-        const validIds = seedModules.map((m) => m.id);
-        await ModuleModel.deleteMany({ id: { $nin: validIds } });
-        console.log('Updated modules to match seed data');
+    // Seed modules if empty or update with new modules
+    const moduleCount = await ModuleModel.countDocuments();
+    if (moduleCount === 0) {
+      await ModuleModel.insertMany(seedModules);
+      console.log('Seeded modules');
+    } else {
+      // Upsert modules: update existing ones and add new ones
+      for (const module of seedModules) {
+        await ModuleModel.findOneAndUpdate(
+          { id: module.id },
+          module,
+          { upsert: true, new: true }
+        );
       }
-    } catch (err) {
-      console.error('✗ Failed to connect to MongoDB');
-      console.error('  Error:', err.message);
-      console.error('  Please ensure MongoDB is running and MONGODB_URI is set correctly in .env');
-      if (!isServerlessRuntime) {
-        process.exit(1);
-      }
-      throw err;
+      // Remove any stale modules not in the current seed list
+      const validIds = seedModules.map((m) => m.id);
+      await ModuleModel.deleteMany({ id: { $nin: validIds } });
+      console.log('Updated modules to match seed data');
     }
   }
 

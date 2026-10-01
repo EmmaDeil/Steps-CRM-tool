@@ -1349,13 +1349,27 @@ Verify:
 
 ## Deployment
 
-The repository includes vercel.json for deployment alignment.
+The repository deploys the Vite frontend and Express API together on Vercel. The `/api/*` routes are served by `server/index.js`; all other routes use the React application.
 
-Typical production steps:
+1. Import the repository in Vercel with the repository root as the project root. Vercel uses `vercel.json` to install the root and `server` dependencies, then runs `npm run build`.
+2. Add the following production environment variables in Vercel Project Settings -> Environment Variables:
 
-1. Build frontend: npm run build
-2. Configure environment variables in host platform
-3. Deploy frontend and backend with matching API base URL and database credentials
+   ```text
+   MONGODB_URI
+   JWT_SECRET
+   JWT_REFRESH_SECRET
+   FRONTEND_URL=https://your-production-domain
+   EMAIL_HOST
+   EMAIL_PORT
+   EMAIL_USER
+   EMAIL_PASSWORD
+   ```
+
+   Add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER` when SMS verification is enabled. Set each value for Production, Preview, and Development as appropriate.
+3. In MongoDB Atlas, allow Vercel's database access. Use a database user with only the required permissions. Atlas IP rules must permit the Vercel function's outbound network; for development, use a restricted stable IP or VPN where possible.
+4. Deploy from Vercel or run `vercel --prod` after installing and authenticating the Vercel CLI.
+
+Do not upload `.env` files or `server/atlas-credentials.env` to Vercel. Keep secrets in Vercel Environment Variables and rotate any credential that has been committed or shared.
 
 ## Contributing
 

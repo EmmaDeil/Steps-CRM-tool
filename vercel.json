@@ -1,5 +1,7 @@
 {
   "version": 2,
+  "installCommand": "npm ci && npm --prefix server ci",
+  "buildCommand": "npm run build",
   "functions": {
     "server/index.js": {
       "memory": 3008,

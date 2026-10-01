@@ -27,6 +27,12 @@ const Approval = () => {
   const [selectedMonthYear, setSelectedMonthYear] = useState(null);
   const [editingLineItems, setEditingLineItems] = useState({});
 
+  // Reliever review queue (leave requests where the current user is the assigned reliever)
+  const [relieverQueue, setRelieverQueue] = useState([]);
+  const [relieverQueueLoading, setRelieverQueueLoading] = useState(false);
+  const [showRelieverModal, setShowRelieverModal] = useState(false);
+  const [relieverCommentDrafts, setRelieverCommentDrafts] = useState({});
+
   // Leave form state
   const [leaveFormData, setLeaveFormData] = useState({
     leaveType: "",
@@ -200,6 +206,52 @@ const Approval = () => {
       fetchLeaveAllocation();
     }
   }, [currentEmployeeId]);
+
+  // Fetch leave requests awaiting this user's review as reliever
+  const fetchRelieverQueue = async () => {
+    if (!user?.email) return;
+    setRelieverQueueLoading(true);
+    try {
+      const response = await apiService.get("/api/approval/leave-requests", {
+        params: { relieverEmail: user.email, relieverStatus: "pending" },
+      });
+      setRelieverQueue(extractList(response));
+    } catch (error) {
+      console.error("Error fetching reliever queue:", error);
+    } finally {
+      setRelieverQueueLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRelieverQueue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email]);
+
+  const handleRelieverReview = async (requestId) => {
+    try {
+      await apiService.post(
+        `/api/approval/leave-requests/${requestId}/reliever-review`,
+        { comments: relieverCommentDrafts[requestId] || "" },
+      );
+      setRelieverQueue((prev) => prev.filter((r) => r._id !== requestId));
+      toast.success("Marked as reviewed");
+    } catch (error) {
+      console.error("Error submitting reliever review:", error);
+      toast.error(error.message || "Failed to submit review");
+    }
+  };
+
+  const viewAttachment = (attachment) => {
+    if (!attachment?.fileData) {
+      toast.error("Attachment data not available");
+      return;
+    }
+    const opened = window.open(attachment.fileData, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      toast.error("Popup blocked. Please allow popups to view attachment.");
+    }
+  };
 
   // Calculate days and remaining leave when dates or leave type changes
   useEffect(() => {
@@ -920,6 +972,34 @@ const Approval = () => {
                   New Request
                 </button>
               </div>
+            </div>
+          </div>
+          {/* Reliever Reviews Card */}
+          <div className="bg-white rounded-xl border border-[#dbe0e6] shadow-lg p-6 hover:shadow-xl transition-shadow flex flex-col items-center justify-center min-h-64 relative">
+            {relieverQueue.length > 0 && (
+              <span className="absolute top-4 right-4 inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full bg-red-600 text-white text-xs font-bold">
+                {relieverQueue.length}
+              </span>
+            )}
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center mx-auto mb-4">
+                <i className="fa-solid fa-user-check text-teal-600 text-3xl"></i>
+              </div>
+              <h3 className="text-2xl font-bold text-[#111418] mb-2">
+                Reliever Reviews
+              </h3>
+              <p className="text-sm text-[#617589] mb-6">
+                Review leave requests where you're assigned as reliever
+              </p>
+              <button
+                onClick={() => setShowRelieverModal(true)}
+                className="px-6 py-3 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-lg hover:shadow-lg transition-all font-semibold flex items-center gap-2 mx-auto"
+              >
+                <i className="fa-solid fa-file-lines text-lg"></i>
+                {relieverQueueLoading
+                  ? "Loading..."
+                  : `Review (${relieverQueue.length})`}
+              </button>
             </div>
           </div>
         </div>
@@ -2178,6 +2258,97 @@ const Approval = () => {
                     </div>
                   );
                 })()}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reliever Reviews Modal */}
+        {showRelieverModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-300">
+            <div className="flex h-full max-h-[90vh] w-full max-w-2xl flex-col bg-white shadow-2xl rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 bg-white">
+                <h3 className="text-slate-900 text-xl font-bold">
+                  Reliever Reviews
+                </h3>
+                <button
+                  onClick={() => setShowRelieverModal(false)}
+                  className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+                >
+                  <i className="fa-solid fa-times text-xl"></i>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {relieverQueue.length === 0 ? (
+                  <div className="text-center py-12">
+                    <i className="fa-solid fa-circle-check text-4xl text-slate-300 mb-4 block"></i>
+                    <p className="text-slate-500">
+                      No leave requests awaiting your review.
+                    </p>
+                  </div>
+                ) : (
+                  relieverQueue.map((request) => (
+                    <div
+                      key={request._id}
+                      className="border border-slate-200 rounded-xl p-4 bg-slate-50"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-bold text-slate-900">
+                          {request.employeeName}
+                        </h4>
+                        <span className="text-xs font-semibold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full capitalize">
+                          {request.leaveType} leave
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 mb-1">
+                        <strong>Dates:</strong>{" "}
+                        {new Date(request.fromDate).toLocaleDateString()} -{" "}
+                        {new Date(request.toDate).toLocaleDateString()} (
+                        {request.days} days)
+                      </p>
+                      {request.reason && (
+                        <p className="text-xs text-slate-600 mb-2">
+                          <strong>Reason:</strong> {request.reason}
+                        </p>
+                      )}
+                      {Array.isArray(request.attachments) &&
+                        request.attachments.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {request.attachments.map((file, index) => (
+                              <button
+                                key={index}
+                                type="button"
+                                onClick={() => viewAttachment(file)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 hover:border-teal-400 hover:text-teal-700 transition-colors"
+                              >
+                                <i className="fa-solid fa-paperclip text-[10px]"></i>
+                                {file.fileName || "Attachment"}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      <textarea
+                        placeholder="Optional comments..."
+                        value={relieverCommentDrafts[request._id] || ""}
+                        onChange={(e) =>
+                          setRelieverCommentDrafts((prev) => ({
+                            ...prev,
+                            [request._id]: e.target.value,
+                          }))
+                        }
+                        className="w-full text-xs rounded-lg border border-slate-200 bg-white px-3 py-2 mb-3 focus:outline-0 focus:ring-2 focus:ring-teal-500/50"
+                        rows="2"
+                      ></textarea>
+                      <button
+                        onClick={() => handleRelieverReview(request._id)}
+                        className="px-4 py-2 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 transition-all flex items-center gap-2"
+                      >
+                        <i className="fa-solid fa-check"></i>
+                        Mark as Reviewed
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>

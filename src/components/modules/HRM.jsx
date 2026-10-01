@@ -8,6 +8,7 @@ import Payroll from "./Payroll";
 import EmployeeProfile from "./EmployeeProfile";
 import BulkEditModal from "./BulkEditModal";
 import DataTable from "../common/DataTable";
+import PayrollApprovals from "./PayrollApprovals";
 
 const StatCard = ({ label, icon, value, trend, trendType }) => (
   <div className="flex flex-col gap-1 rounded-xl p-5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -100,6 +101,7 @@ const HRM = () => {
     useState(false);
   const [leaveAllocationLoading, setLeaveAllocationLoading] = useState(false);
   const [showPayroll, setShowPayroll] = useState(false);
+  const [showPayrollApprovals, setShowPayrollApprovals] = useState(false);
   const [showEmployeeProfile, setShowEmployeeProfile] = useState(false);
   const [showEmployeeDirectoryPage, setShowEmployeeDirectoryPage] =
     useState(false);
@@ -861,6 +863,10 @@ const HRM = () => {
     return <Payroll onBack={() => setShowPayroll(false)} />;
   }
 
+  if (showPayrollApprovals) {
+    return <PayrollApprovals onBack={() => setShowPayrollApprovals(false)} />;
+  }
+
   if (showEmployeeProfile && selectedEmployee) {
     return (
       <EmployeeProfile
@@ -1303,6 +1309,15 @@ const HRM = () => {
                   <i className="fa-solid fa-money-bill-wave text-[16px]"></i>
                   <span className="truncate">Payroll Processing</span>
                 </button>
+                {["Admin", "Security Admin"].includes(user?.role) && (
+                  <button
+                    onClick={() => setShowPayrollApprovals(true)}
+                    className="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-white border border-slate-200 text-slate-700 text-sm font-bold shadow-sm hover:bg-slate-50 transition-colors"
+                  >
+                    <i className="fa-solid fa-clipboard-check text-[16px]"></i>
+                    <span className="truncate">Payroll Approvals</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setShowCreateJobModal(true)}
                   className="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-white border border-slate-200 text-slate-700 text-sm font-bold shadow-sm hover:bg-slate-50 transition-colors"
@@ -1544,6 +1559,19 @@ const HRM = () => {
                                 {lr.currentApproverRole
                                   ? ` (${lr.currentApproverRole})`
                                   : ""}
+                              </p>
+                            )}
+                            {lr.relieverName && (
+                              <p
+                                className={`text-[11px] mt-0.5 ${lr.relieverStatus === "reviewed"
+                                  ? "text-emerald-600"
+                                  : "text-amber-600"
+                                  }`}
+                              >
+                                Reliever ({lr.relieverName}):{" "}
+                                {lr.relieverStatus === "reviewed"
+                                  ? "Reviewed"
+                                  : "Pending review"}
                               </p>
                             )}
                           </div>

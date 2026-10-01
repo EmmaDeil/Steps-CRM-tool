@@ -324,8 +324,8 @@ const Payroll = ({ onBack }) => {
       console.error("Error submitting payroll:", error);
       toast.error(
         error?.response?.data?.message ||
-          error?.serverData?.message ||
-          "Failed to submit payroll via server",
+        error?.serverData?.message ||
+        "Failed to submit payroll via server",
       );
     } finally {
       setLoading(false);
@@ -475,9 +475,8 @@ const Payroll = ({ onBack }) => {
                 className="flex items-center gap-2 h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <i
-                  className={`fa-solid ${
-                    hideAmounts ? "fa-eye" : "fa-eye-slash"
-                  }`}
+                  className={`fa-solid ${hideAmounts ? "fa-eye" : "fa-eye-slash"
+                    }`}
                 ></i>
                 <span className="hidden sm:inline">
                   {hideAmounts ? "Show" : "Hide"} Amounts
@@ -522,13 +521,12 @@ const Payroll = ({ onBack }) => {
                     className="flex flex-col items-center gap-2 z-10"
                   >
                     <div
-                      className={`size-8 rounded-full flex items-center justify-center font-bold ring-4 ring-white dark:ring-slate-800 ${
-                        step.completed
-                          ? "bg-blue-600 text-white"
-                          : step.active
-                            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
-                            : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
-                      }`}
+                      className={`size-8 rounded-full flex items-center justify-center font-bold ring-4 ring-white dark:ring-slate-800 ${step.completed
+                        ? "bg-blue-600 text-white"
+                        : step.active
+                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
+                          : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                        }`}
                     >
                       {step.completed ? (
                         <i className="fa-solid fa-check text-sm"></i>
@@ -537,13 +535,11 @@ const Payroll = ({ onBack }) => {
                       )}
                     </div>
                     <span
-                      className={`text-xs font-${
-                        step.active ? "bold" : "medium"
-                      } hidden sm:block ${
-                        step.active
+                      className={`text-xs font-${step.active ? "bold" : "medium"
+                        } hidden sm:block ${step.active
                           ? "text-slate-900 dark:text-white"
                           : "text-gray-500"
-                      }`}
+                        }`}
                     >
                       {step.label}
                     </span>
@@ -630,11 +626,10 @@ const Payroll = ({ onBack }) => {
                           key={schedule}
                           type="button"
                           onClick={() => handleScheduleChange(schedule)}
-                          className={`px-4 py-3 rounded-lg border-2 font-medium text-sm transition-all ${
-                            selectedPeriod.paymentSchedule === schedule
-                              ? "border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-sm"
-                              : "border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:border-blue-300 dark:hover:border-blue-700"
-                          }`}
+                          className={`px-4 py-3 rounded-lg border-2 font-medium text-sm transition-all ${selectedPeriod.paymentSchedule === schedule
+                            ? "border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-sm"
+                            : "border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:border-blue-300 dark:hover:border-blue-700"
+                            }`}
                         >
                           {schedule}
                         </button>
@@ -753,12 +748,12 @@ const Payroll = ({ onBack }) => {
                       <p className="font-medium text-slate-900 dark:text-white">
                         {selectedPeriod.startDate
                           ? new Date(
-                              selectedPeriod.startDate,
-                            ).toLocaleDateString("en-US", {
-                              year: "numeric",
-                              month: "short",
-                              day: "numeric",
-                            })
+                            selectedPeriod.startDate,
+                          ).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })
                           : "Not set"}
                       </p>
                     </div>
@@ -767,13 +762,13 @@ const Payroll = ({ onBack }) => {
                       <p className="font-medium text-slate-900 dark:text-white">
                         {selectedPeriod.endDate
                           ? new Date(selectedPeriod.endDate).toLocaleDateString(
-                              "en-US",
-                              {
-                                year: "numeric",
-                                month: "short",
-                                day: "numeric",
-                              },
-                            )
+                            "en-US",
+                            {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            },
+                          )
                           : "Not set"}
                       </p>
                     </div>
@@ -887,11 +882,10 @@ const Payroll = ({ onBack }) => {
                         {currentEmployees.map((employee) => (
                           <tr
                             key={employee.id}
-                            className={`hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors ${
-                              employee.warning
-                                ? "bg-amber-50/50 dark:bg-amber-900/10"
-                                : ""
-                            }`}
+                            className={`hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors ${employee.warning
+                              ? "bg-amber-50/50 dark:bg-amber-900/10"
+                              : ""
+                              }`}
                           >
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
@@ -935,11 +929,10 @@ const Payroll = ({ onBack }) => {
                             </td>
                             <td className="px-6 py-4">
                               <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  employee.statusColor === "green"
-                                    ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                                    : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-                                }`}
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${employee.statusColor === "green"
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                                  }`}
                               >
                                 {employee.status}
                               </span>
@@ -947,11 +940,10 @@ const Payroll = ({ onBack }) => {
                             <td className="px-6 py-4 text-right">
                               <button
                                 onClick={() => handleEditEmployee(employee)}
-                                className={`p-1 rounded transition-colors ${
-                                  employee.warning
-                                    ? "text-amber-600 hover:text-amber-700 bg-amber-100/50"
-                                    : "text-gray-400 hover:text-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                }`}
+                                className={`p-1 rounded transition-colors ${employee.warning
+                                  ? "text-amber-600 hover:text-amber-700 bg-amber-100/50"
+                                  : "text-gray-400 hover:text-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                  }`}
                                 title={
                                   employee.warning
                                     ? "Salary is missing – click to update"
@@ -1026,14 +1018,12 @@ const Payroll = ({ onBack }) => {
                         usePayeBrackets: !deductions.usePayeBrackets,
                       })
                     }
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      deductions.usePayeBrackets ? "bg-indigo-600" : "bg-gray-300"
-                    }`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${deductions.usePayeBrackets ? "bg-indigo-600" : "bg-gray-300"
+                      }`}
                   >
                     <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        deductions.usePayeBrackets ? "translate-x-6" : "translate-x-1"
-                      }`}
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${deductions.usePayeBrackets ? "translate-x-6" : "translate-x-1"
+                        }`}
                     />
                   </button>
                 </div>
@@ -1549,16 +1539,16 @@ const Payroll = ({ onBack }) => {
                   {[[
                     "Base Salary",
                     parseFloat(editingEmployee.tempBaseSalary || 0)
-                  ],[
+                  ], [
                     "Bonus",
                     parseFloat(editingEmployee.tempBonus || 0)
-                  ],[
+                  ], [
                     "Allowances",
                     parseFloat(editingEmployee.tempAllowances || 0)
-                  ],[
+                  ], [
                     `Overtime (${parseFloat(editingEmployee.tempOvertime || 0).toFixed(1)} hrs)`,
                     parseFloat(editingEmployee.tempOvertime || 0) * payRates.overtimeRate
-                  ],[
+                  ], [
                     "Extra Commission",
                     parseFloat(editingEmployee.tempCommission || 0)
                   ]].map(([label, amount]) => amount > 0 ? (

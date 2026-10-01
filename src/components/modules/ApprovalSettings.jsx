@@ -259,11 +259,10 @@ const ApprovalSettings = () => {
                     </td>
                     <td className="px-6 py-4">
                       <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          rule.status === "Active"
+                        className={`px-2 py-1 text-xs font-medium rounded-full ${rule.status === "Active"
                             ? "bg-green-100 text-green-700"
                             : "bg-gray-100 text-gray-600"
-                        }`}
+                          }`}
                       >
                         {rule.status}
                       </span>
@@ -278,11 +277,10 @@ const ApprovalSettings = () => {
                       </button>
                       <button
                         onClick={() => handleToggleStatus(rule)}
-                        className={`p-2 transition-colors ml-1 ${
-                          rule.status === "Active"
+                        className={`p-2 transition-colors ml-1 ${rule.status === "Active"
                             ? "text-gray-400 hover:text-orange-600"
                             : "text-gray-400 hover:text-green-600"
-                        }`}
+                          }`}
                         title={
                           rule.status === "Active"
                             ? "Deactivate Rule"
@@ -339,6 +337,7 @@ const ApprovalSettings = () => {
                   <option value="Refund Requests">Refund Requests</option>
                   <option value="Purchase Orders">Purchase Orders</option>
                   <option value="Material Requests">Material Requests</option>
+                  <option value="Travel Requests">Travel Requests</option>
                 </select>
               </div>
 
@@ -368,11 +367,11 @@ const ApprovalSettings = () => {
                           } else {
                             const newConds = e.target.checked
                               ? [
-                                  ...conditions.filter(
-                                    (c) => c !== "All Requests",
-                                  ),
-                                  option,
-                                ]
+                                ...conditions.filter(
+                                  (c) => c !== "All Requests",
+                                ),
+                                option,
+                              ]
                               : conditions.filter((c) => c !== option);
                             setConditions(
                               newConds.length ? newConds : ["All Requests"],
@@ -517,11 +516,10 @@ const ApprovalSettings = () => {
                       Status:
                     </span>
                     <span
-                      className={`text-xs font-bold px-2 py-1 rounded ${
-                        deleteConfirmModal.status === "Active"
+                      className={`text-xs font-bold px-2 py-1 rounded ${deleteConfirmModal.status === "Active"
                           ? "bg-green-100 text-green-700"
                           : "bg-gray-100 text-gray-600"
-                      }`}
+                        }`}
                     >
                       {deleteConfirmModal.status}
                     </span>
