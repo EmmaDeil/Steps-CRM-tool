@@ -2,7 +2,17 @@ const express = require("express");
 const router = express.Router();
 const MaintenanceTicket = require("../models/MaintenanceTicket");
 const NotificationModel = require("../models/Notification");
+const MaintenanceControl = require("../models/MaintenanceControl");
 const { verifyToken } = require("../middleware/auth");
+const { requireMaintenanceAction } = require("../middleware/maintenanceAccess");
+
+// Sub-resource routers. Mounted here (before the generic "/:id" routes below)
+// so that e.g. GET /api/maintenance/assets is handled by the assets router
+// rather than matching the ticket-by-id route with id="assets".
+router.use("/assets", require("./maintenanceAsset.routes"));
+router.use("/tasks", require("./maintenanceTask.routes"));
+router.use("/preventive", require("./maintenancePreventive.routes"));
+router.use("/controls", require("./maintenanceControl.routes"));
 
 const createMaintenanceNotification = async ({ title, message, sourceKey, metadata = {}, targetUser = null }) => {
   try {
@@ -237,6 +247,39 @@ router.put("/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
+    const isClosingStatus = ["Completed", "Cancelled"].includes(updateData.status);
+
+    if (isClosingStatus) {
+      const role = String(req.user.role || "").toLowerCase();
+      const isAdmin = ["admin", "security admin"].includes(role);
+
+      if (!isAdmin) {
+        const settings = await MaintenanceControl.getSingleton();
+        const rolePermissions = settings.permissionMatrix?.get?.(req.user.role);
+        if (!rolePermissions?.canCloseTicket) {
+          return res.status(403).json({ error: "You do not have permission to close tickets" });
+        }
+      }
+
+      if (updateData.status === "Completed") {
+        const existingTicket = await MaintenanceTicket.findById(id).select(
+          "estimatedCost actualCost approvalStatus"
+        );
+        const settings = await MaintenanceControl.getSingleton();
+        const cost = Number(updateData.actualCost ?? existingTicket?.actualCost ?? existingTicket?.estimatedCost ?? 0);
+
+        if (settings.approvalRule?.enabled && cost >= settings.approvalRule.costThreshold) {
+          const currentApproval = updateData.approvalStatus ?? existingTicket?.approvalStatus;
+          if (currentApproval !== "Approved") {
+            updateData.approvalStatus = "Pending Approval";
+            return res.status(409).json({
+              error: `This ticket's cost (${cost}) requires approval before it can be closed.`,
+              requiresApproval: true,
+            });
+          }
+        }
+      }
+    }
 
     // If status is being updated to "Completed", set completedDate
     if (updateData.status === "Completed" && !updateData.completedDate) {
@@ -323,8 +366,46 @@ router.post("/:id/comments", verifyToken, async (req, res) => {
   }
 });
 
+// Approve a ticket pending high-cost approval
+router.post(
+  "/:id/approve",
+  verifyToken,
+  requireMaintenanceAction("canApproveHighCost"),
+  async (req, res) => {
+    try {
+      const { decision } = req.body; // "Approved" | "Rejected"
+      if (!["Approved", "Rejected"].includes(decision)) {
+        return res.status(400).json({ error: "decision must be 'Approved' or 'Rejected'" });
+      }
+
+      const ticket = await MaintenanceTicket.findById(req.params.id);
+      if (!ticket) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      ticket.approvalStatus = decision;
+      ticket.approvedBy = req.user._id;
+      ticket.approvedAt = new Date();
+
+      ticket.workLog.push({
+        user: req.user._id,
+        action: decision,
+        description: `Ticket ${decision.toLowerCase()} by ${req.user.firstName} ${req.user.lastName}`,
+        timestamp: new Date(),
+      });
+
+      await ticket.save();
+
+      res.json({ message: `Ticket ${decision.toLowerCase()} successfully`, ticket });
+    } catch (error) {
+      console.error("Error approving ticket:", error);
+      res.status(500).json({ error: "Failed to approve ticket" });
+    }
+  }
+);
+
 // Assign ticket to technician
-router.post("/:id/assign", verifyToken, async (req, res) => {
+router.post("/:id/assign", verifyToken, requireMaintenanceAction("canAssignTicket"), async (req, res) => {
   try {
     const { id } = req.params;
     const { assignedTo, assignedTeam } = req.body;
@@ -363,7 +444,7 @@ router.post("/:id/assign", verifyToken, async (req, res) => {
 });
 
 // Delete maintenance ticket
-router.delete("/:id", verifyToken, async (req, res) => {
+router.delete("/:id", verifyToken, requireMaintenanceAction("canDeleteRecords"), async (req, res) => {
   try {
     const ticket = await MaintenanceTicket.findByIdAndDelete(req.params.id);
 

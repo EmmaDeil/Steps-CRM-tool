@@ -40,6 +40,8 @@ const RoleModel = require('./models/Role');
 const BudgetCategoryModel = require('./models/BudgetCategory');
 const InventoryItemModel = require('./models/InventoryItem');
 const NotificationModel = require('./models/Notification');
+const PreventiveMaintenanceScheduleModel = require('./models/PreventiveMaintenanceSchedule');
+const { generateTicketForSchedule } = require('./routes/maintenancePreventive.routes');
 const { validatePassword, getPasswordPolicy } = require('./utils/passwordValidator');
 
 // Static lists used to seed the DB when empty
@@ -8680,9 +8682,60 @@ async function start() {
     console.log(`📅 Inventory expiry alerts scheduled daily at 8:00 AM (next run: ${nextRun.toLocaleString()})`);
   };
 
+  // Daily job: generate maintenance tickets for preventive maintenance
+  // schedules that are due (or within their lead time window).
+  const runPreventiveMaintenanceJob = async () => {
+    try {
+      const now = new Date();
+      const dueSchedules = await PreventiveMaintenanceScheduleModel.find({
+        isActive: true,
+        autoGenerateTicket: true,
+      });
+
+      let generatedCount = 0;
+      for (const schedule of dueSchedules) {
+        const leadTimeMs = (schedule.leadTimeDays || 0) * 24 * 60 * 60 * 1000;
+        const triggerAt = new Date(schedule.nextDueDate.getTime() - leadTimeMs);
+        if (triggerAt > now) continue;
+
+        try {
+          await generateTicketForSchedule(schedule, schedule.createdBy);
+          generatedCount += 1;
+        } catch (err) {
+          console.error(`Error generating ticket for PM schedule ${schedule.scheduleNumber}:`, err);
+        }
+      }
+
+      if (generatedCount > 0) {
+        console.log(`🛠️ Preventive maintenance job: generated ${generatedCount} ticket(s)`);
+      } else {
+        console.log('🛠️ Preventive maintenance job: no schedules due');
+      }
+    } catch (error) {
+      console.error('❌ Error running preventive maintenance job:', error);
+    }
+  };
+
+  const schedulePreventiveMaintenanceJob = () => {
+    const now = new Date();
+    const nextRun = new Date();
+    nextRun.setHours(7, 0, 0, 0); // 7:00 AM daily server time
+    if (now > nextRun) nextRun.setDate(nextRun.getDate() + 1);
+
+    const delay = nextRun.getTime() - now.getTime();
+    setTimeout(() => {
+      runPreventiveMaintenanceJob();
+      setInterval(runPreventiveMaintenanceJob, 24 * 60 * 60 * 1000);
+    }, delay);
+
+    console.log(`📅 Preventive maintenance job scheduled daily at 7:00 AM (next run: ${nextRun.toLocaleString()})`);
+  };
+
   if (!isServerlessRuntime) {
     scheduleInventoryExpiryAlertJob();
     runInventoryExpiryAlertJob().catch((err) => console.error('Error running initial inventory expiry alert job:', err));
+    schedulePreventiveMaintenanceJob();
+    runPreventiveMaintenanceJob().catch((err) => console.error('Error running initial preventive maintenance job:', err));
   }
 
   // Graceful shutdown

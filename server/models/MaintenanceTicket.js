@@ -69,10 +69,32 @@ const maintenanceTicketSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    // Free-text team name managed dynamically via the FM Controls roster
+    // (see MaintenanceControl.teams) rather than a fixed enum.
     assignedTeam: {
       type: String,
-      enum: ["HVAC Team", "Plumbing Team", "Electrical Team", "General Maintenance", "IT Support", "Security Team", "Unassigned"],
+      trim: true,
       default: "Unassigned",
+    },
+    relatedAsset: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Asset",
+    },
+    relatedPMSchedule: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PreventiveMaintenanceSchedule",
+    },
+    approvalStatus: {
+      type: String,
+      enum: ["Not Required", "Pending Approval", "Approved", "Rejected"],
+      default: "Not Required",
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    approvedAt: {
+      type: Date,
     },
     estimatedCost: {
       type: Number,
